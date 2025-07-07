@@ -12,14 +12,7 @@
 
 namespace fs = std::filesystem;
 
-static const char *skip_slashes(const char *c)
-{
-	while (*c == '\\' || *c == '/')
-		++c;
-	return c;
-}
-
-ResourceType resource_type_from_path(const char *path)
+static ResourceType resource_type_from_path(const char *path)
 {
 	std::string s (path);
 
@@ -137,10 +130,10 @@ std::unique_ptr<ResourceLoader> ResourceLoader::create(const ResourceLoaderCreat
 	return loader;
 }
 
-void cleanup(ResourceLoader *loader)
+static void cleanup(ResourceLoader *loader)
 {
 	for (size_t i = 0; i < loader->entries.size(); ++i) {
-		ResourceHandle h = i + 1;
+		ResourceHandle h = (uint32_t)i + 1;
 		loader->destroy_handle(h);
 	}
 }

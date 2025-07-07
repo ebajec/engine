@@ -78,13 +78,13 @@ struct gl_renderer_impl
 //--------------------------------------------------------------------------------------------------
 // Tex quad
 
-void gl_tex_quad_draw(const gl_tex_quad* quad)
+static void gl_tex_quad_draw(const gl_tex_quad* quad)
 {
 	glBindVertexArray(quad->vao);
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 }
 
-int gl_tex_quad_create(gl_tex_quad *quad)
+static int gl_tex_quad_create(gl_tex_quad *quad)
 {
 	gl_vao vao;
 	glGenVertexArrays(1,&vao);
@@ -118,7 +118,7 @@ int gl_tex_quad_create(gl_tex_quad *quad)
 	return 0;
 }
 
-void gl_tex_quad_destroy(gl_tex_quad* quad)
+static void gl_tex_quad_destroy(gl_tex_quad* quad)
 {
 	if (quad->vao) glDeleteVertexArrays(1,&quad->vao);
 	if (quad->vbo) glDeleteBuffers(1, &quad->vbo);
@@ -129,20 +129,20 @@ void gl_tex_quad_destroy(gl_tex_quad* quad)
 //--------------------------------------------------------------------------------------------------
 // Frame ubo
 
-gl_target_uniforms gl_target_uniforms_create(const RenderContext* ctx)
+static gl_target_uniforms gl_target_uniforms_create(const RenderContext* ctx)
 {
 	gl_target_uniforms u;
 	u.p = ctx->camera.proj;
 	u.v = ctx->camera.view;
 	u.pv = u.p*u.v;
-	u.t = glfwGetTime();
+	u.t = (float)glfwGetTime();
 	return u;
 }
 
 //--------------------------------------------------------------------------------------------------
 // Render Target
 
-std::unique_ptr<gl_render_target> gl_render_target_create(const RenderTargetCreateInfo* info)
+static std::unique_ptr<gl_render_target> gl_render_target_create(const RenderTargetCreateInfo* info)
 {
 	uint32_t w = info->w;
 	uint32_t h = info->h;
@@ -163,7 +163,7 @@ std::unique_ptr<gl_render_target> gl_render_target_create(const RenderTargetCrea
 	{
 		glGenTextures(1,&color);
 		glBindTexture(GL_TEXTURE_2D,color);
-		glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+		glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,(int)w,(int)h,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
 
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);   
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);   
@@ -181,7 +181,7 @@ std::unique_ptr<gl_render_target> gl_render_target_create(const RenderTargetCrea
 	{
 		glGenRenderbuffers(1,&depth);
 		glBindRenderbuffer(GL_RENDERBUFFER, depth);
-		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, (int)w, (int)h);
 
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER,
 							   GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth);
@@ -270,7 +270,7 @@ GLRenderer::~GLRenderer()
 RenderTargetID GLRenderer::create_target(const RenderTargetCreateInfo* info)
 {
 	uint32_t id = impl->render_target_counter++;
-	impl->render_targets[id] = std::move(gl_render_target_create(info));
+	impl->render_targets[id] = gl_render_target_create(info);
 	return id;
 }
 
@@ -284,7 +284,7 @@ void GLRenderer::reset_target(RenderTargetID id, const RenderTargetCreateInfo* i
 	}
 
 	impl->render_targets.erase(id);
-	impl->render_targets[id] = std::move(gl_render_target_create(info));
+	impl->render_targets[id] = gl_render_target_create(info);
 }
 
 void GLRenderer::begin_pass(const RenderContext* ctx) 
@@ -312,7 +312,7 @@ void GLRenderer::begin_pass(const RenderContext* ctx)
 	// initialze fbo
 
 	glEnable(GL_DEPTH_TEST);
-    glClearColor(.8,0.8,0.8,1);
+    glClearColor(.8f,0.8f,0.8f,1);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 };
 
@@ -387,7 +387,7 @@ void GLRenderer::draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T)
 
 	const GLModel *model = get_model(impl->loader.get(),meshID);
 	glBindVertexArray(model->vao);
-	glDrawElements(GL_TRIANGLES,model->icount,GL_UNSIGNED_INT,NULL);
+	glDrawElements(GL_TRIANGLES,(int)model->icount,GL_UNSIGNED_INT,NULL);
 
 	glDisable(GL_CULL_FACE);
 };

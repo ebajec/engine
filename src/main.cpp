@@ -32,7 +32,7 @@
 
 #include "stb_image.h"
 
-int glfw_init_gl(GLFWwindow* window)
+static int glfw_init_gl(GLFWwindow* window)
 {
 	    glfwMakeContextCurrent(window);
 
@@ -108,8 +108,8 @@ struct ViewComponent : AppComponent
 
 		component->renderer = renderer;
 		component->control = MotionCamera::from_normal(glm::vec3(1,0,0),eye);
-		component->w = w;
-		component->h = h;
+		component->w = (uint32_t)w;
+		component->h = (uint32_t)h;
 
 		RenderTargetCreateInfo target_info = {
 			.w = (uint32_t)w,
@@ -122,9 +122,9 @@ struct ViewComponent : AppComponent
 
 	Camera get_camera()
 	{
-		float fov = PI/2.0;
+		float fov = PIf/2.0f;
 		float far = 100;
-		float near = 1;
+		float near = 0.1f;
 		float aspect = (float)h/(float)w;
 
 		return {
@@ -172,8 +172,8 @@ struct ViewComponent : AppComponent
 
 	virtual void framebufferSizeCallback(int width, int height) override 
 	{
-		w = width;
-		h = height;
+		w = (uint32_t)width;
+		h = (uint32_t)height;
 		RenderTargetCreateInfo target_info = {
 			.w = static_cast<uint32_t>(width),
 			.h = static_cast<uint32_t>(height),
@@ -291,6 +291,10 @@ int main(int argc, char* argv[])
 	};
 
 	int result = load_model(loader.get(),sphereID,&sphereLoadInfo);
+
+	if (result != RESULT_SUCCESS) {
+		return EXIT_FAILURE;
+	}
 
 	//-----------------------------------------------------------------------------
 	// torus

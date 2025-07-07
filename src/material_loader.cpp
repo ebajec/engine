@@ -135,14 +135,14 @@ static bool check_program(GLuint handle, const char* desc)
     if (log_length > 1)
     {
 		std::vector<char> buf;
-        buf.resize((int)(log_length + 1));
+        buf.resize((size_t)(log_length + 1));
         glGetProgramInfoLog(handle, log_length, nullptr, (GLchar*)buf.data());
         fprintf(stderr, "%s\n", buf.data());
     }
     return (GLboolean)status == GL_TRUE;
 }
 
-LoadResult gl_material_load(ResourceLoader *loader, GLMaterial *mat, const PreMaterialInfo *info) 
+static LoadResult gl_material_load(ResourceLoader *loader, GLMaterial *mat, const PreMaterialInfo *info) 
 {
 	LoadResult res = RESULT_SUCCESS;
 
@@ -280,7 +280,7 @@ void gl_material_destroy(ResourceLoader *loader, void *res)
 	if (material->program) glDeleteProgram(material->program);
 }
 
-void update_material_dependencies(ResourceLoader *loader, ResourceHandle h)
+static void update_material_dependencies(ResourceLoader *loader, ResourceHandle h)
 {
 	const GLMaterial *material = get_material(loader,h);
 

@@ -24,15 +24,19 @@
 #define PI 3.14159265359
 #endif
 
+#ifndef PIf
+#define PIf 3.14159265359f
+#endif
+
 #ifndef TWOPI
 #define TWOPI (2.0*3.141592654)
 #endif
 
 static inline glm::mat3 quat_to_mat3(const glm::quat& q) {
-    double w=q.w, x=q.x, y=q.y, z=q.z;
-    double xx=x*x, yy=y*y, zz=z*z;
-    double xy=x*y, xz=x*z, yz=y*z;
-    double wx=w*x, wy=w*y, wz=w*z;
+    float w=q.w, x=q.x, y=q.y, z=q.z;
+    float xx=x*x, yy=y*y, zz=z*z;
+    float xy=x*y, xz=x*z, yz=y*z;
+    float wx=w*x, wy=w*y, wz=w*z;
 
     return glm::mat3{
       {1-2*(yy+zz),   2*(xy - wz), 2*(xz + wy)},
@@ -43,15 +47,15 @@ static inline glm::mat3 quat_to_mat3(const glm::quat& q) {
 
 static inline glm::quat quat_exp(glm::vec3 v, float t)
 {
-	t *= 0.5;
-	v *= sin(t);
-	return glm::quat(cos(t),v);
+	t *= 0.5f;
+	v *= sinf(t);
+	return glm::quat(cosf(t),v);
 }
 
 static inline glm::mat4 camera_proj(float fov, float aspect, float far, float near)
 {
-	float tanfov2 = tan(fov / 2);
-	float ffov = 1.0/tanfov2;
+	float tanfov2 = tanf(fov / 2);
+	float ffov = 1.0f/tanfov2;
 
  	return glm::transpose(glm::mat4(
 		glm::vec4(ffov*aspect,0,0,0),
@@ -63,10 +67,10 @@ static inline glm::mat4 camera_proj(float fov, float aspect, float far, float ne
 
 static inline glm::mat3 s2_frame(float phi, float theta) 
 {
-	float cos_phi = cos(phi);
-	float cos_tht = cos(theta);
-	float sin_phi = sin(phi);
-	float sin_tht = sin(theta);
+	float cos_phi = cosf(phi);
+	float cos_tht = cosf(theta);
+	float sin_phi = sinf(phi);
+	float sin_tht = sinf(theta);
 
 	glm::vec3 T = glm::vec3(-sin_tht, cos_tht,0);
 	glm::vec3 B = glm::vec3(-sin_phi*cos_tht,-sin_phi*sin_tht,cos_phi);
@@ -108,7 +112,7 @@ struct MotionCamera
 		return view;
 	}
 
-	void rotate(float dtht, float dphi)
+	void rotate(double dtht, double dphi)
 	{
 		double phi1 = phi + dphi;
 		phi = glm::clamp(phi1, -HALFPI, HALFPI);

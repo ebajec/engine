@@ -1,7 +1,10 @@
 #include "resource_loader.h"
 #include "shader_loader.h"
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Weverything"
 #include "spirv_reflect.h"
+#pragma clang diagnostic push
 
 #include <utils/log.h>
 
@@ -52,58 +55,12 @@ static uint32_t compile_shader_spv(shader_stage_t stage, const uint32_t* data, s
 
 	glShaderBinary(1, &s,
                GL_SHADER_BINARY_FORMAT_SPIR_V_ARB,
-               data, size*sizeof(uint32_t));
+               data, (GLsizei)(size*sizeof(uint32_t)));
 	glSpecializeShaderARB(s,
                       "main",    
                       0, nullptr, nullptr);
 
 	return s;
-}
-
-static uint32_t compile_shader_glsl(shader_stage_t stage, const char* src)
-{
-	GLuint s = glCreateShader(stage);
-	glShaderSource(s, 1, &src, NULL);
-	glCompileShader(s);
-
-	GLint success = 0;
-	glGetShaderiv(s, GL_COMPILE_STATUS, &success);
-
-	if (success == GL_FALSE) {
-		GLint length = 0;
-		glGetShaderiv(s, GL_INFO_LOG_LENGTH, &length);
-
-		std::vector<GLchar> error_message(length);
-		glGetShaderInfoLog(s, length, NULL, &error_message[0]);
-
-		if (length)
-			printf("%s", &error_message[0]);
-
-		glDeleteShader(s);
-		return 0;
-	}
-	else 
-	{	
-		return s;
-	}
-}
-
-static int read_text_file(std::string_view src, std::string& out)
-{
-	std::ifstream file(src.data());
-
-	if (!file.is_open()) {
-		log_error("ERROR: could not open file: %s \n",src.data());
-		return -1;
-	}
-
-	std::string line;
-	std::string text;
-
-	while (std::getline(file,line)) {
-		out.append(line).append("\n");
-	}
-	return 0;
 }
 
 static shader_stage_t shader_stage_from_ext(std::string_view ext)
@@ -140,7 +97,7 @@ static int spv_load(const fs::path& path,std::vector<uint32_t> &data)
 		return -1;
 	}
 
-	file.read(reinterpret_cast<char*>(data.data()), size);
+	file.read(reinterpret_cast<char*>(data.data()), (intptr_t)size);
 
 	return 0;
 }
@@ -169,7 +126,6 @@ static int spv_bindings_create(GLShaderBindings *shader_bindings, const void* co
 		shader_bindings->ids[name] = id;
 	}
 
-cleanup:
 	spvReflectDestroyShaderModule(&module);
 	return result;
 }
@@ -183,7 +139,7 @@ static int check_shader(uint32_t id)
 		GLint length = 0;
 		glGetShaderiv(id, GL_INFO_LOG_LENGTH, &length);
 
-		std::vector<GLchar> error_message(length);
+		std::vector<GLchar> error_message((size_t)length);
 		glGetShaderInfoLog(id, length, NULL, &error_message[0]);
 
 		if (length)
@@ -202,11 +158,7 @@ static int load_shader_file(fs::path file, GLShaderModule* out)
 	std::string name = file.filename().string();
 	std::string ext = file.extension().string();
 
-	bool is_spv = false;
-
 	if (ext == ".spv") {
-		is_spv = true;
-
 		const char* str = filestr.c_str();
 
 		const char *c = str;
@@ -230,8 +182,10 @@ static int load_shader_file(fs::path file, GLShaderModule* out)
 			return -1;
 		}
 
-		ext.resize(end - start);
-		memcpy(ext.data(), start, end - start);
+		size_t len = (size_t)(end - start);
+
+		ext.resize(len);
+		memcpy(ext.data(), start, len);
 
 		name.resize(name.size() - sizeof(".spv") + 1);
 	} else {

@@ -21,14 +21,14 @@ static int pathcat(char* dest, const char* src, size_t maxlen)
 
     if (catlen < 0) return -1;
 
-    return snprintf(c,catlen,"/%s",s);
+    return snprintf(c,(size_t)catlen,"/%s",s);
 }
 
 namespace utils
 {
 
 monitor::monitor(void (*callback)(void*, monitor_event_t event), void* usr, const char *dir) 
-: m_callback(callback),m_usr(usr), m_dir(dir)
+: m_callback(callback), m_dir(dir), m_usr(usr)
 {
 #ifdef WIN32
     m_watchEvent = nullptr;
@@ -219,7 +219,7 @@ void watcher::watch()
 #include "tinydir.h"
 
 
-static int add_watch_recursive(int inotifyFd, std::unordered_map<int,std::string>& watches, const char * path, int flags)
+static int add_watch_recursive(int inotifyFd, std::unordered_map<int,std::string>& watches, const char * path, uint32_t flags)
 {
     if (!path) 
         return 0;
@@ -263,7 +263,7 @@ namespace utils
 {
 
 void monitor::watch() {
-    int inotifyFd,wd;
+    int inotifyFd;
     inotifyFd = inotify_init1(IN_NONBLOCK);
     ssize_t numRead;
     struct inotify_event* event;
@@ -274,9 +274,9 @@ void monitor::watch() {
         return;
     }
 
-	std::unique_ptr<char[]> buffer (new char[MONITOR_MAX_EVENT_BUFFER]);
+	std::unique_ptr<char[]> buffer (new (std::align_val_t{alignof(struct inotify_event)}) char[MONITOR_MAX_EVENT_BUFFER]);
 
-    int watchFlags =
+    uint32_t watchFlags =
       IN_CREATE 
     | IN_DELETE 
     | IN_MODIFY 
@@ -344,7 +344,10 @@ void monitor::watch() {
 
 		for (char* p = buffer.get(); p < buffer.get() + numRead; ) 
         {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wcast-align"
             event = (struct inotify_event *) p;
+#pragma clang diagnostic pop
 
             if (!activeWatches.count(event->wd))
             {

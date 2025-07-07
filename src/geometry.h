@@ -16,12 +16,15 @@
 #define TWOPI (2.0*3.141592654)
 #endif
 
+#ifndef TWOPIf
+#define TWOPIf (2.0f*3.141592654f)
+#endif
+
 namespace geometry
 {
 
-using namespace std::complex_literals;
 
-static void mesh_s2(uint32_t ntht, uint32_t nphi, std::vector<vertex3d>& verts, std::vector<uint32_t>& indices)
+static inline void mesh_s2(uint32_t ntht, uint32_t nphi, std::vector<vertex3d>& verts, std::vector<uint32_t>& indices)
 {
 	double tht = 0;
 
@@ -74,21 +77,23 @@ static void mesh_s2(uint32_t ntht, uint32_t nphi, std::vector<vertex3d>& verts, 
 static inline void mesh_torus(float R1, float R2, uint32_t ntht1, uint32_t ntht2, 
 				std::vector<vertex3d>& verts, std::vector<uint32_t>& indices)
 {
+	using namespace std::complex_literals;
+
 	size_t count = ntht1*ntht2;
 
 	verts.reserve(count);
 	indices.resize(6*count);
 
-	float du = 1.0/(float)(ntht1-1);
-	float dv = 1.0/(float)(ntht2-1);
+	float du = 1.0f/(float)(ntht1-1);
+	float dv = 1.0f/(float)(ntht2-1);
 
-	std::complex<float> dc1 = std::polar<float>(1,TWOPI*du);
-	std::complex<float> dc2 = std::polar<float>(1,TWOPI*dv);
+	std::complex<float> dc1 = std::polar<float>(1,TWOPIf*du);
+	std::complex<float> dc2 = std::polar<float>(1,TWOPIf*dv);
 
 	size_t idx = 0;
 
 	float u = 0;
-	std::complex<float> c1 = 1.f + 0.fi;
+	std::complex<float> c1 = 1.f;
 
 	for (uint32_t i = 0; i < ntht1; ++i) {
 		glm::vec3 A = glm::vec3(c1.real(),c1.imag(),0);
@@ -96,7 +101,7 @@ static inline void mesh_torus(float R1, float R2, uint32_t ntht1, uint32_t ntht2
 		uint32_t in = i + 1 < ntht1 ? i + 1 : 0; 
 
 		float v = 0;
-		std::complex<float> c2 = 1.f + 0.fi;
+		std::complex<float> c2 = 1.f;
 
 		for (uint32_t j = 0; j < ntht2; ++j) {
 			glm::vec3 B = glm::vec3(0,0,1)*c2.imag() - A*c2.real();

@@ -6,9 +6,6 @@
 #include <glm/vec3.hpp>
 #include <glm/vec2.hpp>
 
-#include <memory>
-#include <string>
-
 typedef uint32_t gl_tex;
 typedef uint32_t gl_renderbuffer;
 typedef uint32_t gl_framebuffer;

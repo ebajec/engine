@@ -105,7 +105,7 @@ std::unique_ptr<MyApp> MyApp::create(GLFWwindow *window)
 
 	glfwSetWindowUserPointer(window, app.get());
 
-	return std::move(app);
+	return app;
 }
 
 MyApp::~MyApp()
