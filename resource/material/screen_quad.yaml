@@ -1,0 +1,3 @@
+shaders:
+  vert: shader/screen_quad.vert
+  frag: shader/screen_quad.frag

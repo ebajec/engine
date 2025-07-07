@@ -1,0 +1,7 @@
+shaders:
+  vert: shader/default_mesh3d.vert
+  frag: shader/default_mesh3d.frag
+bindings:
+  - name: u_tex
+    type: sampler2D
+    path: image/eponge.png

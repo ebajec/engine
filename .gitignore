@@ -1,0 +1,13 @@
+build/
+build-*/
+.cache
+.vscode
+
+imgui.ini
+
+deps/imgui/imgui
+deps/glad/glad
+deps/spirv-reflect/spirv-reflect
+deps/stb/stb
+
+

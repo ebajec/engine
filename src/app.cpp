@@ -1,0 +1,114 @@
+#include "app.h"
+
+// imgui
+#include <imgui.h>
+#include <backends/imgui_impl_glfw.h>
+#include "backends/imgui_impl_opengl3.h"
+
+AppGlobals g_;
+
+void MyApp::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+	ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
+
+	MyApp *app = static_cast<MyApp*>(glfwGetWindowUserPointer(window));
+
+	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) 
+	{
+		if (g_.mouse_mode == GLFW_CURSOR_DISABLED)
+			g_.mouse_mode = GLFW_CURSOR_NORMAL;
+		else 
+			g_.mouse_mode = GLFW_CURSOR_DISABLED;
+
+		glfwSetInputMode(window, GLFW_CURSOR, g_.mouse_mode);
+	}
+
+	for (auto &ptr : app->components) {
+		if (auto shared = ptr.lock(); shared) 
+			shared->keyCallback(key,scancode,action,mods);
+	}
+}
+void MyApp::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
+{
+	ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
+	MyApp *app = static_cast<MyApp*>(glfwGetWindowUserPointer(window));
+	for (auto &ptr : app->components) {
+		if (auto shared = ptr.lock(); shared) 
+			shared->mouseButtonCallback(button,action,mods);
+	}
+}
+void MyApp::scrollCallback(GLFWwindow* window, double xoffset, double yoffset)
+{
+	ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
+	MyApp *app = static_cast<MyApp*>(glfwGetWindowUserPointer(window));
+	for (auto &ptr : app->components) {
+		if (auto shared = ptr.lock(); shared) 
+			shared->scrollCallback(xoffset,yoffset);
+	}
+}
+void MyApp::cursorPosCallback(GLFWwindow* window, double xpos, double ypos)
+{
+	ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
+	MyApp *app = static_cast<MyApp*>(glfwGetWindowUserPointer(window));
+	for (auto &ptr : app->components) {
+		if (auto shared = ptr.lock(); shared) 
+			shared->cursorPosCallback(xpos,ypos);
+	}
+}
+void MyApp::framebufferSizeCallback(GLFWwindow* window, int width, int height)
+{
+	MyApp *app = static_cast<MyApp*>(glfwGetWindowUserPointer(window));
+
+	app->width = width;
+	app->height = height;
+	app->aspect = (float)height/(float)width;
+
+	for (auto &ptr : app->components) {
+		if (auto shared = ptr.lock(); shared) 
+			shared->framebufferSizeCallback(width,height);
+	}
+}
+
+void MyApp::onFrameUpdateCallback(GLFWwindow *window) 
+{
+	for (auto &ptr : components) {
+		if (auto shared = ptr.lock(); shared) 
+			shared->onFrameUpdateCallback();
+	}
+}
+
+std::unique_ptr<MyApp> MyApp::create(GLFWwindow *window)
+{
+	if (!window) return nullptr;
+
+	std::unique_ptr<MyApp> app = std::unique_ptr<MyApp>(new MyApp());
+
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable keyboard controls
+	io.FontGlobalScale = 2.0f; 
+
+	// Set ImGui style
+	ImGui::StyleColorsDark();
+	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplOpenGL3_Init("#version 450");
+
+	glfwGetWindowSize(window, &app->width, &app->height);
+	app->aspect = (float)app->width/(float)app->height;
+
+	glfwSetKeyCallback(window,&MyApp::keyCallback);
+	glfwSetMouseButtonCallback(window,&MyApp::mouseButtonCallback);
+	glfwSetScrollCallback(window,&MyApp::scrollCallback);
+	glfwSetCursorPosCallback(window,&MyApp::cursorPosCallback);
+	glfwSetFramebufferSizeCallback(window, &MyApp::framebufferSizeCallback);
+
+	glfwSetWindowUserPointer(window, app.get());
+
+	return std::move(app);
+}
+
+MyApp::~MyApp()
+{
+}
+

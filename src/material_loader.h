@@ -1,0 +1,33 @@
+#include "def_gl.h"
+#include "resource_loader.h"
+
+struct GLTextureBinding
+{
+	TextureID id;
+};
+
+struct GLMaterial
+{
+	ShaderID vert;
+	ShaderID frag;
+
+	uint32_t program;
+
+	// After loading the shaders, the reflection can be inspected 
+	// to find the binding ids based on resource names in the material 
+	// config
+	std::unordered_map<uint32_t, GLTextureBinding> tex_bindings;
+};
+
+struct MaterialCreateInfo
+{
+	std::string path;
+};
+
+extern ResourceFns g_material_loader_fns;
+
+typedef FileDesc MaterialDesc;
+
+Handle load_material_file(ResourceLoader *loader, std::string_view path);
+
+const GLMaterial *get_material(ResourceLoader *loader, Handle h);
