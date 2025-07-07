@@ -10,6 +10,6 @@ deps/glad/glad
 deps/spirv-reflect/spirv-reflect
 deps/stb/stb
 
-resource/shader/*
+resource/shader/*.spv
 
 

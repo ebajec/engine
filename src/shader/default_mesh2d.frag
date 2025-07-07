@@ -1,24 +1,9 @@
 #version 430 core
+#extension GL_GOOGLE_include_directive : require
+#include "framedata.glsl"
+#include "common.glsl"
 
-struct camera_t
-{
-	mat4 p;
-	mat4 v;
-	mat4 pv;
-};
-
-struct framedata_t
-{
-	camera_t camera;
-	float t;
-};
-
-layout (binding = 5) uniform Framedata
-{
-	framedata_t u_frame;
-};
-
-//--------------------------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------------
 // Frag
 
 layout (location = 0) in vec2 frag_pos;
@@ -27,8 +12,6 @@ layout (location = 1) in vec2 frag_uv;
 layout (location = 0) out vec4 FragColor;
 
 layout (binding = 0) uniform sampler2D u_tex;
-
-#define TWOPI 6.28318530718
 
 vec4 diff(vec2 uv)
 {

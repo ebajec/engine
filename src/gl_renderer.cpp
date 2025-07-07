@@ -278,8 +278,9 @@ void GLRenderer::reset_target(RenderTargetID id, const RenderTargetCreateInfo* i
 {
 	auto iter = impl->render_targets.find(id); 
 
-	if (iter != impl->render_targets.end()){
+	if (iter == impl->render_targets.end()){
 		log_error("gl_renderer::resize_target : failed to get render_target with id %d!", id);
+		return;
 	}
 
 	impl->render_targets.erase(id);
