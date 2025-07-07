@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <stack>
 #include <atomic>
 #include <shared_mutex>
 #include <cstring>
@@ -46,7 +47,7 @@ enum ResourceStatus : int8_t
 	RESOURCE_STATUS_READY = 1,
 	RESOURCE_STATUS_LOADING = 2,
 };
-typedef uint32_t Handle;
+typedef uint32_t ResourceHandle;
 
 typedef LoadResult(*OnResourceCreate)(ResourceLoader* loader, void** res, void* info);
 typedef void(*OnResourceDestroy)(ResourceLoader* loader, void* res);
@@ -68,10 +69,10 @@ struct FileDesc
 struct ResourceReloadInfo
 {
 	std::mutex mut;
-	std::vector<Handle> subscribers;
+	std::vector<ResourceHandle> subscribers;
 	void *p_create_info;
 
-	void add_subscriber(Handle h) {
+	void add_subscriber(ResourceHandle h) {
 		std::lock_guard<std::mutex> lock(mut);
 		subscribers.push_back(h);
 	}
@@ -115,25 +116,35 @@ struct ResourceLoader
 	std::shared_mutex mut;
 	std::string resource_path;
 
+	// TODO: Allocate entries in larger blocks instead of like this
 	std::vector<std::unique_ptr<ResourceEntry>> entries;
+
+	// TODO: synchronization on this
+	std::stack<ResourceHandle> free_slots;
+
 	std::unordered_map<std::string,uint32_t> map;
 	std::array<ResourceFns, RESOURCE_TYPE_MAX_ENUM> pfns;
 
+
+	//-----------------------------------------------------------------------------
+
 	static std::unique_ptr<ResourceLoader> create(const ResourceLoaderCreateInfo *info); 
+	~ResourceLoader();
 
-	Handle create_handle(ResourceType type);
-	void destroy_handle(Handle h) {}
+	ResourceHandle create_handle(ResourceType type);
+	void destroy_handle(ResourceHandle h);
 
-	Handle find(std::string_view key);
-	const ResourceEntry *get(Handle h);
-	ResourceEntry *get_internal(Handle h);
+	ResourceHandle find(std::string_view key);
+	const ResourceEntry *get(ResourceHandle h);
 
-	void set_handle_key(Handle h, std::string_view key);
+	ResourceEntry *get_internal(ResourceHandle h);
+
+	void set_handle_key(ResourceHandle h, std::string_view key);
 	std::string make_path_abs(std::string_view str);
 };
 
-extern LoadResult resource_load(ResourceLoader *loader, Handle h, void *info);
-extern LoadResult resource_reload(ResourceLoader *loader, Handle h);
+extern LoadResult resource_load(ResourceLoader *loader, ResourceHandle h, void *info);
+extern LoadResult resource_reload(ResourceLoader *loader, ResourceHandle h);
 
 struct ResourceUpdateInfo
 {

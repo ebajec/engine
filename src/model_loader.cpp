@@ -117,12 +117,12 @@ void gl_model_destroy(ResourceLoader *loader, void *res)
 	if(model->ibo) glDeleteBuffers(1,&model->ibo);
 }
 
-LoadResult load_model(ResourceLoader *loader, Handle h, ModelDesc desc)
+LoadResult load_model(ResourceLoader *loader, ResourceHandle h, ModelDesc desc)
 {
 	return resource_load(loader, h, &desc);
 }
 
-const GLModel *get_model(ResourceLoader *loader, Handle h)
+const GLModel *get_model(ResourceLoader *loader, ResourceHandle h)
 {
 	const ResourceEntry *ent = loader->get(h);
 	if (!ent || ent->type != RESOURCE_TYPE_MODEL)

@@ -27,6 +27,6 @@ struct ShaderCreateInfo
 
 extern ResourceFns g_shader_loader_fns;
 
-extern Handle load_shader_file(ResourceLoader *loader, std::string_view path);
-extern const GLShaderModule *get_shader(ResourceLoader *loader, Handle h);
+extern ResourceHandle load_shader_file(ResourceLoader *loader, std::string_view path);
+extern const GLShaderModule *get_shader(ResourceLoader *loader, ResourceHandle h);
 

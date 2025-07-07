@@ -95,7 +95,7 @@ LoadResult ResourceHotReloader::process_updates()
 			info.path.resize(info.path.size() - sizeof(".spv") + 1);
 		}
 
-		Handle id = loader->find(info.path);
+		ResourceHandle id = loader->find(info.path);
 
 		if (!id) {
 			continue;
@@ -126,6 +126,8 @@ std::unique_ptr<ResourceLoader> ResourceLoader::create(const ResourceLoaderCreat
 
 	loader->resource_path = info->resource_path;
 	
+	// TODO : Think of a nice way to not initialize these here.
+	
 	loader->pfns[RESOURCE_TYPE_NONE] =	{};
 	loader->pfns[RESOURCE_TYPE_MATERIAL] = g_material_loader_fns;
 	loader->pfns[RESOURCE_TYPE_SHADER] = g_shader_loader_fns; 	
@@ -135,20 +137,75 @@ std::unique_ptr<ResourceLoader> ResourceLoader::create(const ResourceLoaderCreat
 	return loader;
 }
 
-Handle ResourceLoader::create_handle(ResourceType type)
+void cleanup(ResourceLoader *loader)
 {
+	for (size_t i = 0; i < loader->entries.size(); ++i) {
+		ResourceHandle h = i + 1;
+		loader->destroy_handle(h);
+	}
+}
+
+ResourceLoader::~ResourceLoader()
+{
+	cleanup(this);
+}
+
+ResourceHandle ResourceLoader::create_handle(ResourceType type)
+{
+	ResourceHandle h = RESOURCE_HANDLE_NULL;
+	ResourceEntry *ent = nullptr;
+
 	std::unique_lock<std::shared_mutex> lock(mut);
-	Handle h = static_cast<Handle>(entries.size() + 1);
+	if (!free_slots.empty()) {
+		h = free_slots.top();
+		free_slots.pop();
 
-	ResourceEntry *ent = new ResourceEntry{};
+		ent = entries[h - 1].get();
+	} else {
+	 	h = static_cast<ResourceHandle>(entries.size() + 1);
+	 	ent = new ResourceEntry{};
+		entries.push_back(std::unique_ptr<ResourceEntry>(ent));
+	}
+	lock.unlock();
+
+	assert(ent);
+
 	ent->type = type;
-
-	entries.push_back(std::unique_ptr<ResourceEntry>(ent));
 
 	return h;
 }
 
-Handle ResourceLoader::find(std::string_view key) 
+void ResourceLoader::destroy_handle(ResourceHandle h)
+{
+	// TODO : When the time comes, push deletions to queue to be processed
+	// at the end of every frame
+
+	ResourceEntry *ent = get_internal(h);
+
+	if (!ent) 
+		return;
+
+	// TODO : lol...
+	assert(!ent->refs.load());
+
+	ResourceType type = ent->type;
+
+	if (ent->data)
+		pfns[type].destroy_fn(this, ent->data);
+
+	ent->data = nullptr;
+
+#if RESOURCE_ENABLE_HOT_RELOAD
+	ent->reload_info.reset(nullptr);
+#endif
+	ent->status = RESOURCE_STATUS_EMPTY;
+	ent->type = RESOURCE_TYPE_NONE;
+
+	std::unique_lock<std::shared_mutex> lock(mut);
+	free_slots.push(h);
+}
+
+ResourceHandle ResourceLoader::find(std::string_view key) 
 {
 	std::shared_lock<std::shared_mutex> lock(mut);
 	auto it = map.find(key.data());
@@ -160,29 +217,31 @@ Handle ResourceLoader::find(std::string_view key)
 	return it->second;
 }
 
-const ResourceEntry *ResourceLoader::get(Handle h) 
+const ResourceEntry *ResourceLoader::get(ResourceHandle h) 
 {
 	if (h == RESOURCE_HANDLE_NULL || h > entries.size()) 
 		return nullptr;
 
-	return entries[h - 1].get();
-}
+	ResourceEntry *ent = entries[h - 1].get(); 
 
-ResourceEntry *ResourceLoader::get_internal(Handle h) 
-{
-	if (h == RESOURCE_HANDLE_NULL || h > entries.size()) 
+	if (ent->type == RESOURCE_TYPE_NONE)
 		return nullptr;
 
-	return entries[h - 1].get();
+	return ent;
 }
 
-void ResourceLoader::set_handle_key(Handle h, std::string_view key)
+ResourceEntry *ResourceLoader::get_internal(ResourceHandle h) 
+{
+	return const_cast<ResourceEntry*>(get(h));
+}
+
+void ResourceLoader::set_handle_key(ResourceHandle h, std::string_view key)
 {
 	std::unique_lock<std::shared_mutex> lock(mut);
 	map[key.data()] = h;
 }
 
-LoadResult resource_load(ResourceLoader *loader, Handle h, void *info)
+LoadResult resource_load(ResourceLoader *loader, ResourceHandle h, void *info)
 {
 	ResourceEntry *ent = loader->get_internal(h);
 
@@ -217,7 +276,7 @@ LoadResult resource_load(ResourceLoader *loader, Handle h, void *info)
 	return result;
 }
 
-LoadResult resource_reload(ResourceLoader *loader, Handle h)
+LoadResult resource_reload(ResourceLoader *loader, ResourceHandle h)
 {
 	if (h == RESOURCE_HANDLE_NULL)
 		return RESULT_ERROR;
@@ -249,7 +308,7 @@ LoadResult resource_reload(ResourceLoader *loader, Handle h)
 	ent->data = new_data;
 	ent->status = RESOURCE_STATUS_READY;
 
-	for (Handle sub : ent->reload_info->subscribers) {
+	for (ResourceHandle sub : ent->reload_info->subscribers) {
 		resource_reload(loader,sub);
 	}
 

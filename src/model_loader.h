@@ -40,9 +40,9 @@ typedef std::variant<Mesh3DCreateInfo*, Mesh2DCreateInfo*> ModelDesc;
 
 extern ResourceFns g_model_loader_fns;
 
-extern LoadResult load_model(ResourceLoader *loader, Handle h, ModelDesc desc);
+extern LoadResult load_model(ResourceLoader *loader, ResourceHandle h, ModelDesc desc);
 
-const GLModel *get_model(ResourceLoader *loader, Handle h);
+const GLModel *get_model(ResourceLoader *loader, ResourceHandle h);
 
 
 

@@ -28,6 +28,6 @@ extern ResourceFns g_material_loader_fns;
 
 typedef FileDesc MaterialDesc;
 
-Handle load_material_file(ResourceLoader *loader, std::string_view path);
+ResourceHandle load_material_file(ResourceLoader *loader, std::string_view path);
 
-const GLMaterial *get_material(ResourceLoader *loader, Handle h);
+const GLMaterial *get_material(ResourceLoader *loader, ResourceHandle h);

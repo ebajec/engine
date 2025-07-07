@@ -351,6 +351,7 @@ int main(int argc, char* argv[])
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
 
+	glfwDestroyWindow(window);
 	glfwTerminate();
 
 	return EXIT_SUCCESS;

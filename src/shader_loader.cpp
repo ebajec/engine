@@ -305,9 +305,9 @@ void gl_shader_module_destroy(ResourceLoader *loader, void *res)
 	if (shader->id) glDeleteShader(shader->id);
 }
 
-Handle load_shader_file(ResourceLoader *loader, std::string_view path)
+ResourceHandle load_shader_file(ResourceLoader *loader, std::string_view path)
 {
-	Handle h = loader->find(path);
+	ResourceHandle h = loader->find(path);
 
 	if (h)
 		return h;
@@ -338,7 +338,7 @@ error_cleanup:
 	return 0;
 }
 
-const GLShaderModule *get_shader(ResourceLoader *loader, Handle h)
+const GLShaderModule *get_shader(ResourceLoader *loader, ResourceHandle h)
 {
 	const ResourceEntry *ent = loader->get(h);
 	if (!ent || ent->type != RESOURCE_TYPE_SHADER)

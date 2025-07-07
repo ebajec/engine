@@ -17,11 +17,11 @@ typedef uint32_t gl_vao;
 typedef uint32_t gl_vbo;
 typedef uint32_t gl_program;
 
-typedef uint32_t Handle;
-typedef Handle ModelID;
-typedef Handle ShaderID;
-typedef Handle TextureID;
-typedef Handle MaterialID;
+typedef uint32_t ResourceHandle;
+typedef ResourceHandle ModelID;
+typedef ResourceHandle ShaderID;
+typedef ResourceHandle TextureID;
+typedef ResourceHandle MaterialID;
 
 enum TexFormat
 {

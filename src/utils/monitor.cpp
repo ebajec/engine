@@ -274,7 +274,7 @@ void monitor::watch() {
         return;
     }
 
-    char* buffer = new char[MONITOR_MAX_EVENT_BUFFER];
+	std::unique_ptr<char[]> buffer (new char[MONITOR_MAX_EVENT_BUFFER]);
 
     int watchFlags =
       IN_CREATE 
@@ -327,7 +327,7 @@ void monitor::watch() {
 
         // TODO: robust handling for overflows
 
-        numRead = read(inotifyFd, buffer, MONITOR_MAX_EVENT_BUFFER*sizeof(char));
+		numRead = read(inotifyFd, buffer.get(), MONITOR_MAX_EVENT_BUFFER*sizeof(char));
         if (numRead < 0)
         {
             if (errno == EINTR)
@@ -342,7 +342,7 @@ void monitor::watch() {
             }
         }
 
-        for (char* p = buffer; p < buffer + numRead; ) 
+		for (char* p = buffer.get(); p < buffer.get() + numRead; ) 
         {
             event = (struct inotify_event *) p;
 

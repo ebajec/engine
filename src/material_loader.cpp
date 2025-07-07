@@ -280,7 +280,7 @@ void gl_material_destroy(ResourceLoader *loader, void *res)
 	if (material->program) glDeleteProgram(material->program);
 }
 
-void update_material_dependencies(ResourceLoader *loader, Handle h)
+void update_material_dependencies(ResourceLoader *loader, ResourceHandle h)
 {
 	const GLMaterial *material = get_material(loader,h);
 
@@ -302,9 +302,9 @@ void update_material_dependencies(ResourceLoader *loader, Handle h)
 	}
 }
 
-Handle load_material_file(ResourceLoader *loader, std::string_view path)
+ResourceHandle load_material_file(ResourceLoader *loader, std::string_view path)
 {
-	Handle h = loader->find(path);
+	ResourceHandle h = loader->find(path);
 
 	if (h) return h;
 
@@ -335,11 +335,12 @@ Handle load_material_file(ResourceLoader *loader, std::string_view path)
 	return h;
 
 error_cleanup:
+	log_error("Failed to load material file at %s",path.data());
 	loader->destroy_handle(h);
 	return 0;
 }
 
-const GLMaterial *get_material(ResourceLoader *loader, Handle h)
+const GLMaterial *get_material(ResourceLoader *loader, ResourceHandle h)
 {
 	const ResourceEntry *ent = loader->get(h);
 	if (!ent || ent->type != RESOURCE_TYPE_MATERIAL)

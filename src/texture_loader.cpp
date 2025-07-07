@@ -67,6 +67,8 @@ LoadResult load_img_from_file(GLImage *tex, std::string_view path)
 	tex->h = height;
 	tex->d = 1;
 
+	free(rgba);
+
 	if (uint32_t error = gl_check_err())
 		goto LOAD_TEX_FILE_ERROR_CLEANUP;
 
@@ -110,9 +112,9 @@ void gl_image_destroy(ResourceLoader *loader, void *res)
 	delete tex;
 }
 
-Handle load_image_file(ResourceLoader *loader, std::string_view path)
+ResourceHandle load_image_file(ResourceLoader *loader, std::string_view path)
 {
-	Handle h = loader->find(path);
+	ResourceHandle h = loader->find(path);
 
 	if (h)
 		return h;
@@ -145,7 +147,7 @@ error_cleanup:
 	return 0;
 }
 
-const GLImage *get_image(ResourceLoader *loader, Handle h)
+const GLImage *get_image(ResourceLoader *loader, ResourceHandle h)
 {
 	const ResourceEntry *ent = loader->get(h);
 	if (!ent || ent->type != RESOURCE_TYPE_IMAGE)

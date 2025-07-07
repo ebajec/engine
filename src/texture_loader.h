@@ -22,5 +22,5 @@ typedef FileDesc TextureDesc;
 
 extern ResourceFns g_image_loader_fns;
 
-Handle load_image_file(ResourceLoader *loader, std::string_view path);
-const GLImage *get_image(ResourceLoader *loader, Handle h);
+ResourceHandle load_image_file(ResourceLoader *loader, std::string_view path);
+const GLImage *get_image(ResourceLoader *loader, ResourceHandle h);

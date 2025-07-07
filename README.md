@@ -1,6 +1,6 @@
 # Setup
 
-## Linux
+## Build Linux
 
 1. `cd ./path/to/this`
 2. `chmod +x ./configure.sh; ./configure.sh`
@@ -10,4 +10,3 @@
 ### Fedora/RHEL
 
 `dnf install -y glfw-devel yaml-cpp-devel glm-devel`
-
