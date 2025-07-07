@@ -20,7 +20,7 @@ struct GLModel
 
 struct Mesh2DCreateInfo
 {
-	const vertex3d* data; 
+	const vertex2d* data; 
 	size_t vcount; 
 
 	const uint32_t* indices; 

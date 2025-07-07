@@ -3,62 +3,12 @@
 #include "texture_loader.h"
 #include "model_loader.h"
 
-#include "gl_renderer.h"
 #include "def_gl.h"
+#include "gl_renderer.h"
+#include "renderer_defaults.h"
 
 #include <glm/gtc/type_ptr.hpp>
 #include <atomic>
-
-static constexpr vertex2d default_tex_quad_verts[] = {
-	vertex2d{glm::vec2(-1,-1), glm::vec2(0, 0)},
-	vertex2d{glm::vec2(1, -1), glm::vec2(1, 0)},
-	vertex2d{glm::vec2(1,  1), glm::vec2(1, 1)},
-	vertex2d{glm::vec2(-1, 1), glm::vec2(0, 1)}
-};
-static constexpr uint32_t default_tex_quad_indices[] = {
-	0,1,2,0,2,3
-};
-
-enum gl_renderer_bindings
-{
-	GL_RENDERER_COLOR_ATTACHMENT_BINDING = 0,
-	GL_RENDERER_FRAMEDATA_BINDING = 5
-};
-
-struct gl_target_uniforms
-{
-	glm::mat4 p;
-	glm::mat4 v;
-	glm::mat4 pv;
-
-	float t;
-};
-
-struct gl_tex_quad
-{
-	gl_vao vao;
-	gl_vbo vbo;
-	gl_vbo ibo;
-};
-
-struct gl_render_target
-{
-	uint32_t w;
-	uint32_t h;
-
-	gl_framebuffer fbo;
-	gl_tex color;
-	gl_renderbuffer depth;
-	gl_ubo ubo;
-	
-	// these are for drawing to a window
-	~gl_render_target();
-};
-
-struct base_resources_t
-{
-	MaterialID screen_quad;
-};
 
 struct gl_renderer_impl
 {
@@ -68,70 +18,17 @@ struct gl_renderer_impl
 	std::unordered_map<RenderTargetID, 
 		std::unique_ptr<gl_render_target>> render_targets;
 
-	gl_tex_quad screen_quad;
-
-	base_resources_t base_resources;
+	RendererDefaults defaults;
 
 	gl_render_target* get_target(RenderTargetID id);
 };
 
 //--------------------------------------------------------------------------------------------------
-// Tex quad
-
-static void gl_tex_quad_draw(const gl_tex_quad* quad)
-{
-	glBindVertexArray(quad->vao);
-	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
-}
-
-static int gl_tex_quad_create(gl_tex_quad *quad)
-{
-	gl_vao vao;
-	glGenVertexArrays(1,&vao);
-	glBindVertexArray(vao);
-
-	gl_vbo ibo;
-	glGenBuffers(1,&ibo);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ibo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-			  sizeof(default_tex_quad_indices),default_tex_quad_indices,GL_STATIC_DRAW);
-
-	gl_vbo vbo;
-	glGenBuffers(1, &vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, 
-			  sizeof(default_tex_quad_verts),default_tex_quad_verts,GL_STATIC_DRAW);
-
-	glEnableVertexArrayAttrib(vao,0);
-	glEnableVertexArrayAttrib(vao,1);
-	glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,sizeof(vertex2d),(void*)offsetof(vertex2d,position));
-	glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,sizeof(vertex2d),(void*)offsetof(vertex2d,uv));
-
-	glBindVertexArray(0);
-	glBindBuffer(GL_ARRAY_BUFFER,0);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
-
-	quad->vao = vao;
-	quad->vbo = vbo;
-	quad->ibo = ibo;
-
-	return 0;
-}
-
-static void gl_tex_quad_destroy(gl_tex_quad* quad)
-{
-	if (quad->vao) glDeleteVertexArrays(1,&quad->vao);
-	if (quad->vbo) glDeleteBuffers(1, &quad->vbo);
-	if (quad->ibo) glDeleteBuffers(1, &quad->ibo);
-}
-
-
-//--------------------------------------------------------------------------------------------------
 // Frame ubo
 
-static gl_target_uniforms gl_target_uniforms_create(const RenderContext* ctx)
+static gl_framedata_t gl_target_uniforms_create(const RenderContext* ctx)
 {
-	gl_target_uniforms u;
+	gl_framedata_t u;
 	u.p = ctx->camera.proj;
 	u.v = ctx->camera.view;
 	u.pv = u.p*u.v;
@@ -150,7 +47,7 @@ static std::unique_ptr<gl_render_target> gl_render_target_create(const RenderTar
 	gl_ubo ubo;
 	glGenBuffers(1,&ubo);
 	glBindBuffer(GL_UNIFORM_BUFFER,ubo);
-	glBufferData(GL_UNIFORM_BUFFER,sizeof(gl_target_uniforms),NULL,GL_DYNAMIC_READ);
+	glBufferData(GL_UNIFORM_BUFFER,sizeof(gl_framedata_t),NULL,GL_DYNAMIC_READ);
 	glBindBuffer(GL_UNIFORM_BUFFER,0);
 
 	gl_framebuffer fbo;
@@ -255,16 +152,16 @@ std::unique_ptr<GLRenderer> GLRenderer::create(const GLRendererCreateInfo* info)
 
 	impl->loader = info->resource_loader;
 
-	impl->base_resources.screen_quad = load_material_file(impl->loader.get(),"material/screen_quad.yaml");
+	LoadResult result = renderer_defaults_init(impl->loader.get(), &impl->defaults);
 
-	gl_tex_quad_create(&impl->screen_quad);
-
+	if (result != RESULT_SUCCESS) {
+		return nullptr;
+	}
 	return std::unique_ptr<GLRenderer>(renderer);
 }
 
 GLRenderer::~GLRenderer()
 {
-	gl_tex_quad_destroy(&impl->screen_quad);
 }
 
 RenderTargetID GLRenderer::create_target(const RenderTargetCreateInfo* info)
@@ -298,7 +195,7 @@ void GLRenderer::begin_pass(const RenderContext* ctx)
 
 	// upload uniforms
 
-	gl_target_uniforms uniforms = gl_target_uniforms_create(ctx);
+	gl_framedata_t uniforms = gl_target_uniforms_create(ctx);
 
 	glBindBuffer(GL_UNIFORM_BUFFER,target->ubo);
 	glBufferSubData(GL_UNIFORM_BUFFER,0,sizeof(uniforms),&uniforms);
@@ -335,11 +232,13 @@ void GLRenderer::draw_target(RenderTargetID id, glm::mat4 T)
 
 	if (!target) return;
 
-	bind_material(impl->base_resources.screen_quad);
+	bind_material(impl->defaults.materials.screen_quad);
 
 	glBindTextureUnit(GL_RENDERER_COLOR_ATTACHMENT_BINDING,target->color);
 
-	gl_tex_quad_draw(&impl->screen_quad);
+	const GLModel *model = get_model(impl->loader.get(),impl->defaults.models.screen_quad);
+	glBindVertexArray(model->vao);
+	glDrawElements(GL_TRIANGLES,(int)model->icount,GL_UNSIGNED_INT,NULL);
 }
 
 void GLRenderer::bind_material(MaterialID id) 
@@ -359,18 +258,17 @@ void GLRenderer::bind_material(MaterialID id)
 		const GLImage *tex = get_image(impl->loader.get(),texID);
 
 		if (!tex) {
-			// TODO: Bind default texture
-
-		} else {
-			glBindTexture(GL_TEXTURE_2D, tex->id);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);   
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);   
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-			glBindTexture(GL_TEXTURE_2D,0);
-
-			glBindTextureUnit(binding,tex->id);
+			tex = get_image(impl->loader.get(), impl->defaults.textures.missing);
 		}
+
+		glBindTexture(GL_TEXTURE_2D, tex->id);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);   
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);   
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glBindTexture(GL_TEXTURE_2D,0);
+
+		glBindTextureUnit(binding,tex->id);
 	}
 
 	glUseProgram(material->program);

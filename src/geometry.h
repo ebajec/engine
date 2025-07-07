@@ -23,7 +23,6 @@
 namespace geometry
 {
 
-
 static inline void mesh_s2(uint32_t ntht, uint32_t nphi, std::vector<vertex3d>& verts, std::vector<uint32_t>& indices)
 {
 	double tht = 0;
@@ -136,4 +135,4 @@ static inline void mesh_torus(float R1, float R2, uint32_t ntht1, uint32_t ntht2
 }; // namespace geometry
 
 
-#endif
+#endif // GEOMETRY_H
