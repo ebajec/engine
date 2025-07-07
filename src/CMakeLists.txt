@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.27)
 set(CMAKE_CXX_STANDARD 23)
 
+include(clang-warnings)
+
 set(TARGET "app")
 project(${TARGET})
 
@@ -16,8 +18,10 @@ target_link_libraries(${TARGET} PRIVATE
     glfw 
     glad
     imgui
-	spirv-reflect
+	spirv-reflect-static
 	stb
     OpenGL::GL
 	yaml-cpp::yaml-cpp
     glm::glm)
+
+enable_clang_warnings(${TARGET})

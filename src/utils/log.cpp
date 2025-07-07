@@ -56,7 +56,7 @@ void _log_warn(const char* format, ...)
 	if (_log_callback) _log_callback(LOG_WARN_BIT,format,args);
 }
 
-void log_set_callback(void * usr, log_callback_t callback)
+void log_set_callback(void *, log_callback_t callback)
 {
 	_log_callback = callback;
 }

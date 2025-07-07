@@ -1,12 +1,4 @@
-cmake_minimum_required(VERSION 3.27)
-set(CMAKE_CXX_STANDARD 20)
+set(SPIRV_REFLECT_EXECUTABLE OFF CACHE BOOL "" FORCE)
+set(SPIRV_REFLECT_STATIC_LIB ON CACHE BOOL "" FORCE)
 
-project(spirv-reflect)
-
-file(GLOB SOURCES
-    "spirv-reflect/spirv_reflect.c"
-    )
-
-add_library(spirv-reflect STATIC ${SOURCES})
-
-target_include_directories(spirv-reflect PUBLIC spirv-reflect)
+add_subdirectory(spirv-reflect)

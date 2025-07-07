@@ -8,6 +8,9 @@ static void gl_model_destroy(ResourceLoader *loader, void *model);
 ResourceFns g_model_loader_fns = {
 	.create_fn = gl_model_create,
 	.destroy_fn = gl_model_destroy,
+#if RESOURCE_ENABLE_HOT_RELOAD
+	.create_reload_info_fn = nullptr
+#endif
 };
 
 int GLModel::init()
@@ -19,7 +22,7 @@ int GLModel::init()
 	return gl_check_err();
 }
 
-LoadResult model_load_2d(GLModel* model, const Mesh2DCreateInfo *info)
+static LoadResult model_load_2d(GLModel* model, const Mesh2DCreateInfo *info)
 {
 	model->type = MODEL_TYPE_MESH_2D;
 	model->vcount = info->vcount;
@@ -30,12 +33,12 @@ LoadResult model_load_2d(GLModel* model, const Mesh2DCreateInfo *info)
 	glBindVertexArray(model->vao);
 
 	glBindBuffer(GL_ARRAY_BUFFER,model->vbo);
-	glBufferData(GL_ARRAY_BUFFER,model->vsize*model->vcount,info->data,GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER,(GLsizei)(model->vsize*(size_t)model->vcount),info->data,GL_DYNAMIC_DRAW);
 
 	gl_check_err();
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,model->ibo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER,model->icount*model->isize,info->indices,GL_DYNAMIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER,(GLsizei)(model->icount*(size_t)model->isize),info->indices,GL_DYNAMIC_DRAW);
 
 	gl_check_err();
 
@@ -51,7 +54,7 @@ LoadResult model_load_2d(GLModel* model, const Mesh2DCreateInfo *info)
 	return RESULT_SUCCESS;
 }
 
-LoadResult model_load_3d(GLModel *model, const Mesh3DCreateInfo *info)
+static LoadResult model_load_3d(GLModel *model, const Mesh3DCreateInfo *info)
 {
 	model->type = MODEL_TYPE_MESH_3D;
 	model->vcount = info->vcount;
@@ -62,12 +65,12 @@ LoadResult model_load_3d(GLModel *model, const Mesh3DCreateInfo *info)
 	glBindVertexArray(model->vao);
 
 	glBindBuffer(GL_ARRAY_BUFFER,model->vbo);
-	glBufferData(GL_ARRAY_BUFFER,model->vsize*model->vcount,info->data,GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER,(GLsizei)(model->vsize*model->vcount),info->data,GL_DYNAMIC_DRAW);
 
 	gl_check_err();
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,model->ibo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER,model->icount*model->isize,info->indices,GL_DYNAMIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER,(GLsizei)(model->icount*model->isize),info->indices,GL_DYNAMIC_DRAW);
 
 	gl_check_err();
 

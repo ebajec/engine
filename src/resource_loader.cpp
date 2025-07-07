@@ -283,7 +283,7 @@ LoadResult resource_reload(ResourceLoader *loader, ResourceHandle h)
 
 	ResourceEntry *ent = loader->get_internal(h);
 
-	if (!ent->reload_info)
+	if (!ent || !ent->reload_info)
 		return RESULT_ERROR;
 
 	LoadResult result = RESULT_SUCCESS;

@@ -2,9 +2,9 @@
 
 #include <utils/log.h>
 
-static inline uint32_t gl_check_err() 
+static inline int gl_check_err() 
 {
-    GLenum error = glGetError();
+    int error = static_cast<int> (glGetError());
 
     if (!error) return error;
 

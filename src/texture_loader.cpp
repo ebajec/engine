@@ -48,7 +48,7 @@ int GLImage::init()
 	return 0;
 }
 
-LoadResult load_img_from_file(GLImage *tex, std::string_view path)
+static LoadResult load_img_from_file(GLImage *tex, std::string_view path)
 {
 	int width, height, channels;
 	uint8_t* rgba = stbi_load(path.data(),&width,&height,&channels,STBI_rgb_alpha);
@@ -63,13 +63,13 @@ LoadResult load_img_from_file(GLImage *tex, std::string_view path)
 	glTexSubImage2D(GL_TEXTURE_2D,0,0,0,width,height,GL_RGBA, GL_UNSIGNED_BYTE, rgba);
 
 	tex->fmt = TEX_FORMAT_RGBA8;
-	tex->w = width;
-	tex->h = height;
+	tex->w = (uint32_t)width;
+	tex->h = (uint32_t)height;
 	tex->d = 1;
 
 	free(rgba);
 
-	if (uint32_t error = gl_check_err())
+	if (gl_check_err())
 		goto LOAD_TEX_FILE_ERROR_CLEANUP;
 
 	log_info("Loaded image file : %s",path.data());

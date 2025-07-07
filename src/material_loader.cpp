@@ -63,7 +63,7 @@ ResourceFns g_material_loader_fns = {
 #endif
 };
 
-LoadResult parse_material_file(PreMaterialInfo *info, std::string_view path)
+static LoadResult parse_material_file(PreMaterialInfo *info, std::string_view path)
 {
 	YAML::Node root = YAML::LoadFile(path.data());
 
