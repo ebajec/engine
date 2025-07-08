@@ -9,6 +9,7 @@
 
 #include <stdint.h>
 
+#include <unordered_set>
 #include <memory>
 #include <stack>
 #include <atomic>
@@ -23,6 +24,8 @@
 
 struct ResourceLoader;
 
+// TODO : callback in debug mode when a function hits an error? 
+// 'setResult'??
 enum LoadResult : int32_t
 {
 	ERROR_INVALID_HANDLE = -2,
@@ -40,6 +43,14 @@ enum ResourceType :uint8_t
 	RESOURCE_TYPE_MAX_ENUM
 };
 
+enum ResourceLoaderType
+{
+	RESOURCE_LOADER_IMAGE_MEMORY,
+	RESOURCE_LOADER_MODEL_2D,
+	RESOURCE_LOADER_MODEL_3D,
+	RESOURCE_LOADER_MAX_ENUM
+};
+
 enum ResourceStatus : int8_t
 {
 	RESOURCE_STATUS_INVALID = -1,
@@ -52,42 +63,43 @@ typedef uint32_t ResourceHandle;
 typedef LoadResult(*OnResourceCreate)(ResourceLoader* loader, void** res, void* info);
 typedef void(*OnResourceDestroy)(ResourceLoader* loader, void* res);
 
-typedef void*(*OnResourceLoadDesc)(void* desc);
-typedef void(*OnResourceDestroyDesc)(void* desc);
-
+typedef LoadResult(*OnResourceCreateFromDisk)(ResourceLoader *loader, ResourceHandle h, const char *path); 
+typedef LoadResult(*OnResourceLoad)(ResourceLoader* loader, void* res, void* info);
 typedef LoadResult(*OnResourcePostLoad)(ResourceLoader* loader, void* res, void* info);
 
-struct FileDesc
-{
-	std::string path;
-
-	bool operator == (const FileDesc& other) const {
-		return other.path == path;
-	}
-};
-
-struct ResourceReloadInfo
-{
-	std::mutex mut;
-	std::vector<ResourceHandle> subscribers;
-	void *p_create_info;
-
-	void add_subscriber(ResourceHandle h) {
-		std::lock_guard<std::mutex> lock(mut);
-		subscribers.push_back(h);
-	}
-
-	virtual ~ResourceReloadInfo() {}
-};
+//------------------------------------------------------------------------------
+// Virtual Tables
 
 struct ResourceFns
 {
-	OnResourceCreate create_fn;
-	OnResourceDestroy destroy_fn;
+	OnResourceCreate create;
+	OnResourceDestroy destroy;
+	OnResourceCreateFromDisk load_file;
+};
 
-#if RESOURCE_ENABLE_HOT_RELOAD
-	ResourceReloadInfo *(*create_reload_info_fn)(void *info);
-#endif
+struct ResourceLoaderFns
+{
+	OnResourceLoad loader_fn;
+	OnResourcePostLoad post_load_fn;
+};
+
+//------------------------------------------------------------------------------
+// Resource loader
+
+struct ResourceReloadInfo
+{
+	std::string path;
+	std::mutex mut;
+	std::unordered_set<ResourceHandle> subscribers;
+
+	void add_subscriber(ResourceHandle h) {
+		std::lock_guard<std::mutex> lock(mut);
+		subscribers.insert(h);
+	}
+	void remove_subscriber(ResourceHandle h) {
+		std::lock_guard<std::mutex> lock(mut);
+		subscribers.erase(h);
+	}
 };
 
 struct ResourceEntry 
@@ -96,20 +108,15 @@ struct ResourceEntry
 
 	std::atomic_int refs;
 	std::atomic<ResourceStatus> status;
-
 	ResourceType type;
 
-#if RESOURCE_ENABLE_HOT_RELOAD
 	std::unique_ptr<ResourceReloadInfo> reload_info;
-#endif
 };
 
 struct ResourceLoaderCreateInfo
 {
 	const char *resource_path;
 };
-
-struct ResourceWatcher;
 
 struct ResourceLoader
 {
@@ -123,8 +130,11 @@ struct ResourceLoader
 	std::stack<ResourceHandle> free_slots;
 
 	std::unordered_map<std::string,uint32_t> map;
-	std::array<ResourceFns, RESOURCE_TYPE_MAX_ENUM> pfns;
 
+	struct {
+		std::array<ResourceFns, RESOURCE_TYPE_MAX_ENUM> alloc_fns; 
+		std::array<ResourceLoaderFns, RESOURCE_LOADER_MAX_ENUM> loader_fns;
+	} pfns;
 
 	//-----------------------------------------------------------------------------
 
@@ -134,6 +144,13 @@ struct ResourceLoader
 	ResourceHandle create_handle(ResourceType type);
 	void destroy_handle(ResourceHandle h);
 
+	LoadResult load_file(ResourceHandle h, const char *path);
+	LoadResult allocate(ResourceHandle h, void* alloc_info);
+
+	LoadResult upload(ResourceHandle h, ResourceLoaderType loader, void* upload_info);
+
+	LoadResult reload(ResourceHandle h);
+
 	ResourceHandle find(std::string_view key);
 	const ResourceEntry *get(ResourceHandle h);
 
@@ -142,9 +159,6 @@ struct ResourceLoader
 	void set_handle_key(ResourceHandle h, std::string_view key);
 	std::string make_path_abs(std::string_view str);
 };
-
-extern LoadResult resource_load(ResourceLoader *loader, ResourceHandle h, void *info);
-extern LoadResult resource_reload(ResourceLoader *loader, ResourceHandle h);
 
 struct ResourceUpdateInfo
 {

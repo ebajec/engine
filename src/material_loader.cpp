@@ -27,40 +27,15 @@ struct PreMaterialInfo
 	std::vector<Binding> bindings;
 };
 
-#if RESOURCE_ENABLE_HOT_RELOAD
-
-struct MaterialReloadInfo : public ResourceReloadInfo
-{
-	~MaterialReloadInfo()
-	{
-		MaterialCreateInfo *info = static_cast<MaterialCreateInfo*>(p_create_info);
-		delete info;
-	}
-};
-
-static ResourceReloadInfo *create_material_reload_info(void *info) 
-{
-	ResourceReloadInfo *reload_info = new ResourceReloadInfo{};
-
-	MaterialCreateInfo *create_info = new MaterialCreateInfo{};
-	*create_info = *static_cast<MaterialCreateInfo*>(info);
-
-	reload_info->p_create_info = create_info;
-
-	return reload_info;
-}
-#endif
-
 static LoadResult gl_material_create(ResourceLoader *loader, void **res, void *info);
 static void gl_material_destroy(ResourceLoader *loader, void *res);
 
-ResourceFns g_material_loader_fns = {
-	.create_fn = &gl_material_create,
-	.destroy_fn = &gl_material_destroy,
+static LoadResult gl_material_load_file(ResourceLoader *loader, ResourceHandle h, const char *path);
 
-#if RESOURCE_ENABLE_HOT_RELOAD
-	.create_reload_info_fn = &create_material_reload_info
-#endif
+ResourceFns g_material_alloc_fns = {
+	.create = &gl_material_create,
+	.destroy = &gl_material_destroy,
+	.load_file = &gl_material_load_file 
 };
 
 static LoadResult parse_material_file(PreMaterialInfo *info, std::string_view path)
@@ -188,55 +163,53 @@ static LoadResult gl_material_load(ResourceLoader *loader, GLMaterial *mat, cons
 		merged_ids.merge(map);
 	}
 
-	if (!info->bindings.size()) {
-		return res;
-	}
-
 	size_t bind_count = info->bindings.size();
+	if (bind_count) {
 
-	std::vector<TextureID> textures (bind_count,RESOURCE_HANDLE_NULL);
+		std::vector<TextureID> textures (bind_count,RESOURCE_HANDLE_NULL);
 
-	const char* material_name = "material";
+		const char* material_name = "material";
 
-	for (size_t i = 0; i < info->bindings.size(); ++i) {
-		const Binding *bind = &info->bindings[i];
+		for (size_t i = 0; i < info->bindings.size(); ++i) {
+			const Binding *bind = &info->bindings[i];
 
-		TextureID texID = load_image_file(loader,bind->path);
+			TextureID texID = load_image_file(loader,bind->path);
 
-		if (texID == RESOURCE_HANDLE_NULL) {
-			log_error(
-	  			"While loading material %s : failed to load texture %s for binding=%s\n",
-				info->name.c_str(),bind->path.c_str(),bind->name.c_str());
-			continue;
+			if (texID == RESOURCE_HANDLE_NULL) {
+				log_error(
+					"While loading material %s : failed to load texture %s for binding=%s\n",
+					info->name.c_str(),bind->path.c_str(),bind->name.c_str());
+				continue;
+			}
+
+			textures[i] = texID;
 		}
 
-		textures[i] = texID;
-	}
+		std::unordered_map<uint32_t, GLTextureBinding> tex_bindings;
 
-	std::unordered_map<uint32_t, GLTextureBinding> tex_bindings;
+		for (size_t i = 0; i < bind_count; ++i) {
+			TextureID texID = textures[i];
+			
+			const Binding *bind = &info->bindings[i];
 
-	for (size_t i = 0; i < bind_count; ++i) {
-		TextureID texID = textures[i];
-		
-		const Binding *bind = &info->bindings[i];
+			auto it = merged_ids.find(bind->name);
+			if (it == merged_ids.end()) {
+				log_error("While loading material %s : failed to find binding '%s'\n",
+							material_name, bind->name.c_str());
+				return RESULT_ERROR;
+			}
 
-		auto it = merged_ids.find(bind->name);
-		if (it == merged_ids.end()) {
-			log_error("While loading material %s : failed to find binding '%s'\n",
-			 			material_name, bind->name.c_str());
-			return RESULT_ERROR;
+			uint32_t id = it->second;
+
+			GLTextureBinding texBinding = {
+				.id = texID
+			};
+
+			tex_bindings[id] = std::move(texBinding);
 		}
 
-		uint32_t id = it->second;
-
-		GLTextureBinding texBinding = {
-			.id = texID
-		};
-
-		tex_bindings[id] = std::move(texBinding);
+		mat->tex_bindings = std::move(tex_bindings);
 	}
-
-	mat->tex_bindings = std::move(tex_bindings);
 
 	log_info("Loaded material : %s",info->name.c_str());
 	return res;
@@ -244,14 +217,13 @@ static LoadResult gl_material_load(ResourceLoader *loader, GLMaterial *mat, cons
 
 LoadResult gl_material_create(ResourceLoader *loader, void **res, void *info)
 {
-	MaterialDesc *desc = static_cast<MaterialDesc*>(info);
+	MaterialCreateInfo *ci = static_cast<MaterialCreateInfo*>(info);
 
-	PreMaterialInfo pre_info;
-
-	const char *path = desc->path.c_str();
+	const char *path = ci->path.c_str();
 
 	LoadResult result = RESULT_SUCCESS;
 
+	PreMaterialInfo pre_info;
 	try {
 		result = parse_material_file(&pre_info,path);
 	} catch (YAML::Exception e) {
@@ -302,42 +274,41 @@ static void update_material_dependencies(ResourceLoader *loader, ResourceHandle 
 	}
 }
 
+static LoadResult gl_material_load_file(ResourceLoader *loader, ResourceHandle h, const char *path)
+{
+	MaterialCreateInfo ci = {
+		.path = path
+	};
+	LoadResult result = loader->allocate(h,&ci);
+
+	if (result != RESULT_SUCCESS) {
+		return result;
+	}
+
+	update_material_dependencies(loader, h);
+
+	return result;
+}
+
 ResourceHandle load_material_file(ResourceLoader *loader, std::string_view path)
 {
-	ResourceHandle h = loader->find(path);
+	if (ResourceHandle h = loader->find(path)) 
+		return h;
 
-	if (h) return h;
+	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_MATERIAL);
 
-	h = loader->create_handle(RESOURCE_TYPE_MATERIAL);
-
-	MaterialDesc desc = {
-		.path = loader->make_path_abs(path.data())
-	};
-
-	LoadResult result = RESULT_SUCCESS;
-
-	const ResourceEntry *ent = loader->get(h);
-
-	if (!ent || ent->type != RESOURCE_TYPE_MATERIAL)
-		goto error_cleanup;
-
-	result = resource_load(loader, h, &desc);
+	LoadResult result = loader->load_file(h,path.data());
 
 	if (result != RESULT_SUCCESS)
 		goto error_cleanup;
 
-#if RESOURCE_ENABLE_HOT_RELOAD
-	update_material_dependencies(loader, h);
-#endif
-
 	loader->set_handle_key(h,path);
-
 	return h;
 
 error_cleanup:
 	log_error("Failed to load material file at %s",path.data());
 	loader->destroy_handle(h);
-	return 0;
+	return RESOURCE_HANDLE_NULL;
 }
 
 const GLMaterial *get_material(ResourceLoader *loader, ResourceHandle h)

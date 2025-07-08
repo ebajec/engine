@@ -3,24 +3,27 @@
 
 struct GLImage 
 {
-	int init();
-
-	TexFormat fmt;
 	gl_tex id;
 
 	uint32_t w;
 	uint32_t h;
 	uint32_t d;
+
+	TexFormat fmt;
 };
 
-struct ImageFileCreateInfo
+extern ResourceFns g_image_alloc_fns;
+extern ResourceLoaderFns g_image_loader_fns;
+
+struct ImageCreateInfo
 {
-	std::string path;
+	uint32_t w;
+	uint32_t h;
+	TexFormat fmt;
 };
 
-typedef FileDesc TextureDesc;
-
-extern ResourceFns g_image_loader_fns;
-
+ResourceHandle create_image_2d(ResourceLoader *loader, uint32_t w, uint32_t h, 
+							   TexFormat fmt = TEX_FORMAT_RGBA8);
 ResourceHandle load_image_file(ResourceLoader *loader, std::string_view path);
+
 const GLImage *get_image(ResourceLoader *loader, ResourceHandle h);

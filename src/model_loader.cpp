@@ -5,40 +5,44 @@
 static LoadResult gl_model_create(ResourceLoader *loader, void **res, void *info);
 static void gl_model_destroy(ResourceLoader *loader, void *model);
 
-ResourceFns g_model_loader_fns = {
-	.create_fn = gl_model_create,
-	.destroy_fn = gl_model_destroy,
-#if RESOURCE_ENABLE_HOT_RELOAD
-	.create_reload_info_fn = nullptr
-#endif
+ResourceFns g_model_alloc_fns = {
+	.create = gl_model_create,
+	.destroy = gl_model_destroy,
+	.load_file = nullptr
 };
 
-int GLModel::init()
-{
-	glGenVertexArrays(1,&vao);
-	glGenBuffers(1,&vbo);
-	glGenBuffers(1,&ibo);
+static LoadResult model_load_2d(ResourceLoader *loader, void *res, void *info);
+static LoadResult model_load_3d(ResourceLoader *loader, void *res, void *info);
 
-	return gl_check_err();
-}
+ResourceLoaderFns g_model_2d_load_fns {
+	.loader_fn = model_load_2d,
+	.post_load_fn = nullptr
+};
+ResourceLoaderFns g_model_3d_load_fns {
+	.loader_fn = model_load_3d,
+	.post_load_fn = nullptr
+};
 
-static LoadResult model_load_2d(GLModel* model, const Mesh2DCreateInfo *info)
+LoadResult model_load_2d(ResourceLoader *loader, void *res, void *info)
 {
+	GLModel *model = static_cast<GLModel*>(res);
+	Mesh2DCreateInfo *ci = static_cast<Mesh2DCreateInfo*>(info);
+
 	model->type = MODEL_TYPE_MESH_2D;
-	model->vcount = info->vcount;
+	model->vcount = ci->vcount;
 	model->vsize = sizeof(vertex2d);
-	model->icount = info->icount;
+	model->icount = ci->icount;
 	model->isize = sizeof(uint32_t);
 
 	glBindVertexArray(model->vao);
 
 	glBindBuffer(GL_ARRAY_BUFFER,model->vbo);
-	glBufferData(GL_ARRAY_BUFFER,(GLsizei)(model->vsize*(size_t)model->vcount),info->data,GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER,(GLsizei)(model->vsize*(size_t)model->vcount),ci->data,GL_DYNAMIC_DRAW);
 
 	gl_check_err();
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,model->ibo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER,(GLsizei)(model->icount*(size_t)model->isize),info->indices,GL_DYNAMIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER,(GLsizei)(model->icount*(size_t)model->isize),ci->indices,GL_DYNAMIC_DRAW);
 
 	gl_check_err();
 
@@ -54,25 +58,30 @@ static LoadResult model_load_2d(GLModel* model, const Mesh2DCreateInfo *info)
 	return RESULT_SUCCESS;
 }
 
-static LoadResult model_load_3d(GLModel *model, const Mesh3DCreateInfo *info)
+LoadResult model_load_3d(ResourceLoader *loader, void *res, void *info)
 {
+	GLModel *model = static_cast<GLModel*>(res);
+	Mesh3DCreateInfo *ci = static_cast<Mesh3DCreateInfo*>(info);
+
 	model->type = MODEL_TYPE_MESH_3D;
-	model->vcount = info->vcount;
+	model->vcount = ci->vcount;
 	model->vsize = sizeof(vertex3d);
-	model->icount = info->icount;
+	model->icount = ci->icount;
 	model->isize = sizeof(uint32_t);
 
 	glBindVertexArray(model->vao);
 
 	glBindBuffer(GL_ARRAY_BUFFER,model->vbo);
-	glBufferData(GL_ARRAY_BUFFER,(GLsizei)(model->vsize*model->vcount),info->data,GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER,(GLsizei)(model->vsize*model->vcount),ci->data,GL_DYNAMIC_DRAW);
 
-	gl_check_err();
+	if (gl_check_err())
+		goto failure;
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,model->ibo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER,(GLsizei)(model->icount*model->isize),info->indices,GL_DYNAMIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER,(GLsizei)(model->icount*model->isize),ci->indices,GL_DYNAMIC_DRAW);
 
-	gl_check_err();
+	if (gl_check_err())
+		goto failure;
 
 	glEnableVertexArrayAttrib(model->vao,0);
 	glEnableVertexArrayAttrib(model->vao,1);
@@ -83,29 +92,27 @@ static LoadResult model_load_3d(GLModel *model, const Mesh3DCreateInfo *info)
 
 	glBindVertexArray(0);
 
-	gl_check_err();
+	if (gl_check_err())
+		goto failure;
 
 	return RESULT_SUCCESS;
+failure:
+	return RESULT_ERROR;
 }
-
 LoadResult gl_model_create(ResourceLoader *loader, void **res, void *info)
 {
-	ModelDesc desc = *static_cast<ModelDesc*>(info);
 	std::unique_ptr<GLModel> model (new GLModel{});
 
-	model->init();
+	glGenVertexArrays(1,&model->vao);
+	glGenBuffers(1,&model->vbo);
+	glGenBuffers(1,&model->ibo);
 
-	LoadResult result = RESULT_SUCCESS;
-
-	if (std::holds_alternative<Mesh2DCreateInfo*>(desc)) {
-		result = model_load_2d(model.get(),std::get<Mesh2DCreateInfo*>(desc));
-	} else if (std::holds_alternative<Mesh3DCreateInfo*>(desc)) {
-		result = model_load_3d(model.get(),std::get<Mesh3DCreateInfo*>(desc));
+	if (gl_check_err()) {
+		return RESULT_ERROR;
 	}
 
 	*res = model.release();
-
-	return result;
+	return RESULT_SUCCESS;
 }
 
 void gl_model_destroy(ResourceLoader *loader, void *res)
@@ -120,9 +127,46 @@ void gl_model_destroy(ResourceLoader *loader, void *res)
 	if(model->ibo) glDeleteBuffers(1,&model->ibo);
 }
 
-LoadResult load_model(ResourceLoader *loader, ResourceHandle h, ModelDesc desc)
+ResourceHandle load_model_2d(ResourceLoader *loader, Mesh2DCreateInfo *ci)
 {
-	return resource_load(loader, h, &desc);
+	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_MODEL);
+
+	LoadResult result = loader->allocate(h, ci);
+
+	if (result != RESULT_SUCCESS) 
+		goto load_failed;
+
+	result = loader->upload(h, RESOURCE_LOADER_MODEL_2D, ci);
+
+	if (result != RESULT_SUCCESS) 
+		goto load_failed;
+
+	return h;
+
+load_failed:
+	loader->destroy_handle(h);
+	return RESOURCE_HANDLE_NULL;
+}
+
+ResourceHandle load_model_3d(ResourceLoader *loader, Mesh3DCreateInfo *ci)
+{
+	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_MODEL);
+
+	LoadResult result = loader->allocate(h, ci);
+
+	if (result != RESULT_SUCCESS) 
+		goto load_failed;
+
+	result = loader->upload(h, RESOURCE_LOADER_MODEL_3D, ci);
+
+	if (result != RESULT_SUCCESS) 
+		goto load_failed;
+
+	return h;
+
+load_failed:
+	loader->destroy_handle(h);
+	return RESOURCE_HANDLE_NULL;
 }
 
 const GLModel *get_model(ResourceLoader *loader, ResourceHandle h)

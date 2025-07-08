@@ -34,7 +34,7 @@ void main()
 
 	float val = 10*wpos.z*wpos.y*wpos.x*sin(4.0*t);
 	
-	wpos += (1 + 0.5*val)*n;
+	wpos += (1+ 0.5*val)*n;
 
 	frag_pos = wpos.xyz;
 	frag_uv = uv;

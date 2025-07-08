@@ -94,7 +94,7 @@ LoadResult ResourceHotReloader::process_updates()
 			continue;
 		}
 
-		LoadResult res = resource_reload(loader.get(), id);
+		LoadResult res = loader->reload(id);
 
 		if (res) {
 			log_error("Failed to reload resource : %s",info.path.c_str());
@@ -112,6 +112,27 @@ std::string ResourceLoader::make_path_abs(std::string_view str) {
 //------------------------------------------------------------------------------
 // V2
 
+LoadResult ResourceLoader::reload(ResourceHandle h) 
+{
+	if (h == RESOURCE_HANDLE_NULL)
+		return RESULT_ERROR;
+
+	ResourceEntry *ent = get_internal(h);
+
+	if (!ent || !ent->reload_info)
+		return RESULT_ERROR;
+
+	LoadResult result = RESULT_SUCCESS;
+
+	load_file(h,ent->reload_info->path.c_str());
+
+	for (ResourceHandle sub : ent->reload_info->subscribers) {
+		reload(sub);
+	}
+
+	return result;
+}
+
 std::unique_ptr<ResourceLoader> ResourceLoader::create(const ResourceLoaderCreateInfo *info)
 {
 	std::unique_ptr<ResourceLoader> loader = 
@@ -121,11 +142,15 @@ std::unique_ptr<ResourceLoader> ResourceLoader::create(const ResourceLoaderCreat
 	
 	// TODO : Think of a nice way to not initialize these here.
 	
-	loader->pfns[RESOURCE_TYPE_NONE] =	{};
-	loader->pfns[RESOURCE_TYPE_MATERIAL] = g_material_loader_fns;
-	loader->pfns[RESOURCE_TYPE_SHADER] = g_shader_loader_fns; 	
-	loader->pfns[RESOURCE_TYPE_IMAGE] = g_image_loader_fns; 
-	loader->pfns[RESOURCE_TYPE_MODEL] = g_model_loader_fns;	
+	loader->pfns.alloc_fns[RESOURCE_TYPE_NONE] =	{};
+	loader->pfns.alloc_fns[RESOURCE_TYPE_MATERIAL] = g_material_alloc_fns;
+	loader->pfns.alloc_fns[RESOURCE_TYPE_SHADER] = g_shader_alloc_fns; 	
+	loader->pfns.alloc_fns[RESOURCE_TYPE_IMAGE] = g_image_alloc_fns; 
+	loader->pfns.alloc_fns[RESOURCE_TYPE_MODEL] = g_model_alloc_fns;	
+
+	loader->pfns.loader_fns[RESOURCE_LOADER_IMAGE_MEMORY] = g_image_loader_fns;
+	loader->pfns.loader_fns[RESOURCE_LOADER_MODEL_2D] = g_model_2d_load_fns;
+	loader->pfns.loader_fns[RESOURCE_LOADER_MODEL_3D] = g_model_3d_load_fns;
 
 	return loader;
 }
@@ -184,13 +209,9 @@ void ResourceLoader::destroy_handle(ResourceHandle h)
 	ResourceType type = ent->type;
 
 	if (ent->data)
-		pfns[type].destroy_fn(this, ent->data);
+		pfns.alloc_fns[type].destroy(this, ent->data);
 
 	ent->data = nullptr;
-
-#if RESOURCE_ENABLE_HOT_RELOAD
-	ent->reload_info.reset(nullptr);
-#endif
 	ent->status = RESOURCE_STATUS_EMPTY;
 	ent->type = RESOURCE_TYPE_NONE;
 
@@ -234,76 +255,79 @@ void ResourceLoader::set_handle_key(ResourceHandle h, std::string_view key)
 	map[key.data()] = h;
 }
 
-LoadResult resource_load(ResourceLoader *loader, ResourceHandle h, void *info)
+LoadResult ResourceLoader::load_file(ResourceHandle h, const char *path) 
 {
-	ResourceEntry *ent = loader->get_internal(h);
+	ResourceEntry *ent = entries[h - 1].get();
+	assert(ent);
+
+	std::string realpath = make_path_abs(path);
+
+	OnResourceCreateFromDisk load_file_fn = pfns.alloc_fns[ent->type].load_file;
+	LoadResult result = load_file_fn(this, h, realpath.c_str());
+
+	if (!ent->reload_info) {
+		ent->reload_info.reset(new ResourceReloadInfo{});
+		ent->reload_info->path = path;
+	}
+
+	return result;
+}
+
+LoadResult ResourceLoader::allocate(ResourceHandle h, void* alloc_info)
+{
+	ResourceEntry *ent = entries[h - 1].get();
+
+	assert(ent);
+
+	OnResourceCreate alloc_fn = pfns.alloc_fns[ent->type].create; 
+	assert(alloc_fn);
+
+	void* data = nullptr;
+	LoadResult result = alloc_fn(this, &data, alloc_info);
+
+	if (result != RESULT_SUCCESS) {
+		goto error_cleanup;
+	}
+
+	// TODO : erase old data in a free list.
+	if (ent->data) {
+		OnResourceDestroy destroy_fn = pfns.alloc_fns[ent->type].destroy;
+		assert(destroy_fn);
+
+		destroy_fn(this,ent->data);
+	}
+
+	ent->status = RESOURCE_STATUS_READY;
+	ent->data = data;
+
+	return result;
+
+error_cleanup:
+	destroy_handle(h);
+	return result;
+}
+
+LoadResult ResourceLoader::upload(ResourceHandle h, ResourceLoaderType loader, void* upload_info) 
+{
+	ResourceEntry *ent = get_internal(h);
+
+	if (!ent->data || ent->status == RESOURCE_STATUS_EMPTY) {
+		return RESULT_ERROR;
+	}
 
 	LoadResult result = RESULT_SUCCESS;
 
-	if (ent->status != RESOURCE_STATUS_EMPTY)
-		return result;
+	OnResourceLoad load_fn = pfns.loader_fns[loader].loader_fn; 
+	assert(load_fn);
 
-	ResourceType type = ent->type;
-
-	void* data = nullptr;
-
-	OnResourceCreate create_fn = loader->pfns[type].create_fn; 
-	assert(create_fn);
-
-	result = create_fn(loader, &data, info);
+	result = load_fn(this, ent->data, upload_info);
 
 	if (result != RESULT_SUCCESS) {
 		ent->status = RESOURCE_STATUS_INVALID;
 		return result;
 	}
 
-#if RESOURCE_ENABLE_HOT_RELOAD
-	if (auto create_reload_info_fn = loader->pfns[type].create_reload_info_fn) {
-		ent->reload_info.reset(create_reload_info_fn(info));
-	}
-#endif
-
 	ent->status = RESOURCE_STATUS_READY;
-	ent->data = data;
-
-	return result;
-}
-
-LoadResult resource_reload(ResourceLoader *loader, ResourceHandle h)
-{
-	if (h == RESOURCE_HANDLE_NULL)
-		return RESULT_ERROR;
-
-	ResourceEntry *ent = loader->get_internal(h);
-
-	if (!ent || !ent->reload_info)
-		return RESULT_ERROR;
-
-	LoadResult result = RESULT_SUCCESS;
-
-	void *new_data = nullptr;
-	ResourceType type = ent->type;
-
-	OnResourceCreate create_fn = loader->pfns[type].create_fn; 
-	assert(create_fn);
-
-	result = create_fn(loader,&new_data, ent->reload_info->p_create_info);
-
-	if (result != RESULT_SUCCESS) {
-		return result;
-	}
-
-	OnResourceDestroy destroy_fn = loader->pfns[type].destroy_fn;
-	assert(destroy_fn);
-
-	destroy_fn(loader, ent->data);
-
-	ent->data = new_data;
-	ent->status = RESOURCE_STATUS_READY;
-
-	for (ResourceHandle sub : ent->reload_info->subscribers) {
-		resource_reload(loader,sub);
-	}
 
 	return result;
 }

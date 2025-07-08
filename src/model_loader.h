@@ -38,9 +38,12 @@ struct Mesh3DCreateInfo
 
 typedef std::variant<Mesh3DCreateInfo*, Mesh2DCreateInfo*> ModelDesc;
 
-extern ResourceFns g_model_loader_fns;
+extern ResourceFns g_model_alloc_fns;
+extern ResourceLoaderFns g_model_2d_load_fns;
+extern ResourceLoaderFns g_model_3d_load_fns;
 
-extern LoadResult load_model(ResourceLoader *loader, ResourceHandle h, ModelDesc desc);
+extern ResourceHandle load_model_2d(ResourceLoader *loader, Mesh2DCreateInfo *ci);
+extern ResourceHandle load_model_3d(ResourceLoader *loader, Mesh3DCreateInfo *ci);
 
 const GLModel *get_model(ResourceLoader *loader, ResourceHandle h);
 

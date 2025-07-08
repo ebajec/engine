@@ -3,8 +3,8 @@
 set -euo pipefail
 
 # Usage: ./compile_shaders.sh [INPUT_DIR] [OUTPUT_DIR]
-INPUT_DIR="${1:-./shaders}"
-OUTPUT_DIR="${2:-./spv}"
+INPUT_DIR="${1:-./src/shader}"
+OUTPUT_DIR="${2:-./resource/shader}"
 
 # Make sure the output directory exists
 mkdir -p "$OUTPUT_DIR"

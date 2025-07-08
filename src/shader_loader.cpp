@@ -18,35 +18,12 @@ typedef GLenum shader_stage_t;
 
 static LoadResult gl_shader_module_create(ResourceLoader *loader, void **res, void *info);
 static void gl_shader_module_destroy(ResourceLoader *loader, void *res);
+static LoadResult gl_shader_load_file(ResourceLoader *loader, ResourceHandle h, const char *path);
 
-#if RESOURCE_ENABLE_HOT_RELOAD
-
-struct ShaderReloadInfo : public ResourceReloadInfo
-{
-	~ShaderReloadInfo()
-	{
-		ShaderCreateInfo *info = static_cast<ShaderCreateInfo*>(p_create_info);
-		delete info;
-	}
-};
-
-static ResourceReloadInfo *create_shader_reload_info(void *info) 
-{
-	ResourceReloadInfo *reload_info = new ResourceReloadInfo{};
-
-	ShaderCreateInfo *create_info = new ShaderCreateInfo{};
-	*create_info = *static_cast<ShaderCreateInfo*>(info);
-
-	reload_info->p_create_info = create_info;
-
-	return reload_info;
-}
-#endif
-
-ResourceFns g_shader_loader_fns = {
-	.create_fn = &gl_shader_module_create,
-	.destroy_fn = &gl_shader_module_destroy,
-	.create_reload_info_fn = &create_shader_reload_info
+ResourceFns g_shader_alloc_fns = {
+	.create = &gl_shader_module_create,
+	.destroy = &gl_shader_module_destroy,
+	.load_file = &gl_shader_load_file 
 };
 
 static uint32_t compile_shader_spv(shader_stage_t stage, const uint32_t* data, size_t size) 
@@ -259,26 +236,30 @@ void gl_shader_module_destroy(ResourceLoader *loader, void *res)
 	if (shader->id) glDeleteShader(shader->id);
 }
 
+static LoadResult gl_shader_load_file(ResourceLoader *loader, ResourceHandle h, const char *path)
+{
+	ShaderCreateInfo ci = {
+		.path = path
+	};
+	ci.path.append(".spv");
+
+	LoadResult result = loader->allocate(h,&ci);
+
+	if (result != RESULT_SUCCESS) {
+		return result;
+	}
+
+	return result;
+}
+
 ResourceHandle load_shader_file(ResourceLoader *loader, std::string_view path)
 {
-	ResourceHandle h = loader->find(path);
-
-	if (h)
+	if (ResourceHandle h = loader->find(path)) 
 		return h;
 
-	h = loader->create_handle(RESOURCE_TYPE_SHADER);
+	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_SHADER);
 
-	ShaderCreateInfo info = {
-		.path = loader->make_path_abs(path.data()) + ".spv"
-	};
-
-	LoadResult result = RESULT_SUCCESS;
-
-	const ResourceEntry *ent = loader->get(h);
-	if (!ent || ent->type != RESOURCE_TYPE_SHADER)
-		goto error_cleanup;
-
-	result = resource_load(loader, h, &info);
+	LoadResult result = loader->load_file(h,path.data());
 
 	if (result != RESULT_SUCCESS)
 		goto error_cleanup;
@@ -287,9 +268,9 @@ ResourceHandle load_shader_file(ResourceLoader *loader, std::string_view path)
 	return h;
 
 error_cleanup:
+	log_error("Failed to load shader file at %s",path.data());
 	loader->destroy_handle(h);
-
-	return 0;
+	return RESOURCE_HANDLE_NULL;
 }
 
 const GLShaderModule *get_shader(ResourceLoader *loader, ResourceHandle h)

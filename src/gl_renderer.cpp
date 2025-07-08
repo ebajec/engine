@@ -18,6 +18,8 @@ struct gl_renderer_impl
 	std::unordered_map<RenderTargetID, 
 		std::unique_ptr<gl_render_target>> render_targets;
 
+	//gl_tex_quad screen_quad;
+
 	RendererDefaults defaults;
 
 	gl_render_target* get_target(RenderTargetID id);
@@ -257,15 +259,20 @@ void GLRenderer::bind_material(MaterialID id)
 		TextureID texID = tex_bind.id;
 		const GLImage *tex = get_image(impl->loader.get(),texID);
 
+		GLint filter = GL_LINEAR;
+
 		if (!tex) {
-			tex = get_image(impl->loader.get(), impl->defaults.textures.missing);
+			tex = get_image(impl->loader.get(),impl->defaults.textures.missing);
+			filter = GL_NEAREST;
+
+			assert(tex);
 		}
 
 		glBindTexture(GL_TEXTURE_2D, tex->id);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);   
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);   
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
 		glBindTexture(GL_TEXTURE_2D,0);
 
 		glBindTextureUnit(binding,tex->id);

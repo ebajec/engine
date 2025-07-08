@@ -11,6 +11,9 @@ LoadResult renderer_defaults_init(ResourceLoader *loader, RendererDefaults *defa
 	if (!defaults->materials.screen_quad) 
 		return RESULT_ERROR;
 
+	//-----------------------------------------------------------------------------
+	// screen quad
+	
 	Mesh2DCreateInfo mesh_info = {
 		.data = g_default_tex_quad_verts,
 		.vcount = sizeof(g_default_tex_quad_verts)/sizeof(vertex2d),
@@ -18,15 +21,30 @@ LoadResult renderer_defaults_init(ResourceLoader *loader, RendererDefaults *defa
 		.icount = sizeof(g_default_tex_quad_indices)/sizeof(uint32_t),
 	};
 	
-	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_MODEL);
-	result = load_model(loader, h, &mesh_info);
+	defaults->models.screen_quad = load_model_2d(loader, &mesh_info);
 
-	if (result != RESULT_SUCCESS) {
-		loader->destroy_handle(h);
-		return result;
+	if (!defaults->models.screen_quad) 
+		return RESULT_ERROR;
+
+	//-----------------------------------------------------------------------------
+	// missing texture
+	
+	uint32_t w = 16, h = 16;
+
+	defaults->textures.missing = create_image_2d(loader, w, h, TEX_FORMAT_RGBA8);
+
+	uint32_t c[2] = {0xFF000000, 0xFFFF00FF};
+
+	std::vector<uint32_t> data (w*h);
+
+	uint32_t k = 0;
+	for (uint32_t i = 0; i < w*h; ++i) {
+		data[i] = c[k%2];
+		k++;
+		if (i%w == 0) k++;
 	}
-	defaults->models.screen_quad = h;
-	defaults->textures.missing = load_image_file(loader, "image/eponge.png");
+
+	loader->upload(defaults->textures.missing,RESOURCE_LOADER_IMAGE_MEMORY,data.data());
 
 	if (!defaults->textures.missing) 
 		return RESULT_ERROR;

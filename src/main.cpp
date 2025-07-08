@@ -259,7 +259,9 @@ int main(int argc, char* argv[])
 	GLRendererCreateInfo renderer_info = {
 		.resource_loader = loader
 	};
+
 	std::shared_ptr<GLRenderer> renderer = GLRenderer::create(&renderer_info);
+
 	if (!renderer) {
 		log_error("Failed to create renderer!");
 		return EXIT_FAILURE;
@@ -284,15 +286,13 @@ int main(int argc, char* argv[])
 
 	geometry::mesh_s2(100,50,sphereVerts,sphereIndices);
 
-	ModelID sphereID = loader->create_handle(RESOURCE_TYPE_MODEL);
 	Mesh3DCreateInfo sphereLoadInfo = {
 		.data = sphereVerts.data(), .vcount = sphereVerts.size(),
 		.indices = sphereIndices.data(), .icount = sphereIndices.size(),
 	};
+	ModelID sphereID = load_model_3d(loader.get(),&sphereLoadInfo);;
 
-	int result = load_model(loader.get(),sphereID,&sphereLoadInfo);
-
-	if (result != RESULT_SUCCESS) {
+	if (!sphereID) {
 		return EXIT_FAILURE;
 	}
 
@@ -304,12 +304,11 @@ int main(int argc, char* argv[])
 
 	geometry::mesh_torus(5.0,1.0,100,100,vtorus,itorus);
 
-	ModelID torusID = loader->create_handle(RESOURCE_TYPE_MODEL);
 	Mesh3DCreateInfo torusLoadInfo = {
 		.data = vtorus.data(), .vcount = vtorus.size(),
 		.indices = itorus.data(), .icount = itorus.size(),
 	};
-	result = load_model(loader.get(),torusID,&torusLoadInfo);
+	ModelID torusID = load_model_3d(loader.get(),&torusLoadInfo);
 
 	//-----------------------------------------------------------------------------
 	// main loop
