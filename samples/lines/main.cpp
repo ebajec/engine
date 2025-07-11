@@ -29,65 +29,9 @@
 
 // std
 #include <string.h>
+#include <complex>
 
 #include "stb_image.h"
-
-static int glfw_init_gl(GLFWwindow* window)
-{
-	    glfwMakeContextCurrent(window);
-
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
-	    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-        if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-            fprintf(stderr,"Failed to initialize GLAD\n");
-			return EXIT_FAILURE;
-        }
-
-		glEnable(GL_DEBUG_OUTPUT);
-		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);       // makes callback synchronous
-
-		glDebugMessageCallback([]( GLenum source,
-								  GLenum type,
-								  GLuint id,
-								  GLenum severity,
-								  GLsizei length,
-								  const GLchar* message,
-								  const void* userParam )
-		{
-			fprintf(stderr,
-			  "GL DEBUG: [%u] %s\n"
-			  "    Source:   0x%x\n"
-			  "    Type:     0x%x\n"
-			  "    Severity: 0x%x\n"
-			  "    Message:  %s\n\n",
-			  id, (type == GL_DEBUG_TYPE_ERROR ? "** ERROR **" : ""),
-			  source, type, severity, message);
-
-		}, nullptr);
-
-		glDebugMessageControl(
-			GL_DONT_CARE,          // source
-			GL_DONT_CARE,          // type
-			GL_DONT_CARE,          // severity
-			0, nullptr,            // count + list of IDs
-			GL_TRUE);              // enable
-
-        glfwWindowHint(GLFW_SAMPLES, 4);
-        glEnable(GL_MULTISAMPLE);
-
-	    const GLubyte* renderer = glGetString(GL_RENDERER);
-        const GLubyte* version = glGetString(GL_VERSION);
-        const GLubyte* vendor = glGetString(GL_VENDOR);
-        const GLubyte* glslVersion = glGetString(GL_SHADING_LANGUAGE_VERSION);
-
-        printf("Renderer: %s\n", renderer);
-        printf("OpenGL version: %s\n", version);
-        printf("Vendor: %s\n", vendor);
-        printf("GLSL version: %s\n", glslVersion);
-		return EXIT_SUCCESS;
-}
 
 struct ViewComponent : AppComponent
 {
@@ -99,6 +43,10 @@ struct ViewComponent : AppComponent
 
 	uint32_t w;
 	uint32_t h;
+
+	float fov = PIf/2.0f;
+	float far = 100;
+	float near = 0.01f;
 
 	static ViewComponent *create(GLRenderer *renderer, int w, int h) 
 	{
@@ -122,13 +70,10 @@ struct ViewComponent : AppComponent
 
 	Camera get_camera()
 	{
-		float fov = PIf/2.0f;
-		float far = 100;
-		float near = 0.1f;
 		float aspect = (float)h/(float)w;
 
 		return {
-			.proj = camera_proj(fov,aspect,far,near),
+			.proj = camera_proj_3d(fov, aspect, far, near),//camera_proj_2d(aspect),
 			.view = control.get_view()
 		};
 	}
@@ -162,12 +107,20 @@ struct ViewComponent : AppComponent
 
 	virtual void keyCallback(int key, int scancode, int action, int mods) override
 	{
-		control.handle_key_input(key, action);
+		control.handle_key_input_wasd(key, action);
 	}
 
 	virtual void onFrameUpdateCallback() override
 	{
-		control.update();
+		static float speed = 0.5;
+		
+		ImGui::Begin("Demo Window");
+		ImGui::SliderFloat("FOV", &fov, 0.0f, PI, "%.3f");
+		ImGui::SliderFloat("near", &near, 0.0, 1.0, "%.3f");
+		ImGui::SliderFloat("speed", &speed, 0.0, 100, "%.3f");
+		ImGui::End();
+
+		control.update(speed);
 	}
 
 	virtual void framebufferSizeCallback(int width, int height) override 
@@ -181,6 +134,123 @@ struct ViewComponent : AppComponent
 		};
 		renderer->reset_target(target, &target_info);
 		return;
+	}
+};
+
+static float urandf()
+{
+	return (float)rand()/(float)RAND_MAX;
+}
+
+struct RandomLine : AppComponent 
+{
+	GLRenderer *renderer;
+	ResourceLoader *loader;
+
+	std::vector<glm::vec2> points;
+	std::vector<uint32_t> indices;
+
+	gl_vbo vbo;
+	gl_vbo ibo;
+	gl_vao vao;
+
+	uint32_t ssbo;
+
+	MaterialID material;
+
+	static constexpr uint32_t verts[] = {
+		0,1,2,3	
+	};
+
+	static constexpr uint32_t idx[] = {
+		0,1,2,1,2,3
+	};
+
+	RandomLine(GLRenderer *renderer, ResourceLoader *loader) : 
+		AppComponent(), renderer(renderer), loader(loader) 
+	{
+		//----------------------------------------------------------------------------
+		// Lines
+
+		static uint32_t count = 10000000;
+
+		std::complex<float> c = 1;
+		std::complex<float> v = 0;
+
+		for (uint32_t i = 0; i < count; ++i) {
+
+			float r = urandf();
+			v += r*c;
+
+			float tht = HALFPI*urandf();
+			c *= std::polar<float>(1, tht);
+
+			points.push_back(glm::vec2(v.real(),v.imag()));
+
+			indices.push_back(i);
+			if (i + 1 < count)
+				indices.push_back(i + 1);
+		}
+
+		material = load_material_file(loader, "material/line.yaml");
+
+		//----------------------------------------------------------------------------
+		// Buffers
+
+		glGenBuffers(1,&vbo);
+		glGenBuffers(1,&ibo);
+		glGenVertexArrays(1,&vao);
+
+		glBindVertexArray(vao);
+
+		glBindBuffer(GL_ARRAY_BUFFER,vbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_READ);
+
+		glEnableVertexArrayAttrib(vao,0);
+		glVertexAttribIPointer(0, 1, GL_UNSIGNED_INT, 0, (void*)0);
+
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ibo);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(idx), idx, GL_STATIC_READ);
+
+		glBindVertexArray(0);
+
+		//----------------------------------------------------------------------------
+		// ssbo
+
+		glGenBuffers(1,&ssbo);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, 
+			   sizeof(glm::vec2)*points.size(), points.data(), GL_STATIC_READ);
+	}
+
+	void upload_points()
+	{
+
+	}
+
+	virtual void onRender() override
+	{
+		renderer->bind_material(material);
+
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+		glDisable(GL_DEPTH_TEST);
+
+		glBindVertexArray(vao);
+		glDrawElementsInstanced(
+			GL_TRIANGLES, 
+			sizeof(indices)/sizeof(uint32_t), 
+			GL_UNSIGNED_INT, 
+			nullptr, 
+			points.size() - 1
+		);
+
+		glDisable(GL_BLEND);
+		glEnable(GL_DEPTH_TEST);
+
 	}
 };
 
@@ -230,7 +300,7 @@ int main(int argc, char* argv[])
 		params.win.y
 	);
 
-	if (int code = glfw_init_gl(window); code == EXIT_FAILURE) {
+	if (int code = glfw_init_gl_basic(window); code == EXIT_FAILURE) {
 		fprintf(stderr, "ERROR: Failed to load OpenGL\n");
 		return code; 
 	}
@@ -271,6 +341,9 @@ int main(int argc, char* argv[])
 		ViewComponent::create(renderer.get(), params.win.width, params.win.height));
 	app->addComponent(view_component);
 
+	auto random_lines = std::make_shared<RandomLine>(renderer.get(),loader.get());
+	app->addComponent(random_lines);
+
 	//-------------------------------------------------------------------------------------------------
 	// test shader 
 	
@@ -297,20 +370,6 @@ int main(int argc, char* argv[])
 	}
 
 	//-----------------------------------------------------------------------------
-	// torus
-
-	std::vector<vertex3d> vtorus;
-	std::vector<uint32_t> itorus;
-
-	geometry::mesh_torus(5.0,1.0,100,100,vtorus,itorus);
-
-	Mesh3DCreateInfo torusLoadInfo = {
-		.data = vtorus.data(), .vcount = vtorus.size(),
-		.indices = itorus.data(), .icount = itorus.size(),
-	};
-	ModelID torusID = load_model_3d(loader.get(),&torusLoadInfo);
-
-	//-----------------------------------------------------------------------------
 	// main loop
 
 	while (!glfwWindowShouldClose(window)) {
@@ -318,9 +377,7 @@ int main(int argc, char* argv[])
 
 		glfwPollEvents();
 
-		glClearColor(0,0,0,0);
-		glViewport(0,0,app->width,app->height);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		renderer->begin_frame(app->width, app->height);
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -334,20 +391,21 @@ int main(int argc, char* argv[])
 		renderer->begin_pass(&ctx);
 
 		renderer->bind_material(materialID);
+		//renderer->draw_cmd_basic_mesh3d(sphereID,glm::mat4(1.0f));
 
-		renderer->draw_cmd_basic_mesh3d(torusID,glm::mat4(1.0f));
-		renderer->draw_cmd_basic_mesh3d(sphereID,glm::mat4(1.0f));
+		app->renderComponents();
 
 		renderer->end_pass(&ctx);
-
 		renderer->draw_target(ctx.target, glm::mat4(1.0f));
 
+		renderer->end_frame();
+
+		app->onFrameUpdateCallback(window);
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());	
 
         glfwSwapBuffers(window);   
 
-		app->onFrameUpdateCallback(window);
 	}
 
 	ImGui_ImplOpenGL3_Shutdown();

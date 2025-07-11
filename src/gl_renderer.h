@@ -61,7 +61,7 @@ public:
 	RenderTargetID create_target(const RenderTargetCreateInfo* info);
 	void reset_target(RenderTargetID id, const RenderTargetCreateInfo* info);
 
-	void begin_frame();
+	void begin_frame(uint32_t w, uint32_t h);
 	void end_frame();
 
     void begin_pass(const RenderContext* ctx);

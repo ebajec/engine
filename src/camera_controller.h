@@ -52,7 +52,7 @@ static inline glm::quat quat_exp(glm::vec3 v, float t)
 	return glm::quat(cosf(t),v);
 }
 
-static inline glm::mat4 camera_proj(float fov, float aspect, float far, float near)
+static inline glm::mat4 camera_proj_3d(float fov, float aspect, float far, float near)
 {
 	float tanfov2 = tanf(fov / 2);
 	float ffov = 1.0f/tanfov2;
@@ -61,6 +61,16 @@ static inline glm::mat4 camera_proj(float fov, float aspect, float far, float ne
 		glm::vec4(ffov*aspect,0,0,0),
 		glm::vec4(0,ffov,0,0),
 		glm::vec4(0,0,-(far + near)/(far - near),-2*far*near/(far - near)),
+		glm::vec4(0,0,-1,1)
+	)); 
+}
+
+static inline glm::mat4 camera_proj_2d(float aspect)
+{
+ 	return glm::transpose(glm::mat4(
+		glm::vec4(aspect,0,0,0),
+		glm::vec4(0,1,0,0),
+		glm::vec4(0,0,1,0),
 		glm::vec4(0,0,-1,1)
 	)); 
 }
@@ -104,8 +114,9 @@ struct MotionCamera
 
 	glm::mat4 get_view()
 	{
-		glm::mat3 m = glm::transpose(s2_frame((float)phi,(float)tht));
-		glm::vec3 v = -m*p;
+		glm::mat3 TBN = s2_frame((float)phi,(float)tht);
+		glm::mat3 m = glm::transpose(TBN);
+		glm::vec3 v = -m*(p - glm::dvec3(TBN[2]));
 		glm::mat4 view = glm::mat4(m);
 		view[3] = glm::vec4(v,1);
 
@@ -119,7 +130,7 @@ struct MotionCamera
 		tht = fmod(tht + dtht, TWOPI);
 	};
 
-	void handle_key_input(int key, int action) 
+	void handle_key_input_wasd(int key, int action) 
 	{
 		static const int key_fwd = GLFW_KEY_W;
 		static const int key_bkwd = GLFW_KEY_S; 
@@ -155,7 +166,7 @@ struct MotionCamera
 			dir -= glm::vec3(0,0,-1);
 	}
 
-	void update() 
+	void update(float speed) 
 	{
 		double sin_tht = sin(tht);
 		double cos_tht = cos(tht);
@@ -171,7 +182,7 @@ struct MotionCamera
 
 		v *= 0.1;
 
-		p += v;
+		p += v*(double)speed;
 	}
 };
 #endif //CAMERA_CONTROLLER_H

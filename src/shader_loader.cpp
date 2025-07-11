@@ -79,14 +79,14 @@ static int spv_load(const fs::path& path,std::vector<uint32_t> &data)
 	return 0;
 }
 
-static int spv_bindings_create(GLShaderBindings *shader_bindings, const void* code, size_t size)
+static LoadResult spv_bindings_create(GLShaderBindings *shader_bindings, const void* code, size_t size)
 {
 	SpvReflectShaderModule module;
 
 	SpvReflectResult result = spvReflectCreateShaderModule(size, code, &module);
 	
 	if (result != SPV_REFLECT_RESULT_SUCCESS)
-		return result;
+		return RESULT_ERROR;
 
 	std::vector<SpvReflectDescriptorBinding*> bindings;
 	uint32_t binding_count = 0;
@@ -104,10 +104,11 @@ static int spv_bindings_create(GLShaderBindings *shader_bindings, const void* co
 	}
 
 	spvReflectDestroyShaderModule(&module);
-	return result;
+
+	return result == SPV_REFLECT_RESULT_SUCCESS ? RESULT_SUCCESS : RESULT_ERROR;
 }
 
-static int check_shader(uint32_t id)
+static LoadResult check_shader(uint32_t id)
 {
 	GLint success = 0;
 	glGetShaderiv(id, GL_COMPILE_STATUS, &success);
@@ -123,15 +124,20 @@ static int check_shader(uint32_t id)
 			printf("%s", &error_message[0]);
 
 		glDeleteShader(id);
-		return 0;
+		return RESULT_SUCCESS;
 	}
 
-	return success ? 0 : -1;
+	return success ? RESULT_SUCCESS : RESULT_ERROR;
 }
 
-static int load_shader_file(fs::path file, GLShaderModule* out)
+static LoadResult load_shader_file(fs::path file, GLShaderModule* out)
 {
 	std::string filestr = file.string(); 
+
+	if (!fs::is_regular_file(file)) {
+		return RESULT_ERROR;
+	}
+
 	std::string name = file.filename().string();
 	std::string ext = file.extension().string();
 
@@ -156,7 +162,7 @@ static int load_shader_file(fs::path file, GLShaderModule* out)
 
 		if (c == str) {
 			log_error("Wrong extension");
-			return -1;
+			return RESULT_ERROR;
 		}
 
 		size_t len = (size_t)(end - start);
@@ -167,30 +173,30 @@ static int load_shader_file(fs::path file, GLShaderModule* out)
 		name.resize(name.size() - sizeof(".spv") + 1);
 	} else {
 		log_error("Filename extension must be '.spv'");
-		return -1;
+		return RESULT_ERROR;
 	}
  
 	shader_stage_t stage = shader_stage_from_ext(ext);
 
 	// not a shader, ignore
 	if (!stage) {
-		return -1;
+		return RESULT_ERROR;
 	}
 
 	uint32_t id = 0;
 
 	std::vector<uint32_t> code;
 	if (spv_load(file,code) < 0) 
-		return -1;
+		return RESULT_ERROR;
 
 	id = compile_shader_spv(stage, code.data(), code.size());
 
 	if (!id) {
 		log_error("While loading shader '%s' , failed to compile '%s'", name.c_str(), filestr.c_str());
-		return -1;
+		return RESULT_ERROR;
 	}
 
-	int res = check_shader(id);
+	LoadResult res = check_shader(id);
 
 	if (res) 
 		return res;
@@ -209,7 +215,7 @@ static int load_shader_file(fs::path file, GLShaderModule* out)
 	out->stage = stage;
 	out->bindings = std::move(bindings);
 
-	return 0;
+	return res;
 }
 
 LoadResult gl_shader_module_create(ResourceLoader *loader, void **res, void *info)

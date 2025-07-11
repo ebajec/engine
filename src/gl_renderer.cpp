@@ -186,6 +186,17 @@ void GLRenderer::reset_target(RenderTargetID id, const RenderTargetCreateInfo* i
 	impl->render_targets[id] = gl_render_target_create(info);
 }
 
+void GLRenderer::begin_frame(uint32_t w, uint32_t h)
+{
+	glClearColor(0,0,0,0);
+	glViewport(0,0,(int)w,(int)h);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+void GLRenderer::end_frame()
+{
+}
+
 void GLRenderer::begin_pass(const RenderContext* ctx) 
 {
 	// don't even bother with this one
@@ -286,9 +297,9 @@ void GLRenderer::bind_material(MaterialID id)
 
 void GLRenderer::draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T)
 {
-	glEnable(GL_CULL_FACE);
-	glCullFace(GL_BACK);
-	glFrontFace(GL_CCW);
+	//glEnable(GL_CULL_FACE);
+	//glCullFace(GL_BACK);
+	//glFrontFace(GL_CCW);
 
 	const GLModel *model = get_model(impl->loader.get(),meshID);
 	glBindVertexArray(model->vao);

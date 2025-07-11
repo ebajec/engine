@@ -1,0 +1,23 @@
+cmake_minimum_required(VERSION 3.27)
+set(CMAKE_CXX_STANDARD 23)
+
+include(clang-warnings)
+
+project(samples)
+
+file(GLOB SOURCES "src/*.cpp" "src/*.c" "src/*/*.cpp" "src/*/*.c")
+
+add_library(samples STATIC ${SOURCES})
+target_include_directories(samples PUBLIC src)
+
+target_link_libraries(samples PUBLIC 
+	glfw
+    glad
+    imgui
+	stb
+    OpenGL::GL
+	yaml-cpp::yaml-cpp
+    glm::glm)
+
+#add_subdirectory(default)
+add_subdirectory(lines)

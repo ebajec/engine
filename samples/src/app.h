@@ -1,6 +1,7 @@
 #ifndef APP_WINDOW_H
 #define APP_WINDOW_H
 
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
 #include <functional>
@@ -30,6 +31,7 @@ struct AppComponent
 	virtual void cursorPosCallback(double xpos, double ypos) {}
 	virtual void framebufferSizeCallback(int width, int height) {}
 	virtual void onFrameUpdateCallback() {}
+	virtual void onRender() {}
 };
 
 struct MyApp 
@@ -55,9 +57,12 @@ struct MyApp
 	static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 
 	void onFrameUpdateCallback(GLFWwindow* window);
+	void renderComponents();
 private:
 	MyApp() {}
 };
+
+extern int glfw_init_gl_basic(GLFWwindow *window);
 
 //--------------------------------------------------------------------------------------------------
 // Template defintions
