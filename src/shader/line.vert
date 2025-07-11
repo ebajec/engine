@@ -17,8 +17,8 @@ layout (std430, binding = 0) buffer Vertices
 
 layout (location = 0) out vec4 frag_color;
 layout (location = 1) out vec4 frag_pos;
-layout (location = 2) out vec2 out_x;
-layout (location = 3) out vec2 out_y;
+layout (location = 2) flat out vec2 dir;
+layout (location = 3) flat out vec2 center;
 
 const uint SIDE_LEFT = 0;
 const uint SIDE_RIGHT = 0x1;
@@ -61,7 +61,7 @@ vec2 intersect_join(vec2 a, vec2 b, vec2 c, vec2 N)
 	return a + N + t*(b-a);
 }
 
-const uint max_idx = 10000000;
+const uint max_idx = 1000000;
 const float thickness = 0.1; 
 
 void main()
@@ -88,6 +88,7 @@ void main()
 		p = p0;
 		b = u_frame.pv*vec4(data[id_prev].pos,0,1);
 
+		X *= -1;
 	} 
 	else if (side == SIDE_RIGHT) {
 		uint id_next = (idx > max_idx) ? idx : idx + 2;
@@ -110,11 +111,11 @@ void main()
 
 	gl_Position = pos;
 
-	vec4 color = vec4(1,0,0,0.5);
+	vec4 color = vec4(1,0,0,0.7);
 
 	frag_pos = pos;
 	frag_color = color;
-	out_x = X;
-	out_y = Y;
+	dir = X;
+	center = p.xy;
 }
 

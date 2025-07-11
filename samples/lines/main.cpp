@@ -172,7 +172,7 @@ struct RandomLine : AppComponent
 		//----------------------------------------------------------------------------
 		// Lines
 
-		static uint32_t count = 10000000;
+		static uint32_t count = 1000000;
 
 		std::complex<float> c = 1;
 		std::complex<float> v = 0;
@@ -180,10 +180,13 @@ struct RandomLine : AppComponent
 		for (uint32_t i = 0; i < count; ++i) {
 
 			float r = urandf();
-			v += r*c;
+			v += (1.0f + 50*urandf())*r*c;
 
-			float tht = HALFPI*urandf();
+			float tht = 0.3*HALFPI*urandf();
 			c *= std::polar<float>(1, tht);
+
+			if (i % rand() == 0)
+				c *= std::polar<float>(1,TWOPI);
 
 			points.push_back(glm::vec2(v.real(),v.imag()));
 
@@ -231,6 +234,10 @@ struct RandomLine : AppComponent
 	virtual void onRender() override
 	{
 		renderer->bind_material(material);
+
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, 
+			   sizeof(glm::vec2)*points.size(), points.data(), GL_STATIC_READ);
 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 
