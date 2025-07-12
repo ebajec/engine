@@ -77,11 +77,11 @@ void MyApp::onFrameUpdateCallback(GLFWwindow *window)
 	}
 }
 
-void MyApp::renderComponents()
+void MyApp::renderComponents(const RenderContext *ctx)
 {
 	for (auto &ptr : components) {
 		if (auto shared = ptr.lock(); shared) 
-			shared->onRender();
+			shared->onRender(ctx);
 	}
 }
 

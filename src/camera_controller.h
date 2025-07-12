@@ -65,11 +65,11 @@ static inline glm::mat4 camera_proj_3d(float fov, float aspect, float far, float
 	)); 
 }
 
-static inline glm::mat4 camera_proj_2d(float aspect)
+static inline glm::mat4 camera_proj_2d(float aspect, float scale)
 {
  	return glm::transpose(glm::mat4(
-		glm::vec4(aspect,0,0,0),
-		glm::vec4(0,1,0,0),
+		glm::vec4(scale*aspect,0,0,0),
+		glm::vec4(0,scale,0,0),
 		glm::vec4(0,0,1,0),
 		glm::vec4(0,0,-1,1)
 	)); 
@@ -116,7 +116,7 @@ struct MotionCamera
 	{
 		glm::mat3 TBN = s2_frame((float)phi,(float)tht);
 		glm::mat3 m = glm::transpose(TBN);
-		glm::vec3 v = -m*(p - glm::dvec3(TBN[2]));
+		glm::vec3 v = -m*(p);
 		glm::mat4 view = glm::mat4(m);
 		view[3] = glm::vec4(v,1);
 

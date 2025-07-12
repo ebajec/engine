@@ -32,7 +32,7 @@
 
 #include "stb_image.h"
 
-struct ViewComponent : AppComponent
+struct BaseViewComponent : AppComponent
 {
 	GLRenderer *renderer;
 
@@ -43,9 +43,9 @@ struct ViewComponent : AppComponent
 	uint32_t w;
 	uint32_t h;
 
-	static ViewComponent *create(GLRenderer *renderer, int w, int h) 
+	static BaseViewComponent *create(GLRenderer *renderer, int w, int h) 
 	{
-		ViewComponent *component = new ViewComponent();
+		BaseViewComponent *component = new BaseViewComponent();
 
 		glm::vec3 eye = glm::vec3(10,0,0);
 
@@ -210,8 +210,8 @@ int main(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 
-	std::shared_ptr<ViewComponent> view_component (
-		ViewComponent::create(renderer.get(), params.win.width, params.win.height));
+	std::shared_ptr<BaseViewComponent> view_component (
+		BaseViewComponent::create(renderer.get(), params.win.width, params.win.height));
 	app->addComponent(view_component);
 
 	//-------------------------------------------------------------------------------------------------

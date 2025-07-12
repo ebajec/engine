@@ -4,6 +4,8 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#include "gl_renderer.h"
+
 #include <functional>
 #include <memory>
 
@@ -31,7 +33,7 @@ struct AppComponent
 	virtual void cursorPosCallback(double xpos, double ypos) {}
 	virtual void framebufferSizeCallback(int width, int height) {}
 	virtual void onFrameUpdateCallback() {}
-	virtual void onRender() {}
+	virtual void onRender(const RenderContext *ctx) {}
 };
 
 struct MyApp 
@@ -57,7 +59,7 @@ struct MyApp
 	static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 
 	void onFrameUpdateCallback(GLFWwindow* window);
-	void renderComponents();
+	void renderComponents(const RenderContext *ctx);
 private:
 	MyApp() {}
 };

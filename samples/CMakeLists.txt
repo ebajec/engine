@@ -8,9 +8,10 @@ project(samples)
 file(GLOB SOURCES "src/*.cpp" "src/*.c" "src/*/*.cpp" "src/*/*.c")
 
 add_library(samples STATIC ${SOURCES})
-target_include_directories(samples PUBLIC src)
+target_include_directories(samples PUBLIC src )
 
 target_link_libraries(samples PUBLIC 
+	engine
 	glfw
     glad
     imgui

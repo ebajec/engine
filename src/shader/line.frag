@@ -2,6 +2,7 @@
 #extension GL_GOOGLE_include_directive : require
 #include "framedata.glsl"
 #include "common.glsl"
+#include "line.glsl"
 
 layout (location = 0) in vec4 frag_color;
 layout (location = 1) in vec4 frag_pos;
@@ -16,8 +17,8 @@ void main()
 
 	vec4 color = frag_color;
 
-	//if (dot(p,dir) > 0 && length(p) > 0.1)
-	//	discard;
+	if (dot(p,dir) > 0 && length(p) > ubo.thickness)
+		discard;
 
 	FragColor = color;
 }

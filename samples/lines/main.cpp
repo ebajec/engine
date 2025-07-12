@@ -33,51 +33,57 @@
 
 #include "stb_image.h"
 
-struct ViewComponent : AppComponent
+struct BaseViewComponent : AppComponent
 {
 	GLRenderer *renderer;
-
-	MotionCamera control;
 
 	RenderTargetID target;
 
 	uint32_t w;
 	uint32_t h;
 
-	float fov = PIf/2.0f;
-	float far = 100;
-	float near = 0.01f;
-
-	static ViewComponent *create(GLRenderer *renderer, int w, int h) 
+	BaseViewComponent(GLRenderer *renderer, int w, int h) 
 	{
-		ViewComponent *component = new ViewComponent();
-
-		glm::vec3 eye = glm::vec3(10,0,0);
-
-		component->renderer = renderer;
-		component->control = MotionCamera::from_normal(glm::vec3(1,0,0),eye);
-		component->w = (uint32_t)w;
-		component->h = (uint32_t)h;
+		this->renderer = renderer;
+		this->w = (uint32_t)w;
+		this->h = (uint32_t)h;
 
 		RenderTargetCreateInfo target_info = {
 			.w = (uint32_t)w,
 			.h = (uint32_t)w,
 			.flags = RENDER_TARGET_CREATE_COLOR_BIT | RENDER_TARGET_CREATE_DEPTH_BIT
 		};
-		component->target = renderer->create_target(&target_info);;
-		return component;
+		target = renderer->create_target(&target_info);;
 	}
 
-	Camera get_camera()
+	virtual Camera get_camera() = 0;
+
+	virtual void framebufferSizeCallback(int width, int height) override 
 	{
-		float aspect = (float)h/(float)w;
-
-		return {
-			.proj = camera_proj_3d(fov, aspect, far, near),//camera_proj_2d(aspect),
-			.view = control.get_view()
+		w = (uint32_t)width;
+		h = (uint32_t)height;
+		RenderTargetCreateInfo target_info = {
+			.w = static_cast<uint32_t>(width),
+			.h = static_cast<uint32_t>(height),
+			.flags = RENDER_TARGET_CREATE_COLOR_BIT | RENDER_TARGET_CREATE_DEPTH_BIT
 		};
+		renderer->reset_target(target, &target_info);
+		return;
 	}
+};
 
+struct ViewComponent3D : BaseViewComponent 
+{
+	MotionCamera control;
+	float fov = PIf/2.0f;
+	float far = 100;
+	float near = 0.01f;
+
+	ViewComponent3D(GLRenderer *renderer, uint32_t w, uint32_t h) : BaseViewComponent(renderer, w, h) 
+	{
+		glm::vec3 eye = glm::vec3(10,0,0);
+		control = MotionCamera::from_normal(glm::vec3(1,0,0),eye);
+	}
 	virtual void cursorPosCallback(double xpos, double ypos) override 
 	{
 		static int init = 0;
@@ -102,12 +108,6 @@ struct ViewComponent : AppComponent
 		if (g_.mouse_mode == GLFW_CURSOR_DISABLED) {
 			control.rotate(-dx, dy);
 		}
-
-	}
-
-	virtual void keyCallback(int key, int scancode, int action, int mods) override
-	{
-		control.handle_key_input_wasd(key, action);
 	}
 
 	virtual void onFrameUpdateCallback() override
@@ -123,29 +123,125 @@ struct ViewComponent : AppComponent
 		control.update(speed);
 	}
 
-	virtual void framebufferSizeCallback(int width, int height) override 
+
+	virtual void keyCallback(int key, int scancode, int action, int mods) override
 	{
-		w = (uint32_t)width;
-		h = (uint32_t)height;
-		RenderTargetCreateInfo target_info = {
-			.w = static_cast<uint32_t>(width),
-			.h = static_cast<uint32_t>(height),
-			.flags = RENDER_TARGET_CREATE_COLOR_BIT | RENDER_TARGET_CREATE_DEPTH_BIT
+		control.handle_key_input_wasd(key, action);
+	}
+
+	virtual Camera get_camera() override
+	{
+		float aspect = (float)h/(float)w;
+		return {
+			.proj = camera_proj_3d(fov, aspect, far, near),
+			.view = control.get_view()
 		};
-		renderer->reset_target(target, &target_info);
-		return;
 	}
 };
 
+glm::vec2 screen_to_world_2d(Camera camera, glm::vec2 screen) 
+{
+	return glm::inverse(camera.proj*camera.view)*glm::vec4(screen,0,0);
+}
+
+struct ViewComponent2D : BaseViewComponent 
+{
+	glm::dvec2 p = glm::dvec2(0);
+	double zoom = 0.1;
+
+	ViewComponent2D(GLRenderer *renderer, uint32_t w, uint32_t h) : BaseViewComponent(renderer, w, h) 
+	{
+	}
+
+	virtual void cursorPosCallback(double xpos, double ypos) override 
+	{
+		static int init = 0;
+		static double xold = 0, yold = 0;
+
+		double xmid = 0.5*(double)w;
+		double ymid = 0.5*(double)h;
+
+		double x = (xpos - xmid)/xmid; 
+		double y = (ypos - ymid)/ymid; 
+
+		double dx = x - xold;
+		double dy = y - yold;
+
+		xold = x;
+		yold = y;
+
+		mouse_pos = glm::dvec2(x,y);
+
+		if (!init++) {
+			return;
+		};
+
+		// at the top of your frame, after you call ImGui::NewFrame():
+		ImGuiIO& io = ImGui::GetIO();
+
+		if (!io.WantCaptureMouse && isLeftClick) {
+			Camera cam = get_camera();
+			glm::vec2 w = screen_to_world_2d(cam, glm::vec2(dx,-dy));
+
+			p -= w;
+		}
+	}
+
+	glm::dvec2 click_pos = glm::dvec2(0);
+	glm::dvec2 mouse_pos = glm::dvec2(0);
+
+	bool isLeftClick = false;
+
+	virtual void mouseButtonCallback(int button, int action, int mods) override 
+	{
+		if (action == GLFW_PRESS && button == GLFW_MOUSE_BUTTON_LEFT) {
+			isLeftClick = true;
+			click_pos = mouse_pos;
+		}
+		if (action == GLFW_RELEASE && button == GLFW_MOUSE_BUTTON_LEFT) {
+			isLeftClick = false;
+		}
+	}
+
+	virtual void scrollCallback(double xoffset, double yoffset) override 
+	{
+		zoom = std::min(10., zoom * exp(yoffset*0.2));
+	}
+
+	virtual void keyCallback(int key, int scancode, int action, int mods) override
+	{
+	}
+
+	virtual Camera get_camera() override
+	{
+		glm::mat4 view = glm::mat4(1.0f);
+		view[3] = glm::vec4(-p,0,1);
+
+		float aspect = (float)h/(float)w;
+		return {
+			.proj = camera_proj_2d(aspect, zoom),
+			.view = view
+		};
+	}
+
+};
 static float urandf()
 {
 	return (float)rand()/(float)RAND_MAX;
 }
 
+struct line_uniforms_t
+{
+	uint count;
+	float thickness;
+};
+
 struct RandomLine : AppComponent 
 {
 	GLRenderer *renderer;
 	ResourceLoader *loader;
+
+	std::shared_ptr<BaseViewComponent> view;
 
 	std::vector<glm::vec2> points;
 	std::vector<uint32_t> indices;
@@ -154,16 +250,19 @@ struct RandomLine : AppComponent
 	gl_vbo ibo;
 	gl_vao vao;
 
+	gl_ubo ubo;
+
 	uint32_t ssbo;
 
 	MaterialID material;
 
+	
 	static constexpr uint32_t verts[] = {
-		0,1,2,3	
+		0x0,0x1,0x2,0x3,0x4,0x6	
 	};
 
 	static constexpr uint32_t idx[] = {
-		0,1,2,1,2,3
+		0,4,2, 5,4,2, 5,4,1, 5,1,3
 	};
 
 	RandomLine(GLRenderer *renderer, ResourceLoader *loader) : 
@@ -172,7 +271,7 @@ struct RandomLine : AppComponent
 		//----------------------------------------------------------------------------
 		// Lines
 
-		static uint32_t count = 1000000;
+		static uint32_t count = 1e7;
 
 		std::complex<float> c = 1;
 		std::complex<float> v = 0;
@@ -180,13 +279,11 @@ struct RandomLine : AppComponent
 		for (uint32_t i = 0; i < count; ++i) {
 
 			float r = urandf();
-			v += (1.0f + 50*urandf())*r*c;
+			v += r*c;
 
-			float tht = 0.3*HALFPI*urandf();
+			float tht = HALFPI*(1.0 - 2.0*urandf());
+
 			c *= std::polar<float>(1, tht);
-
-			if (i % rand() == 0)
-				c *= std::polar<float>(1,TWOPI);
 
 			points.push_back(glm::vec2(v.real(),v.imag()));
 
@@ -224,32 +321,53 @@ struct RandomLine : AppComponent
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
 		glBufferData(GL_SHADER_STORAGE_BUFFER, 
 			   sizeof(glm::vec2)*points.size(), points.data(), GL_STATIC_READ);
+		uniforms.count = points.size();
+		
+		//----------------------------------------------------------------------------
+		// ubo
+
+		glGenBuffers(1, &ubo);
 	}
 
 	void upload_points()
 	{
 
 	}
+	
+	line_uniforms_t uniforms = {
+		.count = 0,
+		.thickness = 0.1
+	};
 
-	virtual void onRender() override
+	virtual void onRender(const RenderContext *ctx) override
 	{
-		renderer->bind_material(material);
+		if (ImGui::Begin("Demo Window")) {
+			ImGui::SliderFloat("thickness", &uniforms.thickness, 0.0f, 2, "%.3f");
+			ImGui::End();
+		}
 
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
-		glBufferData(GL_SHADER_STORAGE_BUFFER, 
-			   sizeof(glm::vec2)*points.size(), points.data(), GL_STATIC_READ);
+		//glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+		//glBufferSubData(GL_SHADER_STORAGE_BUFFER,0,
+		//	   sizeof(glm::vec2)*points.size(), points.data());
+
+		uniforms.count = points.size();
+
+		glBindBuffer(GL_UNIFORM_BUFFER,ubo);
+		glBufferData(GL_UNIFORM_BUFFER,sizeof(uniforms),&uniforms,GL_DYNAMIC_READ);
+		glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
+
+		renderer->bind_material(material);
 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 
 		glEnable(GL_BLEND);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
 		glDisable(GL_DEPTH_TEST);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 		glBindVertexArray(vao);
 		glDrawElementsInstanced(
 			GL_TRIANGLES, 
-			sizeof(indices)/sizeof(uint32_t), 
+			sizeof(idx)/sizeof(uint32_t), 
 			GL_UNSIGNED_INT, 
 			nullptr, 
 			points.size() - 1
@@ -258,6 +376,7 @@ struct RandomLine : AppComponent
 		glDisable(GL_BLEND);
 		glEnable(GL_DEPTH_TEST);
 
+		glFinish();
 	}
 };
 
@@ -344,8 +463,9 @@ int main(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 
-	std::shared_ptr<ViewComponent> view_component (
-		ViewComponent::create(renderer.get(), params.win.width, params.win.height));
+	auto view_component = std::shared_ptr<ViewComponent2D>( 
+		new ViewComponent2D(renderer.get(), params.win.width, params.win.height)
+	);
 	app->addComponent(view_component);
 
 	auto random_lines = std::make_shared<RandomLine>(renderer.get(),loader.get());
@@ -400,7 +520,7 @@ int main(int argc, char* argv[])
 		renderer->bind_material(materialID);
 		//renderer->draw_cmd_basic_mesh3d(sphereID,glm::mat4(1.0f));
 
-		app->renderComponents();
+		app->renderComponents(&ctx);
 
 		renderer->end_pass(&ctx);
 		renderer->draw_target(ctx.target, glm::mat4(1.0f));
