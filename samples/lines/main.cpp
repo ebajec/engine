@@ -117,6 +117,7 @@ struct ViewComponent3D : BaseViewComponent
 		ImGui::Begin("Demo Window");
 		ImGui::SliderFloat("FOV", &fov, 0.0f, PI, "%.3f");
 		ImGui::SliderFloat("near", &near, 0.0, 1.0, "%.3f");
+		ImGui::SliderFloat("far", &far, 0.0, 1000, "%.3f");
 		ImGui::SliderFloat("speed", &speed, 0.0, 100, "%.3f");
 		ImGui::End();
 
@@ -278,10 +279,9 @@ struct RandomLine : AppComponent
 
 		for (uint32_t i = 0; i < count; ++i) {
 
-			float r = urandf();
-			v += r*c;
+			v += 0.1f*c;
 
-			float tht = HALFPI*(1.0 - 2.0*urandf());
+			float tht = 0.6*HALFPI*(1.0 - 2.0*urandf());
 
 			c *= std::polar<float>(1, tht);
 
@@ -360,8 +360,8 @@ struct RandomLine : AppComponent
 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 
+		glDepthMask(GL_FALSE);        // but don’t write any passing depth back into the buffer
 		glEnable(GL_BLEND);
-		glDisable(GL_DEPTH_TEST);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 		glBindVertexArray(vao);
@@ -374,7 +374,7 @@ struct RandomLine : AppComponent
 		);
 
 		glDisable(GL_BLEND);
-		glEnable(GL_DEPTH_TEST);
+		glDepthMask(GL_TRUE);
 
 		glFinish();
 	}
@@ -463,8 +463,8 @@ int main(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 
-	auto view_component = std::shared_ptr<ViewComponent2D>( 
-		new ViewComponent2D(renderer.get(), params.win.width, params.win.height)
+	auto view_component = std::shared_ptr<ViewComponent3D>( 
+		new ViewComponent3D(renderer.get(), params.win.width, params.win.height)
 	);
 	app->addComponent(view_component);
 
@@ -518,7 +518,7 @@ int main(int argc, char* argv[])
 		renderer->begin_pass(&ctx);
 
 		renderer->bind_material(materialID);
-		//renderer->draw_cmd_basic_mesh3d(sphereID,glm::mat4(1.0f));
+		renderer->draw_cmd_basic_mesh3d(sphereID,glm::mat4(1.0f));
 
 		app->renderComponents(&ctx);
 

@@ -18,8 +18,9 @@ layout (std430, binding = 0) buffer Vertices
 
 layout (location = 0) out vec4 frag_color;
 layout (location = 1) out vec4 frag_pos;
-layout (location = 2) flat out vec2 dir;
-layout (location = 3) flat out vec2 center;
+layout (location = 2) out vec2 out_uv;
+layout (location = 3) flat out vec2 dir;
+layout (location = 4) flat out vec2 center;
 
 const uint SIDE_LEFT = 0;
 const uint SIDE_RIGHT = 0x1;
@@ -72,16 +73,20 @@ void main()
 
 	vec4 p0 = vec4(v[0].pos,0,1);
 	vec4 p1 = vec4(v[1].pos,0,1);
+	vec2 dp = p1.xy - p0.xy;
 
-	vec2 X = normalize(p1.xy - p0.xy);
+	float len = length(dp);
+	vec2 X = dp/len;
 	vec2 Y = vec2(X.y, -X.x);
 
 	uint side = id & 0x1;
 
 	vec2 offset = vec2(0);
 	vec4 p = vec4(0);
+	vec4 a = vec4(0); 
+	vec4 b = vec4(0);
 
-	vec4 a = vec4(0), b = vec4(0);
+	vec2 uv = vec2(1,1);
 
 	if (side == SIDE_LEFT) {
 		uint id_prev = (idx > 0) ? idx - 1 : 0;
@@ -90,33 +95,39 @@ void main()
 		b = vec4(data[id_prev].pos,0,1);
 
 		X *= -1;
+		
+		uv.x = 0;
 	} 
 	else if (side == SIDE_RIGHT) {
 		uint id_next = (idx > ubo.count) ? idx : idx + 2;
 		a = p0;
 		p = p1;
 		b = vec4(data[id_next].pos,0,1);
+
+		uv.x = 1;
 	}
 
 	uint vert = id & 0x2;
 	if (vert == VERT_LOWER) {
 		Y = -Y;	
+		uv.y = 0;
 	} else if (vert == VERT_UPPER) {
 		Y = Y;
+		uv.y = 1;
 	}
 	
+	float factor = len/ubo.thickness; 
+
 	Y *= ubo.thickness;
 
 	vec2 final;
 
-	float t = 0.5;
-
 	if ((id & MID_BIT) != 0) {
-	  	final = (1.0-t)*p.xy + t*a.xy + Y;
+	  	final = 0.5*(p.xy + a.xy) + Y;
+		uv.x = 0.5;
 	} else {
-	  final = intersect_join(a.xy,p.xy,b.xy,Y);
+	  	final = intersect_join(a.xy,p.xy,b.xy,Y);
 	}
-
 
 	vec4 pos = vec4(final.x,final.y,p.z,p.w);
 
@@ -124,11 +135,15 @@ void main()
 
 	vec4 color = vec4(1,0,0,0.5);
 
+	//uv.x *= factor;
+
 	frag_pos = pos;
 	frag_color = color;
 	dir = X;
+	out_uv = uv;
 
 	center = p.xy;
+
 	if (bool(id & MID_BIT) && bool(id & VERT_UPPER)) {
 		center = p1.xy;
 		dir = -X;

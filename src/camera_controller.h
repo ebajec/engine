@@ -116,7 +116,7 @@ struct MotionCamera
 	{
 		glm::mat3 TBN = s2_frame((float)phi,(float)tht);
 		glm::mat3 m = glm::transpose(TBN);
-		glm::vec3 v = -m*(p);
+		glm::vec3 v = -m*(p - glm::dvec3(TBN[2]));
 		glm::mat4 view = glm::mat4(m);
 		view[3] = glm::vec4(v,1);
 
