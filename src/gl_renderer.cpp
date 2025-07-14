@@ -3,6 +3,8 @@
 #include "texture_loader.h"
 #include "model_loader.h"
 
+#include "imgui.h"
+
 #include "def_gl.h"
 #include "gl_renderer.h"
 #include "renderer_defaults.h"
@@ -30,10 +32,13 @@ struct gl_renderer_impl
 
 static gl_framedata_t gl_target_uniforms_create(const RenderContext* ctx)
 {
+	glm::mat4 inv = glm::inverse(ctx->camera.view);
+
 	gl_framedata_t u;
 	u.p = ctx->camera.proj;
 	u.v = ctx->camera.view;
 	u.pv = u.p*u.v;
+	u.center = inv[3];
 	u.t = (float)glfwGetTime();
 	return u;
 }
@@ -220,9 +225,15 @@ void GLRenderer::begin_pass(const RenderContext* ctx)
 	glBindFramebuffer(GL_FRAMEBUFFER,target->fbo);
 
 	// initialze fbo
+	
+	static float rgb[3] = {0.5,0.5,0.5};
+	
+	ImGui::Begin("Begin pass");
+	ImGui::ColorPicker3("Background color",rgb);
+	ImGui::End();
 
 	glEnable(GL_DEPTH_TEST);
-    glClearColor(.8f,0.8f,0.8f,1);
+    glClearColor(rgb[0],rgb[1],rgb[2],1);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 };
 
@@ -294,6 +305,13 @@ void GLRenderer::bind_material(MaterialID id)
 
 //--------------------------------------------------------------------------------------------------
 // Draw commands
+
+void GLRenderer::draw_cmd_mesh_outline(ModelID meshID)
+{
+	const GLModel *model = get_model(impl->loader.get(),meshID);
+	glBindVertexArray(model->vao);
+	glDrawElements(GL_LINES,(int)model->icount,GL_UNSIGNED_INT,NULL);
+}
 
 void GLRenderer::draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T)
 {

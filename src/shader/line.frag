@@ -22,34 +22,38 @@ vec4 dash_color(vec2 p, vec2 dir)
 	mat2 m = mat2(dir,vec2(dir.y,-dir.x));
 	vec2 d = m*p;
 
-	float r_circ = (0.1*ubo.thickness);
+	float r_circ = (0.5*ubo.thickness);
 	float r_line = (ubo.thickness);
-	float r_rect = (0.1*ubo.thickness);
 
-	float r_x = abs((d.x)); 
+	float r_x = abs(d.x); 
 	float r_y = abs(d.y); 
 
-	bool in_rect = r_x > 0.3*ubo.thickness && r_y < r_rect;
+	float r_rect_y = (0.2*ubo.thickness);
+	float r_rect_x = 0;
+
+	bool in_rect = r_x > r_rect_x && r_y < r_rect_y;
 
 	bool in_circle = length(p) < r_circ;
 	bool in_line = r_y < r_line;
 
-	bool inside = in_circle || in_line; 
+	bool inside = in_circle || in_rect; 
 
-	float a = inside ? 0.4 : 0;
+	float a = inside ? 0.8 : 0;
 
 	return vec4(
+		inside ? 1 : 0,
 		in_rect ? 1 : 0,
-		in_rect  ? 1 : 0,
 		0,
-		a
+		0.4
 	);
 }
 
 vec4 soft_color(vec2 p, vec2 dir)
 {
-	mat2 m = mat2(dir,vec2(dir.y,-dir.x))/0.5*ubo.thickness;
+	mat2 m = mat2(dir,vec2(dir.y,-dir.x));
 	vec2 d = m*p;
+
+	d /= 0.5*ubo.thickness;
 
 	float fy = exp(-d.y*d.y);
 	float fx = exp(-d.x*d.x);
@@ -79,9 +83,10 @@ void main()
 	vec4 color;
 
 	//color = soft_color(p,dir);
-	color = dash_color(p,dir);
+	//color = dash_color(p,dir);
+	color = tex_color(p,dir);
 
-	color.a = max(color.a, 0.1);
+	//color.a = max(color.a, 0.1);
 
 	FragColor = color;
 }

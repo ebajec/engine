@@ -28,25 +28,28 @@ vec4 diff(vec2 uv)
 	return ddy;
 }
 
-void main()
+vec2 polar(vec2 p) 
 {
-	float t = u_frame.t;
-
-	vec2 p = frag_uv;
-
 	float theta = p.x*TWOPI;
 	float r = p.y;
 
 	vec2 uv = r*vec2(cos(theta),sin(theta));
 	uv = 0.5*(uv + vec2(1.0));
+	return uv;
+}
 
+void main()
+{
+	float t = u_frame.t;
+
+	//vec2 uv = polar(frag_uv);
+	vec2 uv = frag_uv;
 	vec4 c0 = texture(u_tex,uv);
 
-	vec4 c1 = diff(uv);
+	float r = length(frag_pos - u_frame.center);
+	r /= 80;
 
-	float s = sin(t); s *= s;
-	
-	s = 0.0;
+	c0 *= exp(-r*r*r*r);
 
-	FragColor = (1.0-s)*c0 + s*c1; 
+	FragColor = c0; 
 }

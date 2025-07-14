@@ -73,6 +73,7 @@ public:
 	/// matrix.
 	void draw_target(RenderTargetID id, glm::mat4 T); 
 	void draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T);
+	void draw_cmd_mesh_outline(ModelID meshID);
 };
 
 #endif

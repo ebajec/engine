@@ -69,16 +69,21 @@ LoadResult model_load_3d(ResourceLoader *loader, void *res, void *info)
 	model->icount = ci->icount;
 	model->isize = sizeof(uint32_t);
 
+
 	glBindVertexArray(model->vao);
 
+	size_t vsize = (model->vsize*model->vcount);
+	size_t isize = (model->icount*model->isize);
+
 	glBindBuffer(GL_ARRAY_BUFFER,model->vbo);
-	glBufferData(GL_ARRAY_BUFFER,(GLsizei)(model->vsize*model->vcount),ci->data,GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER,(GLsizei)vsize,ci->data,GL_DYNAMIC_DRAW);
 
 	if (gl_check_err())
 		goto failure;
 
+
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,model->ibo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER,(GLsizei)(model->icount*model->isize),ci->indices,GL_DYNAMIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER,(GLsizei)isize,ci->indices,GL_DYNAMIC_DRAW);
 
 	if (gl_check_err())
 		goto failure;
@@ -158,6 +163,21 @@ ResourceHandle load_model_3d(ResourceLoader *loader, Mesh3DCreateInfo *ci)
 		goto load_failed;
 
 	result = loader->upload(h, RESOURCE_LOADER_MODEL_3D, ci);
+
+	if (result != RESULT_SUCCESS) 
+		goto load_failed;
+
+	return h;
+
+load_failed:
+	loader->destroy_handle(h);
+	return RESOURCE_HANDLE_NULL;
+}
+
+extern ResourceHandle model_create(ResourceLoader *loader)
+{
+	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_MODEL);
+	LoadResult result = loader->allocate(h, nullptr);
 
 	if (result != RESULT_SUCCESS) 
 		goto load_failed;

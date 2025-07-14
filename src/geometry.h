@@ -20,6 +20,185 @@
 #define TWOPIf (2.0f*3.141592654f)
 #endif
 
+struct plane_t
+{
+	glm::dvec3 n;
+	double d;
+};
+
+struct frustum_t
+{
+	plane_t planes[6];
+};
+
+struct aabb2_t
+{
+	union {
+		struct {
+			double x0,y0,x1,y1;
+		};	
+		struct {
+			glm::dvec2 min, max;
+		};
+	};
+
+	constexpr inline glm::dvec2 ll() const {return {x0,y0};}
+	constexpr inline glm::dvec2 ur() const {return {x1,y1};}
+	constexpr inline glm::dvec2 ul() const {return {x0,y1};}
+	constexpr inline glm::dvec2 lr() const {return {x1,y0};}
+};
+
+struct aabb3_t
+{
+	union{
+		struct {
+			double x0,y0,z0, x1,y1,z1;
+		};	
+		struct {
+			glm::dvec3 min, max;
+		};
+	};
+};
+
+struct circle_t
+{
+	glm::dvec2 c;
+	double r;
+};
+
+struct obb_t
+{
+	glm::dmat3x2 T;
+	glm::dvec2 limits;
+};
+
+static constexpr bool aabb_contains(aabb2_t box, glm::dvec2 v)
+{
+	return box.x0 <= v.x || v.x <= box.x1 || box.y0 <= v.y || v.y <= box.y1;
+}
+
+static double aabb3_dist_sq(const aabb3_t& box, glm::dvec3 v)
+{
+	glm::dvec3 d = glm::dvec3(0);
+
+	if (v.x < box.x0)
+		d.x = box.x0 - v.x;
+	else if (v.x > box.x1)
+		d.x = v.x - box.x1;
+
+	if (v.y < box.y0)
+		d.y = box.y0 - v.y;
+	else if (v.y > box.y1)
+		d.y = v.y - box.y1;
+
+	if (v.z < box.z0)
+		d.z = box.z0 - v.z;
+	else if (v.z > box.z1)
+		d.z = v.z - box.z1;
+
+	return dot(d,d);
+}
+
+
+static constexpr bool cull_plane(plane_t p, glm::dvec3 v)
+{
+	return glm::dot(v,p.n) >= p.d;
+}
+
+static inline bool intersects(const aabb2_t& box, const circle_t &circ)
+{
+	glm::dvec2 nearest = glm::clamp(circ.c, box.ll(),box.ur());
+	glm::dvec2 d = circ.c - nearest;
+    return dot(d,d) < circ.r*circ.r;
+}
+
+static inline int classify(const aabb3_t& box, const plane_t& pl)
+{ 
+	glm::dvec3 c = (box.min + box.max) * 0.5;
+	glm::dvec3 e = (box.max - box.min) * 0.5;
+
+    float r = e.x * fabs(pl.n.x)
+            + e.y * fabs(pl.n.y)
+            + e.z * fabs(pl.n.z);
+
+    float s = dot(pl.n, c) - pl.d;
+
+    if (s > r)   return +1;  // entirely in front
+    if (s < -r)  return -1;  // entirely behind
+    return 0;                // intersects
+}
+
+static inline aabb3_t bounding(glm::dvec3 *pts, size_t count)
+{
+	assert(count);
+
+	aabb3_t box;
+
+	box.min = box.max = pts[0];
+
+	for (size_t i = 1; i < count; ++i) {
+		glm::dvec3 p = pts[i];
+		box.min = glm::min(box.min,p);
+		box.max = glm::max(box.max,p);
+	}
+
+	return box;
+}
+
+static inline constexpr uint64_t morton_u64(double x, double y, uint8_t level)
+{
+    double w = (double)(0x1 << level);
+
+    uint64_t px = (uint64_t)(x*w);
+    uint64_t py = (uint64_t)(y*w);
+
+    uint8_t xi, yi; 
+
+	uint64_t index = 0;
+
+    while(level--) {
+		uint64_t mask = 0x1 << level;
+
+		xi = px & mask;
+		yi = py & mask;
+
+		index <<= 1;
+		index |= yi >> level;
+		index <<= 1;
+		index |= xi >> level;
+	}
+
+    return index;
+}
+
+static constexpr aabb2_t morton_u64_to_rect_f64(uint64_t index, uint8_t level)
+{
+    aabb2_t extent = {
+		.min = glm::dvec2(0),
+		.max = glm::dvec2(0)
+	};
+
+	double h = 1.0/(double)(1 << level);
+
+	for (; level > 0; --level) {
+        uint8_t xi = index & 0x1;
+        index >>= 1;
+        uint8_t yi = index & 0x1;
+        index >>= 1;
+
+		double hi = 1.0/(double)(1 << level);
+
+        extent.x0 += xi ? hi : 0.0;
+        extent.y0 += yi ? hi : 0.0;
+	}
+
+	extent.x1 = extent.x0 + h;
+	extent.y1 = extent.y0 + h;
+
+    return extent;
+}
+
+
 namespace geometry
 {
 
@@ -130,6 +309,99 @@ static inline void mesh_torus(float R1, float R2, uint32_t ntht1, uint32_t ntht2
 		u += du;
 	}
 
+}
+
+static inline void mesh_cube_map(float scale, uint32_t nx, uint32_t ny,
+				std::vector<vertex3d>& verts, std::vector<uint32_t>& indices)
+{
+	static constexpr uint32_t CUBE_FACES = 6;
+	static constexpr glm::mat3 faces[] = {
+		glm::mat3( // y ^ z
+			0,1,0,
+			0,0,1,
+			1,0,0
+		),
+		glm::mat3( // x ^ z
+			1,0,0,
+			0,0,1,
+			0,1,0
+		),
+		glm::mat3( // x ^ y
+			1,0,0,
+			0,1,0,
+			0,0,1
+		),
+		glm::mat3( // -y ^ z
+			0,-1,0,
+			0,0,1,
+			-1,0,0
+		),
+		glm::mat3( // - x ^ z
+			-1,0,0,
+			0,0,1,
+			0,-1,0
+		),
+		glm::mat3( // - x ^ x
+			-1,0,0,
+			0,1,0,
+			0,0,-1
+		),
+	};
+
+	size_t pt_count = 6*((nx + 1)*(ny + 1));
+
+	std::vector<glm::vec3> pts;
+	std::vector<glm::vec2> uvs;
+
+	for (uint32_t f = 0; f < CUBE_FACES; ++f) {
+		glm::mat3 m = faces[f];
+
+		for (uint32_t i = 0; i < nx + 1; ++i) {
+			float u = (float)i/(float)nx;
+			glm::vec3 pu = (2.f*u - 1.f)*m[0]; 
+
+			for (uint32_t j = 0; j < ny + 1; ++j) {
+				float v = (float)j/(float)ny;
+				glm::vec3 pv = (2.f*v - 1.f)*m[1]; 
+				glm::vec3 p = m[2] + pu + pv;
+
+				pts.push_back(p);
+				uvs.push_back(glm::vec2(u,v));
+			}
+		}
+	}
+
+	verts.reserve(pt_count);
+
+	for (size_t i = 0; i < pts.size(); ++i) {
+		verts.push_back({
+			.postion = scale * pts[i]/glm::length(pts[i]),
+			.uv = uvs[i],
+			.normal = glm::vec3(0),
+	  	});
+	}
+
+	indices.resize(6 * pt_count);
+
+	uint32_t idx = 0;
+	for (uint32_t f = 0; f < CUBE_FACES; ++f) {
+		uint32_t offset = f*(nx + 1)*(ny + 1);
+		for (uint32_t i = 0; i < nx + 1; ++i) {
+			for (uint32_t j = 0; j < ny + 1; ++j) {
+
+				uint32_t in = std::min(i + 1,nx);
+				uint32_t jn = std::min(j + 1,ny);
+
+				indices[idx++] = offset + (ny + 1) * i + j; 
+				indices[idx++] = offset + (ny + 1) * in + j; 
+				indices[idx++] = offset + (ny + 1) * in + jn; 
+
+				indices[idx++] = offset + (ny + 1) * i + j;
+				indices[idx++] = offset + (ny + 1) * in + jn;
+				indices[idx++] = offset + (ny + 1) * i + jn;
+			}
+		}
+	}
 }
 
 }; // namespace geometry

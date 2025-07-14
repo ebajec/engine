@@ -3,7 +3,7 @@
 #include "framedata.glsl"
 #include "common.glsl"
 
-//-------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Vert
 
 layout (binding = 0) uniform sampler2D u_tex;
@@ -21,12 +21,10 @@ void main()
 	float t = u_frame.t;
 	mat4 pv = u_frame.pv;
 
-	mat4 m = mat4(1.0f);
-
 	vec4 wpos = vec4(pos, 1);
-	vec4 n = m * vec4(normal,0);
+	vec4 n = vec4(normal,0);
 
-	frag_pos = wpos.xyz;
+	frag_pos = pos;
 	frag_uv = uv;
 	frag_normal = n.xyz;
 

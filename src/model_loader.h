@@ -1,3 +1,6 @@
+#ifndef MODEL_LOADER_H
+#define MODEL_LOADER_H
+
 #include "resource_loader.h"
 
 #include <variant>
@@ -45,8 +48,9 @@ extern ResourceLoaderFns g_model_3d_load_fns;
 extern ResourceHandle load_model_2d(ResourceLoader *loader, Mesh2DCreateInfo *ci);
 extern ResourceHandle load_model_3d(ResourceLoader *loader, Mesh3DCreateInfo *ci);
 
+extern ResourceHandle model_create(ResourceLoader *loader);
+extern ResourceHandle model_upload(ResourceLoader *loader);
+
 const GLModel *get_model(ResourceLoader *loader, ResourceHandle h);
 
-
-
-
+#endif // MODEL_LOADER_H

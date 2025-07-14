@@ -11,6 +11,7 @@
 #include "camera_controller.h"
 #include "app.h"
 #include "geometry.h"
+#include "globe.h"
 
 #include "utils/log.h"
 
@@ -76,12 +77,12 @@ struct ViewComponent3D : BaseViewComponent
 {
 	MotionCamera control;
 	float fov = PIf/2.0f;
-	float far = 100;
+	float far = 1000;
 	float near = 0.01f;
 
 	ViewComponent3D(GLRenderer *renderer, uint32_t w, uint32_t h) : BaseViewComponent(renderer, w, h) 
 	{
-		glm::vec3 eye = glm::vec3(10,0,0);
+		glm::vec3 eye = glm::vec3(2,0,0);
 		control = MotionCamera::from_normal(glm::vec3(1,0,0),eye);
 	}
 	virtual void cursorPosCallback(double xpos, double ypos) override 
@@ -112,13 +113,13 @@ struct ViewComponent3D : BaseViewComponent
 
 	virtual void onFrameUpdateCallback() override
 	{
-		static float speed = 0.5;
+		static float speed = 0.1;
 		
 		ImGui::Begin("Demo Window");
 		ImGui::SliderFloat("FOV", &fov, 0.0f, PI, "%.3f");
-		ImGui::SliderFloat("near", &near, 0.0, 1.0, "%.3f");
-		ImGui::SliderFloat("far", &far, 0.0, 1000, "%.3f");
-		ImGui::SliderFloat("speed", &speed, 0.0, 100, "%.3f");
+		ImGui::SliderFloat("near", &near, 0.0, 1.0, "%.5f");
+		ImGui::SliderFloat("far", &far, near, 2000, "%.5f");
+		ImGui::SliderFloat("speed", &speed, 0.0, 1, "%.5f");
 		ImGui::End();
 
 		control.update(speed);
@@ -272,14 +273,14 @@ struct RandomLine : AppComponent
 		//----------------------------------------------------------------------------
 		// Lines
 
-		static uint32_t count = 1e7;
+		static uint32_t count = 1e6;
 
 		std::complex<float> c = 1;
 		std::complex<float> v = 0;
 
 		for (uint32_t i = 0; i < count; ++i) {
 
-			v += 0.1f*c;
+			v += 0.5f*c;
 
 			float tht = 0.6*HALFPI*(1.0 - 2.0*urandf());
 
@@ -342,13 +343,13 @@ struct RandomLine : AppComponent
 	virtual void onRender(const RenderContext *ctx) override
 	{
 		if (ImGui::Begin("Demo Window")) {
-			ImGui::SliderFloat("thickness", &uniforms.thickness, 0.0f, 2, "%.3f");
+			ImGui::SliderFloat("thickness", &uniforms.thickness, 0.0f, 1, "%.3f");
 			ImGui::End();
 		}
 
-		//glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-		//glBufferSubData(GL_SHADER_STORAGE_BUFFER,0,
-		//	   sizeof(glm::vec2)*points.size(), points.data());
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+		glBufferSubData(GL_SHADER_STORAGE_BUFFER,0,
+			   sizeof(glm::vec2)*points.size(), points.data());
 
 		uniforms.count = points.size();
 
@@ -379,6 +380,89 @@ struct RandomLine : AppComponent
 		glFinish();
 	}
 };
+
+frustum_t camera_frustum(glm::dmat4 view, glm::dmat4 proj)
+{
+	glm::mat4 m = glm::transpose(proj * view);
+	
+	frustum_t frust;
+	for (int i = 0; i < 6; ++i) {
+		glm::vec4 p;
+		switch (i) {
+			case 0: p = m[3] + m[2]; break; // near
+			case 1: p = m[3] - m[2]; break; // far
+			case 2: p = m[3] + m[0]; break; // left
+			case 3: p = m[3] - m[0]; break; // right
+			case 4: p = m[3] + m[1]; break; // bottom
+			case 5: p = m[3] - m[1]; break; // top
+		}
+
+		float r_inv = 1.0f / glm::length(glm::vec3(p));
+		frust.planes[i].n = glm::vec3(p) * r_inv;
+		frust.planes[i].d = p.w         * r_inv;
+	}
+	
+	return frust;
+}
+
+struct globe_t
+{
+	std::vector<globe::tile_code_t> tiles;
+
+	std::vector<vertex3d> verts;
+	std::vector<uint32_t> indices;
+
+	ModelID meshID;
+
+	static int create(globe_t * g, ResourceLoader* loader)
+	{
+		ModelID mesh = model_create(loader);
+
+		if (!mesh)
+			return -1;
+
+		g->meshID = mesh;
+		return 0;
+	}
+
+	int update(ResourceLoader *loader, Camera camera) 
+	{
+		tiles.clear();
+		verts.clear();
+		indices.clear();
+
+		frustum_t frust = camera_frustum(camera.view,camera.proj);
+
+		static int zoom = 3;
+
+		ImGui::Begin("Demo Window");
+		ImGui::SliderInt("res", &zoom, 0, 5, "%d");
+		ImGui::End();
+
+		double res = globe::tile_area(zoom);
+
+		glm::dvec3 pos = camera_get_pos(camera.view);
+		globe::select_tiles(tiles, frust, pos, res);
+		globe::create_mesh(1,pos, tiles, verts, indices);
+
+		Mesh3DCreateInfo ci = {
+			.data = verts.data(),
+			.vcount = verts.size(),
+			.indices = indices.data(),
+			.icount = indices.size()
+		};
+
+		LoadResult result = loader->upload(meshID, RESOURCE_LOADER_MODEL_3D, &ci); 
+
+		if (result != RESULT_SUCCESS) {
+			log_error("Failed to upload globe mesh");
+			return -1;
+		}
+
+		return 0;
+	}
+};
+
 
 int main(int argc, char* argv[])
 {
@@ -474,10 +558,37 @@ int main(int argc, char* argv[])
 	//-------------------------------------------------------------------------------------------------
 	// test shader 
 	
-	MaterialID materialID = load_material_file(loader.get(), "material/default_mesh3d.yaml");
-	if (!materialID)
+	MaterialID default_meshID = load_material_file(loader.get(), "material/default_mesh3d.yaml");
+	if (!default_meshID)
 		return EXIT_FAILURE;
 
+	MaterialID globe_tileID = load_material_file(loader.get(), "material/globe_tile.yaml");
+	if (!globe_tileID)
+		return EXIT_FAILURE;
+
+	MaterialID box_material = load_material_file(loader.get(), "material/box_debug.yaml");
+	if (!box_material)
+		return EXIT_FAILURE;
+	
+	//-----------------------------------------------------------------------------
+	// cube
+	ModelID cubeID; {
+		std::vector<vertex3d> verts;
+		std::vector<uint32_t> indices;
+
+		//globe::mesh_cube_map(100,100,100, verts, indices);
+
+		Mesh3DCreateInfo load_info = {
+			.data = verts.data(), .vcount = verts.size(),
+			.indices = indices.data(), .icount = indices.size(),
+		};
+		cubeID = load_model_3d(loader.get(),&load_info);;
+
+		if (!cubeID) {
+			return EXIT_FAILURE;
+		}
+	}
+	
 	//-----------------------------------------------------------------------------
 	// sphere
 
@@ -497,12 +608,23 @@ int main(int argc, char* argv[])
 	}
 
 	//-----------------------------------------------------------------------------
+	// Globe
+	
+	globe_t globe;
+	if (globe_t::create(&globe, loader.get()) < 0) {
+		return EXIT_FAILURE;
+	}
+
+	//globe::init_boxes(loader.get());
+
+	//-----------------------------------------------------------------------------
 	// main loop
 
 	while (!glfwWindowShouldClose(window)) {
 		hot_reloader->process_updates();
 
 		glfwPollEvents();
+
 
 		renderer->begin_frame(app->width, app->height);
 
@@ -515,12 +637,20 @@ int main(int argc, char* argv[])
 			.camera = view_component->get_camera() 
 		};
 
+		globe.update(loader.get(), ctx.camera);
+		//globe::g_disp->update();
+
 		renderer->begin_pass(&ctx);
 
-		renderer->bind_material(materialID);
-		renderer->draw_cmd_basic_mesh3d(sphereID,glm::mat4(1.0f));
+		//renderer->bind_material(default_meshID);
+		//renderer->draw_cmd_basic_mesh3d(sphereID,glm::mat4(1.0f));
+		renderer->bind_material(globe_tileID);
+		renderer->draw_cmd_basic_mesh3d(globe.meshID,glm::mat4(1.0f));
 
-		app->renderComponents(&ctx);
+		renderer->bind_material(box_material);
+		//renderer->draw_cmd_mesh_outline(globe::g_disp->model);
+
+		//app->renderComponents(&ctx);
 
 		renderer->end_pass(&ctx);
 		renderer->draw_target(ctx.target, glm::mat4(1.0f));

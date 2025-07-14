@@ -95,7 +95,7 @@ std::unique_ptr<MyApp> MyApp::create(GLFWwindow *window)
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable keyboard controls
-	io.FontGlobalScale = 2.0f; 
+	io.FontGlobalScale = 1.0f; 
 
 	// Set ImGui style
 	ImGui::StyleColorsDark();
