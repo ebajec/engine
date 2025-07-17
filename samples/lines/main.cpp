@@ -11,7 +11,6 @@
 #include "camera_controller.h"
 #include "app.h"
 #include "geometry.h"
-#include "globe.h"
 
 #include "utils/log.h"
 
@@ -73,14 +72,14 @@ struct BaseViewComponent : AppComponent
 	}
 };
 
-struct ViewComponent3D : BaseViewComponent 
+struct MotionCameraComponent : BaseViewComponent 
 {
 	MotionCamera control;
 	float fov = PIf/2.0f;
 	float far = 1000;
 	float near = 0.01f;
 
-	ViewComponent3D(GLRenderer *renderer, uint32_t w, uint32_t h) : BaseViewComponent(renderer, w, h) 
+	MotionCameraComponent(GLRenderer *renderer, uint32_t w, uint32_t h) : BaseViewComponent(renderer, w, h) 
 	{
 		glm::vec3 eye = glm::vec3(2,0,0);
 		control = MotionCamera::from_normal(glm::vec3(1,0,0),eye);
@@ -128,7 +127,7 @@ struct ViewComponent3D : BaseViewComponent
 
 	virtual void keyCallback(int key, int scancode, int action, int mods) override
 	{
-		control.handle_key_input_wasd(key, action);
+		control.handle_key_input(key, action);
 	}
 
 	virtual Camera get_camera() override
@@ -381,89 +380,6 @@ struct RandomLine : AppComponent
 	}
 };
 
-frustum_t camera_frustum(glm::dmat4 view, glm::dmat4 proj)
-{
-	glm::mat4 m = glm::transpose(proj * view);
-	
-	frustum_t frust;
-	for (int i = 0; i < 6; ++i) {
-		glm::vec4 p;
-		switch (i) {
-			case 0: p = m[3] + m[2]; break; // near
-			case 1: p = m[3] - m[2]; break; // far
-			case 2: p = m[3] + m[0]; break; // left
-			case 3: p = m[3] - m[0]; break; // right
-			case 4: p = m[3] + m[1]; break; // bottom
-			case 5: p = m[3] - m[1]; break; // top
-		}
-
-		float r_inv = 1.0f / glm::length(glm::vec3(p));
-		frust.planes[i].n = glm::vec3(p) * r_inv;
-		frust.planes[i].d = p.w         * r_inv;
-	}
-	
-	return frust;
-}
-
-struct globe_t
-{
-	std::vector<globe::tile_code_t> tiles;
-
-	std::vector<vertex3d> verts;
-	std::vector<uint32_t> indices;
-
-	ModelID meshID;
-
-	static int create(globe_t * g, ResourceLoader* loader)
-	{
-		ModelID mesh = model_create(loader);
-
-		if (!mesh)
-			return -1;
-
-		g->meshID = mesh;
-		return 0;
-	}
-
-	int update(ResourceLoader *loader, Camera camera) 
-	{
-		tiles.clear();
-		verts.clear();
-		indices.clear();
-
-		frustum_t frust = camera_frustum(camera.view,camera.proj);
-
-		static int zoom = 3;
-
-		ImGui::Begin("Demo Window");
-		ImGui::SliderInt("res", &zoom, 0, 5, "%d");
-		ImGui::End();
-
-		double res = globe::tile_area(zoom);
-
-		glm::dvec3 pos = camera_get_pos(camera.view);
-		globe::select_tiles(tiles, frust, pos, res);
-		globe::create_mesh(1,pos, tiles, verts, indices);
-
-		Mesh3DCreateInfo ci = {
-			.data = verts.data(),
-			.vcount = verts.size(),
-			.indices = indices.data(),
-			.icount = indices.size()
-		};
-
-		LoadResult result = loader->upload(meshID, RESOURCE_LOADER_MODEL_3D, &ci); 
-
-		if (result != RESULT_SUCCESS) {
-			log_error("Failed to upload globe mesh");
-			return -1;
-		}
-
-		return 0;
-	}
-};
-
-
 int main(int argc, char* argv[])
 {
 	stbi_set_flip_vertically_on_load(true);
@@ -547,8 +463,8 @@ int main(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 
-	auto view_component = std::shared_ptr<ViewComponent3D>( 
-		new ViewComponent3D(renderer.get(), params.win.width, params.win.height)
+	auto view_component = std::shared_ptr<MotionCameraComponent>( 
+		new MotionCameraComponent(renderer.get(), params.win.width, params.win.height)
 	);
 	app->addComponent(view_component);
 
@@ -608,16 +524,6 @@ int main(int argc, char* argv[])
 	}
 
 	//-----------------------------------------------------------------------------
-	// Globe
-	
-	globe_t globe;
-	if (globe_t::create(&globe, loader.get()) < 0) {
-		return EXIT_FAILURE;
-	}
-
-	//globe::init_boxes(loader.get());
-
-	//-----------------------------------------------------------------------------
 	// main loop
 
 	while (!glfwWindowShouldClose(window)) {
@@ -637,20 +543,12 @@ int main(int argc, char* argv[])
 			.camera = view_component->get_camera() 
 		};
 
-		globe.update(loader.get(), ctx.camera);
-		//globe::g_disp->update();
-
 		renderer->begin_pass(&ctx);
 
 		//renderer->bind_material(default_meshID);
 		//renderer->draw_cmd_basic_mesh3d(sphereID,glm::mat4(1.0f));
 		renderer->bind_material(globe_tileID);
-		renderer->draw_cmd_basic_mesh3d(globe.meshID,glm::mat4(1.0f));
-
-		renderer->bind_material(box_material);
-		//renderer->draw_cmd_mesh_outline(globe::g_disp->model);
-
-		//app->renderComponents(&ctx);
+		app->renderComponents(&ctx);
 
 		renderer->end_pass(&ctx);
 		renderer->draw_target(ctx.target, glm::mat4(1.0f));

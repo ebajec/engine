@@ -14,6 +14,12 @@ namespace globe
 		uint64_t idx : 56;
 	};
 
+	// Double coordinate bases for each cube face, ordered by (+x, +y, +z, -x, -y, -z)
+	extern glm::dmat3 cube_faces_d[6];	
+
+	// Float coordinate bases for each cube face, ordered by (+x, +y, +z, -x, -y, -z)
+	extern glm::mat3 cube_faces_f[6];	
+
 	extern void select_tiles(
 		std::vector<tile_code_t>& tiles,
 		const frustum_t& frust, 
@@ -28,61 +34,6 @@ namespace globe
 		std::vector<vertex3d>& verts,
 		std::vector<uint32_t>&indices
 	);
-
-	static constexpr glm::dmat3 g_faces_d[] = {
-		glm::dmat3( // y ^ z
-			0,1,0,
-			0,0,1,
-			1,0,0
-		), glm::dmat3( // x ^ z
-			1,0,0,
-			0,0,1,
-			0,1,0
-		), glm::dmat3( // x ^ y
-			1,0,0,
-			0,1,0,
-			0,0,1
-		), glm::dmat3( // -y ^ z
-			0,-1,0,
-			0,0,1,
-			-1,0,0
-		), glm::dmat3( // - x ^ z
-			-1,0,0,
-			0,0,1,
-			0,-1,0
-		), glm::dmat3( // - x ^ x
-			-1,0,0,
-			0,1,0,
-			0,0,-1
-		),
-	};
-	static constexpr glm::mat3 g_faces_f[] = {
-		glm::mat3( // y ^ z
-			0,1,0,
-			0,0,1,
-			1,0,0
-		), glm::mat3( // x ^ z
-			1,0,0,
-			0,0,1,
-			0,1,0
-		), glm::mat3( // x ^ y
-			1,0,0,
-			0,1,0,
-			0,0,1
-		), glm::mat3( // -y ^ z
-			0,-1,0,
-			0,0,1,
-			-1,0,0
-		), glm::mat3( // - x ^ z
-			-1,0,0,
-			0,0,1,
-			0,-1,0
-		), glm::mat3( // - x ^ x
-			-1,0,0,
-			0,1,0,
-			0,0,-1
-		),
-	};
 
 	static inline constexpr double tile_area(uint8_t lvl)
 	{
@@ -108,7 +59,7 @@ namespace globe
 
 	static inline constexpr glm::dvec2 globe_to_cube_face(glm::dvec3 p, uint8_t f)
 	{
-		glm::dmat3 m = glm::transpose(g_faces_d[f]);
+		glm::dmat3 m = glm::transpose(cube_faces_d[f]);
 
 		p = m*p;
 		p /= p.z;
@@ -127,7 +78,7 @@ namespace globe
 
 	static inline constexpr glm::dvec3 cube_to_globe(uint8_t face, glm::dvec2 uv) 
 	{
-		glm::dmat3 m = g_faces_d[face];
+		glm::dmat3 m = cube_faces_d[face];
 		glm::vec3 p = m[2] + glm::dmat2x3(m[0],m[1])*(2.0*uv - glm::dvec2(1.0)); 
 		return p/length(p);
 	}

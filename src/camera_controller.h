@@ -75,6 +75,14 @@ static inline glm::mat4 camera_proj_2d(float aspect, float scale)
 	)); 
 }
 
+static inline glm::vec3 rotate(glm::vec3 v, glm::vec3 axis, float tht)
+{
+	glm::quat q = quat_exp(axis,tht);
+	glm::quat q2 = q*glm::quat(0,v)*glm::conjugate(q);
+
+	return glm::vec3(q2.x,q2.y,q2.z);
+}
+
 static inline glm::vec3 camera_get_pos(glm::mat4& view) 
 {
 	glm::mat3 inv = glm::transpose(glm::mat3(view));
@@ -95,6 +103,118 @@ static inline glm::mat3 s2_frame(float phi, float theta)
 
 	return glm::mat3(T,B,N);
 }
+
+static inline glm::vec2 screen_to_world_2d(const glm::dmat4& view, const glm::dmat4& proj, glm::vec2 screen) 
+{
+	return glm::inverse(proj*view)*glm::vec4(screen,0,0);
+}
+
+
+static inline void update_motion_wasd(glm::dvec3& dir, int key, int action) 
+{
+	static const int key_fwd = GLFW_KEY_W;
+	static const int key_bkwd = GLFW_KEY_S; 
+	static const int key_left = GLFW_KEY_A;
+	static const int key_right = GLFW_KEY_D;
+	static const int key_up = GLFW_KEY_SPACE;
+	static const int key_down = GLFW_KEY_LEFT_SHIFT;
+
+	if (key == key_fwd && action == GLFW_PRESS) 
+		dir += glm::vec3(1,0,0);
+	if (key == key_left && action == GLFW_PRESS) 
+		dir += glm::vec3(0,1,0);
+	if (key == key_bkwd && action == GLFW_PRESS) 
+		dir += glm::vec3(-1,0,0);
+	if (key == key_right && action == GLFW_PRESS) 
+		dir += glm::vec3(0,-1,0);
+	if (key == key_up && action == GLFW_PRESS) 
+		dir += glm::vec3(0,0,1);
+	if (key == key_down && action == GLFW_PRESS) 
+		dir += glm::vec3(0,0,-1);
+
+	if (key == key_fwd && action == GLFW_RELEASE) 
+		dir -= glm::vec3(1,0,0);
+	if (key == key_left && action == GLFW_RELEASE) 
+		dir -= glm::vec3(0,1,0);
+	if (key == key_bkwd && action == GLFW_RELEASE) 
+		dir -= glm::vec3(-1,0,0);
+	if (key == key_right && action == GLFW_RELEASE) 
+		dir -= glm::vec3(0,-1,0);
+	if (key == key_up && action == GLFW_RELEASE) 
+		dir -= glm::vec3(0,0,1);
+	if (key == key_down && action == GLFW_RELEASE) 
+		dir -= glm::vec3(0,0,-1);
+}
+
+struct SphericalMotionCamera
+{
+	glm::dvec3 up = glm::dvec3(1,0,0);
+	glm::dvec3 right = glm::dvec3(0,1,0);
+	double phi = 0;
+	double height = 1.5;
+
+	float fov = PIf/2.0f;
+	float far = 1000;
+	float near = 0.01f;
+
+	void move(glm::dvec3 motion)
+	{
+		height = std::max(1. + near,height + motion.z);
+
+		glm::dvec3 fwd = glm::normalize(glm::cross(up,right));
+
+		// TODO: This is not
+		glm::dvec3 v = motion.x * fwd + motion.y * right;
+		double speed = length(v);
+
+		if (fabs(speed) > DBL_EPSILON) {
+			v /= speed;
+
+			glm::dquat q = quat_exp(cross(v,up),speed);
+			glm::dquat qstar = glm::conjugate(q);
+
+			glm::dquat q_up = q*glm::dquat(0,up)*qstar;
+			glm::dquat q_right = q*glm::dquat(0,right)*qstar;
+
+			up = glm::normalize(glm::dvec3(q_up.x,q_up.y,q_up.z));
+			right = glm::dvec3(q_right.x,q_right.y,q_right.z);
+
+			// not required, but helps avoid precision loss over time
+			right = glm::normalize(right - up*dot(right,up));
+		}
+	}
+
+	void rotate(double dphi, double dtht) {
+		phi = glm::clamp(phi - dphi,-HALFPI,HALFPI);
+
+		glm::dquat q = quat_exp(up,dtht);
+		glm::dquat a_new = q*glm::dquat(0,right)*glm::conjugate(q);
+
+		right = glm::dvec3(a_new.x,a_new.y,a_new.z);
+	}
+
+	glm::mat4 get_view()
+	{
+		glm::vec3 fwd = glm::normalize(glm::cross(up,right));
+
+		float sin_phi = sinf(phi);
+		float cos_phi = cosf(phi);
+
+		glm::vec3 T = right;
+		glm::vec3 B = sin_phi*fwd + cos_phi*glm::vec3(up);
+		glm::vec3 N = glm::normalize(glm::cross(B,T));
+
+		glm::mat3 m = glm::transpose(glm::mat3(T,B,N));
+
+		glm::vec3 c = -m*(height*up);
+
+		glm::mat4 view = glm::mat4(m);
+		view[3] = glm::vec4(c,1);
+
+		return view;
+	}
+};
+
 
 struct MotionCamera
 {
@@ -137,40 +257,9 @@ struct MotionCamera
 		tht = fmod(tht + dtht, TWOPI);
 	};
 
-	void handle_key_input_wasd(int key, int action) 
+	void handle_key_input(int key, int action) 
 	{
-		static const int key_fwd = GLFW_KEY_W;
-		static const int key_bkwd = GLFW_KEY_S; 
-		static const int key_left = GLFW_KEY_A;
-		static const int key_right = GLFW_KEY_D;
-		static const int key_up = GLFW_KEY_SPACE;
-		static const int key_down = GLFW_KEY_LEFT_SHIFT;
-
-		if (key == key_fwd && action == GLFW_PRESS) 
-			dir += glm::vec3(1,0,0);
-		if (key == key_left && action == GLFW_PRESS) 
-			dir += glm::vec3(0,1,0);
-		if (key == key_bkwd && action == GLFW_PRESS) 
-			dir += glm::vec3(-1,0,0);
-		if (key == key_right && action == GLFW_PRESS) 
-			dir += glm::vec3(0,-1,0);
-		if (key == key_up && action == GLFW_PRESS) 
-			dir += glm::vec3(0,0,1);
-		if (key == key_down && action == GLFW_PRESS) 
-			dir += glm::vec3(0,0,-1);
-
-		if (key == key_fwd && action == GLFW_RELEASE) 
-			dir -= glm::vec3(1,0,0);
-		if (key == key_left && action == GLFW_RELEASE) 
-			dir -= glm::vec3(0,1,0);
-		if (key == key_bkwd && action == GLFW_RELEASE) 
-			dir -= glm::vec3(-1,0,0);
-		if (key == key_right && action == GLFW_RELEASE) 
-			dir -= glm::vec3(0,-1,0);
-		if (key == key_up && action == GLFW_RELEASE) 
-			dir -= glm::vec3(0,0,1);
-		if (key == key_down && action == GLFW_RELEASE) 
-			dir -= glm::vec3(0,0,-1);
+		update_motion_wasd(dir,key,action);
 	}
 
 	void update(float speed) 

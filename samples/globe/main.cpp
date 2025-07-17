@@ -6,11 +6,10 @@
 #include "texture_loader.h"
 #include "model_loader.h"
 
-#include "gl_renderer.h"
-
-#include "camera_controller.h"
-#include "app.h"
 #include "geometry.h"
+#include "globe.h"
+
+#include "view_utils.h"
 
 #include "utils/log.h"
 
@@ -32,100 +31,93 @@
 
 #include "stb_image.h"
 
-struct BaseViewComponent : AppComponent
+static float urandf()
 {
-	GLRenderer *renderer;
+	return (float)rand()/(float)RAND_MAX;
+}
 
-	MotionCamera control;
-
-	RenderTargetID target;
-
-	uint32_t w;
-	uint32_t h;
-
-	static BaseViewComponent *create(GLRenderer *renderer, int w, int h) 
-	{
-		BaseViewComponent *component = new BaseViewComponent();
-
-		glm::vec3 eye = glm::vec3(10,0,0);
-
-		component->renderer = renderer;
-		component->control = MotionCamera::from_normal(glm::vec3(1,0,0),eye);
-		component->w = (uint32_t)w;
-		component->h = (uint32_t)h;
-
-		RenderTargetCreateInfo target_info = {
-			.w = (uint32_t)w,
-			.h = (uint32_t)w,
-			.flags = RENDER_TARGET_CREATE_COLOR_BIT | RENDER_TARGET_CREATE_DEPTH_BIT
-		};
-		component->target = renderer->create_target(&target_info);;
-		return component;
-	}
-
-	Camera get_camera()
-	{
-		float fov = PIf/2.0f;
-		float far = 100;
-		float near = 0.1f;
-		float aspect = (float)h/(float)w;
-
-		return {
-			.proj = camera_proj_3d(fov,aspect,far,near),
-			.view = control.get_view()
-		};
-	}
-
-	virtual void cursorPosCallback(double xpos, double ypos) override 
-	{
-		static int init = 0;
-		static double xold = 0, yold = 0;
-
-		double xmid = 0.5*(double)w;
-		double ymid = 0.5*(double)h;
-
-		double x = (xpos - xmid)/xmid; 
-		double y = (ypos - ymid)/ymid; 
-
-		double dx = x - xold;
-		double dy = y - yold;
-
-		xold = x;
-		yold = y;
-
-		if (!init++) {
-			return;
+frustum_t camera_frustum(const glm::dmat4& view, const glm::dmat4& proj)
+{
+	glm::mat4 m = glm::transpose(proj * view);
+	
+	frustum_t frust;
+	for (int i = 0; i < 6; ++i) {
+		glm::vec4 p;
+		switch (i) {
+			case 0: p = m[3] + m[2]; break; // near
+			case 1: p = m[3] - m[2]; break; // far
+			case 2: p = m[3] + m[0]; break; // left
+			case 3: p = m[3] - m[0]; break; // right
+			case 4: p = m[3] + m[1]; break; // bottom
+			case 5: p = m[3] - m[1]; break; // top
 		}
 
-		if (g_.mouse_mode == GLFW_CURSOR_DISABLED) {
-			control.rotate(-dx, dy);
+		float r_inv = 1.0f / glm::length(glm::vec3(p));
+		frust.planes[i].n = glm::vec3(p) * r_inv;
+		frust.planes[i].d = p.w         * r_inv;
+	}
+	
+	return frust;
+}
+
+struct globe_t
+{
+	std::vector<globe::tile_code_t> tiles;
+
+	std::vector<vertex3d> verts;
+	std::vector<uint32_t> indices;
+
+	ModelID meshID;
+
+	static int create(globe_t * g, ResourceLoader* loader)
+	{
+		ModelID mesh = model_create(loader);
+
+		if (!mesh)
+			return -1;
+
+		g->meshID = mesh;
+		return 0;
+	}
+
+	int update(ResourceLoader *loader, Camera camera) 
+	{
+		tiles.clear();
+		verts.clear();
+		indices.clear();
+
+		frustum_t frust = camera_frustum(camera.view,camera.proj);
+
+		static int zoom = 3;
+
+		ImGui::Begin("Demo Window");
+		ImGui::SliderInt("res", &zoom, 0, 5, "%d");
+		ImGui::End();
+
+		double res = globe::tile_area(zoom);
+
+		glm::dvec3 pos = camera_get_pos(camera.view);
+		globe::select_tiles(tiles, frust, pos, res);
+		globe::create_mesh(1,pos, tiles, verts, indices);
+
+		Mesh3DCreateInfo ci = {
+			.data = verts.data(),
+			.vcount = verts.size(),
+			.indices = indices.data(),
+			.icount = indices.size()
+		};
+
+		LoadResult result = loader->upload(meshID, RESOURCE_LOADER_MODEL_3D, &ci); 
+
+		if (result != RESULT_SUCCESS) {
+			log_error("Failed to upload globe mesh");
+			return -1;
 		}
 
-	}
-
-	virtual void keyCallback(int key, int scancode, int action, int mods) override
-	{
-		control.handle_key_input(key, action);
-	}
-
-	virtual void onFrameUpdateCallback() override
-	{
-		control.update();
-	}
-
-	virtual void framebufferSizeCallback(int width, int height) override 
-	{
-		w = (uint32_t)width;
-		h = (uint32_t)height;
-		RenderTargetCreateInfo target_info = {
-			.w = static_cast<uint32_t>(width),
-			.h = static_cast<uint32_t>(height),
-			.flags = RENDER_TARGET_CREATE_COLOR_BIT | RENDER_TARGET_CREATE_DEPTH_BIT
-		};
-		renderer->reset_target(target, &target_info);
-		return;
+		return 0;
 	}
 };
+
 
 int main(int argc, char* argv[])
 {
@@ -210,17 +202,48 @@ int main(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 
-	std::shared_ptr<BaseViewComponent> view_component (
-		BaseViewComponent::create(renderer.get(), params.win.width, params.win.height));
+	auto view_component = std::shared_ptr<BaseViewComponent>( 
+		new BaseViewComponent(renderer.get(), params.win.width, params.win.height)
+	);
 	app->addComponent(view_component);
+
+	auto sphere_camera = std::shared_ptr<MotionCameraComponent>(new MotionCameraComponent(view_component));
+	app->addComponent(sphere_camera);
 
 	//-------------------------------------------------------------------------------------------------
 	// test shader 
 	
-	MaterialID materialID = load_material_file(loader.get(), "material/default_mesh3d.yaml");
-	if (!materialID)
+	MaterialID default_meshID = load_material_file(loader.get(), "material/default_mesh3d.yaml");
+	if (!default_meshID)
 		return EXIT_FAILURE;
 
+	MaterialID globe_tileID = load_material_file(loader.get(), "material/globe_tile.yaml");
+	if (!globe_tileID)
+		return EXIT_FAILURE;
+
+	MaterialID box_material = load_material_file(loader.get(), "material/box_debug.yaml");
+	if (!box_material)
+		return EXIT_FAILURE;
+	
+	//-----------------------------------------------------------------------------
+	// cube
+	ModelID cubeID; {
+		std::vector<vertex3d> verts;
+		std::vector<uint32_t> indices;
+
+		//globe::mesh_cube_map(100,100,100, verts, indices);
+
+		Mesh3DCreateInfo load_info = {
+			.data = verts.data(), .vcount = verts.size(),
+			.indices = indices.data(), .icount = indices.size(),
+		};
+		cubeID = load_model_3d(loader.get(),&load_info);;
+
+		if (!cubeID) {
+			return EXIT_FAILURE;
+		}
+	}
+	
 	//-----------------------------------------------------------------------------
 	// sphere
 
@@ -240,18 +263,14 @@ int main(int argc, char* argv[])
 	}
 
 	//-----------------------------------------------------------------------------
-	// torus
+	// Globe
+	
+	globe_t globe;
+	if (globe_t::create(&globe, loader.get()) < 0) {
+		return EXIT_FAILURE;
+	}
 
-	std::vector<vertex3d> vtorus;
-	std::vector<uint32_t> itorus;
-
-	geometry::mesh_torus(5.0,1.0,100,100,vtorus,itorus);
-
-	Mesh3DCreateInfo torusLoadInfo = {
-		.data = vtorus.data(), .vcount = vtorus.size(),
-		.indices = itorus.data(), .icount = itorus.size(),
-	};
-	ModelID torusID = load_model_3d(loader.get(),&torusLoadInfo);
+	//globe::init_boxes(loader.get());
 
 	//-----------------------------------------------------------------------------
 	// main loop
@@ -259,37 +278,41 @@ int main(int argc, char* argv[])
 	while (!glfwWindowShouldClose(window)) {
 		hot_reloader->process_updates();
 
-		glfwPollEvents();
-
-		renderer->begin_frame(app->width, app->height);
-
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		RenderContext ctx = {
-			.target = view_component->target,
-			.camera = view_component->get_camera() 
-		};
+		glfwPollEvents();
+
+		app->onFrameUpdateCallback(window);
+
+		glm::mat4 view = sphere_camera->control.get_view();
+		RenderContext ctx = view_component->get_render_context(view);
+
+		renderer->begin_frame(app->width,app->height);
+
+		globe.update(loader.get(), ctx.camera);
+		//globe::g_disp->update();
 
 		renderer->begin_pass(&ctx);
 
-		renderer->bind_material(materialID);
+		//renderer->bind_material(default_meshID);
+		//renderer->draw_cmd_basic_mesh3d(sphereID,glm::mat4(1.0f));
+		renderer->bind_material(globe_tileID);
+		renderer->draw_cmd_basic_mesh3d(globe.meshID,glm::mat4(1.0f));
 
-		renderer->draw_cmd_basic_mesh3d(torusID,glm::mat4(1.0f));
-		renderer->draw_cmd_basic_mesh3d(sphereID,glm::mat4(1.0f));
+		renderer->bind_material(box_material);
+		//renderer->draw_cmd_mesh_outline(globe::g_disp->model);
 
 		renderer->end_pass(&ctx);
-
 		renderer->draw_target(ctx.target, glm::mat4(1.0f));
+
+		renderer->end_frame();
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());	
 
-		renderer->end_frame();
         glfwSwapBuffers(window);   
-
-		app->onFrameUpdateCallback(window);
 	}
 
 	ImGui_ImplOpenGL3_Shutdown();
