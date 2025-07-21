@@ -128,7 +128,7 @@ static inline int classify(const aabb3_t& box, const plane_t& pl)
     return 0;                // intersects
 }
 
-static inline aabb3_t bounding(glm::dvec3 *pts, size_t count)
+static inline aabb3_t aabb_bounding(glm::dvec3 *pts, size_t count)
 {
 	assert(count);
 
@@ -142,6 +142,13 @@ static inline aabb3_t bounding(glm::dvec3 *pts, size_t count)
 		box.max = glm::max(box.max,p);
 	}
 
+	return box;
+}
+
+static inline aabb3_t aabb_add(aabb3_t box, glm::dvec3 p)
+{
+	box.max = glm::max(p,box.max);
+	box.min = glm::min(p,box.min);
 	return box;
 }
 
@@ -231,7 +238,7 @@ static inline void mesh_s2(uint32_t ntht, uint32_t nphi, std::vector<vertex3d>& 
 			glm::vec2 uv = glm::vec2(tht/tht_max,phi/PI);
 
 			verts.push_back(vertex3d{
-				.postion = p,
+				.position = p,
 				.uv = uv,
 				.normal = n
 			});
@@ -287,7 +294,7 @@ static inline void mesh_torus(float R1, float R2, uint32_t ntht1, uint32_t ntht2
 			glm::vec3 p = R1*A + R2*B;
 
 			verts.push_back({
-				.postion = p,
+				.position = p,
 				.uv = glm::vec2(u,v),
 				.normal = glm::vec3(0)
 			});
@@ -375,7 +382,7 @@ static inline void mesh_cube_map(float scale, uint32_t nx, uint32_t ny,
 
 	for (size_t i = 0; i < pts.size(); ++i) {
 		verts.push_back({
-			.postion = scale * pts[i]/glm::length(pts[i]),
+			.position = scale * pts[i]/glm::length(pts[i]),
 			.uv = uvs[i],
 			.normal = glm::vec3(0),
 	  	});

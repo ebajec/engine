@@ -123,7 +123,7 @@ struct SphereCameraComponent : AppComponent
 
 	virtual void onFrameUpdateCallback() override
 	{
-		static float speed = 0.1;
+		static float speed = 0.01;
 		
 		ImGui::Begin("Demo Window");
 		ImGui::SliderFloat("speed", &speed, 0.0, 1, "%.5f");
@@ -149,13 +149,13 @@ struct MotionCameraComponent : AppComponent
 		if (g_.mouse_mode == GLFW_CURSOR_DISABLED) {
 			double dx = view_component->dmouse_pos.x;
 			double dy = view_component->dmouse_pos.y;
-			control.rotate(-dx,dy);
+			control.rotate(dx,dy);
 		}
 	}
 
 	virtual void onFrameUpdateCallback() override
 	{
-		static float speed = 0.1;
+		static float speed = 0.01;
 		
 		ImGui::Begin("View Config");
 		ImGui::SliderFloat("speed", &speed, 0.0, 1, "%.5f");

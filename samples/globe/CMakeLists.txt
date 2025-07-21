@@ -6,7 +6,7 @@ include(clang-warnings)
 set(TARGET globe)
 project(${TARGET})
 
-add_executable(${TARGET} main.cpp globe.cpp)
+add_executable(${TARGET} main.cpp)
 
 target_link_libraries(${TARGET} PRIVATE
 	samples

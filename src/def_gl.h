@@ -77,7 +77,7 @@ struct vertex2d
 
 struct vertex3d
 {
-	glm::vec3 postion;
+	glm::vec3 position;
 	glm::vec2 uv;
 	glm::vec3 normal;
 };

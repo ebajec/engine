@@ -6,6 +6,7 @@
 #include "imgui.h"
 
 #include "def_gl.h"
+#include "gl_debug.h"
 #include "gl_renderer.h"
 #include "renderer_defaults.h"
 
@@ -250,7 +251,7 @@ void GLRenderer::end_pass(const RenderContext* ctx)
 	glBindFramebuffer(GL_FRAMEBUFFER,0);
 };
 
-void GLRenderer::draw_target(RenderTargetID id, glm::mat4 T)
+void GLRenderer::draw_target(RenderTargetID id, glm::mat4 T) const
 {
 	gl_render_target* target = impl->get_target(id);
 
@@ -265,7 +266,7 @@ void GLRenderer::draw_target(RenderTargetID id, glm::mat4 T)
 	glDrawElements(GL_TRIANGLES,(int)model->icount,GL_UNSIGNED_INT,NULL);
 }
 
-void GLRenderer::bind_material(MaterialID id) 
+void GLRenderer::bind_material(MaterialID id) const
 {
 	const GLMaterial *material = get_material(impl->loader.get(),id); 
 
@@ -306,19 +307,19 @@ void GLRenderer::bind_material(MaterialID id)
 //--------------------------------------------------------------------------------------------------
 // Draw commands
 
-void GLRenderer::draw_cmd_mesh_outline(ModelID meshID)
+void GLRenderer::draw_cmd_mesh_outline(ModelID meshID) const
 {
 	const GLModel *model = get_model(impl->loader.get(),meshID);
 	glBindVertexArray(model->vao);
 	glDrawElements(GL_LINES,(int)model->icount,GL_UNSIGNED_INT,NULL);
 }
 
-void GLRenderer::draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T)
+void GLRenderer::draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T) const
 {
 	//glEnable(GL_CULL_FACE);
 	//glCullFace(GL_BACK);
 	//glFrontFace(GL_CCW);
-
+	
 	const GLModel *model = get_model(impl->loader.get(),meshID);
 	glBindVertexArray(model->vao);
 	glDrawElements(GL_TRIANGLES,(int)model->icount,GL_UNSIGNED_INT,NULL);

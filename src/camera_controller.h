@@ -151,15 +151,13 @@ struct SphericalMotionCamera
 	glm::dvec3 up = glm::dvec3(1,0,0);
 	glm::dvec3 right = glm::dvec3(0,1,0);
 	double phi = 0;
-	double height = 1.5;
 
-	float fov = PIf/2.0f;
-	float far = 1000;
-	float near = 0.01f;
+	double min_height = 0.01;
+	double height = 2.0;
 
 	void move(glm::dvec3 motion)
 	{
-		height = std::max(1. + near,height + motion.z);
+		height = std::max(1. + min_height,height + motion.z);
 
 		glm::dvec3 fwd = glm::normalize(glm::cross(up,right));
 

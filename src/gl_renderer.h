@@ -67,13 +67,13 @@ public:
     void begin_pass(const RenderContext* ctx);
     void end_pass(const RenderContext* ctx);
 
-	void bind_material(MaterialID material);
+	void bind_material(MaterialID material) const;
 
 	/// @brief Render a target to the screen to a region specified by the transformation
 	/// matrix.
-	void draw_target(RenderTargetID id, glm::mat4 T); 
-	void draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T);
-	void draw_cmd_mesh_outline(ModelID meshID);
+	void draw_target(RenderTargetID id, glm::mat4 T) const; 
+	void draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T) const;
+	void draw_cmd_mesh_outline(ModelID meshID) const;
 };
 
 #endif

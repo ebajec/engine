@@ -3,6 +3,7 @@
 #include "shader_loader.h"
 #include "texture_loader.h"
 #include "model_loader.h"
+#include "globe.h"
 
 #include <utils/log.h>
 
@@ -151,6 +152,7 @@ std::unique_ptr<ResourceLoader> ResourceLoader::create(const ResourceLoaderCreat
 	loader->pfns.loader_fns[RESOURCE_LOADER_IMAGE_MEMORY] = g_image_loader_fns;
 	loader->pfns.loader_fns[RESOURCE_LOADER_MODEL_2D] = g_model_2d_load_fns;
 	loader->pfns.loader_fns[RESOURCE_LOADER_MODEL_3D] = g_model_3d_load_fns;
+	loader->pfns.loader_fns[RESOURCE_LOADER_GLOBE] = globe::loader_fns;
 
 	return loader;
 }

@@ -1,4 +1,4 @@
-#version 430 core
+#version 450 core
 #extension GL_GOOGLE_include_directive : require
 #include "framedata.glsl"
 #include "common.glsl"
@@ -11,6 +11,7 @@ layout (binding = 0) uniform sampler2D u_tex;
 layout (location = 0) in vec3 frag_pos;
 layout (location = 1) in vec2 frag_uv;
 layout (location = 2) in vec3 frag_normal;
+layout (location = 3) in vec4 fcolor;
 
 layout (location = 0) out vec4 FragColor;
 
@@ -108,5 +109,5 @@ void main()
 	vec4 color = f*FACE_COLORS[face];
 	color.w = 0.5;
 
-	FragColor = color; 
+	FragColor = fcolor;
 }

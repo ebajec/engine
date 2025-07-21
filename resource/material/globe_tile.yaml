@@ -1,3 +1,7 @@
 shaders:
   vert: shader/globe_tile.vert
   frag: shader/globe_tile.frag
+bindings:
+  - name: u_tex
+    type: sampler2D
+    path: image/saro.jpg

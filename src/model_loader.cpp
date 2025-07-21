@@ -91,7 +91,7 @@ LoadResult model_load_3d(ResourceLoader *loader, void *res, void *info)
 	glEnableVertexArrayAttrib(model->vao,0);
 	glEnableVertexArrayAttrib(model->vao,1);
 	glEnableVertexArrayAttrib(model->vao,2);
-	glVertexAttribPointer(0,3,GL_FLOAT,0,sizeof(vertex3d),(void*)0);
+	glVertexAttribPointer(0,3,GL_FLOAT,0,sizeof(vertex3d),(void*)offsetof(vertex3d,position));
 	glVertexAttribPointer(1,2,GL_FLOAT,0,sizeof(vertex3d),(void*)offsetof(vertex3d,uv));
 	glVertexAttribPointer(2,3,GL_FLOAT,0,sizeof(vertex3d),(void*)offsetof(vertex3d,normal));
 

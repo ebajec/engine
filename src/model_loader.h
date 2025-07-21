@@ -3,9 +3,6 @@
 
 #include "resource_loader.h"
 
-#include <variant>
-
-// Renderable geometry
 struct GLModel
 {
 	int init();
@@ -38,8 +35,6 @@ struct Mesh3DCreateInfo
 	const uint32_t* indices; 
 	size_t icount;
 };
-
-typedef std::variant<Mesh3DCreateInfo*, Mesh2DCreateInfo*> ModelDesc;
 
 extern ResourceFns g_model_alloc_fns;
 extern ResourceLoaderFns g_model_2d_load_fns;

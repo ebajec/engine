@@ -2,16 +2,50 @@
 #define GLOBE_H
 
 #include "geometry.h"
+#include "gl_renderer.h"
+#include "resource_loader.h"
+#include "model_loader.h"
 
 #include <cfloat>
 
 namespace globe
 {
-	struct tile_code_t
+	struct TileCode
 	{
 		uint8_t face : 3;
 		uint8_t zoom : 5;
 		uint64_t idx : 56;
+	};
+
+	struct GlobeVertex
+	{
+		glm::vec3 pos;
+		glm::vec2 uv;
+		glm::vec3 normal;
+		union {
+			struct {
+				uint32_t left; 
+				uint32_t right;
+			};
+			TileCode code;
+		};
+	};
+
+	struct Globe
+	{
+		std::vector<TileCode> tiles;
+
+		std::vector<GlobeVertex> verts;
+		std::vector<uint32_t> indices;
+
+		ModelID modelID;
+	};
+
+
+	struct GlobeUpdateInfo
+	{
+		glm::mat4 proj;
+		glm::mat4 view;
 	};
 
 	// Double coordinate bases for each cube face, ordered by (+x, +y, +z, -x, -y, -z)
@@ -20,20 +54,29 @@ namespace globe
 	// Float coordinate bases for each cube face, ordered by (+x, +y, +z, -x, -y, -z)
 	extern glm::mat3 cube_faces_f[6];	
 
+//------------------------------------------------------------------------------
+// Loaders
+
+	extern ResourceLoaderFns loader_fns;
+
+	LoadResult globe_create(Globe *globe, ResourceLoader *loader);
+	LoadResult globe_update(Globe *globe, ResourceLoader *loader, GlobeUpdateInfo *info);
+
+//------------------------------------------------------------------------------
+// Interface
+	extern void init_boxes(ResourceLoader *loader);
+	extern void render_boxes(const GLRenderer *renderer);
+	extern void update_boxes();
+
 	extern void select_tiles(
-		std::vector<tile_code_t>& tiles,
+		std::vector<TileCode>& tiles,
 		const frustum_t& frust, 
 		glm::dvec3 center, 
 		double res
 	);
 
-	extern void create_mesh(
-		double scale,
-		glm::dvec3 origin,
-		const std::vector<tile_code_t>& tiles, 
-		std::vector<vertex3d>& verts,
-		std::vector<uint32_t>&indices
-	);
+//-------------------------------------------------------------------------------
+// Static helpers
 
 	static inline constexpr double tile_area(uint8_t lvl)
 	{
@@ -62,7 +105,7 @@ namespace globe
 		glm::dmat3 m = glm::transpose(cube_faces_d[f]);
 
 		p = m*p;
-		p /= p.z;
+		p /= copysign(std::max(fabs(p.z),1e-14),p.z);
 
 		glm::dvec2 uv = 0.5 * (glm::dvec2(1.0) + glm::dvec2(p.x,p.y));
 
@@ -80,10 +123,10 @@ namespace globe
 	{
 		glm::dmat3 m = cube_faces_d[face];
 		glm::vec3 p = m[2] + glm::dmat2x3(m[0],m[1])*(2.0*uv - glm::dvec2(1.0)); 
-		return p/length(p);
+		return glm::normalize(p);
 	}
 
-	static inline constexpr tile_code_t encode(uint8_t zoom, glm::dvec3 p)
+	static inline constexpr TileCode encode(uint8_t zoom, glm::dvec3 p)
 	{
 		assert(zoom < 24);
 		uint8_t f;
@@ -91,7 +134,7 @@ namespace globe
 
 		globe_to_cube(p, &uv, &f);
 
-		tile_code_t code = {
+		TileCode code = {
 			.face = f,
 			.zoom = zoom,
 			.idx = morton_u64(uv.x,uv.y,zoom)

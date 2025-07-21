@@ -82,7 +82,7 @@ struct BoxDisplay
 
 			for (glm::dvec3 &p : pts) {
 				verts.push_back(vertex3d{ 
-					.postion = p
+					.position = p
 				});
 			}
 

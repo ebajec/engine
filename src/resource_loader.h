@@ -22,17 +22,6 @@
 
 #define RESOURCE_HANDLE_NULL 0
 
-struct ResourceLoader;
-
-// TODO : callback in debug mode when a function hits an error? 
-// 'setResult'??
-enum LoadResult : int32_t
-{
-	ERROR_INVALID_HANDLE = -2,
-	RESULT_ERROR = -1,
-	RESULT_SUCCESS = 0
-};
-
 enum ResourceType :uint8_t
 {
 	RESOURCE_TYPE_NONE,
@@ -48,7 +37,19 @@ enum ResourceLoaderType
 	RESOURCE_LOADER_IMAGE_MEMORY,
 	RESOURCE_LOADER_MODEL_2D,
 	RESOURCE_LOADER_MODEL_3D,
+	RESOURCE_LOADER_GLOBE,
 	RESOURCE_LOADER_MAX_ENUM
+};
+
+struct ResourceLoader;
+
+// TODO : callback in debug mode when a function hits an error? 
+// 'setResult'??
+enum LoadResult : int32_t
+{
+	ERROR_INVALID_HANDLE = -2,
+	RESULT_ERROR = -1,
+	RESULT_SUCCESS = 0
 };
 
 enum ResourceStatus : int8_t
