@@ -12,4 +12,6 @@ deps/stb/stb
 
 resource/shader/*.spv
 
+perf.*
+
 
