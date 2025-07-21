@@ -76,7 +76,10 @@ void main()
 	vec2 dp = p1.xy - p0.xy;
 
 	float len = length(dp);
-	vec2 X = dp/len;
+
+	vec2 X_abs = dp/len;
+
+	vec2 X = X_abs;
 	vec2 Y = vec2(X.y, -X.x);
 
 	uint side = id & 0x1;
@@ -116,17 +119,24 @@ void main()
 		uv.y = 1;
 	}
 	
-	float factor = len/ubo.thickness; 
 
 	Y *= ubo.thickness;
 
 	vec2 final;
 
-	if ((id & MID_BIT) != 0) {
+	bool is_mid = bool(id & MID_BIT); 
+
+	if (is_mid) {
 	  	final = 0.5*(p.xy + a.xy) + Y;
 		uv.x = 0.5;
 	} else {
 	  	final = intersect_join(a.xy,p.xy,b.xy,Y);
+
+		float factor = len/ubo.thickness; 
+		vec2 r = final.xy - p.xy;
+		float extra = dot(r,X_abs);
+
+		uv.x += extra/len;
 	}
 
 	vec4 pos = vec4(final.x,final.y,p.z,p.w);
@@ -135,18 +145,18 @@ void main()
 
 	vec4 color = vec4(1,0,0,0.5);
 
-	//uv.x *= factor;
-
 	frag_pos = pos;
 	frag_color = color;
 	dir = X;
-	out_uv = uv;
-
 	center = p.xy;
+	out_uv = vec2(uv.x*(0.5*len/ubo.thickness),uv.y);
 
-	if (bool(id & MID_BIT) && bool(id & VERT_UPPER)) {
+	// This is so the provoking vertex passes the 
+	// correct values for flat shader outputs
+	if (is_mid && bool(id & VERT_UPPER)) {
 		center = p1.xy;
 		dir = -X;
 	}
+
 }
 

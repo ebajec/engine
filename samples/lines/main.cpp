@@ -281,7 +281,7 @@ struct RandomLine : AppComponent
 
 			v += 0.5f*c;
 
-			float tht = 0.6*HALFPI*(1.0 - 2.0*urandf());
+			float tht = HALFPI*(1.0 - 2.0*urandf());
 
 			c *= std::polar<float>(1, tht);
 
