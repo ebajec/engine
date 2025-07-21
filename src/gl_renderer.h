@@ -7,6 +7,7 @@
 #include <glm/matrix.hpp>
 #include <glm/integer.hpp>
 
+#include <vector>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 

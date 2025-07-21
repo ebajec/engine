@@ -3,6 +3,7 @@
 #include "shader_loader.h"
 #include "texture_loader.h"
 
+#include <vector>
 #include <string_view>
 #include <utils/log.h>
 #include <yaml-cpp/yaml.h>

@@ -3,6 +3,8 @@
 #include "texture_loader.h"
 #include "model_loader.h"
 
+#include <vector>
+
 LoadResult renderer_defaults_init(ResourceLoader *loader, RendererDefaults *defaults) 
 {
 	LoadResult result = RESULT_SUCCESS;

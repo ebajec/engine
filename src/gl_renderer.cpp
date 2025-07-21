@@ -11,6 +11,7 @@
 #include "renderer_defaults.h"
 
 #include <glm/gtc/type_ptr.hpp>
+#include <vector>
 #include <atomic>
 
 struct gl_renderer_impl

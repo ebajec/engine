@@ -2,6 +2,8 @@
 #include "model_loader.h"
 #include "gl_debug.h"
 
+#include <vector>
+
 static LoadResult gl_model_create(ResourceLoader *loader, void **res, void *info);
 static void gl_model_destroy(ResourceLoader *loader, void *model);
 

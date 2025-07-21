@@ -15,10 +15,11 @@ void MyApp::keyCallback(GLFWwindow* window, int key, int scancode, int action, i
 
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) 
 	{
-		if (g_.mouse_mode == GLFW_CURSOR_DISABLED)
+		if (g_.mouse_mode == GLFW_CURSOR_DISABLED) {
 			g_.mouse_mode = GLFW_CURSOR_NORMAL;
-		else 
+		} else  {
 			g_.mouse_mode = GLFW_CURSOR_DISABLED;
+		}
 
 		glfwSetInputMode(window, GLFW_CURSOR, g_.mouse_mode);
 	}

@@ -272,7 +272,7 @@ struct RandomLine : AppComponent
 		//----------------------------------------------------------------------------
 		// Lines
 
-		static uint32_t count = 1e6;
+		static uint32_t count = 1e4;
 
 		std::complex<float> c = 1;
 		std::complex<float> v = 0;
@@ -345,10 +345,6 @@ struct RandomLine : AppComponent
 			ImGui::SliderFloat("thickness", &uniforms.thickness, 0.0f, 1, "%.3f");
 			ImGui::End();
 		}
-
-		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-		glBufferSubData(GL_SHADER_STORAGE_BUFFER,0,
-			   sizeof(glm::vec2)*points.size(), points.data());
 
 		uniforms.count = points.size();
 

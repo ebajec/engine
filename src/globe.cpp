@@ -9,6 +9,7 @@
 #include <glm/mat3x3.hpp>
 #include <glm/mat3x2.hpp>
 
+#include <vector>
 #include <cstdint>
 #include <climits>
 #include <cfloat>

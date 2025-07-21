@@ -7,6 +7,7 @@
 #include "model_loader.h"
 
 #include <cfloat>
+#include <vector>
 
 namespace globe
 {
@@ -97,10 +98,10 @@ namespace globe
 			}
 		}
 
-		return argmax;
+		return (uint8_t)argmax;
 	}
 
-	static inline constexpr glm::dvec2 globe_to_cube_face(glm::dvec3 p, uint8_t f)
+	static inline glm::dvec2 globe_to_cube_face(glm::dvec3 p, uint8_t f)
 	{
 		glm::dmat3 m = glm::transpose(cube_faces_d[f]);
 
@@ -112,14 +113,14 @@ namespace globe
 		return uv;
 	}
 
-	static inline constexpr void globe_to_cube(glm::dvec3 p, glm::dvec2 *p_uv, uint8_t *p_f)
+	static inline void globe_to_cube(glm::dvec3 p, glm::dvec2 *p_uv, uint8_t *p_f)
 	{
 		uint8_t f = cube_face(p);
 		*p_uv = globe_to_cube_face(p,f);
 		*p_f = f;
 	}
 
-	static inline constexpr glm::dvec3 cube_to_globe(uint8_t face, glm::dvec2 uv) 
+	static inline glm::dvec3 cube_to_globe(uint8_t face, glm::dvec2 uv) 
 	{
 		glm::dmat3 m = cube_faces_d[face];
 		glm::vec3 p = m[2] + glm::dmat2x3(m[0],m[1])*(2.0*uv - glm::dvec2(1.0)); 

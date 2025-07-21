@@ -8,6 +8,7 @@
 
 #include <utils/log.h>
 
+#include <vector>
 #include <cstring>
 #include <filesystem>
 #include <fstream>

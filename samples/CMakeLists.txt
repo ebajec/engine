@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.27)
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 20)
 
 include(clang-warnings)
 
@@ -17,7 +17,6 @@ target_link_libraries(samples PUBLIC
     imgui
 	stb
     OpenGL::GL
-	yaml-cpp::yaml-cpp
     glm::glm)
 
 #add_subdirectory(default)

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.27)
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 20)
 
 include(clang-warnings)
 
@@ -20,7 +20,7 @@ target_link_libraries(${TARGET} PUBLIC
 	spirv-reflect-static
 	stb
     OpenGL::GL
-	yaml-cpp::yaml-cpp
+	yaml-cpp
     glm::glm)
 
 enable_clang_warnings(${TARGET})

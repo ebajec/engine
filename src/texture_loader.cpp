@@ -2,6 +2,7 @@
 #include "texture_loader.h"
 #include "gl_debug.h"
 
+#include <vector>
 #include <filesystem>
 
 #include "stb_image.h"

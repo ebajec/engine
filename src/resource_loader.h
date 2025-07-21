@@ -10,6 +10,8 @@
 #include <stdint.h>
 
 #include <unordered_set>
+#include <vector>
+#include <array>
 #include <memory>
 #include <stack>
 #include <atomic>

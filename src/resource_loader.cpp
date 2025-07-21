@@ -7,6 +7,7 @@
 
 #include <utils/log.h>
 
+#include <vector>
 #include <mutex>
 #include <cstring>
 #include <filesystem>
