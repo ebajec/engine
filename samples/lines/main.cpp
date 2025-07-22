@@ -121,7 +121,7 @@ struct MotionCameraComponent : BaseViewComponent
 		ImGui::SliderFloat("speed", &speed, 0.0, 1, "%.5f");
 		ImGui::End();
 
-		control.update(speed);
+		control.update(speed*g_.dt);
 	}
 
 
@@ -266,24 +266,24 @@ struct RandomLine : AppComponent
 		0,4,2, 5,4,2, 5,4,1, 5,1,3
 	};
 
-	RandomLine(GLRenderer *renderer, ResourceLoader *loader) : 
+	RandomLine(GLRenderer *renderer, ResourceLoader *loader, uint32_t count) : 
 		AppComponent(), renderer(renderer), loader(loader) 
 	{
 		//----------------------------------------------------------------------------
 		// Lines
-
-		static uint32_t count = 1e4;
 
 		std::complex<float> c = 1;
 		std::complex<float> v = 0;
 
 		for (uint32_t i = 0; i < count; ++i) {
 
-			v += 0.5f*c;
+			v += (0.5f + 0.5f*urandf())*c;
 
-			float tht = HALFPI*(1.0 - 2.0*urandf());
+			float tht = 0.7*PI*(1.0 - 2.0*urandf());
 
 			c *= std::polar<float>(1, tht);
+
+			v = std::polar<float>(1,TWOPI*(float)i/(float)(count - 1));
 
 			points.push_back(glm::vec2(v.real(),v.imag()));
 
@@ -400,9 +400,17 @@ int main(int argc, char* argv[])
 	const char* resource_path = NULL;
 #endif
 
+	uint32_t count = 1000;
+
 	for (int i = 0; i < argc; ++i) {
 		if (!strcmp(argv[i],"--resources")) {
 			resource_path = argv[++i];	
+		}
+		if (!strcmp(argv[i],"--count")) {
+			if (i + 1 < argc) {
+				count = strtoul(argv[i + 1],NULL,10);
+				++i;
+			}
 		}
 	}
 
@@ -464,7 +472,7 @@ int main(int argc, char* argv[])
 	);
 	app->addComponent(view_component);
 
-	auto random_lines = std::make_shared<RandomLine>(renderer.get(),loader.get());
+	auto random_lines = std::make_shared<RandomLine>(renderer.get(),loader.get(),count);
 	app->addComponent(random_lines);
 
 	//-------------------------------------------------------------------------------------------------

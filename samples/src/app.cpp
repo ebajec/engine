@@ -72,6 +72,16 @@ void MyApp::framebufferSizeCallback(GLFWwindow* window, int width, int height)
 
 void MyApp::onFrameUpdateCallback(GLFWwindow *window) 
 {
+	static double t0 = -1; 
+
+	if (t0 < 0) {
+		g_.dt = 1.0/60.0;
+	} else {
+		g_.dt = glfwGetTime() - t0;
+	}
+
+	t0 = glfwGetTime();
+
 	for (auto &ptr : components) {
 		if (auto shared = ptr.lock(); shared) 
 			shared->onFrameUpdateCallback();

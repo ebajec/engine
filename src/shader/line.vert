@@ -19,8 +19,11 @@ layout (std430, binding = 0) buffer Vertices
 layout (location = 0) out vec4 frag_color;
 layout (location = 1) out vec4 frag_pos;
 layout (location = 2) out vec2 out_uv;
+
 layout (location = 3) flat out vec2 dir;
 layout (location = 4) flat out vec2 center;
+
+layout (location = 5) flat out float out_length;
 
 const uint SIDE_LEFT = 0;
 const uint SIDE_RIGHT = 0x1;
@@ -150,6 +153,8 @@ void main()
 	dir = X;
 	center = p.xy;
 	out_uv = vec2(uv.x*(0.5*len/ubo.thickness),uv.y);
+
+	out_length = len;
 
 	// This is so the provoking vertex passes the 
 	// correct values for flat shader outputs

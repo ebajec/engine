@@ -18,7 +18,7 @@ typedef std::function<void(int, int)> framebuffer_size_callback_t;
 extern struct AppGlobals
 {
 	int mouse_mode = GLFW_CURSOR_NORMAL;
-	double dt;
+	double dt = 0;
 } g_;
 
 struct MyApp;
