@@ -272,11 +272,12 @@ struct RandomLine : AppComponent
 
 	
 	static constexpr uint32_t verts[] = {
-		0x0,0x1,0x2,0x3,0x4,0x6	
+		0x0,0x1,0x2,0x3//,0x4,0x6	
 	};
 
 	static constexpr uint32_t idx[] = {
-		0,4,2, 5,4,2, 5,4,1, 5,1,3
+		//0,4,2, 5,4,2, 5,4,1, 3,5,1
+		0,1,2, 2,1,3
 	};
 
 	RandomLine(GLRenderer *renderer, ResourceLoader *loader, uint32_t count) : 
@@ -292,10 +293,9 @@ struct RandomLine : AppComponent
 
 		for (uint32_t i = 0; i < count; ++i) {
 
-			v += (0.5f + 0.5f*urandf())*c;
+			v += 0.5f*(0.5f + 0.5f*urandf())*c;
 
-			float tht = 0.7*PI*(1.0 - 2.0*urandf());
-
+			float tht = PI*(1.0 - 2.0*urandf());
 			c *= std::polar<float>(1, tht);
 
 			//v = std::polar<float>(1,TWOPI*(float)i/(float)(count - 1));
