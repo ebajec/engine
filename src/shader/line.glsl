@@ -11,3 +11,7 @@ layout (std140, binding = 0) uniform LineUniforms
 
 layout (binding = 1) uniform sampler2D u_tex;
 
+bool limit_join(float delta)
+{
+	return abs(delta) > 3*ubo.thickness;
+}

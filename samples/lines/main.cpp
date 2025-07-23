@@ -112,7 +112,7 @@ struct MotionCameraComponent : BaseViewComponent
 
 	virtual void onFrameUpdateCallback() override
 	{
-		static float speed = 0.1;
+		static float speed = 10;
 		
 		ImGui::Begin("Demo Window");
 		ImGui::SliderFloat("FOV", &fov, 0.0f, PI, "%.3f");
@@ -293,14 +293,15 @@ struct RandomLine : AppComponent
 
 		for (uint32_t i = 0; i < count; ++i) {
 
-			v += 0.5f*(0.5f + 0.5f*urandf())*c;
+			v += 5*(0.5f + 0.5f*urandf())*c;
 
 			float tht = PI*(1.0 - 2.0*urandf());
 			c *= std::polar<float>(1, tht);
 
-			//v = std::polar<float>(1,TWOPI*(float)i/(float)(count - 1));
-
 			glm::vec2 next = glm::vec2(v.real(),v.imag());
+
+			float t = TWOPI*(float)i/(float)(count - 1);
+			//next = glm::vec2(1+sin(t) - cos(7*t), cos(t) + sin(7*t));
 
 			if (i > 0)
 				pt.length += glm::length(next - pt.pos); 
@@ -365,8 +366,8 @@ struct RandomLine : AppComponent
 	{
 		if (ImGui::Begin("Demo Window")) {
 			ImGui::SliderFloat("thickness", &uniforms.thickness, 0.0f, 1, "%.3f");
-			ImGui::End();
 		}
+		ImGui::End();
 
 		uniforms.count = points.size();
 
