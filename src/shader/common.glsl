@@ -1,3 +1,6 @@
+#ifndef COMMON_GLSL
+#define COMMON_GLSL
+
 #define PI 3.141592654
 #define TWOPI 6.28318530718
 
@@ -33,3 +36,4 @@ quat qexp(vec3 v, float t)
 	return q;
 }
 
+#endif // COMMON_GLSL

@@ -6,16 +6,7 @@
 #include "line.glsl"
 #include "line_frag_defs.glsl"
 
-const uint type = JOIN_TYPE_ROUND;
-
-bool clip_round_join(vec2 d, float thickness)
-{
-	if (d.x > 0 && length(d) > ubo.thickness) {
-		discard;
-		return true;
-	}
-	return false;
-}
+const uint type = JOIN_TYPE_BEVEL;
 
 void main()
 {
@@ -23,9 +14,6 @@ void main()
 
 	vec2 p = in_pos - join.center;
 	vec2 d = transpose(join.frame)*p;
-
-	if (type == JOIN_TYPE_ROUND)
-		clip_round_join(d,join.width);
 
 	FragColor = vec4(0,0,0,0);
 

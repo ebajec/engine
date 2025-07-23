@@ -1,3 +1,6 @@
+#ifndef LINE_GLSL
+#define LINE_GLSL
+
 struct line_uniforms_t
 {
 	uint count;
@@ -13,5 +16,6 @@ layout (binding = 1) uniform sampler2D u_tex;
 
 bool limit_join(float delta)
 {
-	return abs(delta) > 3*ubo.thickness;
+	return abs(delta) > 4*ubo.thickness;
 }
+#endif // LINE_GLSL

@@ -1,3 +1,6 @@
+#ifndef FRAMEDATA_GLSL
+#define FRAMEDATA_GLSL
+
 #define FRAMEDATA_BINDING 5
 
 struct framedata_t
@@ -14,3 +17,4 @@ layout (binding = FRAMEDATA_BINDING) uniform Framedata
 	framedata_t u_frame;
 };
 
+#endif // FRAMEDATA_GLSL
