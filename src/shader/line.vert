@@ -7,6 +7,8 @@
 struct vert_data_t
 {
 	vec2 pos;
+	float len;
+	float padding;
 };
 
 layout (location = 0) in uint id;
@@ -16,14 +18,17 @@ layout (std430, binding = 0) buffer Vertices
 	vert_data_t data[];
 };
 
-layout (location = 0) out vec4 frag_color;
-layout (location = 1) out vec4 frag_pos;
-layout (location = 2) out vec2 out_uv;
+layout (location = 0) out vec4 frag_pos;
+layout (location = 1) out vec2 out_uv;
 
-layout (location = 3) flat out vec2 dir;
-layout (location = 4) flat out vec2 center;
+layout (location = 2) flat out vec2 dir;
+layout (location = 3) flat out vec2 center;
 
-layout (location = 5) flat out float out_length;
+layout (location = 4) flat out float out_length;
+
+layout (location = 5) out float out_total_length;
+
+layout (location = 6) flat out uint instance_id;
 
 const uint SIDE_LEFT = 0;
 const uint SIDE_RIGHT = 0x1;
@@ -85,33 +90,7 @@ void main()
 	vec2 X = X_abs;
 	vec2 Y = vec2(X.y, -X.x);
 
-	uint side = id & 0x1;
-
-	vec2 offset = vec2(0);
-	vec4 p = vec4(0);
-	vec4 a = vec4(0); 
-	vec4 b = vec4(0);
-
 	vec2 uv = vec2(1,1);
-
-	if (side == SIDE_LEFT) {
-		uint id_prev = (idx > 0) ? idx - 1 : 0;
-		a = p1;
-		p = p0;
-		b = vec4(data[id_prev].pos,0,1);
-
-		X *= -1;
-		
-		uv.x = 0;
-	} 
-	else if (side == SIDE_RIGHT) {
-		uint id_next = (idx > ubo.count) ? idx : idx + 2;
-		a = p0;
-		p = p1;
-		b = vec4(data[id_next].pos,0,1);
-
-		uv.x = 1;
-	}
 
 	uint vert = id & 0x2;
 	if (vert == VERT_LOWER) {
@@ -121,17 +100,48 @@ void main()
 		Y = Y;
 		uv.y = 1;
 	}
-	
-
 	Y *= ubo.thickness;
 
-	vec2 final;
+	vec2 offset = vec2(0);
+	vec4 p = vec4(0);
+	vec4 a = vec4(0); 
+	vec4 b = vec4(0);
 
+	float s0 = v[0].len;
+	float s1 = v[1].len;
+	float ds = s1 - s0;
+	float s = 0;
+
+	uint side = id & 0x1;
+
+	if (side == SIDE_LEFT) {
+		uint id_prev = (idx > 0) ? idx - 1 : 0;
+		a = p1;
+		p = p0;
+		b = vec4(data[id_prev].pos,0,1);
+
+		X *= -1;
+		uv.x = 0;
+
+		s = s0;
+	} 
+	else if (side == SIDE_RIGHT) {
+		uint id_next = (idx + 2 < ubo.count) ? idx + 2: idx;
+		a = p0;
+		p = p1;
+		b = vec4(data[id_next].pos,0,1);
+
+		uv.x = 1;
+		s = s1;
+	}
+
+	vec2 final;
 	bool is_mid = bool(id & MID_BIT); 
 
 	if (is_mid) {
 	  	final = 0.5*(p.xy + a.xy) + Y;
 		uv.x = 0.5;
+		s = s0 + 0.5*ds;
 	} else {
 	  	final = intersect_join(a.xy,p.xy,b.xy,Y);
 
@@ -146,14 +156,14 @@ void main()
 
 	gl_Position = u_frame.pv * pos;
 
-	vec4 color = vec4(1,0,0,0.5);
-
 	frag_pos = pos;
-	frag_color = color;
 	dir = X;
 	center = p.xy;
-	out_uv = vec2(uv.x*(0.5*len/ubo.thickness),uv.y);
 
+	out_uv = vec2(uv.x*(0.5*len/ubo.thickness),uv.y);
+	out_total_length = s;
+
+	instance_id = gl_InstanceIndex;
 	out_length = len;
 
 	// This is so the provoking vertex passes the 

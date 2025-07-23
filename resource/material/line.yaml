@@ -1,6 +1,6 @@
 shaders:
-  vert: shader/line.vert
-  frag: shader/line.frag
+  vert: shader/line2.vert
+  frag: shader/line2.frag
 bindings:
   - name: u_tex
     type: sampler2D

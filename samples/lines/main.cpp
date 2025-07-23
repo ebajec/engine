@@ -237,6 +237,13 @@ struct line_uniforms_t
 	float thickness;
 };
 
+struct LinePoint
+{
+	glm::vec2 pos;
+	float length;
+	float padding;
+};
+
 struct RandomLine : AppComponent 
 {
 	GLRenderer *renderer;
@@ -244,7 +251,7 @@ struct RandomLine : AppComponent
 
 	std::shared_ptr<BaseViewComponent> view;
 
-	std::vector<glm::vec2> points;
+	std::vector<LinePoint> points;
 	std::vector<uint32_t> indices;
 
 	gl_vbo vbo;
@@ -256,6 +263,12 @@ struct RandomLine : AppComponent
 	uint32_t ssbo;
 
 	MaterialID material;
+
+	struct LineVert
+	{
+		glm::vec2 uv;
+		uint32_t id;
+	};
 
 	
 	static constexpr uint32_t verts[] = {
@@ -275,6 +288,8 @@ struct RandomLine : AppComponent
 		std::complex<float> c = 1;
 		std::complex<float> v = 0;
 
+		LinePoint pt = {};
+
 		for (uint32_t i = 0; i < count; ++i) {
 
 			v += (0.5f + 0.5f*urandf())*c;
@@ -283,9 +298,16 @@ struct RandomLine : AppComponent
 
 			c *= std::polar<float>(1, tht);
 
-			v = std::polar<float>(1,TWOPI*(float)i/(float)(count - 1));
+			//v = std::polar<float>(1,TWOPI*(float)i/(float)(count - 1));
 
-			points.push_back(glm::vec2(v.real(),v.imag()));
+			glm::vec2 next = glm::vec2(v.real(),v.imag());
+
+			if (i > 0)
+				pt.length += glm::length(next - pt.pos); 
+
+			pt.pos = next;
+
+			points.push_back(pt);
 
 			indices.push_back(i);
 			if (i + 1 < count)
@@ -320,7 +342,7 @@ struct RandomLine : AppComponent
 		glGenBuffers(1,&ssbo);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
 		glBufferData(GL_SHADER_STORAGE_BUFFER, 
-			   sizeof(glm::vec2)*points.size(), points.data(), GL_STATIC_READ);
+			   sizeof(LinePoint)*points.size(), points.data(), GL_STATIC_READ);
 		uniforms.count = points.size();
 		
 		//----------------------------------------------------------------------------
