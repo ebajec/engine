@@ -75,7 +75,7 @@ vec2 intersect_join(vec2 a, vec2 b, vec2 c, vec2 N)
 
 void main()
 {
-	uint idx = gl_InstanceIndex; 
+	uint idx = gl_InstanceID; 
 
 	vert_data_t v[2] = {data[idx],data[idx + 1]};
 
@@ -163,7 +163,7 @@ void main()
 	out_uv = vec2(uv.x*(0.5*len/ubo.thickness),uv.y);
 	out_total_length = s;
 
-	instance_id = gl_InstanceIndex;
+	instance_id = gl_InstanceID;
 	out_length = len;
 
 	// This is so the provoking vertex passes the 

@@ -20,6 +20,6 @@ for ext in "${EXTENSIONS[@]}"; do
     out="$OUTPUT_DIR/${filename}.spv"
 
     echo "Compiling $src → $out"
-    glslangValidator -V -I${INPUT_DIR} "$src" -o "$out"
+    glslangValidator -G -I${INPUT_DIR} "$src" -o "$out"
   done
 done

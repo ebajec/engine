@@ -1,7 +1,7 @@
 shaders:
   vert: shader/line2.vert
-  frag: shader/line_round.frag
+  frag: shader/line_dashed.frag
 bindings:
   - name: u_tex
     type: sampler2D
-    path: image/saro.jpg
+    path: image/seamless-texture-finished.jpg

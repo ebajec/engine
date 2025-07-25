@@ -30,6 +30,8 @@ function(enable_clang_warnings target)
 			-Wno-unused-parameter
 		   	-Wno-format-nonliteral
 			-Wno-gnu-zero-variadic-macro-arguments
+			-Wno-gnu-anonymous-struct
+			-Wno-nested-anon-types
     	)
   	endif()
 endfunction()

@@ -21,4 +21,4 @@ target_link_libraries(samples PUBLIC
 
 #add_subdirectory(default)
 add_subdirectory(lines)
-add_subdirectory(globe)
+#add_subdirectory(globe)

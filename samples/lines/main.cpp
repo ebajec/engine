@@ -244,6 +244,14 @@ struct LinePoint
 	float padding;
 };
 
+typedef  struct {
+        uint  count;
+        uint  instanceCount;
+        uint  firstIndex;
+        int  baseVertex;
+        uint  baseInstance;
+} DrawElementsIndirectCommand;
+
 struct RandomLine : AppComponent 
 {
 	GLRenderer *renderer;
@@ -251,14 +259,17 @@ struct RandomLine : AppComponent
 
 	std::shared_ptr<BaseViewComponent> view;
 
-	std::vector<LinePoint> points;
 	std::vector<uint32_t> indices;
+	std::vector<LinePoint> points;
+	std::vector<DrawElementsIndirectCommand> cmds;
+	std::vector<uint32_t> draw_counts;
 
 	gl_vbo vbo;
 	gl_vbo ibo;
 	gl_vao vao;
 
 	gl_ubo ubo;
+	gl_ubo cmd_buf;
 
 	uint32_t ssbo;
 
@@ -291,28 +302,55 @@ struct RandomLine : AppComponent
 
 		LinePoint pt = {};
 
-		for (uint32_t i = 0; i < count; ++i) {
+		uint32_t segs = 10;
 
-			v += 5*(0.5f + 0.5f*urandf())*c;
+		size_t offset = 0;
+		for (uint32_t k = 0; k < segs; ++k) { 
+			for (uint32_t i = 0; i < count; ++i) {
 
-			float tht = PI*(1.0 - 2.0*urandf());
-			c *= std::polar<float>(1, tht);
+				v += (0.5f + 0.5f*urandf())*c;
 
-			glm::vec2 next = glm::vec2(v.real(),v.imag());
+				float tht = PI*(1.0 - 2.0*urandf());
+				c *= std::polar<float>(1, tht);
 
-			float t = TWOPI*(float)i/(float)(count - 1);
-			//next = glm::vec2(1+sin(t) - cos(7*t), cos(t) + sin(7*t));
+				glm::vec2 next = glm::vec2(v.real(),v.imag());
 
-			if (i > 0)
-				pt.length += glm::length(next - pt.pos); 
+				float t = TWOPI*(float)i/(float)(count - 1);
+				//next = glm::vec2(1+sin(t) - cos(7*t), cos(t) + sin(7*t));
 
-			pt.pos = next;
+				if (i > 0)
+					pt.length += glm::length(next - pt.pos); 
 
-			points.push_back(pt);
+				pt.pos = next;
 
-			indices.push_back(i);
-			if (i + 1 < count)
-				indices.push_back(i + 1);
+				points.push_back(pt);
+
+				indices.push_back(i);
+				if (i + 1 < count)
+					indices.push_back(i + 1);
+
+				if (pt.length > 1e3)
+					pt.length = 0;
+			}
+
+			DrawElementsIndirectCommand cmd = {
+				.count = sizeof(idx)/sizeof(idx[0]),
+				.instanceCount = count - 1,
+				.firstIndex = 0,
+				.baseVertex = 0,
+				.baseInstance = static_cast<uint32_t>(offset),
+			};
+
+			log_info("instanceCount: %d\n",cmd.instanceCount);
+
+			cmds.push_back(cmd);
+			draw_counts.push_back(cmd.instanceCount);
+
+			pt.length = 0;	
+			v += 10.f*(0.5f + 0.5f*urandf())*c;
+			pt.pos = glm::vec2(v.real(),v.imag());
+
+			offset += points.size();
 		}
 
 		material = load_material_file(loader, "material/line.yaml");
@@ -323,6 +361,11 @@ struct RandomLine : AppComponent
 		glGenBuffers(1,&vbo);
 		glGenBuffers(1,&ibo);
 		glGenVertexArrays(1,&vao);
+		glGenBuffers(1,&cmd_buf);
+
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER,cmd_buf);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, cmds.size()*sizeof(DrawElementsIndirectCommand), cmds.data(), GL_STATIC_READ);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER,0);
 
 		glBindVertexArray(vao);
 
@@ -336,6 +379,8 @@ struct RandomLine : AppComponent
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(idx), idx, GL_STATIC_READ);
 
 		glBindVertexArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER,0);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
 
 		//----------------------------------------------------------------------------
 		// ssbo
@@ -345,6 +390,7 @@ struct RandomLine : AppComponent
 		glBufferData(GL_SHADER_STORAGE_BUFFER, 
 			   sizeof(LinePoint)*points.size(), points.data(), GL_STATIC_READ);
 		uniforms.count = points.size();
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 		
 		//----------------------------------------------------------------------------
 		// ubo
@@ -373,24 +419,37 @@ struct RandomLine : AppComponent
 
 		glBindBuffer(GL_UNIFORM_BUFFER,ubo);
 		glBufferData(GL_UNIFORM_BUFFER,sizeof(uniforms),&uniforms,GL_DYNAMIC_READ);
+		glBindBuffer(GL_UNIFORM_BUFFER,0);
+
 		glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
 
 		renderer->bind_material(material);
 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, cmd_buf);
 
 		glDepthMask(GL_FALSE);        // but don’t write any passing depth back into the buffer
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 		glBindVertexArray(vao);
-		glDrawElementsInstanced(
+
+		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, cmd_buf);
+		glMultiDrawElementsIndirect(
 			GL_TRIANGLES, 
-			sizeof(idx)/sizeof(uint32_t), 
 			GL_UNSIGNED_INT, 
-			nullptr, 
-			points.size() - 1
+			nullptr,
+			static_cast<uint32_t>(cmds.size()), 
+			0
 		);
+
+		//glDrawElementsInstanced(
+		//	GL_TRIANGLES, 
+		//	sizeof(idx)/sizeof(uint32_t), 
+		//	GL_UNSIGNED_INT, 
+		//	nullptr, 
+		//	points.size() - 1
+		//);
 
 		glDisable(GL_BLEND);
 		glDepthMask(GL_TRUE);
@@ -423,7 +482,7 @@ int main(int argc, char* argv[])
 	const char* resource_path = NULL;
 #endif
 
-	uint32_t count = 1000;
+	uint32_t count = 10;
 
 	for (int i = 0; i < argc; ++i) {
 		if (!strcmp(argv[i],"--resources")) {
