@@ -24,15 +24,16 @@ void main()
  	uv.x -= u_frame.t;
 
 	float dash_scale = 3;
-	float dash_weight = 0.2;
+	float dash_weight = 0.4;
+
 	float fx = mod(uv.x,(1 + dash_weight)*dash_scale) < dash_scale ? 1 : 0;
 
 	vec4 color = vec4(0.5,0,0,0.5);
 
 	FragColor = color * fx;
 
-	if (d.x > 0)
-		FragColor = vec4(0,0,1,0.5);
+	//if (d.x > 0)
+	//	FragColor = vec4(0,0,1,0.5);
 
 	vec4 palette[5] = {
 		vec4(1,0,0,1),
@@ -42,5 +43,5 @@ void main()
 		vec4(1,0,1,1)
 	};
 
-	FragColor = vec4(palette[uint(mod(dbg_draw,5))]) * (4.0/(1.0 + dbg_draw));
+	//FragColor = vec4(palette[uint(mod(dbg_draw,5))]) * (4.0/(1.0 + dbg_draw));
 }

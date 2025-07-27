@@ -33,6 +33,8 @@ void main()
 
 	//uv.x *= 0.5/join.width;
 
+	uv.x += u_frame.t;
+
 	float dot_spacing = 1;
 
 	float rx = (mod(uv.x,dot_spacing) - dot_spacing*0.5)*2*join.width;

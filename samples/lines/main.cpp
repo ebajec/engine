@@ -434,22 +434,22 @@ struct RandomLine : AppComponent
 
 		glBindVertexArray(vao);
 
-		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, cmd_buf);
-		glMultiDrawElementsIndirect(
-			GL_TRIANGLES, 
-			GL_UNSIGNED_INT, 
-			nullptr,
-			static_cast<uint32_t>(cmds.size()), 
-			0
-		);
-
-		//glDrawElementsInstanced(
+		//glBindBuffer(GL_DRAW_INDIRECT_BUFFER, cmd_buf);
+		//glMultiDrawElementsIndirect(
 		//	GL_TRIANGLES, 
-		//	sizeof(idx)/sizeof(uint32_t), 
 		//	GL_UNSIGNED_INT, 
-		//	nullptr, 
-		//	points.size() - 1
+		//	nullptr,
+		//	static_cast<uint32_t>(cmds.size()), 
+		//	0
 		//);
+
+		glDrawElementsInstanced(
+			GL_TRIANGLES, 
+			sizeof(idx)/sizeof(uint32_t), 
+			GL_UNSIGNED_INT, 
+			nullptr, 
+			points.size() - 1
+		);
 
 		glDisable(GL_BLEND);
 		glDepthMask(GL_TRUE);
