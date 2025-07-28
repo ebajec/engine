@@ -35,16 +35,16 @@
 
 struct BaseViewComponent : AppComponent
 {
-	GLRenderer *renderer;
+	ResourceLoader *loader;
 
 	RenderTargetID target;
 
 	uint32_t w;
 	uint32_t h;
 
-	BaseViewComponent(GLRenderer *renderer, int w, int h) 
+	BaseViewComponent(ResourceLoader *loader, int w, int h) 
 	{
-		this->renderer = renderer;
+		this->loader = loader;
 		this->w = (uint32_t)w;
 		this->h = (uint32_t)h;
 
@@ -53,7 +53,7 @@ struct BaseViewComponent : AppComponent
 			.h = (uint32_t)w,
 			.flags = RENDER_TARGET_CREATE_COLOR_BIT | RENDER_TARGET_CREATE_DEPTH_BIT
 		};
-		target = renderer->create_target(&target_info);;
+		target = render_target_create(loader,&target_info);;
 	}
 
 	virtual Camera get_camera() = 0;
@@ -67,7 +67,7 @@ struct BaseViewComponent : AppComponent
 			.h = static_cast<uint32_t>(height),
 			.flags = RENDER_TARGET_CREATE_COLOR_BIT | RENDER_TARGET_CREATE_DEPTH_BIT
 		};
-		renderer->reset_target(target, &target_info);
+		render_target_resize(loader,target, &target_info);
 		return;
 	}
 };
@@ -79,7 +79,7 @@ struct MotionCameraComponent : BaseViewComponent
 	float far = 1000;
 	float near = 0.01f;
 
-	MotionCameraComponent(GLRenderer *renderer, uint32_t w, uint32_t h) : BaseViewComponent(renderer, w, h) 
+	MotionCameraComponent(ResourceLoader *loader, uint32_t w, uint32_t h) : BaseViewComponent(loader, w, h) 
 	{
 		glm::vec3 eye = glm::vec3(2,0,0);
 		control = MotionCamera::from_normal(glm::vec3(1,0,0),eye);
@@ -150,7 +150,7 @@ struct ViewComponent2D : BaseViewComponent
 	glm::dvec2 p = glm::dvec2(0);
 	double zoom = 0.1;
 
-	ViewComponent2D(GLRenderer *renderer, uint32_t w, uint32_t h) : BaseViewComponent(renderer, w, h) 
+	ViewComponent2D(ResourceLoader *loader, uint32_t w, uint32_t h) : BaseViewComponent(loader, w, h) 
 	{
 	}
 
@@ -421,7 +421,7 @@ struct RandomLine : AppComponent
 
 		glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
 
-		renderer->bind_material(material);
+		ctx->bind_material(material);
 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, cmd_buf);
@@ -530,6 +530,8 @@ int main(int argc, char* argv[])
 		.resource_path = resource_path
 	};
 	std::shared_ptr<ResourceLoader> loader = ResourceLoader::create(&resource_loader_info); 
+	ModelLoader::registration(loader.get());
+	ImageLoader::registration(loader.get());
 
 	std::shared_ptr<ResourceHotReloader> hot_reloader = ResourceHotReloader::create(loader);
 
@@ -548,7 +550,7 @@ int main(int argc, char* argv[])
 	}
 
 	auto view_component = std::shared_ptr<MotionCameraComponent>( 
-		new MotionCameraComponent(renderer.get(), params.win.width, params.win.height)
+		new MotionCameraComponent(loader.get(), params.win.width, params.win.height)
 	);
 	app->addComponent(view_component);
 
@@ -582,7 +584,7 @@ int main(int argc, char* argv[])
 			.data = verts.data(), .vcount = verts.size(),
 			.indices = indices.data(), .icount = indices.size(),
 		};
-		cubeID = load_model_3d(loader.get(),&load_info);;
+		cubeID = ModelLoader::load_3d(loader.get(),&load_info);;
 
 		if (!cubeID) {
 			return EXIT_FAILURE;
@@ -601,7 +603,7 @@ int main(int argc, char* argv[])
 		.data = sphereVerts.data(), .vcount = sphereVerts.size(),
 		.indices = sphereIndices.data(), .icount = sphereIndices.size(),
 	};
-	ModelID sphereID = load_model_3d(loader.get(),&sphereLoadInfo);;
+	ModelID sphereID = ModelLoader::load_3d(loader.get(),&sphereLoadInfo);;
 
 	if (!sphereID) {
 		return EXIT_FAILURE;
@@ -615,28 +617,28 @@ int main(int argc, char* argv[])
 
 		glfwPollEvents();
 
-
 		renderer->begin_frame(app->width, app->height);
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		RenderContext ctx = {
+		Camera camera = view_component->get_camera(); 
+
+		BeginPassInfo passInfo = {
 			.target = view_component->target,
-			.camera = view_component->get_camera() 
+			.camera = &camera
 		};
 
-		renderer->begin_pass(&ctx);
+		RenderContext ctx = renderer->begin_pass(&passInfo);
 
 		//renderer->bind_material(default_meshID);
 		//renderer->draw_cmd_basic_mesh3d(sphereID,glm::mat4(1.0f));
-		renderer->bind_material(globe_tileID);
+		ctx.bind_material(globe_tileID);
 		app->renderComponents(&ctx);
 
 		renderer->end_pass(&ctx);
 		renderer->draw_screen_texture(ctx.target, glm::mat4(1.0f));
-
 		renderer->end_frame();
 
 		app->onFrameUpdateCallback(window);

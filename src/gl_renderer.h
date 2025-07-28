@@ -5,6 +5,7 @@
 #include "resource_loader.h"
 #include "render_target.h"
 #include "renderer_defaults.h"
+#include "buffer.h"
 
 #include <glm/matrix.hpp>
 #include <glm/integer.hpp>
@@ -30,7 +31,11 @@ struct BeginPassInfo
 
 struct FrameContext
 {
+	Camera camera;
+	BufferID ubo;
 
+	float t;
+	float dt;
 };
 
 struct RenderContext

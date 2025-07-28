@@ -9,12 +9,14 @@ struct GLModel
 	ModelType type;
 
 	gl_vao vao;
+
+	size_t vcount;
+	size_t icount;
+
 	gl_vbo vbo;
 	gl_vbo ibo;
-	size_t vcount;
 	size_t vsize;
 
-	size_t icount;
 	size_t isize;
 };
 

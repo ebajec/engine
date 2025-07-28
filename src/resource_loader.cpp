@@ -3,7 +3,8 @@
 #include "shader_loader.h"
 #include "texture_loader.h"
 #include "model_loader.h"
-#include "globe.h"
+#include "buffer.h"
+#include "render_target.h"
 
 #include <utils/log.h>
 
@@ -148,6 +149,7 @@ std::unique_ptr<ResourceLoader> ResourceLoader::create(const ResourceLoaderCreat
 	loader->alloc_fns[RESOURCE_TYPE_MATERIAL] = g_material_alloc_fns;
 	loader->alloc_fns[RESOURCE_TYPE_SHADER] = g_shader_alloc_fns; 	
 	loader->alloc_fns[RESOURCE_TYPE_IMAGE] = g_image_alloc_fns; 
+	loader->alloc_fns[RESOURCE_TYPE_BUFFER] = g_buffer_alloc_fns; 
 	loader->alloc_fns[RESOURCE_TYPE_MODEL] = g_model_alloc_fns;	
 	loader->alloc_fns[RESOURCE_TYPE_RENDER_TARGET] = g_target_alloc_fns;	
 
