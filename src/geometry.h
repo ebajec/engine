@@ -77,7 +77,7 @@ static constexpr bool aabb_contains(aabb2_t box, glm::dvec2 v)
 	return box.x0 <= v.x || v.x <= box.x1 || box.y0 <= v.y || v.y <= box.y1;
 }
 
-static double aabb3_dist_sq(const aabb3_t& box, glm::dvec3 v)
+static inline double aabb3_dist_sq(const aabb3_t& box, glm::dvec3 v)
 {
 	glm::dvec3 d = glm::dvec3(0);
 
@@ -117,11 +117,11 @@ static inline int classify(const aabb3_t& box, const plane_t& pl)
 	glm::dvec3 c = (box.min + box.max) * 0.5;
 	glm::dvec3 e = (box.max - box.min) * 0.5;
 
-    float r = e.x * fabs(pl.n.x)
+    double r = e.x * fabs(pl.n.x)
             + e.y * fabs(pl.n.y)
             + e.z * fabs(pl.n.z);
 
-    float s = dot(pl.n, c) - pl.d;
+    double s = dot(pl.n, c) - pl.d;
 
     if (s > r)   return +1;  // entirely in front
     if (s < -r)  return -1;  // entirely behind
@@ -159,7 +159,7 @@ static inline constexpr uint64_t morton_u64(double x, double y, uint8_t level)
     uint64_t px = (uint64_t)(x*w);
     uint64_t py = (uint64_t)(y*w);
 
-    uint8_t xi, yi; 
+    uint64_t xi, yi; 
 
 	uint64_t index = 0;
 

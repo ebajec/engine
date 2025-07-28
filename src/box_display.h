@@ -3,11 +3,13 @@
 
 #include "resource_loader.h"
 #include "model_loader.h"
+#include "material_loader.h"
 #include "geometry.h"
 
 #include <glm/vec3.hpp>
 #include <glm/mat3x3.hpp>
 
+#include <algorithm>
 #include <vector>
 
 struct edge_t 
@@ -55,11 +57,14 @@ struct BoxDisplay
 {
 	std::vector<aabb3_t> boxes;
 	ModelID model;
+	MaterialID material;
 
 	ResourceLoader *loader;
 
 	BoxDisplay(ResourceLoader *loader) : loader(loader) {
 		model = model_create(loader);
+		material = load_material_file(loader, "material/box_debug.yaml");
+	
 	}
 
 	void clear() {boxes.clear();}
@@ -82,11 +87,13 @@ struct BoxDisplay
 
 			for (glm::dvec3 &p : pts) {
 				verts.push_back(vertex3d{ 
-					.position = p
+					.position = p,
+					.uv = glm::vec2(0),
+					.normal = glm::vec3(0)
 				});
 			}
 
-			aabb3_edges(idxv,(edge_t*)(indices.data() + idxi));
+			aabb3_edges((uint32_t)idxv,(edge_t*)(indices.data() + idxi));
 			idxi += 24;
 			idxv = verts.size();
 		}
@@ -98,7 +105,7 @@ struct BoxDisplay
 			.icount = indices.size()
 		};
 
-		loader->upload(model, RESOURCE_LOADER_MODEL_3D, &ci);
+		loader->upload(model, "model3d", &ci);
 
 		boxes.clear();
 	}

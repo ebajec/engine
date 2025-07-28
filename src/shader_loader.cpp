@@ -21,7 +21,7 @@ static LoadResult gl_shader_module_create(ResourceLoader *loader, void **res, vo
 static void gl_shader_module_destroy(ResourceLoader *loader, void *res);
 static LoadResult gl_shader_load_file(ResourceLoader *loader, ResourceHandle h, const char *path);
 
-ResourceFns g_shader_alloc_fns = {
+ResourceAllocFns g_shader_alloc_fns = {
 	.create = &gl_shader_module_create,
 	.destroy = &gl_shader_module_destroy,
 	.load_file = &gl_shader_load_file 
@@ -241,6 +241,7 @@ void gl_shader_module_destroy(ResourceLoader *loader, void *res)
 
 	GLShaderModule *shader = static_cast<GLShaderModule*>(res);
 	if (shader->id) glDeleteShader(shader->id);
+	delete shader;
 }
 
 static LoadResult gl_shader_load_file(ResourceLoader *loader, ResourceHandle h, const char *path)

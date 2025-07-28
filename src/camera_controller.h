@@ -83,7 +83,7 @@ static inline glm::vec3 rotate(glm::vec3 v, glm::vec3 axis, float tht)
 	return glm::vec3(q2.x,q2.y,q2.z);
 }
 
-static inline glm::vec3 camera_get_pos(glm::mat4& view) 
+static inline glm::vec3 camera_get_pos(glm::mat4 const& view) 
 {
 	glm::mat3 inv = glm::transpose(glm::mat3(view));
 	return inv*(-glm::vec3(view[3]));
@@ -168,7 +168,7 @@ struct SphericalMotionCamera
 		if (fabs(speed) > DBL_EPSILON) {
 			v /= speed;
 
-			glm::dquat q = quat_exp(cross(v,up),speed);
+			glm::dquat q = quat_exp(cross(v,up),(float)speed);
 			glm::dquat qstar = glm::conjugate(q);
 
 			glm::dquat q_up = q*glm::dquat(0,up)*qstar;
@@ -185,18 +185,18 @@ struct SphericalMotionCamera
 	void rotate(double dphi, double dtht) {
 		phi = glm::clamp(phi - dphi,-HALFPI,HALFPI);
 
-		glm::dquat q = quat_exp(up,dtht);
+		glm::dquat q = quat_exp(up,(float)dtht);
 		glm::dquat a_new = q*glm::dquat(0,right)*glm::conjugate(q);
 
 		right = glm::dvec3(a_new.x,a_new.y,a_new.z);
-	}
+}
 
 	glm::mat4 get_view()
 	{
 		glm::vec3 fwd = glm::normalize(glm::cross(up,right));
 
-		float sin_phi = sinf(phi);
-		float cos_phi = cosf(phi);
+		float sin_phi = sinf((float)phi);
+		float cos_phi = cosf((float)phi);
 
 		glm::vec3 T = right;
 		glm::vec3 B = sin_phi*fwd + cos_phi*glm::vec3(up);

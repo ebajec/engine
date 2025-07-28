@@ -12,14 +12,20 @@ struct GLImage
 	TexFormat fmt;
 };
 
-extern ResourceFns g_image_alloc_fns;
-extern ResourceLoaderFns g_image_loader_fns;
+extern ResourceAllocFns g_image_alloc_fns;
 
 struct ImageCreateInfo
 {
 	uint32_t w;
 	uint32_t h;
 	TexFormat fmt;
+};
+
+class ImageLoader
+{
+public:
+	static constexpr char const * name = "image";
+	static void registration(ResourceLoader *loader);
 };
 
 ResourceHandle create_image_2d(ResourceLoader *loader, uint32_t w, uint32_t h, 

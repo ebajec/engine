@@ -3,17 +3,18 @@
 
 #include <utils/log.h>
 #include "resource_loader.h"
+#include "render_target.h"
+#include "renderer_defaults.h"
 
 #include <glm/matrix.hpp>
 #include <glm/integer.hpp>
 
-#include <vector>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
 #include <memory>
 
-typedef uint32_t RenderTargetID;
+class GLRenderer;
 
 struct Camera
 {
@@ -21,24 +22,27 @@ struct Camera
 	glm::mat4 view;
 };
 
-enum RenderTargetCreateFlagBits
+struct BeginPassInfo
 {
-	RENDER_TARGET_CREATE_COLOR_BIT = 0x1,
-	RENDER_TARGET_CREATE_DEPTH_BIT = 0x2,
+	RenderTargetID target;
+	const Camera *camera;
 };
-typedef uint32_t RenderTargetCreateFlags;
 
-struct RenderTargetCreateInfo
+struct FrameContext
 {
-	uint32_t w; 
-	uint32_t h;
-	RenderTargetCreateFlags flags;
+
 };
 
 struct RenderContext
 {
+	const GLRenderer *renderer;
+	ResourceLoader *loader;
 	RenderTargetID target;
 	Camera camera;
+
+	void bind_material(MaterialID material) const;
+	void draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T) const;
+	void draw_cmd_mesh_outline(ModelID meshID) const;
 };
 
 //--------------------------------------------------------------------------------------------------
@@ -59,22 +63,14 @@ public:
 
 	static std::unique_ptr<GLRenderer> create(const GLRendererCreateInfo* info);
 
-	RenderTargetID create_target(const RenderTargetCreateInfo* info);
-	void reset_target(RenderTargetID id, const RenderTargetCreateInfo* info);
-
 	void begin_frame(uint32_t w, uint32_t h);
 	void end_frame();
 
-    void begin_pass(const RenderContext* ctx);
+	RenderContext begin_pass(const BeginPassInfo *info);
     void end_pass(const RenderContext* ctx);
 
-	void bind_material(MaterialID material) const;
-
-	/// @brief Render a target to the screen to a region specified by the transformation
-	/// matrix.
-	void draw_target(RenderTargetID id, glm::mat4 T) const; 
-	void draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T) const;
-	void draw_cmd_mesh_outline(ModelID meshID) const;
+	void draw_screen_texture(RenderTargetID id, glm::mat4 T) const; 
+	const RendererDefaults *get_defaults() const;
 };
 
 #endif

@@ -97,6 +97,9 @@ int main(int argc, char* argv[])
 		.resource_path = resource_path
 	};
 	std::shared_ptr<ResourceLoader> loader = ResourceLoader::create(&resource_loader_info); 
+	loader->register_loader("globe", globe::loader_fns);
+	ImageLoader::registration(loader.get());
+	ModelLoader::registration(loader.get());
 
 	std::shared_ptr<ResourceHotReloader> hot_reloader = ResourceHotReloader::create(loader);
 
@@ -115,7 +118,7 @@ int main(int argc, char* argv[])
 	}
 
 	auto view_component = std::shared_ptr<BaseViewComponent>( 
-		new BaseViewComponent(renderer.get(), params.win.width, params.win.height)
+		new BaseViewComponent(loader.get(), params.win.width, params.win.height)
 	);
 	app->addComponent(view_component);
 
@@ -135,10 +138,6 @@ int main(int argc, char* argv[])
 	if (!globe_tileID)
 		return EXIT_FAILURE;
 
-	MaterialID box_material = load_material_file(loader.get(), "material/box_debug.yaml");
-	if (!box_material)
-		return EXIT_FAILURE;
-	
 	//-----------------------------------------------------------------------------
 	// cube
 	ModelID cubeID; {
@@ -151,7 +150,7 @@ int main(int argc, char* argv[])
 			.data = verts.data(), .vcount = verts.size(),
 			.indices = indices.data(), .icount = indices.size(),
 		};
-		cubeID = load_model_3d(loader.get(),&load_info);;
+		cubeID = ModelLoader::load_3d(loader.get(),&load_info);;
 
 		if (!cubeID) {
 			return EXIT_FAILURE;
@@ -170,7 +169,7 @@ int main(int argc, char* argv[])
 		.data = sphereVerts.data(), .vcount = sphereVerts.size(),
 		.indices = sphereIndices.data(), .icount = sphereIndices.size(),
 	};
-	ModelID sphereID = load_model_3d(loader.get(),&sphereLoadInfo);;
+	ModelID sphereID = ModelLoader::load_3d(loader.get(),&sphereLoadInfo);;
 
 	if (!sphereID) {
 		return EXIT_FAILURE;
@@ -198,29 +197,31 @@ int main(int argc, char* argv[])
 
 		app->onFrameUpdateCallback(window);
 
-		glm::mat4 view = sphere_camera->control.get_view();
-		sphere_camera->control.min_height = view_component->near; RenderContext ctx = view_component->get_render_context(view);
+		Camera camera = {
+			.proj = view_component->get_proj(),
+			.view = sphere_camera->control.get_view()
+		};
 
 		renderer->begin_frame(app->width,app->height);
 
-		globe::GlobeUpdateInfo ginfo = {
-			.proj = ctx.camera.proj,
-			.view = ctx.camera.view
+		globe::GlobeUpdateInfo globeInfo = {
+			.camera = &camera
 		};
 
-		globe::globe_update(globe.get(),loader.get(), &ginfo);
-		globe::update_boxes();
+		globe::globe_update(globe.get(),loader.get(), &globeInfo);
 
-		renderer->begin_pass(&ctx);
+		BeginPassInfo passInfo = {
+			.target = view_component->target,
+			.camera = &camera
+		};
 
-		renderer->bind_material(globe_tileID);
-		renderer->draw_cmd_basic_mesh3d(globe->modelID,glm::mat4(1.0f));
-
-		renderer->bind_material(box_material);
-		globe::render_boxes(renderer.get());
-
+		RenderContext ctx = renderer->begin_pass(&passInfo);
+		ctx.bind_material(globe_tileID);
+		ctx.draw_cmd_basic_mesh3d(globe->modelID,glm::mat4(1.0f));
+		globe::render_boxes(ctx);
 		renderer->end_pass(&ctx);
-		renderer->draw_target(ctx.target, glm::mat4(1.0f));
+
+		renderer->draw_screen_texture(ctx.target, glm::mat4(1.0f));
 
 		renderer->end_frame();
 

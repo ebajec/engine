@@ -97,7 +97,7 @@ void main()
 	float d = sin(f*wpos.x - 2*t)*cos(f*wpos.y - 2*t)*
 			sin(f*wpos.z + 2*t)*cos(f*wpos.z + 2*t);
 
-	wpos += n*0.05*length(c);
+	//wpos += n*0.05*length(c);
 
 	frag_pos = wpos.xyz;
 	frag_uv = uv;

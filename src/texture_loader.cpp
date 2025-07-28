@@ -15,7 +15,7 @@ static LoadResult gl_image_create_from_disk(ResourceLoader *loader, ResourceHand
 
 static LoadResult gl_image_upload_mem(ResourceLoader *loader, void *res, void *info);
 
-ResourceFns g_image_alloc_fns = {
+ResourceAllocFns g_image_alloc_fns = {
 	.create = gl_image_create,
 	.destroy = gl_image_destroy,
 	.load_file = gl_image_create_from_disk
@@ -25,27 +25,6 @@ ResourceLoaderFns g_image_loader_fns {
 	.loader_fn = gl_image_upload_mem,
 	.post_load_fn = nullptr
 };
-
-static LoadResult gl_image_upload_mem(ResourceLoader *loader, void *res, void *info)
-{
-	GLImage *img = static_cast<GLImage*>(res);
-	char *data = static_cast<char*>(info);
-
-	if (!img || !data || !img->id) {
-		return RESULT_ERROR;
-	}
-
-	glBindTexture(GL_TEXTURE_2D,img->id);
-	glTexSubImage2D(GL_TEXTURE_2D,0,0,0, 
-				 (int)img->w, (int)img->h, GL_RGBA, GL_UNSIGNED_BYTE, data);
-	glBindTexture(GL_TEXTURE_2D,0);
-	
-	if (gl_check_err()) {
-		return RESULT_ERROR;
-	}
-
-	return RESULT_SUCCESS;
-}
 
 LoadResult gl_image_create(ResourceLoader *loader, void **res, void *info)
 {
@@ -77,6 +56,32 @@ void gl_image_destroy(ResourceLoader *loader, void *res)
 	delete tex;
 }
 
+static LoadResult gl_image_upload_mem(ResourceLoader *loader, void *res, void *info)
+{
+	GLImage *img = static_cast<GLImage*>(res);
+	char *data = static_cast<char*>(info);
+
+	if (!img || !data || !img->id) {
+		return RESULT_ERROR;
+	}
+
+	glBindTexture(GL_TEXTURE_2D,img->id);
+	glTexSubImage2D(GL_TEXTURE_2D,0,0,0, 
+				 (int)img->w, (int)img->h, GL_RGBA, GL_UNSIGNED_BYTE, data);
+	glBindTexture(GL_TEXTURE_2D,0);
+	
+	if (gl_check_err()) {
+		return RESULT_ERROR;
+	}
+
+	return RESULT_SUCCESS;
+}
+
+void ImageLoader::registration(ResourceLoader *loader)
+{
+	loader->register_loader(ImageLoader::name,g_image_loader_fns);
+}
+
 static LoadResult gl_image_create_from_disk(ResourceLoader *loader, ResourceHandle h, const char *path) 
 {
 	int width, height, channels;
@@ -100,7 +105,7 @@ static LoadResult gl_image_create_from_disk(ResourceLoader *loader, ResourceHand
 	}
 
 	uint8_t* rgba = stbi_load(path,&width,&height,&channels,STBI_rgb_alpha);
-	result = loader->upload(h, RESOURCE_LOADER_IMAGE_MEMORY,rgba); 
+	result = loader->upload(h,"image" ,rgba); 
 
 	if (result != RESULT_SUCCESS) {
 		return result;

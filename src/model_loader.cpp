@@ -7,7 +7,7 @@
 static LoadResult gl_model_create(ResourceLoader *loader, void **res, void *info);
 static void gl_model_destroy(ResourceLoader *loader, void *model);
 
-ResourceFns g_model_alloc_fns = {
+ResourceAllocFns g_model_alloc_fns = {
 	.create = gl_model_create,
 	.destroy = gl_model_destroy,
 	.load_file = nullptr
@@ -134,7 +134,13 @@ void gl_model_destroy(ResourceLoader *loader, void *res)
 	if(model->ibo) glDeleteBuffers(1,&model->ibo);
 }
 
-ResourceHandle load_model_2d(ResourceLoader *loader, Mesh2DCreateInfo *ci)
+void ModelLoader::registration(ResourceLoader *loader)
+{
+	loader->register_loader("model2d", g_model_2d_load_fns);
+	loader->register_loader("model3d", g_model_3d_load_fns);
+}
+
+ResourceHandle ModelLoader::load_2d(ResourceLoader *loader, Mesh2DCreateInfo *ci)
 {
 	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_MODEL);
 
@@ -143,7 +149,7 @@ ResourceHandle load_model_2d(ResourceLoader *loader, Mesh2DCreateInfo *ci)
 	if (result != RESULT_SUCCESS) 
 		goto load_failed;
 
-	result = loader->upload(h, RESOURCE_LOADER_MODEL_2D, ci);
+	result = loader->upload(h, "model2d", ci);
 
 	if (result != RESULT_SUCCESS) 
 		goto load_failed;
@@ -155,7 +161,7 @@ load_failed:
 	return RESOURCE_HANDLE_NULL;
 }
 
-ResourceHandle load_model_3d(ResourceLoader *loader, Mesh3DCreateInfo *ci)
+ResourceHandle ModelLoader::load_3d(ResourceLoader *loader, Mesh3DCreateInfo *ci)
 {
 	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_MODEL);
 
@@ -164,7 +170,7 @@ ResourceHandle load_model_3d(ResourceLoader *loader, Mesh3DCreateInfo *ci)
 	if (result != RESULT_SUCCESS) 
 		goto load_failed;
 
-	result = loader->upload(h, RESOURCE_LOADER_MODEL_3D, ci);
+	result = loader->upload(h, "model3d", ci);
 
 	if (result != RESULT_SUCCESS) 
 		goto load_failed;

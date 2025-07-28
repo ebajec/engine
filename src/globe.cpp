@@ -33,17 +33,6 @@ namespace globe
 
 static constexpr uint32_t CUBE_FACES = 6;
 
-constexpr uint8_t TILE_MAX_ZOOM = 29;
-
-constexpr uint64_t TILE_CODE_FACE_BITS_MASK = 0x8500000000000000;
-constexpr uint8_t TILE_CODE_FACE_BITS_SHIFT = 61;
-
-constexpr uint64_t TILE_CODE_ZOOM_BITS_MASK = 0x1700000000000000;
-constexpr uint64_t TILE_CODE_ZOOM_BITS_SHIFT = 56;
-
-constexpr uint64_t TILE_CODE_IDX_BITS_MASK = 
-	~(TILE_CODE_FACE_BITS_MASK | TILE_CODE_ZOOM_BITS_MASK);
-
 enum quadrant_t
 {
 	LOWER_LEFT = 0x0,
@@ -57,15 +46,11 @@ void init_boxes(ResourceLoader *loader) {
 	g_enable_boxes = true;
 }
 
-void disable_boxes()
+void render_boxes(RenderContext const & ctx)
 {
-	g_enable_boxes = false;
-}
-
-void render_boxes(const GLRenderer *renderer)
-{
+	ctx.bind_material(g_disp->material);
 	if (g_enable_boxes)
-		renderer->draw_cmd_mesh_outline(g_disp->model);
+		ctx.draw_cmd_mesh_outline(g_disp->model);
 }
 
 void update_boxes() 
@@ -183,6 +168,7 @@ void select_tiles(
 		.frust = frust,
 		.res = res,
 		.origin = center,
+		.origin_uv = glm::vec2(0)
 	};
  
 	for (uint8_t f = 0; f < CUBE_FACES; ++f) {
@@ -306,7 +292,7 @@ static frustum_t camera_frustum(const glm::dmat4& view, const glm::dmat4& proj)
 
 		float r_inv = 1.0f / glm::length(glm::vec3(p));
 		frust.planes[i].n = glm::vec3(p) * r_inv;
-		frust.planes[i].d = p.w * r_inv;
+		frust.planes[i].d = (double)(p.w * r_inv);
 	}
 	
 	return frust;
@@ -318,7 +304,7 @@ LoadResult globe_update(Globe *globe, ResourceLoader *loader, GlobeUpdateInfo *i
 	globe->verts.clear();
 	globe->indices.clear();
 
-	frustum_t frust = camera_frustum(info->view,info->proj);
+	frustum_t frust = camera_frustum(info->camera->view,info->camera->proj);
 
 	static int zoom = 3;
 
@@ -326,16 +312,18 @@ LoadResult globe_update(Globe *globe, ResourceLoader *loader, GlobeUpdateInfo *i
 	ImGui::SliderInt("res", &zoom, 0, 5, "%d");
 	ImGui::End();
 
-	double resolution = globe::tile_area(zoom);
+	double resolution = globe::tile_area((uint8_t)zoom);
 
-	glm::dvec3 pos = camera_get_pos(info->view);
+	glm::dvec3 pos = camera_get_pos(info->camera->view);
 
 	globe::select_tiles(globe->tiles, frust, pos, resolution);
 
 	globe::create_mesh(1,pos, globe->tiles, globe->verts, globe->indices);
 
-	LoadResult result = loader->upload(globe->modelID,RESOURCE_LOADER_GLOBE,globe);
+	LoadResult result = loader->upload(globe->modelID,"globe",globe);
 	
+	globe::update_boxes();
+
 	return result;
 }
 

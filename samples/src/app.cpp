@@ -146,12 +146,6 @@ int glfw_init_gl_basic(GLFWwindow *window)
 
 	std::string extensions ((const char *)glGetString(GL_EXTENSIONS));
 
-	if (!GLAD_GL_ARB_shader_draw_parameters) {
-		log_error("Failed to find GL_ARB_shader_draw_parameters");
-		return EXIT_FAILURE;
-	}
-
-
 	glEnable(GL_DEBUG_OUTPUT);
 	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);       // makes callback synchronous
 

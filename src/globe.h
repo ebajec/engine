@@ -45,8 +45,7 @@ namespace globe
 
 	struct GlobeUpdateInfo
 	{
-		glm::mat4 proj;
-		glm::mat4 view;
+		Camera const *camera;
 	};
 
 	// Double coordinate bases for each cube face, ordered by (+x, +y, +z, -x, -y, -z)
@@ -66,7 +65,7 @@ namespace globe
 //------------------------------------------------------------------------------
 // Interface
 	extern void init_boxes(ResourceLoader *loader);
-	extern void render_boxes(const GLRenderer *renderer);
+	extern void render_boxes(RenderContext const &ctx);
 	extern void update_boxes();
 
 	extern void select_tiles(

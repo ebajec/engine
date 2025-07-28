@@ -24,7 +24,7 @@ struct MaterialCreateInfo
 	std::string path;
 };
 
-extern ResourceFns g_material_alloc_fns;
+extern ResourceAllocFns g_material_alloc_fns;
 
 ResourceHandle load_material_file(ResourceLoader *loader, std::string_view path);
 

@@ -16,7 +16,6 @@
 #include <stack>
 #include <atomic>
 #include <shared_mutex>
-#include <cstring>
 #include <unordered_map>
 #include <string_view>
 
@@ -31,6 +30,7 @@ enum ResourceType :uint8_t
 	RESOURCE_TYPE_MODEL,
 	RESOURCE_TYPE_IMAGE,
 	RESOURCE_TYPE_SHADER,
+	RESOURCE_TYPE_RENDER_TARGET,
 	RESOURCE_TYPE_MAX_ENUM
 };
 
@@ -39,7 +39,7 @@ enum ResourceLoaderType
 	RESOURCE_LOADER_IMAGE_MEMORY,
 	RESOURCE_LOADER_MODEL_2D,
 	RESOURCE_LOADER_MODEL_3D,
-	RESOURCE_LOADER_GLOBE,
+	RESOURCE_LOADER_MODEL_GLOBE,
 	RESOURCE_LOADER_MAX_ENUM
 };
 
@@ -73,7 +73,7 @@ typedef LoadResult(*OnResourcePostLoad)(ResourceLoader* loader, void* res, void*
 //------------------------------------------------------------------------------
 // Virtual Tables
 
-struct ResourceFns
+struct ResourceAllocFns
 {
 	OnResourceCreate create;
 	OnResourceDestroy destroy;
@@ -132,17 +132,17 @@ struct ResourceLoader
 	// TODO: synchronization on this
 	std::stack<ResourceHandle> free_slots;
 
-	std::unordered_map<std::string,uint32_t> map;
+	std::unordered_map<std::string, ResourceHandle> map;
 
-	struct {
-		std::array<ResourceFns, RESOURCE_TYPE_MAX_ENUM> alloc_fns; 
-		std::array<ResourceLoaderFns, RESOURCE_LOADER_MAX_ENUM> loader_fns;
-	} pfns;
+	std::unordered_map<std::string, ResourceLoaderFns> loader_fns;
+	std::array<ResourceAllocFns, RESOURCE_TYPE_MAX_ENUM> alloc_fns; 
 
 	//-----------------------------------------------------------------------------
 
 	static std::unique_ptr<ResourceLoader> create(const ResourceLoaderCreateInfo *info); 
 	~ResourceLoader();
+
+	void register_loader(std::string_view key, ResourceLoaderFns fns);
 
 	ResourceHandle create_handle(ResourceType type);
 	void destroy_handle(ResourceHandle h);
@@ -150,14 +150,29 @@ struct ResourceLoader
 	LoadResult load_file(ResourceHandle h, const char *path);
 	LoadResult allocate(ResourceHandle h, void* alloc_info);
 
-	LoadResult upload(ResourceHandle h, ResourceLoaderType loader, void* upload_info);
-
-	LoadResult reload(ResourceHandle h);
+	LoadResult upload(ResourceHandle h, std::string_view key, void* upload_info);
 
 	ResourceHandle find(std::string_view key);
-	const ResourceEntry *get(ResourceHandle h);
 
+	template<typename T> 
+	const T *get(ResourceHandle h)
+	{
+		assert(h != RESOURCE_HANDLE_NULL);
+
+		if (h > entries.size()) 
+			return nullptr;
+
+		ResourceEntry *ent = entries[h - 1].get(); 
+
+		if (ent->type == RESOURCE_TYPE_NONE)
+			return nullptr;
+
+		return static_cast<const T*>(ent->data);
+	}
+
+	const ResourceEntry *get(ResourceHandle h);
 	ResourceEntry *get_internal(ResourceHandle h);
+
 
 	void set_handle_key(ResourceHandle h, std::string_view key);
 	std::string make_path_abs(std::string_view str);

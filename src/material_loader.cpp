@@ -33,7 +33,7 @@ static void gl_material_destroy(ResourceLoader *loader, void *res);
 
 static LoadResult gl_material_load_file(ResourceLoader *loader, ResourceHandle h, const char *path);
 
-ResourceFns g_material_alloc_fns = {
+ResourceAllocFns g_material_alloc_fns = {
 	.create = &gl_material_create,
 	.destroy = &gl_material_destroy,
 	.load_file = &gl_material_load_file 
@@ -251,6 +251,8 @@ void gl_material_destroy(ResourceLoader *loader, void *res)
 	GLMaterial *material = static_cast<GLMaterial*>(res);
 
 	if (material->program) glDeleteProgram(material->program);
+
+	delete material;
 }
 
 static void update_material_dependencies(ResourceLoader *loader, ResourceHandle h)

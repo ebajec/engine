@@ -341,8 +341,6 @@ struct RandomLine : AppComponent
 				.baseInstance = static_cast<uint32_t>(offset),
 			};
 
-			log_info("instanceCount: %d\n",cmd.instanceCount);
-
 			cmds.push_back(cmd);
 			draw_counts.push_back(cmd.instanceCount);
 
@@ -637,7 +635,7 @@ int main(int argc, char* argv[])
 		app->renderComponents(&ctx);
 
 		renderer->end_pass(&ctx);
-		renderer->draw_target(ctx.target, glm::mat4(1.0f));
+		renderer->draw_screen_texture(ctx.target, glm::mat4(1.0f));
 
 		renderer->end_frame();
 

@@ -47,27 +47,13 @@ struct gl_framedata_t
 	float t;
 };
 
+
 struct gl_tex_quad
 {
 	gl_vao vao;
 	gl_vbo vbo;
 	gl_vbo ibo;
 };
-
-struct gl_render_target
-{
-	uint32_t w;
-	uint32_t h;
-
-	gl_framebuffer fbo;
-	gl_tex color;
-	gl_renderbuffer depth;
-	gl_ubo ubo;
-	
-	// these are for drawing to a window
-	~gl_render_target();
-};
-
 
 struct vertex2d
 {

@@ -23,7 +23,7 @@ LoadResult renderer_defaults_init(ResourceLoader *loader, RendererDefaults *defa
 		.icount = sizeof(g_default_tex_quad_indices)/sizeof(uint32_t),
 	};
 	
-	defaults->models.screen_quad = load_model_2d(loader, &mesh_info);
+	defaults->models.screen_quad = ModelLoader::load_2d(loader, &mesh_info);
 
 	if (!defaults->models.screen_quad) 
 		return RESULT_ERROR;
@@ -46,7 +46,7 @@ LoadResult renderer_defaults_init(ResourceLoader *loader, RendererDefaults *defa
 		if (i%w == 0) k++;
 	}
 
-	loader->upload(defaults->textures.missing,RESOURCE_LOADER_IMAGE_MEMORY,data.data());
+	loader->upload(defaults->textures.missing,ImageLoader::name,data.data());
 
 	if (!defaults->textures.missing) 
 		return RESULT_ERROR;

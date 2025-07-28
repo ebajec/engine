@@ -96,8 +96,8 @@ void main()
 {
 	frustum_t frust = camera_frustum(u_frame.v,u_frame.p);
 
-	//if (!cull_frustum(frag_pos, frust))
-	// 	discard;
+	if (cull_frustum(frag_pos, frust))
+	 	discard;
 
 	vec2 uv = frag_uv;
 
@@ -109,5 +109,5 @@ void main()
 	vec4 color = f*FACE_COLORS[face];
 	color.w = 0.5;
 
-	FragColor = fcolor;
+	FragColor = color;
 }

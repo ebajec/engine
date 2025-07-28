@@ -36,12 +36,17 @@ struct Mesh3DCreateInfo
 	size_t icount;
 };
 
-extern ResourceFns g_model_alloc_fns;
-extern ResourceLoaderFns g_model_2d_load_fns;
-extern ResourceLoaderFns g_model_3d_load_fns;
+extern ResourceAllocFns g_model_alloc_fns;
 
-extern ResourceHandle load_model_2d(ResourceLoader *loader, Mesh2DCreateInfo *ci);
-extern ResourceHandle load_model_3d(ResourceLoader *loader, Mesh3DCreateInfo *ci);
+class ModelLoader
+{
+
+public:
+	static void registration(ResourceLoader *loader);
+
+	static ResourceHandle load_2d(ResourceLoader *loader, Mesh2DCreateInfo *ci);
+	static ResourceHandle load_3d(ResourceLoader *loader, Mesh3DCreateInfo *ci);
+};
 
 extern ResourceHandle model_create(ResourceLoader *loader);
 extern ResourceHandle model_upload(ResourceLoader *loader);

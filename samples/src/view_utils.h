@@ -9,7 +9,7 @@
 
 struct BaseViewComponent : AppComponent
 {
-	GLRenderer *renderer;
+	ResourceLoader *loader;
 
 	RenderTargetID target;
 
@@ -23,9 +23,9 @@ struct BaseViewComponent : AppComponent
 	glm::dvec2 mouse_pos;
 	glm::dvec2 dmouse_pos;
 
-	BaseViewComponent(GLRenderer *renderer, int w, int h) 
+	BaseViewComponent(ResourceLoader *loader, int w, int h) 
 	{
-		this->renderer = renderer;
+		this->loader = loader;
 		this->w = (uint32_t)w;
 		this->h = (uint32_t)h;
 
@@ -34,7 +34,8 @@ struct BaseViewComponent : AppComponent
 			.h = (uint32_t)w,
 			.flags = RENDER_TARGET_CREATE_COLOR_BIT | RENDER_TARGET_CREATE_DEPTH_BIT
 		};
-		target = renderer->create_target(&target_info);;
+		target = render_target_create(loader,&target_info);
+		assert(target);
 	}
 
 	virtual void framebufferSizeCallback(int width, int height) override 
@@ -46,7 +47,7 @@ struct BaseViewComponent : AppComponent
 			.h = static_cast<uint32_t>(height),
 			.flags = RENDER_TARGET_CREATE_COLOR_BIT | RENDER_TARGET_CREATE_DEPTH_BIT
 		};
-		renderer->reset_target(target, &target_info);
+		render_target_resize(loader, target, &target_info);
 		return;
 	}
 
@@ -74,7 +75,7 @@ struct BaseViewComponent : AppComponent
 		dmouse_pos = glm::dvec2(dx,dy);
 	}
 
-	RenderContext get_render_context(glm::mat4 view)
+	glm::mat4 get_proj()
 	{
 		ImGui::Begin("Demo Window");
 		ImGui::SliderFloat("FOV", &fov, 0.0f, PI, "%.3f");
@@ -83,15 +84,7 @@ struct BaseViewComponent : AppComponent
 		ImGui::End();
 
 		float aspect = (float)h/(float)w;
-		Camera cam = {
-			.proj = camera_proj_3d(fov, aspect, far, near),
-			.view = view
-		};
-
-		return RenderContext{
-			.target = target,
-			.camera = cam
-		};
+		return camera_proj_3d(fov, aspect, far, near);
 	}
 };
 
@@ -129,6 +122,7 @@ struct SphereCameraComponent : AppComponent
 		ImGui::SliderFloat("speed", &speed, 0.0, 1, "%.5f");
 		ImGui::End();
 
+		control.min_height = view_component->near; 
 		control.move((double)speed*keydir);
 	}
 };
