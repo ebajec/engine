@@ -26,11 +26,6 @@ struct plane_t
 	double d;
 };
 
-struct frustum_t
-{
-	plane_t planes[6];
-};
-
 struct aabb2_t
 {
 	union {
@@ -72,6 +67,26 @@ struct obb_t
 	glm::dvec2 limits;
 };
 
+enum frustum_planes_t
+{
+	FRUSTUM_PLANE_LEFT,
+	FRUSTUM_PLANE_RIGHT,
+	FRUSTUM_PLANE_DOWN,
+	FRUSTUM_PLANE_UP,
+	FRUSTUM_PLANE_NEAR,
+	FRUSTUM_PLANE_FAR,
+};
+
+struct frustum_t
+{
+	union {
+		struct {
+			plane_t left, right, down, up, near, far;
+		};
+		plane_t planes[6];
+	};
+};
+
 static inline frustum_t camera_frustum(glm::mat4 m)
 {
 	m = transpose(m);
@@ -79,12 +94,12 @@ static inline frustum_t camera_frustum(glm::mat4 m)
 	for (int i = 0; i < 6; ++i) {
 		glm::vec4 p;
 		switch (i) {
-			case 0: p = m[3] + m[0]; break; // left
-			case 1: p = m[3] - m[0]; break; // right
-			case 2: p = m[3] + m[1]; break; // bottom
-			case 3: p = m[3] - m[1]; break; // top
-			case 4: p = m[3] + m[2]; break; // near
-			case 5: p = m[3] - m[2]; break; // far
+			case FRUSTUM_PLANE_LEFT:  p = m[3] + m[0]; break; // left
+			case FRUSTUM_PLANE_RIGHT: p = m[3] - m[0]; break; // right
+			case FRUSTUM_PLANE_DOWN:  p = m[3] + m[1]; break; // bottom
+			case FRUSTUM_PLANE_UP:    p = m[3] - m[1]; break; // top
+			case FRUSTUM_PLANE_NEAR:   p = m[3] + m[2]; break; // near
+			case FRUSTUM_PLANE_FAR:  p = m[3] - m[2]; break; // far
 		}
 
 		float r_inv = 1.0f / length(glm::vec3(p));

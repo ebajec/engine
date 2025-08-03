@@ -17,7 +17,7 @@ struct BaseViewComponent : AppComponent
 	uint32_t h;
 
 	float fov = PIf/2.0f;
-	float far = 100;
+	float far = 10;
 	float near = 0.01f;
 
 	glm::dvec2 mouse_pos;
@@ -68,8 +68,6 @@ struct BaseViewComponent : AppComponent
 		xold = x;
 		yold = y;
 
-		printf("%f,%f\n",x,y);
-
 		if (!init++)
 			return;
 
@@ -82,7 +80,7 @@ struct BaseViewComponent : AppComponent
 		ImGui::Begin("Demo Window");
 		ImGui::SliderFloat("FOV", &fov, 0.0f, PI, "%.3f");
 		ImGui::SliderFloat("near", &near, 0.0, 1.0, "%.5f");
-		ImGui::SliderFloat("far", &far, near, 100, "%.5f");
+		ImGui::SliderFloat("far", &far, near, 10, "%.5f");
 		ImGui::End();
 
 		float aspect = (float)h/(float)w;

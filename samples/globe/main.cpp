@@ -260,7 +260,6 @@ int main(int argc, char* argv[])
 		globe::globe_record_draw_cmds(ctx,globe.get());
 
 		frame.end_pass(&ctx);
-
 		renderer->end_frame(&frame);
 
 		renderer->present(ctx.target, app->width,app->height);

@@ -202,8 +202,6 @@ struct SphericalMotionCamera
 	{
 		glm::vec3 fwd = glm::normalize(glm::cross(up,right));
 
-		printf("phi=%f\n",phi);
-
 		float sin_phi = sinf((float)phi);
 		float cos_phi = cosf((float)phi);
 

@@ -35,6 +35,13 @@ namespace globe
 
 static constexpr uint32_t CUBE_FACES = 6;
 
+static constexpr uint32_t TILE_VERT_WIDTH = 32;
+static constexpr uint32_t TILE_VERT_COUNT = 
+	TILE_VERT_WIDTH*TILE_VERT_WIDTH;
+
+static constexpr double tile_scale_factor = 128;
+
+
 enum quadrant_t
 {
 	LOWER_LEFT = 0x0,
@@ -72,8 +79,6 @@ static constexpr TileCode tile_code_refine(TileCode code, quadrant_t quadrant)
 	return code;
 }
 
-static constexpr double tile_res_mult = 1.0;
-
 struct select_tiles_params
 {
 	frustum_t frust;
@@ -90,8 +95,6 @@ static glm::dvec3 tile_diff(glm::dvec3 p, glm::dvec2 p_uv, aabb2_t tile, uint8_t
 
 	return diff;
 }
-
-static constexpr double tile_scale_factor = 64;
 
 static inline int select_tiles_rec(
 	std::vector<TileCode> &out, 
@@ -136,13 +139,13 @@ static inline int select_tiles_rec(
 	
 	glm::dvec3 tile_nearest_diff = tile_diff(params->origin,params->origin_uv,rect,code.face);
 	double d_min_sq = dot(tile_nearest_diff,params->frust.planes[4].n);
-	d_min_sq = std::max(tile_scale_factor * d_min_sq * d_min_sq,1e-5);
+	d_min_sq = std::max(tile_scale_factor * d_min_sq * d_min_sq,1e-6);
 
 	glm::dvec3 mid = cube_to_globe(code.face, 0.5*(rect.ur() + rect.ll()));
 
 	double area = tile_area(code.zoom);
 
-	if ((area/d_min_sq)*tile_res_mult < params->res) {
+	if (area/d_min_sq < params->res) {
 		out.push_back(code);
 		if(enable_boxes) g_disp->add(box);
 		return 1;
@@ -199,10 +202,6 @@ void select_tiles(
 	}
 }
 
-static constexpr uint32_t TILE_VERT_WIDTH = 16;
-static constexpr uint32_t TILE_VERT_COUNT = 
-	TILE_VERT_WIDTH*TILE_VERT_WIDTH;
-
 static void create_mesh(
 	double scale,
 	glm::dvec3 origin,
@@ -218,6 +217,11 @@ static void create_mesh(
 	}
 
 	uint32_t total = TILE_VERT_COUNT*count;
+
+	log_info(
+		"tile count : %d\n"
+		"total globe vertices : %d\n",
+		count,total);
 
 	verts.reserve(total);
 	indices.reserve(6*total);
@@ -310,7 +314,7 @@ LoadResult globe_update(Globe *globe, ResourceTable *table, GlobeUpdateInfo *inf
 	globe->verts.clear();
 	globe->indices.clear();
 
-	const Camera * camera = g_camera_debug->get_camera(); 
+	const Camera * p_camera = g_camera_debug->get_camera(); 
 	static int zoom = 3;
 
 	ImGui::Begin("Globe debug");
@@ -321,24 +325,29 @@ LoadResult globe_update(Globe *globe, ResourceTable *table, GlobeUpdateInfo *inf
 		"Enable globe tile boxes##globe tile boxes")) 
 		g_enable_boxes = !g_enable_boxes;
 
-	if (ImGui::Button(camera ? 
+	if (ImGui::Button(p_camera ? 
 			"Unfix globe camera##globe tile camera" : 
 			"Fix globe camera##globe tile camera")
 	) {
-		g_camera_debug->set_camera(camera ? nullptr : info->camera);
-		camera = info->camera;
+		g_camera_debug->set_camera(p_camera ? nullptr : info->camera);
+		p_camera = info->camera;
 	}
-	if (!camera) camera = info->camera;
+	if (!p_camera) p_camera = info->camera;
 
 	ImGui::End();
 
-	glm::mat4 pv = camera->proj*camera->view;
-
-	frustum_t frust = camera_frustum(pv);
+	glm::mat4 pv = p_camera->proj*p_camera->view;
 
 	double resolution = globe::tile_area((uint8_t)zoom);
 
-	glm::dvec3 pos = camera_get_pos(camera->view);
+	glm::dvec3 pos = camera_get_pos(p_camera->view);
+
+	frustum_t frust = camera_frustum(pv);
+
+	double r_horizon = sqrt(std::max(dot(pos,pos) - 1.,0.));
+
+	glm::dvec3 n_far = frust.far.n;
+	frust.far.d = dot(pos,n_far) + r_horizon;
 
 	globe::select_tiles(globe->tiles, frust, pos, resolution);
 	globe::create_mesh(1,pos, globe->tiles, globe->verts, globe->indices);
@@ -445,28 +454,28 @@ glm::dmat3 cube_faces_d[] = {
 
 glm::mat3 cube_faces_f[] = {
 	glm::mat3( // y ^ z
-		0,1,0,
 		0,0,1,
-		1,0,0
-	), glm::mat3( // x ^ z
 		1,0,0,
+		0,1,0
+	), glm::mat3( // x ^ z
+		-1,0,0,
 		0,0,1,
 		0,1,0
 	), glm::mat3( // x ^ y
-		1,0,0,
-		0,1,0,
-		0,0,1
-	), glm::mat3( // -y ^ z
 		0,-1,0,
-		0,0,1,
-		-1,0,0
-	), glm::mat3( // - x ^ z
-		-1,0,0,
-		0,0,1,
+		1,0,0,
+		0,0,1
+	), glm::mat3( // y ^ -z
+		0,0,-1,
+		1,0,0,
 		0,-1,0
+	), glm::mat3( // - x ^ z
+		1,0,0,
+		0,0,-1,
+		0,1,0
 	), glm::mat3( // - x ^ x
-		-1,0,0,
 		0,1,0,
+		1,0,0,
 		0,0,-1
 	),
 };
