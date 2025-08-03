@@ -2,7 +2,7 @@
 #define RENDERER_DEFAULTS_H
 
 #include "def_gl.h"
-#include "resource_loader.h"
+#include "resource_table.h"
 
 struct RendererDefaults 
 {
@@ -19,7 +19,7 @@ struct RendererDefaults
 	} models;
 };
 
-extern LoadResult renderer_defaults_init(ResourceLoader *loader, RendererDefaults *defaults);
+extern LoadResult renderer_defaults_init(ResourceTable *loader, RendererDefaults *defaults);
 
 static constexpr vertex2d g_default_tex_quad_verts[] = {
 	vertex2d{glm::vec2(-1,-1), glm::vec2(0, 0)},

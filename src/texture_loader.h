@@ -1,4 +1,4 @@
-#include "resource_loader.h"
+#include "resource_table.h"
 #include "def_gl.h"
 
 struct GLImage 
@@ -25,11 +25,11 @@ class ImageLoader
 {
 public:
 	static constexpr char const * name = "image";
-	static void registration(ResourceLoader *loader);
+	static void registration(ResourceTable *table);
 };
 
-ResourceHandle create_image_2d(ResourceLoader *loader, uint32_t w, uint32_t h, 
+ResourceHandle create_image_2d(ResourceTable *table, uint32_t w, uint32_t h, 
 							   TexFormat fmt = TEX_FORMAT_RGBA8);
-ResourceHandle load_image_file(ResourceLoader *loader, std::string_view path);
+ResourceHandle load_image_file(ResourceTable *table, std::string_view path);
 
-const GLImage *get_image(ResourceLoader *loader, ResourceHandle h);
+const GLImage *get_image(ResourceTable *table, ResourceHandle h);

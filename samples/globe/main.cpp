@@ -1,10 +1,11 @@
 // local
 
-#include "resource_loader.h"
+#include "resource_table.h"
 #include "material_loader.h"
 #include "shader_loader.h"
 #include "texture_loader.h"
 #include "model_loader.h"
+#include "camera_controller.h"
 
 #include "geometry.h"
 #include "globe.h"
@@ -26,15 +27,164 @@
 #include <glm/vec4.hpp>
 #include <glm/vec2.hpp>
 
-// std
+// libc
+#include <stdlib.h>
 #include <string.h>
 
+// posix
+#include <unistd.h>
+#include <signal.h>
+
+
 #include "stb_image.h"
+
+class CameraDebugView : public AppComponent
+{
+	ResourceTable *m_rt;
+
+	MaterialID frust_material;
+	BufferID m_ubo;
+	uint32_t m_vao;
+
+	std::optional<Camera> m_camera;
+public:
+	CameraDebugView(ResourceTable * rt) : AppComponent(), m_rt(rt)
+	{
+		//------------------------------------------------------------------------------
+		// Test Camera
+		
+		m_ubo = create_buffer(m_rt, sizeof(glm::mat4));
+
+		static uint32_t frust_indices[] = {
+			0,1, 0,2, 2,3, 3,1, 
+			0,4, 1,5, 2,6, 3,7, 
+			4,5, 4,6, 6,7, 7,5
+		};
+
+		BufferID test_ibo = create_buffer(m_rt, sizeof(frust_indices));
+		LoadResult result = upload_buffer(m_rt, test_ibo, frust_indices, sizeof(frust_indices));
+		if (result)
+			return;
+
+		frust_material = load_material_file(m_rt, "material/frustum.yaml");
+
+		if (!frust_material)
+			return;
+
+		glGenVertexArrays(1,&m_vao);
+		glBindVertexArray(m_vao);
+
+		const GLBuffer *test_ibo_data = m_rt->get<GLBuffer>(test_ibo);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, test_ibo_data->id);
+
+		glBindVertexArray(0);
+	}
+
+	void set_camera(const Camera* camera) {
+		if (camera)
+			m_camera = *camera;
+		else 
+			m_camera.reset();
+	}
+
+	const Camera *get_camera() {
+		return m_camera ? &m_camera.value() : nullptr;
+	}
+
+	void render(const RenderContext& ctx)
+	{ 
+		glm::mat4 pv = glm::mat4(0);
+		if (!m_camera) {
+			return;
+		} else {
+			pv = m_camera->proj*m_camera->view;
+		}
+
+		LoadResult result = upload_buffer(m_rt, m_ubo, &pv, sizeof(pv));
+
+		ctx.bind_material(frust_material);
+
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_rt->get<GLBuffer>(m_ubo)->id);
+		glBindVertexArray(m_vao);
+		glDrawElements(GL_LINES, 24, GL_UNSIGNED_INT,nullptr);
+		glBindVertexArray(0);
+
+	}
+};
+
+size_t levenshtein(const char *s, const char *t) {
+    size_t n = strlen(s), m = strlen(t);
+    size_t *col = (size_t*)malloc((m+1)*sizeof(size_t)),
+           *prev = (size_t*)malloc((m+1)*sizeof(size_t));
+    for (size_t j = 0; j <= m; j++) prev[j] = j;
+
+    for (size_t i = 1; i <= n; i++) {
+        col[0] = i;
+        for (size_t j = 1; j <= m; j++) {
+            size_t cost = (s[i-1] == t[j-1]) ? 0 : 1;
+            size_t del = prev[j] + 1;
+            size_t ins = col[j-1] + 1;
+            size_t sub = prev[j-1] + cost;
+            col[j] = del < ins ? (del < sub ? del : sub)
+                              : (ins < sub ? ins : sub);
+        }
+        memcpy(prev, col, (m+1)*sizeof(size_t));
+    }
+    size_t result = prev[m];
+    free(prev);
+    free(col);
+    return result;
+}
+
+
+GLFWmonitor *glfw_select_monitor(const char* match)
+{
+	if (!match)
+		return NULL;
+
+	int count;
+	GLFWmonitor **monitors = glfwGetMonitors(&count);
+
+	size_t best = 0;
+	size_t score = UINT64_MAX;
+
+	for (int i = 0; i < count; ++i) {
+		const char *name = glfwGetMonitorName(monitors[i]);
+
+		size_t test = levenshtein(name, match);
+
+		if (test < score) {
+			best = i;
+			score = test;
+		}
+	}
+
+	return monitors[best];
+}
+
+static GLFWwindow *g_window = NULL;
+
+void handle_sigint(int sig)
+{
+	(void)sig;
+
+	if (g_window)
+		glfwSetWindowShouldClose(g_window,GLFW_TRUE);
+}
 
 int main(int argc, char* argv[])
 {
 	stbi_set_flip_vertically_on_load(true);
 	log_set_flags(LOG_ERROR_BIT | LOG_INFO_BIT);
+
+	struct sigaction sa{};
+	sa.sa_handler = handle_sigint;
+	sa.sa_flags = SA_RESTART;
+
+	if (sigaction(SIGINT, &sa, NULL) == -1) {
+		perror("sigaction");
+		return EXIT_FAILURE;
+	}
 
 	if (!glfwInit())
 		return EXIT_FAILURE;
@@ -55,12 +205,18 @@ int main(int argc, char* argv[])
 	const char* resource_path = NULL;
 #endif
 
+	const char *preferred_monitor = NULL;
+
 	for (int i = 0; i < argc; ++i) {
 		if (!strcmp(argv[i],"--resources")) {
 			resource_path = argv[++i];	
 		}
+		if (!strcmp(argv[i], "--monitor")) {
+			preferred_monitor = argv[++i];
+		}
 	}
 
+	GLFWmonitor *monitor = glfw_select_monitor(preferred_monitor);
 	GLFWwindow *window = glfwCreateWindow(
 		params.win.width, 
 		params.win.height, 
@@ -71,6 +227,10 @@ int main(int argc, char* argv[])
 	    glfwTerminate();
 		return EXIT_FAILURE;
 	}
+
+	g_window = window;
+
+	glfwGetFramebufferSize(window, &params.win.width, &params.win.height);
 
 	glfwSetWindowPos(window,
 		params.win.x,
@@ -91,23 +251,23 @@ int main(int argc, char* argv[])
 	}
 	
 	//-------------------------------------------------------------------------------------------------
-	// Resource loaders
+	// Resource tables
 
-	ResourceLoaderCreateInfo resource_loader_info = {
+	ResourceTableCreateInfo resource_table_info = {
 		.resource_path = resource_path
 	};
-	std::shared_ptr<ResourceLoader> loader = ResourceLoader::create(&resource_loader_info); 
-	loader->register_loader("globe", globe::loader_fns);
-	ImageLoader::registration(loader.get());
-	ModelLoader::registration(loader.get());
+	std::shared_ptr<ResourceTable> rt = ResourceTable::create(&resource_table_info); 
+	rt->register_loader("globe", globe::loader_fns);
+	ImageLoader::registration(rt.get());
+	ModelLoader::registration(rt.get());
 
-	std::shared_ptr<ResourceHotReloader> hot_reloader = ResourceHotReloader::create(loader);
+	std::shared_ptr<ResourceHotReloader> hot_retable = ResourceHotReloader::create(rt);
 
 	//-------------------------------------------------------------------------------------------------
 	// Renderer
 
 	GLRendererCreateInfo renderer_info = {
-		.resource_loader = loader
+		.resource_table = rt
 	};
 
 	std::shared_ptr<GLRenderer> renderer = GLRenderer::create(&renderer_info);
@@ -118,7 +278,7 @@ int main(int argc, char* argv[])
 	}
 
 	auto view_component = std::shared_ptr<BaseViewComponent>( 
-		new BaseViewComponent(loader.get(), params.win.width, params.win.height)
+		new BaseViewComponent(rt.get(), params.win.width, params.win.height)
 	);
 	app->addComponent(view_component);
 
@@ -127,67 +287,34 @@ int main(int argc, char* argv[])
 	);
 	app->addComponent(sphere_camera);
 
+	auto camera_debug = std::shared_ptr<CameraDebugView>(
+		new CameraDebugView(rt.get())
+	);
+	app->addComponent(camera_debug);
+
 	//-------------------------------------------------------------------------------------------------
 	// test shader 
-	
-	MaterialID default_meshID = load_material_file(loader.get(), "material/default_mesh3d.yaml");
+	MaterialID default_meshID = load_material_file(rt.get(), "material/default_mesh3d.yaml");
 	if (!default_meshID)
 		return EXIT_FAILURE;
 
-	MaterialID globe_tileID = load_material_file(loader.get(), "material/globe_tile.yaml");
+	MaterialID globe_tileID = load_material_file(rt.get(), "material/globe_tile.yaml");
 	if (!globe_tileID)
 		return EXIT_FAILURE;
 
 	//-----------------------------------------------------------------------------
-	// cube
-	ModelID cubeID; {
-		std::vector<vertex3d> verts;
-		std::vector<uint32_t> indices;
-
-		//globe::mesh_cube_map(100,100,100, verts, indices);
-
-		Mesh3DCreateInfo load_info = {
-			.data = verts.data(), .vcount = verts.size(),
-			.indices = indices.data(), .icount = indices.size(),
-		};
-		cubeID = ModelLoader::load_3d(loader.get(),&load_info);;
-
-		if (!cubeID) {
-			return EXIT_FAILURE;
-		}
-	}
-	
-	//-----------------------------------------------------------------------------
-	// sphere
-
-	std::vector<vertex3d> sphereVerts;
-	std::vector<uint32_t> sphereIndices;
-
-	geometry::mesh_s2(100,50,sphereVerts,sphereIndices);
-
-	Mesh3DCreateInfo sphereLoadInfo = {
-		.data = sphereVerts.data(), .vcount = sphereVerts.size(),
-		.indices = sphereIndices.data(), .icount = sphereIndices.size(),
-	};
-	ModelID sphereID = ModelLoader::load_3d(loader.get(),&sphereLoadInfo);;
-
-	if (!sphereID) {
-		return EXIT_FAILURE;
-	}
-
-	//-----------------------------------------------------------------------------
 	// Globe
 	
-	globe::init_boxes(loader.get());
+	globe::init_boxes(rt.get());
 
 	std::unique_ptr<globe::Globe> globe (new globe::Globe);
-	ResourceHandle globeID = globe::globe_create(globe.get(), loader.get());
+	ResourceHandle globeID = globe::globe_create(globe.get(), rt.get());
 
 	//-----------------------------------------------------------------------------
 	// main loop
 
 	while (!glfwWindowShouldClose(window)) {
-		hot_reloader->process_updates();
+		hot_retable->process_updates();
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -202,28 +329,36 @@ int main(int argc, char* argv[])
 			.view = sphere_camera->control.get_view()
 		};
 
-		renderer->begin_frame(app->width,app->height);
+		static bool fixed_camera = false;
 
-		globe::GlobeUpdateInfo globeInfo = {
-			.camera = &camera
+		if (ImGui::Button(fixed_camera ? 
+				"Unfix camera##globe tile boxes" : 
+				"Fix camera##globe tile boxes")
+		) {
+			camera_debug->set_camera(&camera);
+		}
+
+		globe::GlobeUpdateInfo globeInfo = { 
+			.camera = &camera 
 		};
+		globe::globe_update(globe.get(),rt.get(), &globeInfo);
 
-		globe::globe_update(globe.get(),loader.get(), &globeInfo);
+		FrameBeginInfo frameInfo = {.camera = &camera};
+		FrameContext frame = renderer->begin_frame(&frameInfo);
 
-		BeginPassInfo passInfo = {
-			.target = view_component->target,
-			.camera = &camera
-		};
+		BeginPassInfo passInfo = {.target = view_component->target};
+		RenderContext ctx = frame.begin_pass(&passInfo);
 
-		RenderContext ctx = renderer->begin_pass(&passInfo);
+		camera_debug->render(ctx);
+
 		ctx.bind_material(globe_tileID);
 		ctx.draw_cmd_basic_mesh3d(globe->modelID,glm::mat4(1.0f));
 		globe::render_boxes(ctx);
-		renderer->end_pass(&ctx);
+		frame.end_pass(&ctx);
 
-		renderer->draw_screen_texture(ctx.target, glm::mat4(1.0f));
+		renderer->end_frame(&frame);
 
-		renderer->end_frame();
+		renderer->present(ctx.target, app->width,app->height);
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());	

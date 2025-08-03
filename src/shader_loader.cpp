@@ -1,4 +1,4 @@
-#include "resource_loader.h"
+#include "resource_table.h"
 #include "shader_loader.h"
 
 #pragma clang diagnostic push
@@ -17,9 +17,9 @@ namespace fs = std::filesystem;
 
 typedef GLenum shader_stage_t;
 
-static LoadResult gl_shader_module_create(ResourceLoader *loader, void **res, void *info);
-static void gl_shader_module_destroy(ResourceLoader *loader, void *res);
-static LoadResult gl_shader_load_file(ResourceLoader *loader, ResourceHandle h, const char *path);
+static LoadResult gl_shader_module_create(ResourceTable *loader, void **res, void *info);
+static void gl_shader_module_destroy(ResourceTable *loader, void *res);
+static LoadResult gl_shader_load_file(ResourceTable *loader, ResourceHandle h, const char *path);
 
 ResourceAllocFns g_shader_alloc_fns = {
 	.create = &gl_shader_module_create,
@@ -219,7 +219,7 @@ static LoadResult load_shader_file(fs::path file, GLShaderModule* out)
 	return res;
 }
 
-LoadResult gl_shader_module_create(ResourceLoader *loader, void **res, void *info)
+LoadResult gl_shader_module_create(ResourceTable *loader, void **res, void *info)
 {
 	ShaderCreateInfo *desc = static_cast<ShaderCreateInfo*>(info);
 	std::unique_ptr<GLShaderModule> shader (new GLShaderModule{});
@@ -234,7 +234,7 @@ LoadResult gl_shader_module_create(ResourceLoader *loader, void **res, void *inf
 
 }
 
-void gl_shader_module_destroy(ResourceLoader *loader, void *res)
+void gl_shader_module_destroy(ResourceTable *loader, void *res)
 {
 	if (!res) 
 		return;
@@ -244,7 +244,7 @@ void gl_shader_module_destroy(ResourceLoader *loader, void *res)
 	delete shader;
 }
 
-static LoadResult gl_shader_load_file(ResourceLoader *loader, ResourceHandle h, const char *path)
+static LoadResult gl_shader_load_file(ResourceTable *loader, ResourceHandle h, const char *path)
 {
 	ShaderCreateInfo ci = {
 		.path = path
@@ -260,7 +260,7 @@ static LoadResult gl_shader_load_file(ResourceLoader *loader, ResourceHandle h, 
 	return result;
 }
 
-ResourceHandle load_shader_file(ResourceLoader *loader, std::string_view path)
+ResourceHandle load_shader_file(ResourceTable *loader, std::string_view path)
 {
 	if (ResourceHandle h = loader->find(path)) 
 		return h;
@@ -281,7 +281,7 @@ error_cleanup:
 	return RESOURCE_HANDLE_NULL;
 }
 
-const GLShaderModule *get_shader(ResourceLoader *loader, ResourceHandle h)
+const GLShaderModule *get_shader(ResourceTable *loader, ResourceHandle h)
 {
 	const ResourceEntry *ent = loader->get(h);
 	if (!ent || ent->type != RESOURCE_TYPE_SHADER)

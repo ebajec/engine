@@ -1,6 +1,6 @@
 // local
 
-#include "resource_loader.h"
+#include "resource_table.h"
 #include "material_loader.h"
 #include "shader_loader.h"
 #include "texture_loader.h"
@@ -35,16 +35,16 @@
 
 struct BaseViewComponent : AppComponent
 {
-	ResourceLoader *loader;
+	ResourceTable *table;
 
 	RenderTargetID target;
 
 	uint32_t w;
 	uint32_t h;
 
-	BaseViewComponent(ResourceLoader *loader, int w, int h) 
+	BaseViewComponent(ResourceTable *table, int w, int h) 
 	{
-		this->loader = loader;
+		this->table = table;
 		this->w = (uint32_t)w;
 		this->h = (uint32_t)h;
 
@@ -53,7 +53,7 @@ struct BaseViewComponent : AppComponent
 			.h = (uint32_t)w,
 			.flags = RENDER_TARGET_CREATE_COLOR_BIT | RENDER_TARGET_CREATE_DEPTH_BIT
 		};
-		target = render_target_create(loader,&target_info);;
+		target = render_target_create(table,&target_info);;
 	}
 
 	virtual Camera get_camera() = 0;
@@ -67,7 +67,7 @@ struct BaseViewComponent : AppComponent
 			.h = static_cast<uint32_t>(height),
 			.flags = RENDER_TARGET_CREATE_COLOR_BIT | RENDER_TARGET_CREATE_DEPTH_BIT
 		};
-		render_target_resize(loader,target, &target_info);
+		render_target_resize(table,target, &target_info);
 		return;
 	}
 };
@@ -79,7 +79,7 @@ struct MotionCameraComponent : BaseViewComponent
 	float far = 1000;
 	float near = 0.01f;
 
-	MotionCameraComponent(ResourceLoader *loader, uint32_t w, uint32_t h) : BaseViewComponent(loader, w, h) 
+	MotionCameraComponent(ResourceTable *table, uint32_t w, uint32_t h) : BaseViewComponent(table, w, h) 
 	{
 		glm::vec3 eye = glm::vec3(2,0,0);
 		control = MotionCamera::from_normal(glm::vec3(1,0,0),eye);
@@ -150,7 +150,7 @@ struct ViewComponent2D : BaseViewComponent
 	glm::dvec2 p = glm::dvec2(0);
 	double zoom = 0.1;
 
-	ViewComponent2D(ResourceLoader *loader, uint32_t w, uint32_t h) : BaseViewComponent(loader, w, h) 
+	ViewComponent2D(ResourceTable *table, uint32_t w, uint32_t h) : BaseViewComponent(table, w, h) 
 	{
 	}
 
@@ -255,7 +255,7 @@ typedef  struct {
 struct RandomLine : AppComponent 
 {
 	GLRenderer *renderer;
-	ResourceLoader *loader;
+	ResourceTable *table;
 
 	std::shared_ptr<BaseViewComponent> view;
 
@@ -291,8 +291,8 @@ struct RandomLine : AppComponent
 		0,1,2, 2,1,3
 	};
 
-	RandomLine(GLRenderer *renderer, ResourceLoader *loader, uint32_t count) : 
-		AppComponent(), renderer(renderer), loader(loader) 
+	RandomLine(GLRenderer *renderer, ResourceTable *table, uint32_t count) : 
+		AppComponent(), renderer(renderer), table(table) 
 	{
 		//----------------------------------------------------------------------------
 		// Lines
@@ -351,7 +351,7 @@ struct RandomLine : AppComponent
 			offset += points.size();
 		}
 
-		material = load_material_file(loader, "material/line.yaml");
+		material = load_material_file(table, "material/line.yaml");
 
 		//----------------------------------------------------------------------------
 		// Buffers
@@ -524,22 +524,22 @@ int main(int argc, char* argv[])
 	}
 	
 	//-------------------------------------------------------------------------------------------------
-	// Resource loaders
+	// Resource tables
 
-	ResourceLoaderCreateInfo resource_loader_info = {
+	ResourceTableCreateInfo resource_table_info = {
 		.resource_path = resource_path
 	};
-	std::shared_ptr<ResourceLoader> loader = ResourceLoader::create(&resource_loader_info); 
-	ModelLoader::registration(loader.get());
-	ImageLoader::registration(loader.get());
+	std::shared_ptr<ResourceTable> table = ResourceTable::create(&resource_table_info); 
+	ModelLoader::registration(table.get());
+	ImageLoader::registration(table.get());
 
-	std::shared_ptr<ResourceHotReloader> hot_reloader = ResourceHotReloader::create(loader);
+	std::shared_ptr<ResourceHotReloader> hot_retable = ResourceHotReloader::create(table);
 
 	//-------------------------------------------------------------------------------------------------
 	// Renderer
 
 	GLRendererCreateInfo renderer_info = {
-		.resource_loader = loader
+		.resource_table = table
 	};
 
 	std::shared_ptr<GLRenderer> renderer = GLRenderer::create(&renderer_info);
@@ -550,25 +550,25 @@ int main(int argc, char* argv[])
 	}
 
 	auto view_component = std::shared_ptr<MotionCameraComponent>( 
-		new MotionCameraComponent(loader.get(), params.win.width, params.win.height)
+		new MotionCameraComponent(table.get(), params.win.width, params.win.height)
 	);
 	app->addComponent(view_component);
 
-	auto random_lines = std::make_shared<RandomLine>(renderer.get(),loader.get(),count);
+	auto random_lines = std::make_shared<RandomLine>(renderer.get(),table.get(),count);
 	app->addComponent(random_lines);
 
 	//-------------------------------------------------------------------------------------------------
 	// test shader 
 	
-	MaterialID default_meshID = load_material_file(loader.get(), "material/default_mesh3d.yaml");
+	MaterialID default_meshID = load_material_file(table.get(), "material/default_mesh3d.yaml");
 	if (!default_meshID)
 		return EXIT_FAILURE;
 
-	MaterialID globe_tileID = load_material_file(loader.get(), "material/globe_tile.yaml");
+	MaterialID globe_tileID = load_material_file(table.get(), "material/globe_tile.yaml");
 	if (!globe_tileID)
 		return EXIT_FAILURE;
 
-	MaterialID box_material = load_material_file(loader.get(), "material/box_debug.yaml");
+	MaterialID box_material = load_material_file(table.get(), "material/box_debug.yaml");
 	if (!box_material)
 		return EXIT_FAILURE;
 	
@@ -584,7 +584,7 @@ int main(int argc, char* argv[])
 			.data = verts.data(), .vcount = verts.size(),
 			.indices = indices.data(), .icount = indices.size(),
 		};
-		cubeID = ModelLoader::load_3d(loader.get(),&load_info);;
+		cubeID = ModelLoader::load_3d(table.get(),&load_info);;
 
 		if (!cubeID) {
 			return EXIT_FAILURE;
@@ -603,7 +603,7 @@ int main(int argc, char* argv[])
 		.data = sphereVerts.data(), .vcount = sphereVerts.size(),
 		.indices = sphereIndices.data(), .icount = sphereIndices.size(),
 	};
-	ModelID sphereID = ModelLoader::load_3d(loader.get(),&sphereLoadInfo);;
+	ModelID sphereID = ModelLoader::load_3d(table.get(),&sphereLoadInfo);;
 
 	if (!sphereID) {
 		return EXIT_FAILURE;
@@ -613,11 +613,10 @@ int main(int argc, char* argv[])
 	// main loop
 
 	while (!glfwWindowShouldClose(window)) {
-		hot_reloader->process_updates();
+		hot_retable->process_updates();
 
 		glfwPollEvents();
 
-		renderer->begin_frame(app->width, app->height);
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -625,21 +624,21 @@ int main(int argc, char* argv[])
 
 		Camera camera = view_component->get_camera(); 
 
-		BeginPassInfo passInfo = {
-			.target = view_component->target,
-			.camera = &camera
-		};
+		FrameBeginInfo frameInfo = {.camera = &camera};
+		FrameContext frame = renderer->begin_frame(&frameInfo);
 
-		RenderContext ctx = renderer->begin_pass(&passInfo);
+		BeginPassInfo passInfo = {.target = view_component->target};
+
+		RenderContext ctx = frame.begin_pass(&passInfo);
 
 		//renderer->bind_material(default_meshID);
 		//renderer->draw_cmd_basic_mesh3d(sphereID,glm::mat4(1.0f));
 		ctx.bind_material(globe_tileID);
 		app->renderComponents(&ctx);
+		frame.end_pass(&ctx);
+		renderer->end_frame(&frame);
 
-		renderer->end_pass(&ctx);
-		renderer->draw_screen_texture(ctx.target, glm::mat4(1.0f));
-		renderer->end_frame();
+		renderer->present(ctx.target, app->width, app->height);
 
 		app->onFrameUpdateCallback(window);
 		ImGui::Render();

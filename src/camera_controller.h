@@ -57,12 +57,18 @@ static inline glm::mat4 camera_proj_3d(float fov, float aspect, float far, float
 	float tanfov2 = tanf(fov / 2);
 	float ffov = 1.0f/tanfov2;
 
- 	return glm::transpose(glm::mat4(
+	far = std::max(far, near + 64*FLT_EPSILON);
+
+	float d = far - near;
+
+	glm::mat4 proj = glm::transpose(glm::mat4(
 		glm::vec4(ffov*aspect,0,0,0),
 		glm::vec4(0,ffov,0,0),
-		glm::vec4(0,0,-(far)/(far - near),-far*near/(far - near)),
+		glm::vec4(0,0,-(far)/d,-far*near/d),
 		glm::vec4(0,0,-1,0)
 	)); 
+
+	return proj;
 }
 
 static inline glm::mat4 camera_proj_2d(float aspect, float scale)
@@ -153,7 +159,7 @@ struct SphericalMotionCamera
 	double phi = 0;
 
 	double min_height = 0.01;
-	double height = 2.0;
+	double height = 2.1;
 
 	void move(glm::dvec3 motion)
 	{

@@ -9,7 +9,7 @@
 
 struct BaseViewComponent : AppComponent
 {
-	ResourceLoader *loader;
+	ResourceTable *table;
 
 	RenderTargetID target;
 
@@ -17,15 +17,15 @@ struct BaseViewComponent : AppComponent
 	uint32_t h;
 
 	float fov = PIf/2.0f;
-	float far = 1000;
+	float far = 100;
 	float near = 0.01f;
 
 	glm::dvec2 mouse_pos;
 	glm::dvec2 dmouse_pos;
 
-	BaseViewComponent(ResourceLoader *loader, int w, int h) 
+	BaseViewComponent(ResourceTable *table, int w, int h) 
 	{
-		this->loader = loader;
+		this->table = table;
 		this->w = (uint32_t)w;
 		this->h = (uint32_t)h;
 
@@ -34,7 +34,7 @@ struct BaseViewComponent : AppComponent
 			.h = (uint32_t)w,
 			.flags = RENDER_TARGET_CREATE_COLOR_BIT | RENDER_TARGET_CREATE_DEPTH_BIT
 		};
-		target = render_target_create(loader,&target_info);
+		target = render_target_create(table,&target_info);
 		assert(target);
 	}
 
@@ -47,7 +47,7 @@ struct BaseViewComponent : AppComponent
 			.h = static_cast<uint32_t>(height),
 			.flags = RENDER_TARGET_CREATE_COLOR_BIT | RENDER_TARGET_CREATE_DEPTH_BIT
 		};
-		render_target_resize(loader, target, &target_info);
+		render_target_resize(table, target, &target_info);
 		return;
 	}
 
@@ -80,7 +80,7 @@ struct BaseViewComponent : AppComponent
 		ImGui::Begin("Demo Window");
 		ImGui::SliderFloat("FOV", &fov, 0.0f, PI, "%.3f");
 		ImGui::SliderFloat("near", &near, 0.0, 1.0, "%.5f");
-		ImGui::SliderFloat("far", &far, near, 2000, "%.5f");
+		ImGui::SliderFloat("far", &far, near, 100, "%.5f");
 		ImGui::End();
 
 		float aspect = (float)h/(float)w;
@@ -116,14 +116,14 @@ struct SphereCameraComponent : AppComponent
 
 	virtual void onFrameUpdateCallback() override
 	{
-		static float speed = 0.01;
+		static float speed = 1;
 		
 		ImGui::Begin("Demo Window");
 		ImGui::SliderFloat("speed", &speed, 0.0, 1, "%.5f");
 		ImGui::End();
 
 		control.min_height = view_component->near; 
-		control.move((double)speed*keydir);
+		control.move((double)g_.dt*speed*keydir);
 	}
 };
 
@@ -149,7 +149,7 @@ struct MotionCameraComponent : AppComponent
 
 	virtual void onFrameUpdateCallback() override
 	{
-		static float speed = 0.01;
+		static float speed = 1;
 		
 		ImGui::Begin("View Config");
 		ImGui::SliderFloat("speed", &speed, 0.0, 1, "%.5f");

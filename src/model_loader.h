@@ -1,7 +1,7 @@
 #ifndef MODEL_LOADER_H
 #define MODEL_LOADER_H
 
-#include "resource_loader.h"
+#include "resource_table.h"
 
 struct GLModel
 {
@@ -44,15 +44,15 @@ class ModelLoader
 {
 
 public:
-	static void registration(ResourceLoader *loader);
+	static void registration(ResourceTable *loader);
 
-	static ResourceHandle load_2d(ResourceLoader *loader, Mesh2DCreateInfo *ci);
-	static ResourceHandle load_3d(ResourceLoader *loader, Mesh3DCreateInfo *ci);
+	static ResourceHandle load_2d(ResourceTable *loader, Mesh2DCreateInfo *ci);
+	static ResourceHandle load_3d(ResourceTable *loader, Mesh3DCreateInfo *ci);
 };
 
-extern ResourceHandle model_create(ResourceLoader *loader);
-extern ResourceHandle model_upload(ResourceLoader *loader);
+extern ResourceHandle model_create(ResourceTable *loader);
+extern ResourceHandle model_upload(ResourceTable *loader);
 
-const GLModel *get_model(ResourceLoader *loader, ResourceHandle h);
+const GLModel *get_model(ResourceTable *loader, ResourceHandle h);
 
 #endif // MODEL_LOADER_H

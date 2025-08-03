@@ -1,7 +1,7 @@
 #ifndef BUFFER_RESOURCE_H
 #define BUFFER_RESOURCE_H
 
-#include "resource_loader.h"
+#include "resource_table.h"
 
 struct GLBuffer
 {
@@ -21,5 +21,7 @@ struct BufferCreateInfo
 
 extern ResourceAllocFns g_buffer_alloc_fns;
 
+BufferID create_buffer(ResourceTable *table, size_t size, uint32_t flags = GL_DYNAMIC_STORAGE_BIT);
+LoadResult upload_buffer(ResourceTable *table, BufferID buf, void* data, size_t size);
 
 #endif // BUFFER_RESOURCE_H

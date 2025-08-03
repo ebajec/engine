@@ -1,7 +1,7 @@
 #ifndef RENDER_TARGET_H
 #define RENDER_TARGET_H
 
-#include "resource_loader.h"
+#include "resource_table.h"
 
 #include <cstdint>
 
@@ -34,8 +34,8 @@ struct RenderTargetCreateInfo
 
 extern ResourceAllocFns g_target_alloc_fns;
 
-extern ResourceHandle render_target_create(ResourceLoader *loader, const RenderTargetCreateInfo *info);
-extern LoadResult render_target_resize(ResourceLoader *loader, ResourceHandle h, const RenderTargetCreateInfo *info);
+extern ResourceHandle render_target_create(ResourceTable *table, const RenderTargetCreateInfo *info);
+extern LoadResult render_target_resize(ResourceTable *table, ResourceHandle h, const RenderTargetCreateInfo *info);
 
 
 #endif

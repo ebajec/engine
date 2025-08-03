@@ -38,7 +38,7 @@ enum gl_renderer_bindings
 	GL_RENDERER_FRAMEDATA_BINDING = 5
 };
 
-struct gl_framedata_t
+struct Framedata
 {
 	glm::mat4 p;
 	glm::mat4 v;

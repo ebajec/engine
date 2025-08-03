@@ -1,6 +1,6 @@
 // local
 
-#include "resource_loader.h"
+#include "resource_table.h"
 #include "material_loader.h"
 #include "shader_loader.h"
 #include "texture_loader.h"
@@ -187,20 +187,20 @@ int main(int argc, char* argv[])
 	}
 	
 	//-------------------------------------------------------------------------------------------------
-	// Resource loaders
+	// Resource tables
 
-	ResourceLoaderCreateInfo resource_loader_info = {
+	ResourceLoaderCreateInfo resource_table_info = {
 		.resource_path = resource_path
 	};
-	std::shared_ptr<ResourceLoader> loader = ResourceLoader::create(&resource_loader_info); 
+	std::shared_ptr<ResourceLoader> table = ResourceLoader::create(&resource_table_info); 
 
-	std::shared_ptr<ResourceHotReloader> hot_reloader = ResourceHotReloader::create(loader);
+	std::shared_ptr<ResourceHotReloader> hot_retable = ResourceHotRetable::create(table);
 
 	//-------------------------------------------------------------------------------------------------
 	// Renderer
 
 	GLRendererCreateInfo renderer_info = {
-		.resource_loader = loader
+		.resource_table = table
 	};
 
 	std::shared_ptr<GLRenderer> renderer = GLRenderer::create(&renderer_info);
@@ -217,7 +217,7 @@ int main(int argc, char* argv[])
 	//-------------------------------------------------------------------------------------------------
 	// test shader 
 	
-	MaterialID materialID = load_material_file(loader.get(), "material/default_mesh3d.yaml");
+	MaterialID materialID = load_material_file(table.get(), "material/default_mesh3d.yaml");
 	if (!materialID)
 		return EXIT_FAILURE;
 
@@ -233,7 +233,7 @@ int main(int argc, char* argv[])
 		.data = sphereVerts.data(), .vcount = sphereVerts.size(),
 		.indices = sphereIndices.data(), .icount = sphereIndices.size(),
 	};
-	ModelID sphereID = load_model_3d(loader.get(),&sphereLoadInfo);;
+	ModelID sphereID = load_model_3d(table.get(),&sphereLoadInfo);;
 
 	if (!sphereID) {
 		return EXIT_FAILURE;
@@ -251,13 +251,13 @@ int main(int argc, char* argv[])
 		.data = vtorus.data(), .vcount = vtorus.size(),
 		.indices = itorus.data(), .icount = itorus.size(),
 	};
-	ModelID torusID = load_model_3d(loader.get(),&torusLoadInfo);
+	ModelID torusID = load_model_3d(table.get(),&torusLoadInfo);
 
 	//-----------------------------------------------------------------------------
 	// main loop
 
 	while (!glfwWindowShouldClose(window)) {
-		hot_reloader->process_updates();
+		hot_retable->process_updates();
 
 		glfwPollEvents();
 

@@ -72,6 +72,8 @@ void MyApp::framebufferSizeCallback(GLFWwindow* window, int width, int height)
 
 void MyApp::onFrameUpdateCallback(GLFWwindow *window) 
 {
+	glfwGetFramebufferSize(window,&width,&height);
+
 	static double t0 = -1; 
 
 	if (t0 < 0) {

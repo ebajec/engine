@@ -2,6 +2,7 @@
 #include "box_display.h"
 #include "gl_debug.h"
 #include "camera_controller.h"
+#include "geometry.h"
 
 #include <imgui.h>
 
@@ -14,6 +15,7 @@
 #include <climits>
 #include <cfloat>
 #include <cmath>
+#include <algorithm>
 #include <vector>
 #include <complex.h>
 
@@ -41,9 +43,9 @@ enum quadrant_t
 	UPPER_RIGHT = 0x3
 };
 
-void init_boxes(ResourceLoader *loader) {
-	g_disp.reset(new BoxDisplay(loader));
-	g_enable_boxes = true;
+void init_boxes(ResourceTable *table) {
+	g_disp.reset(new BoxDisplay(table));
+	g_enable_boxes = false;
 }
 
 void render_boxes(RenderContext const & ctx)
@@ -55,7 +57,7 @@ void render_boxes(RenderContext const & ctx)
 
 void update_boxes() 
 {
-	if (ImGui::Button(g_enable_boxes ? "ON##globe tile boxes" : "OFF##globe tile boxes")) 
+	if (ImGui::Button(g_enable_boxes ? "Disable globe tile boxes##globe tile boxes" : "Enable globe tile boxes##globe tile boxes")) 
 		g_enable_boxes = !g_enable_boxes;
 
 	if (g_enable_boxes)
@@ -80,14 +82,16 @@ struct select_tiles_params
 	glm::dvec2 origin_uv;
 };
 
-static double tile_dist_sq(glm::dvec3 p, glm::dvec2 p_uv, aabb2_t tile, uint8_t face)
+static glm::dvec3 tile_diff(glm::dvec3 p, glm::dvec2 p_uv, aabb2_t tile, uint8_t face)
 {
 	p_uv = glm::clamp(p_uv,tile.min,tile.max);
 
 	glm::dvec3 diff = p - cube_to_globe(face, p_uv);
 
-	return dot(diff,diff);
+	return diff;
 }
+
+static constexpr double tile_scale_factor = 64;
 
 static inline int select_tiles_rec(
 	std::vector<TileCode> &out, 
@@ -101,29 +105,38 @@ static inline int select_tiles_rec(
 
 	aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
 
-	glm::dvec3 p[4] = {
+	glm::dvec3 p[5] = {
 		cube_to_globe(code.face, rect.ll()),
 		cube_to_globe(code.face, rect.lr()),
 		cube_to_globe(code.face, rect.ul()),
 		cube_to_globe(code.face, rect.ur()),
+
+		// the last one is not always necessary right now, but will be
+		// with elevation
+		cube_to_globe(code.face, 0.5*(rect.ur() + rect.ll())),
 	};
 
-	size_t count = sizeof(p)/sizeof(glm::dvec3);
-
-	aabb3_t box = aabb_bounding(p, count);
+	aabb3_t box = aabb_bounding(p, sizeof(p)/sizeof(p[0]));
 
 	if (code.zoom == 0) {
-		const glm::dmat3& m = cube_faces_d[code.face];
-		box = aabb_add(box,m[2]);
+		box = aabb_add(box, cube_to_globe(code.face, 0.5*(rect.ll() + rect.lr())));
+		box = aabb_add(box, cube_to_globe(code.face, 0.5*(rect.ll() + rect.ul())));
+		box = aabb_add(box, cube_to_globe(code.face, 0.5*(rect.ur() + rect.ul())));
+		box = aabb_add(box, cube_to_globe(code.face, 0.5*(rect.ur() + rect.lr())));
 	}
 
-	//for (uint8_t i = 0; i < 6; ++i) {
-	//	if (classify(box, params->frust.planes[i]) < 0) { 
-	//		return 0;
-	//	}
-	//}
+	for (uint8_t i = 0; i < 6; ++i) {
+		if (classify(box, params->frust.planes[i]) > 0) { 
+			return 0;
+		}
+	}
 
-	double d_min_sq = 64*tile_dist_sq(params->origin,params->origin_uv,rect,code.face);
+	glm::dvec3 tile_nearest_diff = tile_diff(params->origin,params->origin_uv,rect,code.face);
+	double d_min_sq = dot(tile_nearest_diff,params->frust.planes[4].n);
+	d_min_sq = std::max(tile_scale_factor * d_min_sq * d_min_sq,1e-5);
+
+	glm::dvec3 mid = cube_to_globe(code.face, 0.5*(rect.ur() + rect.ll()));
+
 	double area = tile_area(code.zoom);
 
 	if ((area/d_min_sq)*tile_res_mult < params->res) {
@@ -194,14 +207,22 @@ static void create_mesh(
 	std::vector<GlobeVertex>& verts,
 	std::vector<uint32_t>&indices)
 {
-	uint32_t total = TILE_VERT_COUNT*static_cast<uint32_t>(tiles.size());
+	static constexpr uint32_t tile_limit = 4096;
+
+	uint32_t count = std::min((uint32_t)tiles.size(),tile_limit);
+	if (tiles.size() > tile_limit) {
+		log_warn("Selected tile count is large (%ld)! Limiting to %d", tiles.size(), tile_limit);
+	}
+
+	uint32_t total = TILE_VERT_COUNT*count;
 
 	verts.reserve(total);
 	indices.reserve(6*total);
 
 	static const uint32_t n = TILE_VERT_WIDTH;
 
-	for (TileCode code : tiles) {
+	for (uint32_t i = 0; i < count; ++i) {
+		TileCode code = tiles[i];
 
 		uint8_t f = code.face;
 
@@ -254,14 +275,14 @@ static void create_mesh(
 //------------------------------------------------------------------------------
 // Interface
 
-LoadResult globe_create(Globe *globe, ResourceLoader *loader)
+LoadResult globe_create(Globe *globe, ResourceTable *table)
 {
-	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_MODEL);
+	ResourceHandle h = table->create_handle(RESOURCE_TYPE_MODEL);
 
 	if (h == RESOURCE_HANDLE_NULL)
 		return RESULT_ERROR;
 
-	LoadResult result = loader->allocate(h, nullptr);
+	LoadResult result = table->allocate(h, nullptr);
 
 	if (result)
 		goto load_failed;
@@ -270,41 +291,19 @@ LoadResult globe_create(Globe *globe, ResourceLoader *loader)
 
 	return result;
 load_failed:
-	loader->destroy_handle(h);
+	table->destroy_handle(h);
 	return result;
 }
 
-static frustum_t camera_frustum(const glm::dmat4& view, const glm::dmat4& proj)
-{
-	glm::mat4 m = glm::transpose(proj * view);
-	
-	frustum_t frust;
-	for (int i = 0; i < 6; ++i) {
-		glm::vec4 p;
-		switch (i) {
-			case 0: p = m[3] + m[2]; break; // near
-			case 1: p = m[3] - m[2]; break; // far
-			case 2: p = m[3] + m[0]; break; // left
-			case 3: p = m[3] - m[0]; break; // right
-			case 4: p = m[3] + m[1]; break; // bottom
-			case 5: p = m[3] - m[1]; break; // top
-		}
-
-		float r_inv = 1.0f / glm::length(glm::vec3(p));
-		frust.planes[i].n = glm::vec3(p) * r_inv;
-		frust.planes[i].d = (double)(p.w * r_inv);
-	}
-	
-	return frust;
-}
-
-LoadResult globe_update(Globe *globe, ResourceLoader *loader, GlobeUpdateInfo *info)
+LoadResult globe_update(Globe *globe, ResourceTable *table, GlobeUpdateInfo *info)
 {
 	globe->tiles.clear();
 	globe->verts.clear();
 	globe->indices.clear();
 
-	frustum_t frust = camera_frustum(info->camera->view,info->camera->proj);
+	glm::mat4 pv = info->camera->proj*info->camera->view;
+
+	frustum_t frust = camera_frustum(pv);
 
 	static int zoom = 3;
 
@@ -320,7 +319,7 @@ LoadResult globe_update(Globe *globe, ResourceLoader *loader, GlobeUpdateInfo *i
 
 	globe::create_mesh(1,pos, globe->tiles, globe->verts, globe->indices);
 
-	LoadResult result = loader->upload(globe->modelID,"globe",globe);
+	LoadResult result = table->upload(globe->modelID,"globe",globe);
 	
 	globe::update_boxes();
 
@@ -330,14 +329,14 @@ LoadResult globe_update(Globe *globe, ResourceLoader *loader, GlobeUpdateInfo *i
 //------------------------------------------------------------------------------
 // Loader functions
 
-static LoadResult globe_upload_fn(ResourceLoader *loader, void *res, void *into);
+static LoadResult globe_upload_fn(ResourceTable *table, void *res, void *into);
 
 ResourceLoaderFns loader_fns = { 
 	.loader_fn = globe_upload_fn,
 	.post_load_fn = nullptr
 };
 
-LoadResult globe_upload_fn(ResourceLoader *loader, void *res, void *usr)
+LoadResult globe_upload_fn(ResourceTable *table, void *res, void *usr)
 {
 	const Globe *globe = static_cast<const Globe*>(usr);
 	GLModel *model = static_cast<GLModel*>(res);

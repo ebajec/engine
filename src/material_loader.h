@@ -1,5 +1,5 @@
 #include "def_gl.h"
-#include "resource_loader.h"
+#include "resource_table.h"
 
 struct GLTextureBinding
 {
@@ -26,6 +26,6 @@ struct MaterialCreateInfo
 
 extern ResourceAllocFns g_material_alloc_fns;
 
-ResourceHandle load_material_file(ResourceLoader *loader, std::string_view path);
+ResourceHandle load_material_file(ResourceTable *loader, std::string_view path);
 
-const GLMaterial *get_material(ResourceLoader *loader, ResourceHandle h);
+const GLMaterial *get_material(ResourceTable *loader, ResourceHandle h);

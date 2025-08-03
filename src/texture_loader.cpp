@@ -1,4 +1,4 @@
-#include "resource_loader.h"
+#include "resource_table.h"
 #include "texture_loader.h"
 #include "gl_debug.h"
 
@@ -9,11 +9,11 @@
 
 namespace fs = std::filesystem;
 
-static LoadResult gl_image_create(ResourceLoader *loader, void **res, void *info);
-static void gl_image_destroy(ResourceLoader *loader, void *tex);
-static LoadResult gl_image_create_from_disk(ResourceLoader *loader, ResourceHandle h, const char *path); 
+static LoadResult gl_image_create(ResourceTable *loader, void **res, void *info);
+static void gl_image_destroy(ResourceTable *loader, void *tex);
+static LoadResult gl_image_create_from_disk(ResourceTable *loader, ResourceHandle h, const char *path); 
 
-static LoadResult gl_image_upload_mem(ResourceLoader *loader, void *res, void *info);
+static LoadResult gl_image_upload_mem(ResourceTable *loader, void *res, void *info);
 
 ResourceAllocFns g_image_alloc_fns = {
 	.create = gl_image_create,
@@ -26,7 +26,7 @@ ResourceLoaderFns g_image_loader_fns {
 	.post_load_fn = nullptr
 };
 
-LoadResult gl_image_create(ResourceLoader *loader, void **res, void *info)
+LoadResult gl_image_create(ResourceTable *loader, void **res, void *info)
 {
 	ImageCreateInfo *ci = static_cast<ImageCreateInfo*>(info);
 
@@ -46,7 +46,7 @@ LoadResult gl_image_create(ResourceLoader *loader, void **res, void *info)
 
 }
 
-void gl_image_destroy(ResourceLoader *loader, void *res)
+void gl_image_destroy(ResourceTable *loader, void *res)
 {
 	if (!res) return;
 
@@ -56,7 +56,7 @@ void gl_image_destroy(ResourceLoader *loader, void *res)
 	delete tex;
 }
 
-static LoadResult gl_image_upload_mem(ResourceLoader *loader, void *res, void *info)
+static LoadResult gl_image_upload_mem(ResourceTable *loader, void *res, void *info)
 {
 	GLImage *img = static_cast<GLImage*>(res);
 	char *data = static_cast<char*>(info);
@@ -77,12 +77,12 @@ static LoadResult gl_image_upload_mem(ResourceLoader *loader, void *res, void *i
 	return RESULT_SUCCESS;
 }
 
-void ImageLoader::registration(ResourceLoader *loader)
+void ImageLoader::registration(ResourceTable *loader)
 {
 	loader->register_loader(ImageLoader::name,g_image_loader_fns);
 }
 
-static LoadResult gl_image_create_from_disk(ResourceLoader *loader, ResourceHandle h, const char *path) 
+static LoadResult gl_image_create_from_disk(ResourceTable *loader, ResourceHandle h, const char *path) 
 {
 	int width, height, channels;
 	int stbi_res = stbi_info(path, &width, &height, &channels);
@@ -114,7 +114,7 @@ static LoadResult gl_image_create_from_disk(ResourceLoader *loader, ResourceHand
 	return result;
 }
 
-ResourceHandle create_image_2d(ResourceLoader *loader, uint32_t width, uint32_t height, TexFormat fmt)
+ResourceHandle create_image_2d(ResourceTable *loader, uint32_t width, uint32_t height, TexFormat fmt)
 {
 	ImageCreateInfo info = {
 		.w = width,
@@ -133,7 +133,7 @@ ResourceHandle create_image_2d(ResourceLoader *loader, uint32_t width, uint32_t 
 	return h;
 }
 
-ResourceHandle load_image_file(ResourceLoader *loader, std::string_view path)
+ResourceHandle load_image_file(ResourceTable *loader, std::string_view path)
 {
 	if (ResourceHandle h = loader->find(path)) {
 		return h;
@@ -158,11 +158,12 @@ load_failed:
 	return h;
 }
 
-const GLImage *get_image(ResourceLoader *loader, ResourceHandle h)
+const GLImage *get_image(ResourceTable *loader, ResourceHandle h)
 {
 	const ResourceEntry *ent = loader->get(h);
 	if (!ent || ent->type != RESOURCE_TYPE_IMAGE)
 		return nullptr;
 
-	return static_cast<const GLImage*>(ent->data);
+	return static_cast<const GLImage*>(ent->data)
+	;
 }

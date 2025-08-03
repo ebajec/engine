@@ -2,7 +2,7 @@
 #define GL_RENDERER_H
 
 #include <utils/log.h>
-#include "resource_loader.h"
+#include "resource_table.h"
 #include "render_target.h"
 #include "renderer_defaults.h"
 #include "buffer.h"
@@ -16,6 +16,7 @@
 #include <memory>
 
 class GLRenderer;
+struct FrameContext;
 
 struct Camera
 {
@@ -26,36 +27,43 @@ struct Camera
 struct BeginPassInfo
 {
 	RenderTargetID target;
-	const Camera *camera;
-};
-
-struct FrameContext
-{
-	Camera camera;
-	BufferID ubo;
-
-	float t;
-	float dt;
 };
 
 struct RenderContext
 {
 	const GLRenderer *renderer;
-	ResourceLoader *loader;
+	ResourceTable *table;
 	RenderTargetID target;
-	Camera camera;
+	BufferID frame_ubo;
 
 	void bind_material(MaterialID material) const;
 	void draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T) const;
 	void draw_cmd_mesh_outline(ModelID meshID) const;
 };
 
+struct FrameBeginInfo
+{
+	Camera const *camera;
+};
+
+struct FrameContext
+{
+	const GLRenderer *renderer;
+	ResourceTable *table;
+	Framedata data;
+	BufferID ubo;
+
+	RenderContext begin_pass(const BeginPassInfo *info);
+    void end_pass(const RenderContext* ctx);
+};
+
+
 //--------------------------------------------------------------------------------------------------
 // OpenGL renderer
 
 struct GLRendererCreateInfo
 {
-	std::shared_ptr<ResourceLoader> resource_loader;
+	std::shared_ptr<ResourceTable> resource_table;
 };
 
 typedef struct gl_renderer_impl gl_renderer_impl;
@@ -68,13 +76,11 @@ public:
 
 	static std::unique_ptr<GLRenderer> create(const GLRendererCreateInfo* info);
 
-	void begin_frame(uint32_t w, uint32_t h);
-	void end_frame();
+	FrameContext begin_frame(FrameBeginInfo const *info);
+	void end_frame(FrameContext* ctx);
 
-	RenderContext begin_pass(const BeginPassInfo *info);
-    void end_pass(const RenderContext* ctx);
+	void present(RenderTargetID id, uint32_t w, uint32_t h) const;
 
-	void draw_screen_texture(RenderTargetID id, glm::mat4 T) const; 
 	const RendererDefaults *get_defaults() const;
 };
 

@@ -1,4 +1,4 @@
-#include "resource_loader.h"
+#include "resource_table.h"
 
 #include <memory>
 #include <unordered_map>
@@ -27,6 +27,6 @@ struct ShaderCreateInfo
 
 extern ResourceAllocFns g_shader_alloc_fns;
 
-extern ResourceHandle load_shader_file(ResourceLoader *loader, std::string_view path);
-extern const GLShaderModule *get_shader(ResourceLoader *loader, ResourceHandle h);
+extern ResourceHandle load_shader_file(ResourceTable *loader, std::string_view path);
+extern const GLShaderModule *get_shader(ResourceTable *loader, ResourceHandle h);
 

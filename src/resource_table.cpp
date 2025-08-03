@@ -1,4 +1,4 @@
-#include "resource_loader.h"
+#include "resource_table.h"
 #include "material_loader.h"
 #include "shader_loader.h"
 #include "texture_loader.h"
@@ -39,7 +39,7 @@ static void monitor_callback(void *usr, utils::monitor_event_t event)
 
 	ResourceHotReloader *watcher = static_cast<ResourceHotReloader*>(usr);
 
-	fs::path root = watcher->loader->resource_path;
+	fs::path root = watcher->table->resource_path;
 
 	fs::path event_path;
 	try {
@@ -63,21 +63,21 @@ static void monitor_callback(void *usr, utils::monitor_event_t event)
 	watcher->updates.push_back(std::move(update_info));
 }
 
-std::unique_ptr<ResourceHotReloader> ResourceHotReloader::create(std::shared_ptr<ResourceLoader> loader)
+std::unique_ptr<ResourceHotReloader> ResourceHotReloader::create(std::shared_ptr<ResourceTable> table)
 {
 	std::unique_ptr<ResourceHotReloader> watcher (new ResourceHotReloader);
-	watcher->loader = loader;
+	watcher->table = table;
 
-	if (!fs::is_directory(watcher->loader->resource_path))
+	if (!fs::is_directory(watcher->table->resource_path))
 		return nullptr;
 
 	watcher->monitor = std::unique_ptr<utils::monitor>(new utils::monitor(
-		&monitor_callback, watcher.get(), watcher->loader->resource_path.c_str()));
+		&monitor_callback, watcher.get(), watcher->table->resource_path.c_str()));
 
 	return watcher;
 }
 
-static LoadResult reload_file_resource(ResourceLoader *loader, ResourceHandle h) 
+static LoadResult reload_file_resource(ResourceTable *loader, ResourceHandle h) 
 {
 	if (h == RESOURCE_HANDLE_NULL)
 		return RESULT_ERROR;
@@ -112,13 +112,13 @@ LoadResult ResourceHotReloader::process_updates()
 			info.path.resize(info.path.size() - sizeof(".spv") + 1);
 		}
 
-		ResourceHandle id = loader->find(info.path);
+		ResourceHandle id = table->find(info.path);
 
 		if (!id) {
 			continue;
 		}
 
-		LoadResult res = reload_file_resource(loader.get(),id);
+		LoadResult res = reload_file_resource(table.get(),id);
 
 		if (res) {
 			log_error("Failed to reload resource : %s",info.path.c_str());
@@ -129,17 +129,17 @@ LoadResult ResourceHotReloader::process_updates()
 	return RESULT_SUCCESS;
 }
 
-std::string ResourceLoader::make_path_abs(std::string_view str) {
+std::string ResourceTable::make_path_abs(std::string_view str) {
 	return fs::path(resource_path) / fs::path(str);
 }
 
 //------------------------------------------------------------------------------
 // V2
 
-std::unique_ptr<ResourceLoader> ResourceLoader::create(const ResourceLoaderCreateInfo *info)
+std::unique_ptr<ResourceTable> ResourceTable::create(const ResourceTableCreateInfo *info)
 {
-	std::unique_ptr<ResourceLoader> loader = 
-		std::unique_ptr<ResourceLoader>(new ResourceLoader());
+	std::unique_ptr<ResourceTable> loader = 
+		std::unique_ptr<ResourceTable>(new ResourceTable());
 
 	loader->resource_path = info->resource_path;
 	
@@ -156,12 +156,12 @@ std::unique_ptr<ResourceLoader> ResourceLoader::create(const ResourceLoaderCreat
 	return loader;
 }
 
-void ResourceLoader::register_loader(std::string_view key, ResourceLoaderFns fns)
+void ResourceTable::register_loader(std::string_view key, ResourceLoaderFns fns)
 {
 	loader_fns[key.data()] = fns;
 }
 
-ResourceLoader::~ResourceLoader()
+ResourceTable::~ResourceTable()
 {
 	for (size_t i = 0; i < entries.size(); ++i) {
 		ResourceHandle h = (uint32_t)i + 1;
@@ -169,7 +169,7 @@ ResourceLoader::~ResourceLoader()
 	}
 }
 
-ResourceHandle ResourceLoader::create_handle(ResourceType type)
+ResourceHandle ResourceTable::create_handle(ResourceType type)
 {
 	ResourceHandle h = RESOURCE_HANDLE_NULL;
 	ResourceEntry *ent = nullptr;
@@ -194,7 +194,7 @@ ResourceHandle ResourceLoader::create_handle(ResourceType type)
 	return h;
 }
 
-void ResourceLoader::destroy_handle(ResourceHandle h)
+void ResourceTable::destroy_handle(ResourceHandle h)
 {
 	// TODO : When the time comes, push deletions to queue to be processed
 	// at the end of every frame
@@ -225,7 +225,7 @@ void ResourceLoader::destroy_handle(ResourceHandle h)
 	free_slots.push(h);
 }
 
-ResourceHandle ResourceLoader::find(std::string_view key) 
+ResourceHandle ResourceTable::find(std::string_view key) 
 {
 	std::shared_lock<std::shared_mutex> lock(mut);
 	auto it = map.find(key.data());
@@ -237,7 +237,7 @@ ResourceHandle ResourceLoader::find(std::string_view key)
 	return it->second;
 }
 
-const ResourceEntry *ResourceLoader::get(ResourceHandle h) 
+const ResourceEntry *ResourceTable::get(ResourceHandle h) 
 {
 	if (h == RESOURCE_HANDLE_NULL || h > entries.size()) 
 		return nullptr;
@@ -250,18 +250,18 @@ const ResourceEntry *ResourceLoader::get(ResourceHandle h)
 	return ent;
 }
 
-ResourceEntry *ResourceLoader::get_internal(ResourceHandle h) 
+ResourceEntry *ResourceTable::get_internal(ResourceHandle h) 
 {
 	return const_cast<ResourceEntry*>(get(h));
 }
 
-void ResourceLoader::set_handle_key(ResourceHandle h, std::string_view key)
+void ResourceTable::set_handle_key(ResourceHandle h, std::string_view key)
 {
 	std::unique_lock<std::shared_mutex> lock(mut);
 	map[key.data()] = h;
 }
 
-LoadResult ResourceLoader::load_file(ResourceHandle h, const char *path) 
+LoadResult ResourceTable::load_file(ResourceHandle h, const char *path) 
 {
 	ResourceEntry *ent = entries[h - 1].get();
 	assert(ent);
@@ -279,7 +279,7 @@ LoadResult ResourceLoader::load_file(ResourceHandle h, const char *path)
 	return result;
 }
 
-LoadResult ResourceLoader::allocate(ResourceHandle h, void* alloc_info)
+LoadResult ResourceTable::allocate(ResourceHandle h, void* alloc_info)
 {
 	ResourceEntry *ent = entries[h - 1].get();
 
@@ -313,7 +313,7 @@ error_cleanup:
 	return result;
 }
 
-LoadResult ResourceLoader::upload(ResourceHandle h, std::string_view key, void* upload_info) 
+LoadResult ResourceTable::upload(ResourceHandle h, std::string_view key, void* upload_info) 
 {
 	ResourceEntry *ent = get_internal(h);
 

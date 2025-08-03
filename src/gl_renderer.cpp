@@ -14,9 +14,10 @@
 
 struct gl_renderer_impl
 {
-	std::shared_ptr<ResourceLoader> loader;
+	std::shared_ptr<ResourceTable> table;
 
-	gl_ubo framedata_ubo;
+	// TODO: Pool per-frame ubos by the number of frames in flight
+	BufferID frame_ubo;
 
 	RendererDefaults defaults;
 };
@@ -24,13 +25,13 @@ struct gl_renderer_impl
 //--------------------------------------------------------------------------------------------------
 // Frame ubo
 
-static gl_framedata_t gl_target_uniforms_create(const RenderContext* ctx)
+static Framedata framedata_create(const Camera* camera)
 {
-	glm::mat4 inv = glm::inverse(ctx->camera.view);
+	glm::mat4 inv = glm::inverse(camera->view);
 
-	gl_framedata_t u;
-	u.p = ctx->camera.proj;
-	u.v = ctx->camera.view;
+	Framedata u;
+	u.p = camera->proj;
+	u.v = camera->view;
 	u.pv = u.p*u.v;
 	u.center = inv[3];
 	u.t = (float)glfwGetTime();
@@ -45,13 +46,26 @@ std::unique_ptr<GLRenderer> GLRenderer::create(const GLRendererCreateInfo* info)
 	GLRenderer* renderer = new GLRenderer();
 	gl_renderer_impl* impl = renderer->impl = new gl_renderer_impl{};
 
-	impl->loader = info->resource_loader;
+	impl->table = info->resource_table;
 
-	LoadResult result = renderer_defaults_init(impl->loader.get(), &impl->defaults);
+	LoadResult result = renderer_defaults_init(impl->table.get(), &impl->defaults);
 
 	if (result != RESULT_SUCCESS) {
 		return nullptr;
 	}
+
+	impl->frame_ubo = impl->table->create_handle(RESOURCE_TYPE_BUFFER);
+	BufferCreateInfo buffer_info = {
+		.size = sizeof(Framedata),
+		.flags = GL_DYNAMIC_STORAGE_BIT
+	};
+	result = impl->table->allocate(impl->frame_ubo,&buffer_info);
+
+	if (result != RESULT_SUCCESS) {
+		impl->table->destroy_handle(impl->frame_ubo);
+		return nullptr;
+	}
+
 	return std::unique_ptr<GLRenderer>(renderer);
 }
 
@@ -64,23 +78,36 @@ const RendererDefaults *GLRenderer::get_defaults() const
 	return &impl->defaults;
 }
 
-void GLRenderer::begin_frame(uint32_t w, uint32_t h)
+FrameContext GLRenderer::begin_frame(FrameBeginInfo const *info)
 {
-	glClearColor(0,0,0,0);
-	glViewport(0,0,(int)w,(int)h);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	const GLBuffer *ubo = impl->table->get<GLBuffer>(impl->frame_ubo);
+
+	FrameContext ctx {};
+	ctx.table = impl->table.get();
+	ctx.renderer = this;
+	ctx.data = framedata_create(info->camera);
+	ctx.ubo = impl->frame_ubo;
+
+	glNamedBufferSubData(ubo->id,0,sizeof(Framedata),&ctx.data);
+
+	glBindBufferBase(GL_UNIFORM_BUFFER,GL_RENDERER_FRAMEDATA_BINDING,ubo->id);
+
+	return ctx;
 }
 
-void GLRenderer::end_frame()
+void GLRenderer::end_frame(FrameContext *ctx)
 {
+    GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    glWaitSync(fence, 0, GL_TIMEOUT_IGNORED);
+    glDeleteSync(fence);
 }
 
-RenderContext GLRenderer::begin_pass(const BeginPassInfo *info) 
+RenderContext FrameContext::begin_pass(const BeginPassInfo *info) 
 {
 	// don't even bother with this one
 	assert(info);
 
-	const GLRenderTarget* target = impl->loader->get<GLRenderTarget>(info->target); 
+	const GLRenderTarget* target = table->get<GLRenderTarget>(info->target); 
 
 	if (!target) {
 		log_error("Failed to find render target with id %d",info->target);
@@ -89,60 +116,53 @@ RenderContext GLRenderer::begin_pass(const BeginPassInfo *info)
 	}
 
 	RenderContext ctx = {
-		.renderer = this,
-		.loader = impl->loader.get(),
+		.renderer = renderer,
+		.table = table,
 		.target = info->target,
-		.camera = *info->camera,
+		.frame_ubo = ubo
 	};
-
-	// upload uniforms
-	gl_framedata_t uniforms = gl_target_uniforms_create(&ctx);
-
-	glBindBuffer(GL_UNIFORM_BUFFER,target->ubo);
-	glBufferSubData(GL_UNIFORM_BUFFER,0,sizeof(uniforms),&uniforms);
-	glBindBuffer(GL_UNIFORM_BUFFER,0);
 
 	// bindings
 
-	glBindBufferBase(GL_UNIFORM_BUFFER,GL_RENDERER_FRAMEDATA_BINDING,target->ubo);
 	glBindFramebuffer(GL_FRAMEBUFFER,target->fbo);
 
 	// initialze fbo
 	
-	static float rgb[3] = {0.5,0.5,0.5};
+	static float rgb[3] = {0.15f,0.15f,0.2f};
 	
 	ImGui::Begin("Begin pass");
 	ImGui::ColorPicker3("Background color",rgb);
 	ImGui::End();
 
 	glEnable(GL_DEPTH_TEST);
+	glViewport(0,0,(GLsizei)target->w,(GLsizei)target->h);
     glClearColor(rgb[0],rgb[1],rgb[2],1);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	return ctx;
 };
 
-void GLRenderer::end_pass(const RenderContext* ctx) 
+void FrameContext::end_pass(const RenderContext* ctx) 
 {
-    GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-    glWaitSync(fence, 0, GL_TIMEOUT_IGNORED);
-    glDeleteSync(fence);
-
 	glBindFramebuffer(GL_FRAMEBUFFER,0);
 };
 
-void GLRenderer::draw_screen_texture(RenderTargetID id, glm::mat4 T) const
+void GLRenderer::present(RenderTargetID id, uint32_t w, uint32_t h) const
 {
-	const GLRenderTarget* target = impl->loader->get<GLRenderTarget>(id);
+	const GLRenderTarget* target = impl->table->get<GLRenderTarget>(id);
 
 	if (!target) return;
 
-	const GLMaterial * material = impl->loader->get<GLMaterial>(impl->defaults.materials.screen_quad);
+	const GLMaterial * material = impl->table->get<GLMaterial>(impl->defaults.materials.screen_quad);
+
+	glClearColor(0,0,0,0);
+	glViewport(0,0,(int)w,(int)h);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	glUseProgram(material->program);
 	glBindTextureUnit(GL_RENDERER_COLOR_ATTACHMENT_BINDING,target->color);
 
-	const GLModel *model = impl->loader->get<GLModel>(impl->defaults.models.screen_quad);
+	const GLModel *model = impl->table->get<GLModel>(impl->defaults.models.screen_quad);
 	glBindVertexArray(model->vao);
 	glDrawElements(GL_TRIANGLES,(int)model->icount,GL_UNSIGNED_INT,NULL);
 }
@@ -152,7 +172,7 @@ void GLRenderer::draw_screen_texture(RenderTargetID id, glm::mat4 T) const
 
 void RenderContext::bind_material(MaterialID id) const
 {
-	const GLMaterial *material = loader->get<GLMaterial>(id); 
+	const GLMaterial *material = table->get<GLMaterial>(id); 
 
 	if (!material) {
 		log_error("Material does not exist with id %d", id);
@@ -164,13 +184,13 @@ void RenderContext::bind_material(MaterialID id) const
 		GLTextureBinding tex_bind = pair.second;
 
 		TextureID texID = tex_bind.id;
-		const GLImage *tex = loader->get<GLImage>(texID);
+		const GLImage *tex = table->get<GLImage>(texID);
 
 		GLint filter = GL_LINEAR;
 
 		if (!tex) {
 			const RendererDefaults * defaults = renderer->get_defaults();
-			tex = loader->get<GLImage>(defaults->textures.missing);
+			tex = table->get<GLImage>(defaults->textures.missing);
 			filter = GL_NEAREST;
 
 			assert(tex);
@@ -191,7 +211,7 @@ void RenderContext::bind_material(MaterialID id) const
 
 void RenderContext::draw_cmd_mesh_outline(ModelID meshID) const
 {
-	const GLModel *model = loader->get<GLModel>(meshID);
+	const GLModel *model = table->get<GLModel>(meshID);
 	glBindVertexArray(model->vao);
 	glDrawElements(GL_LINES,(int)model->icount,GL_UNSIGNED_INT,NULL);
 }
@@ -202,7 +222,7 @@ void RenderContext::draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T) const
 	//glCullFace(GL_BACK);
 	//glFrontFace(GL_CCW);
 	
-	const GLModel *model = loader->get<GLModel>(meshID);
+	const GLModel *model = table->get<GLModel>(meshID);
 	glBindVertexArray(model->vao);
 	glDrawElements(GL_TRIANGLES,(int)model->icount,GL_UNSIGNED_INT,NULL);
 

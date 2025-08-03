@@ -1,4 +1,4 @@
-#include "resource_loader.h"
+#include "resource_table.h"
 #include "material_loader.h"
 #include "shader_loader.h"
 #include "texture_loader.h"
@@ -28,10 +28,10 @@ struct PreMaterialInfo
 	std::vector<Binding> bindings;
 };
 
-static LoadResult gl_material_create(ResourceLoader *loader, void **res, void *info);
-static void gl_material_destroy(ResourceLoader *loader, void *res);
+static LoadResult gl_material_create(ResourceTable *loader, void **res, void *info);
+static void gl_material_destroy(ResourceTable *loader, void *res);
 
-static LoadResult gl_material_load_file(ResourceLoader *loader, ResourceHandle h, const char *path);
+static LoadResult gl_material_load_file(ResourceTable *loader, ResourceHandle h, const char *path);
 
 ResourceAllocFns g_material_alloc_fns = {
 	.create = &gl_material_create,
@@ -118,7 +118,7 @@ static bool check_program(GLuint handle, const char* desc)
     return (GLboolean)status == GL_TRUE;
 }
 
-static LoadResult gl_material_load(ResourceLoader *loader, GLMaterial *mat, const PreMaterialInfo *info) 
+static LoadResult gl_material_load(ResourceTable *loader, GLMaterial *mat, const PreMaterialInfo *info) 
 {
 	LoadResult res = RESULT_SUCCESS;
 
@@ -216,7 +216,7 @@ static LoadResult gl_material_load(ResourceLoader *loader, GLMaterial *mat, cons
 	return res;
 }
 
-LoadResult gl_material_create(ResourceLoader *loader, void **res, void *info)
+LoadResult gl_material_create(ResourceTable *loader, void **res, void *info)
 {
 	MaterialCreateInfo *ci = static_cast<MaterialCreateInfo*>(info);
 
@@ -246,7 +246,7 @@ LoadResult gl_material_create(ResourceLoader *loader, void **res, void *info)
 	return result;
 }
 
-void gl_material_destroy(ResourceLoader *loader, void *res) 
+void gl_material_destroy(ResourceTable *loader, void *res) 
 {
 	GLMaterial *material = static_cast<GLMaterial*>(res);
 
@@ -255,7 +255,7 @@ void gl_material_destroy(ResourceLoader *loader, void *res)
 	delete material;
 }
 
-static void update_material_dependencies(ResourceLoader *loader, ResourceHandle h)
+static void update_material_dependencies(ResourceTable *loader, ResourceHandle h)
 {
 	const GLMaterial *material = get_material(loader,h);
 
@@ -277,7 +277,7 @@ static void update_material_dependencies(ResourceLoader *loader, ResourceHandle 
 	}
 }
 
-static LoadResult gl_material_load_file(ResourceLoader *loader, ResourceHandle h, const char *path)
+static LoadResult gl_material_load_file(ResourceTable *loader, ResourceHandle h, const char *path)
 {
 	MaterialCreateInfo ci = {
 		.path = path
@@ -293,7 +293,7 @@ static LoadResult gl_material_load_file(ResourceLoader *loader, ResourceHandle h
 	return result;
 }
 
-ResourceHandle load_material_file(ResourceLoader *loader, std::string_view path)
+ResourceHandle load_material_file(ResourceTable *loader, std::string_view path)
 {
 	if (ResourceHandle h = loader->find(path)) 
 		return h;
@@ -314,7 +314,7 @@ error_cleanup:
 	return RESOURCE_HANDLE_NULL;
 }
 
-const GLMaterial *get_material(ResourceLoader *loader, ResourceHandle h)
+const GLMaterial *get_material(ResourceTable *loader, ResourceHandle h)
 {
 	const ResourceEntry *ent = loader->get(h);
 	if (!ent || ent->type != RESOURCE_TYPE_MATERIAL)

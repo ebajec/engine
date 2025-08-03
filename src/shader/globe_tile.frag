@@ -8,6 +8,11 @@
 
 layout (binding = 0) uniform sampler2D u_tex;
 
+layout (binding = 0) buffer Cameras
+{
+	mat4 matrices[];
+};
+
 layout (location = 0) in vec3 frag_pos;
 layout (location = 1) in vec2 frag_uv;
 layout (location = 2) in vec3 frag_normal;
@@ -53,10 +58,9 @@ struct frustum_t
 	plane_t planes[6];
 };
 
-frustum_t camera_frustum(mat4 view, mat4 proj)
+frustum_t camera_frustum(mat4 m)
 {
-	mat4 m = proj * view;
-	
+	m = transpose(m);
 	frustum_t frust;
 	for (int i = 0; i < 6; ++i) {
 		vec4 p;
@@ -70,7 +74,7 @@ frustum_t camera_frustum(mat4 view, mat4 proj)
 		}
 
 		float r_inv = 1.0f / length(vec3(p));
-		frust.planes[i].n = vec3(p) * r_inv;
+		frust.planes[i].n = -vec3(p) * r_inv;
 		frust.planes[i].d = p.w * r_inv;
 	}
 	
@@ -79,10 +83,10 @@ frustum_t camera_frustum(mat4 view, mat4 proj)
 
 bool cull_plane(vec3 v, plane_t pl)
 {
-	return dot(v,pl.n) - pl.d > 0;
+	return dot(v,pl.n) < pl.d;
 }
 
-bool cull_frustum(vec3 v, frustum_t frust)
+bool within_frustum(vec3 v, frustum_t frust)
 {
 	for (uint i = 0; i < 6; ++i) {
 		bool res = cull_plane(v,frust.planes[i]);
@@ -94,10 +98,10 @@ bool cull_frustum(vec3 v, frustum_t frust)
 
 void main()
 {
-	frustum_t frust = camera_frustum(u_frame.v,u_frame.p);
+	frustum_t frust = camera_frustum(matrices[0]);
 
-	if (cull_frustum(frag_pos, frust))
-	 	discard;
+	//if (!within_frustum(frag_pos, frust))
+	// 	discard;
 
 	vec2 uv = frag_uv;
 

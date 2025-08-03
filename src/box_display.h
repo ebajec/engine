@@ -1,7 +1,7 @@
 #ifndef BOX_DISPLAY_H
 #define BOX_DISPLAY_H
 
-#include "resource_loader.h"
+#include "resource_table.h"
 #include "model_loader.h"
 #include "material_loader.h"
 #include "geometry.h"
@@ -59,11 +59,11 @@ struct BoxDisplay
 	ModelID model;
 	MaterialID material;
 
-	ResourceLoader *loader;
+	ResourceTable *table;
 
-	BoxDisplay(ResourceLoader *loader) : loader(loader) {
-		model = model_create(loader);
-		material = load_material_file(loader, "material/box_debug.yaml");
+	BoxDisplay(ResourceTable *table) : table(table) {
+		model = model_create(table);
+		material = load_material_file(table, "material/box_debug.yaml");
 	
 	}
 
@@ -105,7 +105,7 @@ struct BoxDisplay
 			.icount = indices.size()
 		};
 
-		loader->upload(model, "model3d", &ci);
+		table->upload(model, "model3d", &ci);
 
 		boxes.clear();
 	}

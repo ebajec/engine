@@ -3,7 +3,7 @@
 
 #include "geometry.h"
 #include "gl_renderer.h"
-#include "resource_loader.h"
+#include "resource_table.h"
 #include "model_loader.h"
 
 #include <cfloat>
@@ -59,12 +59,12 @@ namespace globe
 
 	extern ResourceLoaderFns loader_fns;
 
-	LoadResult globe_create(Globe *globe, ResourceLoader *loader);
-	LoadResult globe_update(Globe *globe, ResourceLoader *loader, GlobeUpdateInfo *info);
+	LoadResult globe_create(Globe *globe, ResourceTable *table);
+	LoadResult globe_update(Globe *globe, ResourceTable *table, GlobeUpdateInfo *info);
 
 //------------------------------------------------------------------------------
 // Interface
-	extern void init_boxes(ResourceLoader *loader);
+	extern void init_boxes(ResourceTable *table);
 	extern void render_boxes(RenderContext const &ctx);
 	extern void update_boxes();
 

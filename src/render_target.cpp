@@ -2,8 +2,8 @@
 #include "gl_debug.h"
 #include "render_target.h"
 
-static LoadResult gl_render_target_create(ResourceLoader *loader, void** res, void *usr);
-static void gl_render_target_destroy(ResourceLoader *loader, void *res);
+static LoadResult gl_render_target_create(ResourceTable *table, void** res, void *usr);
+static void gl_render_target_destroy(ResourceTable *table, void *res);
 
 ResourceAllocFns g_target_alloc_fns = {
 	.create = gl_render_target_create,
@@ -11,7 +11,7 @@ ResourceAllocFns g_target_alloc_fns = {
 	.load_file = nullptr
 };
 
-LoadResult gl_render_target_create(ResourceLoader *loader, void** res, void *usr)
+LoadResult gl_render_target_create(ResourceTable *table, void** res, void *usr)
 {
 	const RenderTargetCreateInfo *info = static_cast<RenderTargetCreateInfo*>(usr);
 
@@ -21,7 +21,7 @@ LoadResult gl_render_target_create(ResourceLoader *loader, void** res, void *usr
 	gl_ubo ubo;
 	glGenBuffers(1,&ubo);
 	glBindBuffer(GL_UNIFORM_BUFFER,ubo);
-	glBufferData(GL_UNIFORM_BUFFER,sizeof(gl_framedata_t),NULL,GL_DYNAMIC_READ);
+	glBufferData(GL_UNIFORM_BUFFER,sizeof(Framedata),NULL,GL_DYNAMIC_READ);
 	glBindBuffer(GL_UNIFORM_BUFFER,0);
 
 	gl_framebuffer fbo;
@@ -95,7 +95,7 @@ GL_RENDER_TARGET_CREATE_CLEANUP:
 	return RESULT_ERROR;
 }
 
-void gl_render_target_destroy(ResourceLoader *loader, void *res)
+void gl_render_target_destroy(ResourceTable *table, void *res)
 {
 	GLRenderTarget *target = static_cast<GLRenderTarget *>(res);
 
@@ -107,23 +107,23 @@ void gl_render_target_destroy(ResourceLoader *loader, void *res)
 	delete target;
 }
 
-ResourceHandle render_target_create(ResourceLoader *loader, const RenderTargetCreateInfo *info)
+ResourceHandle render_target_create(ResourceTable *table, const RenderTargetCreateInfo *info)
 {
-	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_RENDER_TARGET);
+	ResourceHandle h = table->create_handle(RESOURCE_TYPE_RENDER_TARGET);
 
-	LoadResult result = loader->allocate(h, (void*)info);
+	LoadResult result = table->allocate(h, (void*)info);
 
 	if (result != RESULT_SUCCESS) {
-		loader->destroy_handle(h);
+		table->destroy_handle(h);
 		return RESOURCE_HANDLE_NULL;
 	}
 
 	return h;
 }
 
-LoadResult render_target_resize(ResourceLoader *loader, ResourceHandle h, const RenderTargetCreateInfo *info)
+LoadResult render_target_resize(ResourceTable *table, ResourceHandle h, const RenderTargetCreateInfo *info)
 {
-	LoadResult result = loader->allocate(h, (void*)info);
+	LoadResult result = table->allocate(h, (void*)info);
 	return result;
 }
 

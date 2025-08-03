@@ -72,6 +72,29 @@ struct obb_t
 	glm::dvec2 limits;
 };
 
+static inline frustum_t camera_frustum(glm::mat4 m)
+{
+	m = transpose(m);
+	frustum_t frust;
+	for (int i = 0; i < 6; ++i) {
+		glm::vec4 p;
+		switch (i) {
+			case 0: p = m[3] + m[0]; break; // left
+			case 1: p = m[3] - m[0]; break; // right
+			case 2: p = m[3] + m[1]; break; // bottom
+			case 3: p = m[3] - m[1]; break; // top
+			case 4: p = m[3] + m[2]; break; // near
+			case 5: p = m[3] - m[2]; break; // far
+		}
+
+		float r_inv = 1.0f / length(glm::vec3(p));
+		frust.planes[i].n = -glm::vec3(p) * r_inv;
+		frust.planes[i].d = p.w * r_inv;
+	}
+	
+	return frust;
+}
+
 static constexpr bool aabb_contains(aabb2_t box, glm::dvec2 v)
 {
 	return box.x0 <= v.x || v.x <= box.x1 || box.y0 <= v.y || v.y <= box.y1;
@@ -102,8 +125,18 @@ static inline double aabb3_dist_sq(const aabb3_t& box, glm::dvec3 v)
 
 static constexpr bool cull_plane(plane_t p, glm::dvec3 v)
 {
-	return glm::dot(v,p.n) >= p.d;
+	return glm::dot(v,p.n) < p.d;
 }
+
+static inline bool within_frustum(glm::dvec3 v, frustum_t frust)
+{
+	for (uint i = 0; i < 6; ++i) {
+		if (!cull_plane(frust.planes[i],v))
+			return false;
+	}
+	return true;
+}
+
 
 static inline bool intersects(const aabb2_t& box, const circle_t &circ)
 {
@@ -117,9 +150,7 @@ static inline int classify(const aabb3_t& box, const plane_t& pl)
 	glm::dvec3 c = (box.min + box.max) * 0.5;
 	glm::dvec3 e = (box.max - box.min) * 0.5;
 
-    double r = e.x * fabs(pl.n.x)
-            + e.y * fabs(pl.n.y)
-            + e.z * fabs(pl.n.z);
+    double r = fabs(e.x*pl.n.x) + fabs(e.y*pl.n.y) + fabs(e.z*pl.n.z);
 
     double s = dot(pl.n, c) - pl.d;
 

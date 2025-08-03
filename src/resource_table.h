@@ -1,5 +1,5 @@
-#ifndef RESOURCE_LOADER_H
-#define RESOURCE_LOADER_H
+#ifndef RESOURCE_TABLE_H
+#define RESOURCE_TABLE_H
 
 #include "def_gl.h"
 
@@ -44,7 +44,7 @@ enum ResourceLoaderType
 	RESOURCE_LOADER_MAX_ENUM
 };
 
-struct ResourceLoader;
+struct ResourceTable;
 
 // TODO : callback in debug mode when a function hits an error? 
 // 'setResult'??
@@ -64,12 +64,12 @@ enum ResourceStatus : int8_t
 };
 typedef uint32_t ResourceHandle;
 
-typedef LoadResult(*OnResourceCreate)(ResourceLoader* loader, void** res, void* info);
-typedef void(*OnResourceDestroy)(ResourceLoader* loader, void* res);
+typedef LoadResult(*OnResourceCreate)(ResourceTable* table, void** res, void* info);
+typedef void(*OnResourceDestroy)(ResourceTable* table, void* res);
 
-typedef LoadResult(*OnResourceCreateFromDisk)(ResourceLoader *loader, ResourceHandle h, const char *path); 
-typedef LoadResult(*OnResourceLoad)(ResourceLoader* loader, void* res, void* info);
-typedef LoadResult(*OnResourcePostLoad)(ResourceLoader* loader, void* res, void* info);
+typedef LoadResult(*OnResourceCreateFromDisk)(ResourceTable *table, ResourceHandle h, const char *path); 
+typedef LoadResult(*OnResourceLoad)(ResourceTable* table, void* res, void* info);
+typedef LoadResult(*OnResourcePostLoad)(ResourceTable* table, void* res, void* info);
 
 //------------------------------------------------------------------------------
 // Virtual Tables
@@ -88,7 +88,7 @@ struct ResourceLoaderFns
 };
 
 //------------------------------------------------------------------------------
-// Resource loader
+// Resource table
 
 struct ResourceReloadInfo
 {
@@ -117,12 +117,12 @@ struct ResourceEntry
 	std::unique_ptr<ResourceReloadInfo> reload_info;
 };
 
-struct ResourceLoaderCreateInfo
+struct ResourceTableCreateInfo
 {
 	const char *resource_path;
 };
 
-struct ResourceLoader
+struct ResourceTable
 {
 	std::shared_mutex mut;
 	std::string resource_path;
@@ -140,20 +140,20 @@ struct ResourceLoader
 
 	//-----------------------------------------------------------------------------
 
-	static std::unique_ptr<ResourceLoader> create(const ResourceLoaderCreateInfo *info); 
-	~ResourceLoader();
+	static std::unique_ptr<ResourceTable> create(const ResourceTableCreateInfo *info); 
+	~ResourceTable();
 
 	void register_loader(std::string_view key, ResourceLoaderFns fns);
 
 	ResourceHandle create_handle(ResourceType type);
 	void destroy_handle(ResourceHandle h);
+	ResourceHandle find(std::string_view key);
+	void set_handle_key(ResourceHandle h, std::string_view key);
 
 	LoadResult load_file(ResourceHandle h, const char *path);
+
 	LoadResult allocate(ResourceHandle h, void* alloc_info);
-
 	LoadResult upload(ResourceHandle h, std::string_view key, void* upload_info);
-
-	ResourceHandle find(std::string_view key);
 
 	template<typename T> 
 	const T *get(ResourceHandle h)
@@ -170,12 +170,9 @@ struct ResourceLoader
 
 		return static_cast<const T*>(ent->data);
 	}
-
 	const ResourceEntry *get(ResourceHandle h);
 	ResourceEntry *get_internal(ResourceHandle h);
 
-
-	void set_handle_key(ResourceHandle h, std::string_view key);
 	std::string make_path_abs(std::string_view str);
 };
 
@@ -187,14 +184,14 @@ struct ResourceUpdateInfo
 
 struct ResourceHotReloader
 {
-	std::shared_ptr<ResourceLoader> loader;
+	std::shared_ptr<ResourceTable> table;
 	std::unique_ptr<utils::monitor> monitor;
 
 	std::mutex mut;
 	std::vector<ResourceUpdateInfo> updates;
 
-	static std::unique_ptr<ResourceHotReloader> create(std::shared_ptr<ResourceLoader> loader);
+	static std::unique_ptr<ResourceHotReloader> create(std::shared_ptr<ResourceTable> table);
 	LoadResult process_updates();
 };
 
-#endif
+#endif //RESOURCE_TABLE_H

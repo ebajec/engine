@@ -1,11 +1,11 @@
-#include "resource_loader.h"
+#include "resource_table.h"
 #include "model_loader.h"
 #include "gl_debug.h"
 
 #include <vector>
 
-static LoadResult gl_model_create(ResourceLoader *loader, void **res, void *info);
-static void gl_model_destroy(ResourceLoader *loader, void *model);
+static LoadResult gl_model_create(ResourceTable *table, void **res, void *info);
+static void gl_model_destroy(ResourceTable *table, void *model);
 
 ResourceAllocFns g_model_alloc_fns = {
 	.create = gl_model_create,
@@ -13,8 +13,8 @@ ResourceAllocFns g_model_alloc_fns = {
 	.load_file = nullptr
 };
 
-static LoadResult model_load_2d(ResourceLoader *loader, void *res, void *info);
-static LoadResult model_load_3d(ResourceLoader *loader, void *res, void *info);
+static LoadResult model_load_2d(ResourceTable *table, void *res, void *info);
+static LoadResult model_load_3d(ResourceTable *table, void *res, void *info);
 
 ResourceLoaderFns g_model_2d_load_fns {
 	.loader_fn = model_load_2d,
@@ -25,7 +25,7 @@ ResourceLoaderFns g_model_3d_load_fns {
 	.post_load_fn = nullptr
 };
 
-LoadResult model_load_2d(ResourceLoader *loader, void *res, void *info)
+LoadResult model_load_2d(ResourceTable *table, void *res, void *info)
 {
 	GLModel *model = static_cast<GLModel*>(res);
 	Mesh2DCreateInfo *ci = static_cast<Mesh2DCreateInfo*>(info);
@@ -60,7 +60,7 @@ LoadResult model_load_2d(ResourceLoader *loader, void *res, void *info)
 	return RESULT_SUCCESS;
 }
 
-LoadResult model_load_3d(ResourceLoader *loader, void *res, void *info)
+LoadResult model_load_3d(ResourceTable *table, void *res, void *info)
 {
 	GLModel *model = static_cast<GLModel*>(res);
 	Mesh3DCreateInfo *ci = static_cast<Mesh3DCreateInfo*>(info);
@@ -106,7 +106,7 @@ LoadResult model_load_3d(ResourceLoader *loader, void *res, void *info)
 failure:
 	return RESULT_ERROR;
 }
-LoadResult gl_model_create(ResourceLoader *loader, void **res, void *info)
+LoadResult gl_model_create(ResourceTable *table, void **res, void *info)
 {
 	std::unique_ptr<GLModel> model (new GLModel{});
 
@@ -122,7 +122,7 @@ LoadResult gl_model_create(ResourceLoader *loader, void **res, void *info)
 	return RESULT_SUCCESS;
 }
 
-void gl_model_destroy(ResourceLoader *loader, void *res)
+void gl_model_destroy(ResourceTable *table, void *res)
 {
 	if (!res)
 		return;
@@ -134,22 +134,22 @@ void gl_model_destroy(ResourceLoader *loader, void *res)
 	if(model->ibo) glDeleteBuffers(1,&model->ibo);
 }
 
-void ModelLoader::registration(ResourceLoader *loader)
+void ModelLoader::registration(ResourceTable *table)
 {
-	loader->register_loader("model2d", g_model_2d_load_fns);
-	loader->register_loader("model3d", g_model_3d_load_fns);
+	table->register_loader("model2d", g_model_2d_load_fns);
+	table->register_loader("model3d", g_model_3d_load_fns);
 }
 
-ResourceHandle ModelLoader::load_2d(ResourceLoader *loader, Mesh2DCreateInfo *ci)
+ResourceHandle ModelLoader::load_2d(ResourceTable *table, Mesh2DCreateInfo *ci)
 {
-	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_MODEL);
+	ResourceHandle h = table->create_handle(RESOURCE_TYPE_MODEL);
 
-	LoadResult result = loader->allocate(h, ci);
+	LoadResult result = table->allocate(h, ci);
 
 	if (result != RESULT_SUCCESS) 
 		goto load_failed;
 
-	result = loader->upload(h, "model2d", ci);
+	result = table->upload(h, "model2d", ci);
 
 	if (result != RESULT_SUCCESS) 
 		goto load_failed;
@@ -157,35 +157,20 @@ ResourceHandle ModelLoader::load_2d(ResourceLoader *loader, Mesh2DCreateInfo *ci
 	return h;
 
 load_failed:
-	loader->destroy_handle(h);
+	table->destroy_handle(h);
 	return RESOURCE_HANDLE_NULL;
 }
 
-ResourceHandle ModelLoader::load_3d(ResourceLoader *loader, Mesh3DCreateInfo *ci)
+ResourceHandle ModelLoader::load_3d(ResourceTable *table, Mesh3DCreateInfo *ci)
 {
-	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_MODEL);
+	ResourceHandle h = table->create_handle(RESOURCE_TYPE_MODEL);
 
-	LoadResult result = loader->allocate(h, ci);
+	LoadResult result = table->allocate(h, ci);
 
 	if (result != RESULT_SUCCESS) 
 		goto load_failed;
 
-	result = loader->upload(h, "model3d", ci);
-
-	if (result != RESULT_SUCCESS) 
-		goto load_failed;
-
-	return h;
-
-load_failed:
-	loader->destroy_handle(h);
-	return RESOURCE_HANDLE_NULL;
-}
-
-extern ResourceHandle model_create(ResourceLoader *loader)
-{
-	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_MODEL);
-	LoadResult result = loader->allocate(h, nullptr);
+	result = table->upload(h, "model3d", ci);
 
 	if (result != RESULT_SUCCESS) 
 		goto load_failed;
@@ -193,13 +178,28 @@ extern ResourceHandle model_create(ResourceLoader *loader)
 	return h;
 
 load_failed:
-	loader->destroy_handle(h);
+	table->destroy_handle(h);
 	return RESOURCE_HANDLE_NULL;
 }
 
-const GLModel *get_model(ResourceLoader *loader, ResourceHandle h)
+extern ResourceHandle model_create(ResourceTable *table)
 {
-	const ResourceEntry *ent = loader->get(h);
+	ResourceHandle h = table->create_handle(RESOURCE_TYPE_MODEL);
+	LoadResult result = table->allocate(h, nullptr);
+
+	if (result != RESULT_SUCCESS) 
+		goto load_failed;
+
+	return h;
+
+load_failed:
+	table->destroy_handle(h);
+	return RESOURCE_HANDLE_NULL;
+}
+
+const GLModel *get_model(ResourceTable *table, ResourceHandle h)
+{
+	const ResourceEntry *ent = table->get(h);
 	if (!ent || ent->type != RESOURCE_TYPE_MODEL)
 		return nullptr;
 

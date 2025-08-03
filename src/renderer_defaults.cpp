@@ -5,10 +5,10 @@
 
 #include <vector>
 
-LoadResult renderer_defaults_init(ResourceLoader *loader, RendererDefaults *defaults) 
+LoadResult renderer_defaults_init(ResourceTable *table, RendererDefaults *defaults) 
 {
 	LoadResult result = RESULT_SUCCESS;
-	defaults->materials.screen_quad = load_material_file(loader,"material/screen_quad.yaml");
+	defaults->materials.screen_quad = load_material_file(table,"material/screen_quad.yaml");
 
 	if (!defaults->materials.screen_quad) 
 		return RESULT_ERROR;
@@ -23,7 +23,7 @@ LoadResult renderer_defaults_init(ResourceLoader *loader, RendererDefaults *defa
 		.icount = sizeof(g_default_tex_quad_indices)/sizeof(uint32_t),
 	};
 	
-	defaults->models.screen_quad = ModelLoader::load_2d(loader, &mesh_info);
+	defaults->models.screen_quad = ModelLoader::load_2d(table, &mesh_info);
 
 	if (!defaults->models.screen_quad) 
 		return RESULT_ERROR;
@@ -33,7 +33,7 @@ LoadResult renderer_defaults_init(ResourceLoader *loader, RendererDefaults *defa
 	
 	uint32_t w = 16, h = 16;
 
-	defaults->textures.missing = create_image_2d(loader, w, h, TEX_FORMAT_RGBA8);
+	defaults->textures.missing = create_image_2d(table, w, h, TEX_FORMAT_RGBA8);
 
 	uint32_t c[2] = {0xFF000000, 0xFFFF00FF};
 
@@ -46,7 +46,7 @@ LoadResult renderer_defaults_init(ResourceLoader *loader, RendererDefaults *defa
 		if (i%w == 0) k++;
 	}
 
-	loader->upload(defaults->textures.missing,ImageLoader::name,data.data());
+	table->upload(defaults->textures.missing,ImageLoader::name,data.data());
 
 	if (!defaults->textures.missing) 
 		return RESULT_ERROR;
