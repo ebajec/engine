@@ -18,6 +18,7 @@ layout (location = 0) out vec3 frag_pos;
 layout (location = 1) out vec2 frag_uv;
 layout (location = 2) out vec3 frag_normal;
 layout (location = 3) out vec4 fcolor;
+layout (location = 4) flat out uint out_face;
 
 uint TILE_CODE_FACE_BITS_MASK = 0x70000000;
 uint TILE_CODE_FACE_BITS_SHIFT = 0;
@@ -97,12 +98,13 @@ void main()
 	float d = sin(f*wpos.x - 2*t)*cos(f*wpos.y - 2*t)*
 			sin(f*wpos.z + 2*t)*cos(f*wpos.z + 2*t);
 
-	//wpos += n*0.05*length(c);
+	wpos += n*0.05*length(c);
 
 	frag_pos = wpos.xyz;
 	frag_uv = uv;
 	frag_normal = n.xyz;
 	fcolor = c;
+	out_face = code.face;
 
 	gl_Position = (pv*wpos);
 }

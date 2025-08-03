@@ -11,6 +11,7 @@
 #include <GLFW/glfw3.h>
 
 #include <cfloat>
+#include <stdio.h>
 
 #ifndef HALFPIf
 #define HALFPIf 1.57079632679f
@@ -127,27 +128,27 @@ static inline void update_motion_wasd(glm::dvec3& dir, int key, int action)
 
 	if (key == key_fwd && action == GLFW_PRESS) 
 		dir += glm::vec3(1,0,0);
-	if (key == key_left && action == GLFW_PRESS) 
-		dir += glm::vec3(0,1,0);
-	if (key == key_bkwd && action == GLFW_PRESS) 
-		dir += glm::vec3(-1,0,0);
 	if (key == key_right && action == GLFW_PRESS) 
-		dir += glm::vec3(0,-1,0);
+		dir += glm::vec3(0,1,0);
 	if (key == key_up && action == GLFW_PRESS) 
 		dir += glm::vec3(0,0,1);
+	if (key == key_bkwd && action == GLFW_PRESS) 
+		dir += glm::vec3(-1,0,0);
+	if (key == key_left && action == GLFW_PRESS) 
+		dir += glm::vec3(0,-1,0);
 	if (key == key_down && action == GLFW_PRESS) 
 		dir += glm::vec3(0,0,-1);
 
 	if (key == key_fwd && action == GLFW_RELEASE) 
 		dir -= glm::vec3(1,0,0);
-	if (key == key_left && action == GLFW_RELEASE) 
-		dir -= glm::vec3(0,1,0);
-	if (key == key_bkwd && action == GLFW_RELEASE) 
-		dir -= glm::vec3(-1,0,0);
 	if (key == key_right && action == GLFW_RELEASE) 
-		dir -= glm::vec3(0,-1,0);
+		dir -= glm::vec3(0,1,0);
 	if (key == key_up && action == GLFW_RELEASE) 
 		dir -= glm::vec3(0,0,1);
+	if (key == key_bkwd && action == GLFW_RELEASE) 
+		dir -= glm::vec3(-1,0,0);
+	if (key == key_left && action == GLFW_RELEASE) 
+		dir -= glm::vec3(0,-1,0);
 	if (key == key_down && action == GLFW_RELEASE) 
 		dir -= glm::vec3(0,0,-1);
 }
@@ -174,7 +175,7 @@ struct SphericalMotionCamera
 		if (fabs(speed) > DBL_EPSILON) {
 			v /= speed;
 
-			glm::dquat q = quat_exp(cross(v,up),(float)speed);
+			glm::dquat q = quat_exp(glm::normalize(cross(up,v)),(float)speed);
 			glm::dquat qstar = glm::conjugate(q);
 
 			glm::dquat q_up = q*glm::dquat(0,up)*qstar;
@@ -189,9 +190,9 @@ struct SphericalMotionCamera
 	}
 
 	void rotate(double dphi, double dtht) {
-		phi = glm::clamp(phi - dphi,-HALFPI,HALFPI);
+		phi = glm::clamp(phi + dphi,-HALFPI,HALFPI);
 
-		glm::dquat q = quat_exp(up,(float)dtht);
+		glm::dquat q = quat_exp(up,(float)-dtht);
 		glm::dquat a_new = q*glm::dquat(0,right)*glm::conjugate(q);
 
 		right = glm::dvec3(a_new.x,a_new.y,a_new.z);
@@ -201,12 +202,14 @@ struct SphericalMotionCamera
 	{
 		glm::vec3 fwd = glm::normalize(glm::cross(up,right));
 
+		printf("phi=%f\n",phi);
+
 		float sin_phi = sinf((float)phi);
 		float cos_phi = cosf((float)phi);
 
 		glm::vec3 T = right;
-		glm::vec3 B = sin_phi*fwd + cos_phi*glm::vec3(up);
-		glm::vec3 N = glm::normalize(glm::cross(B,T));
+		glm::vec3 B = cos_phi*glm::vec3(up) - sin_phi*fwd;
+		glm::vec3 N = glm::normalize(glm::cross(T,B));
 
 		glm::mat3 m = glm::transpose(glm::mat3(T,B,N));
 

@@ -40,6 +40,7 @@ namespace globe
 		std::vector<uint32_t> indices;
 
 		ModelID modelID;
+		MaterialID materialID;
 	};
 
 
@@ -61,11 +62,12 @@ namespace globe
 
 	LoadResult globe_create(Globe *globe, ResourceTable *table);
 	LoadResult globe_update(Globe *globe, ResourceTable *table, GlobeUpdateInfo *info);
+	void globe_record_draw_cmds(const RenderContext& ctx, const Globe *globe);
 
 //------------------------------------------------------------------------------
 // Interface
-	extern void init_boxes(ResourceTable *table);
-	extern void render_boxes(RenderContext const &ctx);
+	extern void init_debug(ResourceTable *table);
+	extern void draw(RenderContext const &ctx);
 	extern void update_boxes();
 
 	extern void select_tiles(
@@ -80,6 +82,8 @@ namespace globe
 
 	static inline constexpr double tile_area(uint8_t lvl)
 	{
+		// TODO : Compute the actual surface integral (or approximate with
+		// a series to an acceptable order).
 		return (4.0 * PI / 6.0)/(double)(1LU << 2*lvl);
 	}
 
@@ -102,7 +106,7 @@ namespace globe
 
 	static inline glm::dvec2 globe_to_cube_face(glm::dvec3 p, uint8_t f)
 	{
-		glm::dmat3 m = glm::transpose(cube_faces_d[f]);
+		glm::dmat3 m = cube_faces_d[f];
 
 		p = m*p;
 		p /= copysign(std::max(fabs(p.z),1e-14),p.z);
@@ -121,7 +125,7 @@ namespace globe
 
 	static inline glm::dvec3 cube_to_globe(uint8_t face, glm::dvec2 uv) 
 	{
-		glm::dmat3 m = cube_faces_d[face];
+		glm::dmat3 m = glm::transpose(cube_faces_d[face]);
 		glm::vec3 p = m[2] + glm::dmat2x3(m[0],m[1])*(2.0*uv - glm::dvec2(1.0)); 
 		return glm::normalize(p);
 	}

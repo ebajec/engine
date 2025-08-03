@@ -17,6 +17,7 @@ layout (location = 0) in vec3 frag_pos;
 layout (location = 1) in vec2 frag_uv;
 layout (location = 2) in vec3 frag_normal;
 layout (location = 3) in vec4 fcolor;
+layout (location = 4) flat in uint in_face;
 
 layout (location = 0) out vec4 FragColor;
 
@@ -108,10 +109,9 @@ void main()
 	float r = length(uv - vec2(0.5));
 	float f = exp(-16*pow(1-r,4));
 
-	uint face = cube_face(frag_pos);
-
-	vec4 color = f*FACE_COLORS[face];
+	vec4 color = FACE_COLORS[cube_face(frag_pos)];
+	//color *= f;
 	color.w = 0.5;
 
-	FragColor = color;
+	FragColor = texture(u_tex,frag_uv)*max(frag_uv.x,frag_uv.x)*color ;
 }

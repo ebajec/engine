@@ -218,11 +218,11 @@ void RenderContext::draw_cmd_mesh_outline(ModelID meshID) const
 
 void RenderContext::draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T) const
 {
+	const GLModel *model = table->get<GLModel>(meshID);
 	//glEnable(GL_CULL_FACE);
-	//glCullFace(GL_BACK);
+	//glCullFace(GL_FRONT);
 	//glFrontFace(GL_CCW);
 	
-	const GLModel *model = table->get<GLModel>(meshID);
 	glBindVertexArray(model->vao);
 	glDrawElements(GL_TRIANGLES,(int)model->icount,GL_UNSIGNED_INT,NULL);
 

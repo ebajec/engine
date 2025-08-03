@@ -60,13 +60,15 @@ struct BaseViewComponent : AppComponent
 		double ymid = 0.5*(double)h;
 
 		double x = (xpos - xmid)/xmid; 
-		double y = (ypos - ymid)/ymid; 
+		double y = -(ypos - ymid)/ymid; 
 
 		double dx = x - xold;
 		double dy = y - yold;
 
 		xold = x;
 		yold = y;
+
+		printf("%f,%f\n",x,y);
 
 		if (!init++)
 			return;

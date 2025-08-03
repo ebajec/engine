@@ -1,3 +1,6 @@
+#ifndef MATERIAL_LOADER_H
+#define MATERIAL_LOADER_H
+
 #include "def_gl.h"
 #include "resource_table.h"
 
@@ -29,3 +32,5 @@ extern ResourceAllocFns g_material_alloc_fns;
 ResourceHandle load_material_file(ResourceTable *loader, std::string_view path);
 
 const GLMaterial *get_material(ResourceTable *loader, ResourceHandle h);
+
+#endif // MATERIAL_LOADER_H

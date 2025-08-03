@@ -53,7 +53,7 @@ static inline void aabb3_edges( uint32_t offset, edge_t e[])
 	}
 }
 
-struct BoxDisplay
+struct BoxDebugView
 {
 	std::vector<aabb3_t> boxes;
 	ModelID model;
@@ -61,7 +61,7 @@ struct BoxDisplay
 
 	ResourceTable *table;
 
-	BoxDisplay(ResourceTable *table) : table(table) {
+	BoxDebugView(ResourceTable *table) : table(table) {
 		model = model_create(table);
 		material = load_material_file(table, "material/box_debug.yaml");
 	

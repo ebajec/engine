@@ -1,8 +1,10 @@
 #include "globe.h"
-#include "box_display.h"
 #include "gl_debug.h"
 #include "camera_controller.h"
 #include "geometry.h"
+
+#include "debug/box_debug_view.h"
+#include "debug/camera_debug_view.h"
 
 #include <imgui.h>
 
@@ -12,9 +14,6 @@
 
 #include <vector>
 #include <cstdint>
-#include <climits>
-#include <cfloat>
-#include <cmath>
 #include <algorithm>
 #include <vector>
 #include <complex.h>
@@ -28,7 +27,8 @@
 #endif
 
 static bool g_enable_boxes;
-static std::unique_ptr<BoxDisplay> g_disp;
+static std::unique_ptr<BoxDebugView> g_disp;
+static std::unique_ptr<CameraDebugView> g_camera_debug;
 
 namespace globe
 {
@@ -43,23 +43,23 @@ enum quadrant_t
 	UPPER_RIGHT = 0x3
 };
 
-void init_boxes(ResourceTable *table) {
-	g_disp.reset(new BoxDisplay(table));
+void init_debug(ResourceTable *table) {
+	g_disp.reset(new BoxDebugView(table));
+	g_camera_debug.reset(new CameraDebugView(table));
 	g_enable_boxes = false;
 }
 
-void render_boxes(RenderContext const & ctx)
+void draw_boxes(RenderContext const & ctx)
 {
 	ctx.bind_material(g_disp->material);
 	if (g_enable_boxes)
 		ctx.draw_cmd_mesh_outline(g_disp->model);
+
+	g_camera_debug->render(ctx);
 }
 
 void update_boxes() 
 {
-	if (ImGui::Button(g_enable_boxes ? "Disable globe tile boxes##globe tile boxes" : "Enable globe tile boxes##globe tile boxes")) 
-		g_enable_boxes = !g_enable_boxes;
-
 	if (g_enable_boxes)
 		g_disp->update();
 }
@@ -131,6 +131,9 @@ static inline int select_tiles_rec(
 		}
 	}
 
+	// TODO : Use the integral of the product of view direction and surface normal
+	// over a tile to approximate the visible area.
+	
 	glm::dvec3 tile_nearest_diff = tile_diff(params->origin,params->origin_uv,rect,code.face);
 	double d_min_sq = dot(tile_nearest_diff,params->frust.planes[4].n);
 	d_min_sq = std::max(tile_scale_factor * d_min_sq * d_min_sq,1e-5);
@@ -207,7 +210,7 @@ static void create_mesh(
 	std::vector<GlobeVertex>& verts,
 	std::vector<uint32_t>&indices)
 {
-	static constexpr uint32_t tile_limit = 4096;
+	static constexpr uint32_t tile_limit = 1 << 14;
 
 	uint32_t count = std::min((uint32_t)tiles.size(),tile_limit);
 	if (tiles.size() > tile_limit) {
@@ -262,6 +265,7 @@ static void create_mesh(
 				indices.push_back(offset + (n) * i  + j); 
 				indices.push_back(offset + (n) * in + j); 
 				indices.push_back(offset + (n) * in + jn); 
+
 				indices.push_back(offset + (n) * i  + j);
 				indices.push_back(offset + (n) * in + jn);
 				indices.push_back(offset + (n) * i  + jn);
@@ -284,10 +288,15 @@ LoadResult globe_create(Globe *globe, ResourceTable *table)
 
 	LoadResult result = table->allocate(h, nullptr);
 
-	if (result)
+	MaterialID material = load_material_file(table, "material/globe_tile.yaml");
+
+	if (!material || result != RESULT_SUCCESS)
 		goto load_failed;
 
 	globe->modelID = h;
+	globe->materialID = material;
+
+	globe::init_debug(table);
 
 	return result;
 load_failed:
@@ -301,22 +310,37 @@ LoadResult globe_update(Globe *globe, ResourceTable *table, GlobeUpdateInfo *inf
 	globe->verts.clear();
 	globe->indices.clear();
 
-	glm::mat4 pv = info->camera->proj*info->camera->view;
+	const Camera * camera = g_camera_debug->get_camera(); 
+	static int zoom = 3;
+
+	ImGui::Begin("Globe debug");
+	ImGui::SliderInt("res", &zoom, 0, 8, "%d");
+
+	if (ImGui::Button(g_enable_boxes ? 
+		"Disable globe tile boxes##globe tile boxes" : 
+		"Enable globe tile boxes##globe tile boxes")) 
+		g_enable_boxes = !g_enable_boxes;
+
+	if (ImGui::Button(camera ? 
+			"Unfix globe camera##globe tile camera" : 
+			"Fix globe camera##globe tile camera")
+	) {
+		g_camera_debug->set_camera(camera ? nullptr : info->camera);
+		camera = info->camera;
+	}
+	if (!camera) camera = info->camera;
+
+	ImGui::End();
+
+	glm::mat4 pv = camera->proj*camera->view;
 
 	frustum_t frust = camera_frustum(pv);
 
-	static int zoom = 3;
-
-	ImGui::Begin("Demo Window");
-	ImGui::SliderInt("res", &zoom, 0, 5, "%d");
-	ImGui::End();
-
 	double resolution = globe::tile_area((uint8_t)zoom);
 
-	glm::dvec3 pos = camera_get_pos(info->camera->view);
+	glm::dvec3 pos = camera_get_pos(camera->view);
 
 	globe::select_tiles(globe->tiles, frust, pos, resolution);
-
 	globe::create_mesh(1,pos, globe->tiles, globe->verts, globe->indices);
 
 	LoadResult result = table->upload(globe->modelID,"globe",globe);
@@ -324,6 +348,14 @@ LoadResult globe_update(Globe *globe, ResourceTable *table, GlobeUpdateInfo *inf
 	globe::update_boxes();
 
 	return result;
+}
+
+void globe_record_draw_cmds(const RenderContext& ctx, const Globe *globe)
+{
+
+	ctx.bind_material(globe->materialID);
+	ctx.draw_cmd_basic_mesh3d(globe->modelID,glm::mat4(1.0f));
+	globe::draw_boxes(ctx);
 }
 
 //------------------------------------------------------------------------------
@@ -385,28 +417,28 @@ LoadResult globe_upload_fn(ResourceTable *table, void *res, void *usr)
 
 glm::dmat3 cube_faces_d[] = {
 	glm::dmat3( // y ^ z
-		0,1,0,
 		0,0,1,
-		1,0,0
-	), glm::dmat3( // x ^ z
 		1,0,0,
+		0,1,0
+	), glm::dmat3( // x ^ z
+		-1,0,0,
 		0,0,1,
 		0,1,0
 	), glm::dmat3( // x ^ y
-		1,0,0,
-		0,1,0,
-		0,0,1
-	), glm::dmat3( // -y ^ z
 		0,-1,0,
-		0,0,1,
-		-1,0,0
-	), glm::dmat3( // - x ^ z
-		-1,0,0,
-		0,0,1,
+		1,0,0,
+		0,0,1
+	), glm::dmat3( // y ^ -z
+		0,0,-1,
+		1,0,0,
 		0,-1,0
+	), glm::dmat3( // - x ^ z
+		1,0,0,
+		0,0,-1,
+		0,1,0
 	), glm::dmat3( // - x ^ x
-		-1,0,0,
 		0,1,0,
+		1,0,0,
 		0,0,-1
 	),
 };
