@@ -10,6 +10,11 @@ struct tile_code_t
 	uint idx;
 };
 
+struct aabb2_t
+{
+	vec2 min, max;
+};
+
 //------------------------------------------------------------------------------
 // Vert
 
@@ -35,11 +40,6 @@ uint TILE_CODE_ZOOM_BITS_SHIFT = 3;
 
 uint TILE_CODE_IDX_BITS_MASK = 
 	~(TILE_CODE_FACE_BITS_MASK | TILE_CODE_ZOOM_BITS_MASK);
-
-struct aabb2_t
-{
-	vec2 min, max;
-};
 
 aabb2_t morton_u64_to_rect_f64(uint index, uint level)
 {
@@ -99,6 +99,8 @@ void main()
 			sin(f*wpos.z + 2*t)*cos(f*wpos.z + 2*t);
 
 	//wpos += n*0.05*length(c);
+
+	//wpos += n*0.1*d;
 
 	frag_pos = wpos.xyz;
 	frag_uv = uv;

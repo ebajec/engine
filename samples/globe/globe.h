@@ -4,20 +4,13 @@
 #include "geometry.h"
 #include "gl_renderer.h"
 #include "resource_table.h"
-#include "model_loader.h"
+#include "tile_cache.h"
 
 #include <cfloat>
 #include <vector>
 
 namespace globe
 {
-	struct TileCode
-	{
-		uint8_t face : 3;
-		uint8_t zoom : 5;
-		uint64_t idx : 56;
-	};
-
 	struct GlobeVertex
 	{
 		glm::vec3 pos;
@@ -35,12 +28,13 @@ namespace globe
 	struct Globe
 	{
 		std::vector<TileCode> tiles;
-
 		std::vector<GlobeVertex> verts;
 		std::vector<uint32_t> indices;
 
 		ModelID modelID;
 		MaterialID materialID;
+
+		TileCache cache;
 	};
 
 

@@ -120,7 +120,14 @@ void main()
 	color *= f;
 	color.w = 0.5;
 
-	//color *= length(unpackUnorm4x8(in_code.idx));
+	vec3 sun = normalize(vec3(-1,-1,3));
+
+	if (false) {
+		vec3 dx = dFdx(frag_pos);
+		vec3 dy = dFdy(frag_pos);
+		vec3 n = normalize(cross(dx,dy));
+		color = 0.8*fcolor*max(dot(n, sun),0) + 0.2*fcolor;
+	}
 
 	FragColor = color;
 }

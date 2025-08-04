@@ -1,3 +1,6 @@
+#ifndef IMAGE_LOADER_H
+#define IMAGE_LOADER_H
+
 #include "resource_table.h"
 #include "def_gl.h"
 
@@ -33,3 +36,5 @@ ResourceHandle create_image_2d(ResourceTable *table, uint32_t w, uint32_t h,
 ResourceHandle load_image_file(ResourceTable *table, std::string_view path);
 
 const GLImage *get_image(ResourceTable *table, ResourceHandle h);
+
+#endif //IMAGE_LOADER_H

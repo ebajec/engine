@@ -3,6 +3,8 @@
 #include "camera_controller.h"
 #include "geometry.h"
 
+#include "tile_cache.h"
+
 #include "debug/box_debug_view.h"
 #include "debug/camera_debug_view.h"
 
@@ -40,7 +42,6 @@ static constexpr uint32_t TILE_VERT_COUNT =
 	TILE_VERT_WIDTH*TILE_VERT_WIDTH;
 
 static constexpr double tile_scale_factor = 128;
-
 
 enum quadrant_t
 {
@@ -200,28 +201,28 @@ void select_tiles(
 		};
 		select_tiles_rec(tiles, &params, code); 
 	}
+
+	log_info("globe::select_tiles : selected %d tiles",tiles.size());
 }
 
 static void create_mesh(
-	double scale,
+	Globe *globe,
 	glm::dvec3 origin,
-	const std::vector<TileCode>& tiles, 
-	std::vector<GlobeVertex>& verts,
-	std::vector<uint32_t>&indices)
+	const std::vector<TileTexIndex> &tex_indices
+)
 {
-	static constexpr uint32_t tile_limit = 1 << 14;
+	const std::vector<TileCode>& tiles = globe->tiles;
+	std::vector<GlobeVertex>& verts = globe->verts;
+	std::vector<uint32_t>&indices = globe->indices;
 
-	uint32_t count = std::min((uint32_t)tiles.size(),tile_limit);
-	if (tiles.size() > tile_limit) {
-		log_warn("Selected tile count is large (%ld)! Limiting to %d", tiles.size(), tile_limit);
+	uint32_t count = std::min((uint32_t)tiles.size(),(uint32_t)MAX_TILES);
+	if (tiles.size() > MAX_TILES) {
+		log_warn("Selected tile count is large (%ld)! Limiting to %d", tiles.size(), MAX_TILES);
 	}
 
 	uint32_t total = TILE_VERT_COUNT*count;
 
-	log_info(
-		"tile count : %d\n"
-		"total globe vertices : %d\n",
-		count,total);
+	log_info("globe::create_mesh : total globe vertices : %d",total);
 
 	verts.reserve(total);
 	indices.reserve(6*total);
@@ -259,10 +260,9 @@ static void create_mesh(
 			}
 		}
 
-
+		// TODO : Set up indirect draw calls so this is not required.
 		for (uint32_t i = 0; i < n; ++i) {
 			for (uint32_t j = 0; j < n; ++j) {
-
 				uint32_t in = std::min(i + 1,n - 1);
 				uint32_t jn = std::min(j + 1,n - 1);
 
@@ -336,21 +336,29 @@ LoadResult globe_update(Globe *globe, ResourceTable *table, GlobeUpdateInfo *inf
 
 	ImGui::End();
 
+	//----------------------------------------------------------------------------
+	// Adjust the test frustum to only go to the horizon
+	
 	glm::mat4 pv = p_camera->proj*p_camera->view;
-
-	double resolution = globe::tile_area((uint8_t)zoom);
-
-	glm::dvec3 pos = camera_get_pos(p_camera->view);
-
 	frustum_t frust = camera_frustum(pv);
 
+	double resolution = globe::tile_area((uint8_t)zoom);
+	glm::dvec3 pos = camera_get_pos(p_camera->view);
 	double r_horizon = sqrt(std::max(dot(pos,pos) - 1.,0.));
 
 	glm::dvec3 n_far = frust.far.n;
 	frust.far.d = dot(pos,n_far) + r_horizon;
 
+	//-----------------------------------------------------------------------------
+	// Process visible tiles
+
 	globe::select_tiles(globe->tiles, frust, pos, resolution);
-	globe::create_mesh(1,pos, globe->tiles, globe->verts, globe->indices);
+
+	std::vector<TileTexIndex> tile_textures;
+	std::vector<std::pair<TileCode,TileTexIndex>> new_textures;
+	globe->cache.get_textures(globe->tiles,tile_textures,new_textures);
+
+	create_mesh(globe,pos,tile_textures);
 
 	LoadResult result = table->upload(globe->modelID,"globe",globe);
 	
@@ -361,7 +369,6 @@ LoadResult globe_update(Globe *globe, ResourceTable *table, GlobeUpdateInfo *inf
 
 void globe_record_draw_cmds(const RenderContext& ctx, const Globe *globe)
 {
-
 	ctx.bind_material(globe->materialID);
 	ctx.draw_cmd_basic_mesh3d(globe->modelID,glm::mat4(1.0f));
 	globe::draw_boxes(ctx);
