@@ -12,12 +12,12 @@ TilePage create_page()
 		GL_R32F, 
 		TILE_SIZE, 
 		TILE_SIZE, 
-		TILE_CHUNK_SIZE
+		TILE_PAGE_SIZE
 	);
 
-	page.free_list.resize(TILE_CHUNK_SIZE);
+	page.free_list.resize(TILE_PAGE_SIZE);
 
-	for (uint16_t i = 0; i < TILE_CHUNK_SIZE; ++i) {
+	for (uint16_t i = 0; i < TILE_PAGE_SIZE; ++i) {
 		page.free_list[i] = i;
 	}
 
@@ -73,12 +73,12 @@ void TileCache::reserve(uint32_t count)
 {
 	assert(count <= MAX_TILES);
 
-	size_t curr = m_pages.size() * TILE_CHUNK_SIZE;
+	size_t curr = m_pages.size() * TILE_PAGE_SIZE;
 
 	if (curr >= count)
 		return;
 
-	size_t req = (count ? count - 1 : 0)/TILE_CHUNK_SIZE + 1;
+	size_t req = (count ? count - 1 : 0)/TILE_PAGE_SIZE + 1;
 	size_t diff = req - m_pages.size();
 
 	m_pages.reserve(req);

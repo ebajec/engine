@@ -13,9 +13,9 @@
 #include <cstdint>
 
 static constexpr uint32_t TILE_SIZE = 256;
-static constexpr uint32_t TILE_CHUNK_SIZE = 64;
-static constexpr uint32_t MAX_TILE_CHUNKS = 16;
-static constexpr uint32_t MAX_TILES = TILE_CHUNK_SIZE*MAX_TILE_CHUNKS;
+static constexpr uint32_t TILE_PAGE_SIZE = 64;
+static constexpr uint32_t MAX_TILE_PAGES = 16;
+static constexpr uint32_t MAX_TILES = TILE_PAGE_SIZE*MAX_TILE_PAGES;
 
 union TileCode
 {
