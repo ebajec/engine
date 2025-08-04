@@ -1,13 +1,13 @@
 #include "tile_cache.h"
 #include "utils/log.h"
 
-TileChunk create_chunk()
+TilePage create_page()
 {
-	TileChunk chunk{};
+	TilePage page{};
 
-	glCreateTextures(GL_TEXTURE_3D, 1, &chunk.tex_array);
+	glCreateTextures(GL_TEXTURE_3D, 1, &page.tex_array);
 	glTextureStorage3D(
-		chunk.tex_array, 
+		page.tex_array, 
 		1, 
 		GL_R32F, 
 		TILE_SIZE, 
@@ -15,77 +15,77 @@ TileChunk create_chunk()
 		TILE_CHUNK_SIZE
 	);
 
-	chunk.free_list.resize(TILE_CHUNK_SIZE);
+	page.free_list.resize(TILE_CHUNK_SIZE);
 
 	for (uint16_t i = 0; i < TILE_CHUNK_SIZE; ++i) {
-		chunk.free_list[i] = i;
+		page.free_list[i] = i;
 	}
 
-	return chunk;
+	return page;
 }
 
-void destroy_chunk(TileChunk &chunk)
+void destroy_page(TilePage &page)
 {
-	glDeleteTextures(1,&chunk.tex_array);
+	glDeleteTextures(1,&page.tex_array);
 }
 
 TileCache::tex_idx_t TileCache::allocate()
 {
-	if (m_open_chunks.empty()) {
-		m_chunks.emplace_back(std::move(create_chunk()));
-		m_open_chunks.push(m_chunks.size() - 1);
+	if (m_open_pages.empty()) {
+		m_pages.emplace_back(std::move(create_page()));
+		m_open_pages.push(m_pages.size() - 1);
 	}
 
-	uint16_t chunk_idx = m_open_chunks.top(); 
+	uint16_t page_idx = m_open_pages.top(); 
 
-	assert(chunk_idx < m_chunks.size());
+	assert(page_idx < m_pages.size());
 
-	TileChunk &chunk = m_chunks[chunk_idx];
+	TilePage &page = m_pages[page_idx];
 
-	uint16_t tex_idx = chunk.free_list.back();
+	uint16_t tex_idx = page.free_list.back();
 
 	assert(tex_idx < TILE_CHUNK_SIZE);
 
-	chunk.free_list.pop_back();
+	page.free_list.pop_back();
 
-	if (chunk.free_list.empty()) {
-		m_open_chunks.pop();
+	if (page.free_list.empty()) {
+		m_open_pages.pop();
 	}
 
 	return tex_idx_t{
-		.chunk = chunk_idx,
+		.page = page_idx,
 		.tex = tex_idx,
 	};
 }
 
 void TileCache::deallocate(tex_idx_t idx)
 {
-	TileChunk &chunk = m_chunks[idx.chunk];
+	TilePage &page = m_pages[idx.page];
 
-	if (chunk.free_list.empty()) {
-		m_open_chunks.push(idx.chunk);
+	if (page.free_list.empty()) {
+		m_open_pages.push(idx.page);
 	}
 
-	chunk.free_list.push_back(idx.tex);
+	page.free_list.push_back(idx.tex);
 }
 
 void TileCache::reserve(uint32_t count)
 {
 	assert(count <= MAX_TILES);
 
-	size_t curr = m_chunks.size() * TILE_CHUNK_SIZE;
+	size_t curr = m_pages.size() * TILE_CHUNK_SIZE;
 
 	if (curr >= count)
 		return;
 
 	size_t req = (count ? count - 1 : 0)/TILE_CHUNK_SIZE + 1;
-	size_t diff = req - m_chunks.size();
+	size_t diff = req - m_pages.size();
 
-	m_chunks.reserve(req);
+	m_pages.reserve(req);
 
 	for (size_t i = 0; i < diff; ++i) {
-		m_chunks.emplace_back(std::move(create_chunk()));
-		m_open_chunks.push(m_chunks.size() - 1);
+		m_pages.emplace_back(std::move(create_page()));
+		m_open_pages.push(m_pages.size() - 1);
 	}
 }
 
@@ -143,8 +143,8 @@ void TileCache::get_textures(
 		}
 
 		TileTexIndex tex_idx = {
-			.array = m_chunks[idx.chunk].tex_array,
-			.chunk_idx = idx.chunk,
+			.array = m_pages[idx.page].tex_array,
+			.page_idx = idx.page,
 			.tex_idx = idx.tex
 		};
 

@@ -38,7 +38,7 @@ struct TileCodeHash
 	}
 };
 
-struct TileChunk
+struct TilePage
 {
 	std::vector<uint16_t> free_list;
 	GLuint tex_array;
@@ -47,7 +47,7 @@ struct TileChunk
 struct TileTexIndex
 {
 	GLuint array;
-	uint16_t chunk_idx;
+	uint16_t page_idx;
 	uint16_t tex_idx;
 };
 
@@ -55,7 +55,7 @@ class TileCache
 {
 	struct tex_idx_t
 	{
-		uint16_t chunk;
+		uint16_t page;
 		uint16_t tex;
 	};
 
@@ -73,9 +73,9 @@ class TileCache
 		uint16_t, 
 		std::vector<uint16_t>, 
 		std::greater<uint16_t>
-	> m_open_chunks;
+	> m_open_pages;
 
-	std::vector<TileChunk> m_chunks;
+	std::vector<TilePage> m_pages;
 
 private:
 	tex_idx_t allocate();
