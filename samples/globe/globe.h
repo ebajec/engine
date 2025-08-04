@@ -43,12 +43,6 @@ namespace globe
 		Camera const *camera;
 	};
 
-	// Double coordinate bases for each cube face, ordered by (+x, +y, +z, -x, -y, -z)
-	extern glm::dmat3 cube_faces_d[6];	
-
-	// Float coordinate bases for each cube face, ordered by (+x, +y, +z, -x, -y, -z)
-	extern glm::mat3 cube_faces_f[6];	
-
 //------------------------------------------------------------------------------
 // Loaders
 
@@ -98,9 +92,52 @@ namespace globe
 		return (uint8_t)argmax;
 	}
 
+	inline constexpr glm::dmat3 cube_faces_d(uint8_t face)
+	{
+		switch (face) {
+		case 0:
+		return glm::dmat3( // y ^ z
+			0,0,1,
+			1,0,0,
+			0,1,0
+		); 
+		case 1:
+		return glm::dmat3( // x ^ z
+			-1,0,0,
+			0,0,1,
+			0,1,0
+		); 
+		case 2:
+		return glm::dmat3( // x ^ y
+			0,-1,0,
+			1,0,0,
+			0,0,1
+		); 
+		case 3:
+		return glm::dmat3( // y ^ -z
+			0,0,-1,
+			1,0,0,
+			0,-1,0
+		); 
+		case 4:
+		return glm::dmat3( // - x ^ z
+			1,0,0,
+			0,0,-1,
+			0,1,0
+		); 
+		case 5:
+		return glm::dmat3( // - x ^ x
+			0,1,0,
+			1,0,0,
+			0,0,-1
+		);
+		}
+		return glm::mat3(0);
+	};
+
 	static inline glm::dvec2 globe_to_cube_face(glm::dvec3 p, uint8_t f)
 	{
-		glm::dmat3 m = cube_faces_d[f];
+		glm::dmat3 m = cube_faces_d(f);
 
 		p = m*p;
 		p /= copysign(std::max(fabs(p.z),1e-14),p.z);
@@ -119,7 +156,7 @@ namespace globe
 
 	static inline glm::dvec3 cube_to_globe(uint8_t face, glm::dvec2 uv) 
 	{
-		glm::dmat3 m = glm::transpose(cube_faces_d[face]);
+		glm::dmat3 m = glm::transpose(cube_faces_d(face));
 		glm::vec3 p = m[2] + glm::dmat2x3(m[0],m[1])*(2.0*uv - glm::dvec2(1.0)); 
 		return glm::normalize(p);
 	}
@@ -140,6 +177,7 @@ namespace globe
 
 		return code; 
 	}
+
 };
 
 #endif

@@ -205,10 +205,22 @@ void select_tiles(
 	log_info("globe::select_tiles : selected %d tiles",tiles.size());
 }
 
+aabb2_t sub_rect(TileCode parent, TileCode child)
+{
+	if (parent.zoom >= child.zoom)
+		return aabb2_t{.x0 = 0,.y0 = 0, .x1 = 1, .y1 = 1};
+
+	int diff = child.zoom - parent.zoom;	
+	child.idx &= (1 << (2*diff)) - 1;
+
+	return morton_u64_to_rect_f64(child.idx, (uint8_t)diff);
+}
+
 static void create_mesh(
 	Globe *globe,
 	glm::dvec3 origin,
-	const std::vector<TileTexIndex> &tex_indices
+	const std::vector<TileCode>& parents, 
+	const std::vector<TileTexIndex> &textures
 )
 {
 	const std::vector<TileCode>& tiles = globe->tiles;
@@ -235,23 +247,25 @@ static void create_mesh(
 		uint8_t f = code.face;
 
 		aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
+		aabb2_t rect_tex = sub_rect(parents[i], code);
 
 		uint32_t offset = static_cast<uint32_t>(verts.size());
 
 		double factor = 1.0/(double)(n-1);
 
+		glm::dvec2 uv;
 		for (uint32_t i = 0; i < n; ++i) {
-			double u = (double)i*factor;
+			uv.x = (double)i*factor;
 			for (uint32_t j = 0; j < n; ++j) {
-				double v = (double)j*factor;
+				uv.y = (double)j*factor;
 
-				glm::dvec2 uv = glm::dvec2(u,v);
-				glm::dvec2 face_uv = (glm::dvec2(1.0) - uv)*(rect.min) + uv*(rect.max);
+				glm::dvec2 face_uv = glm::mix(rect.min,rect.max,uv);
+				glm::dvec2 tex_uv = glm::mix(rect_tex.min,rect_tex.max,uv);
 				glm::dvec3 p = cube_to_globe(f, face_uv);
 
 				GlobeVertex vert = {
 					.pos = glm::vec3(p),
-					.uv = glm::vec2(uv),
+					.uv = glm::vec2(tex_uv),
 					.normal = glm::vec3(p),
 					.code = code
 				};
@@ -358,7 +372,7 @@ LoadResult globe_update(Globe *globe, ResourceTable *table, GlobeUpdateInfo *inf
 	std::vector<std::pair<TileCode,TileTexIndex>> new_textures;
 	globe->cache.get_textures(globe->tiles,tile_textures,new_textures);
 
-	create_mesh(globe,pos,tile_textures);
+	create_mesh(globe,pos,globe->tiles,tile_textures);
 
 	LoadResult result = table->upload(globe->modelID,"globe",globe);
 	
@@ -430,61 +444,5 @@ LoadResult globe_upload_fn(ResourceTable *table, void *res, void *usr)
 
 	return result;
 }
-
-glm::dmat3 cube_faces_d[] = {
-	glm::dmat3( // y ^ z
-		0,0,1,
-		1,0,0,
-		0,1,0
-	), glm::dmat3( // x ^ z
-		-1,0,0,
-		0,0,1,
-		0,1,0
-	), glm::dmat3( // x ^ y
-		0,-1,0,
-		1,0,0,
-		0,0,1
-	), glm::dmat3( // y ^ -z
-		0,0,-1,
-		1,0,0,
-		0,-1,0
-	), glm::dmat3( // - x ^ z
-		1,0,0,
-		0,0,-1,
-		0,1,0
-	), glm::dmat3( // - x ^ x
-		0,1,0,
-		1,0,0,
-		0,0,-1
-	),
-};
-
-glm::mat3 cube_faces_f[] = {
-	glm::mat3( // y ^ z
-		0,0,1,
-		1,0,0,
-		0,1,0
-	), glm::mat3( // x ^ z
-		-1,0,0,
-		0,0,1,
-		0,1,0
-	), glm::mat3( // x ^ y
-		0,-1,0,
-		1,0,0,
-		0,0,1
-	), glm::mat3( // y ^ -z
-		0,0,-1,
-		1,0,0,
-		0,-1,0
-	), glm::mat3( // - x ^ z
-		1,0,0,
-		0,0,-1,
-		0,1,0
-	), glm::mat3( // - x ^ x
-		0,1,0,
-		1,0,0,
-		0,0,-1
-	),
-};
 
 }; // namespace globe
