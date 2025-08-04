@@ -1,30 +1,19 @@
 #version 450 core
+
 #extension GL_GOOGLE_include_directive : require
 #include "framedata.glsl"
 #include "common.glsl"
-
-struct tile_code_t
-{
-	uint face;
-	uint zoom; 
-	uint idx;
-};
+#include "globe.glsl"
 
 //------------------------------------------------------------------------------
 // Frag
 
-layout (binding = 0) uniform sampler2D u_tex;
-
-layout (binding = 0) buffer Cameras
-{
-	mat4 matrices[];
-};
-
-layout (location = 0) in vec3 frag_pos;
-layout (location = 1) in vec2 frag_uv;
-layout (location = 2) in vec3 frag_normal;
-layout (location = 3) in vec4 fcolor;
+layout (location = 0) in vec3 in_pos;
+layout (location = 1) in vec2 in_uv;
+layout (location = 2) in vec3 in_normal;
+layout (location = 3) in vec4 in_color;
 layout (location = 4) flat in tile_code_t in_code;
+layout (location = 7) flat in tex_idx_t in_tex_idx;
 
 layout (location = 0) out vec4 FragColor;
 
@@ -106,12 +95,12 @@ bool within_frustum(vec3 v, frustum_t frust)
 
 void main()
 {
-	frustum_t frust = camera_frustum(matrices[0]);
+	//frustum_t frust = camera_frustum(matrices[0]);
 
-	//if (!within_frustum(frag_pos, frust))
+	//if (!within_frustum(in_pos, frust))
 	// 	discard;
 
-	vec2 uv = frag_uv;
+	vec2 uv = in_uv;
 
 	float r = length(uv - vec2(0.5));
 	float f = exp(-16*pow(1-r,4));
@@ -123,11 +112,17 @@ void main()
 	vec3 sun = normalize(vec3(-1,-1,3));
 
 	if (false) {
-		vec3 dx = dFdx(frag_pos);
-		vec3 dy = dFdy(frag_pos);
+		vec3 dx = dFdx(in_pos);
+		vec3 dy = dFdy(in_pos);
 		vec3 n = normalize(cross(dx,dy));
-		color = 0.8*fcolor*max(dot(n, sun),0) + 0.2*fcolor;
+		color = 0.8*in_color*max(dot(n, sun),0) + 0.2*in_color;
 	}
+
+	vec3 uvw = vec3(in_uv, in_tex_idx.tex);
+
+	//color = texture(u_tex_arrays[in_tex_idx.page], uvw);
+	//color = (float(in_tex_idx.tex)/7.0)*FACE_COLORS[0];
+	color = unpackUnorm4x8(64*in_tex_idx.tex*(in_tex_idx.page + 1));
 
 	FragColor = color;
 }

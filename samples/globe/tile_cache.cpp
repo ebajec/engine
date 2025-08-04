@@ -5,7 +5,7 @@ TilePage create_page()
 {
 	TilePage page{};
 
-	glCreateTextures(GL_TEXTURE_3D, 1, &page.tex_array);
+	glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &page.tex_array);
 	glTextureStorage3D(
 		page.tex_array, 
 		1, 
@@ -15,10 +15,15 @@ TilePage create_page()
 		TILE_PAGE_SIZE
 	);
 
+	glTextureParameteri(page.tex_array, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTextureParameteri(page.tex_array, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTextureParameteri(page.tex_array, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTextureParameteri(page.tex_array, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+
 	page.free_list.resize(TILE_PAGE_SIZE);
 
 	for (uint16_t i = 0; i < TILE_PAGE_SIZE; ++i) {
-		page.free_list[i] = i;
+		page.free_list[i] = TILE_PAGE_SIZE - i - 1;
 	}
 
 	return page;
@@ -29,7 +34,7 @@ void destroy_page(TilePage &page)
 	glDeleteTextures(1,&page.tex_array);
 }
 
-TileCache::tex_idx_t TileCache::allocate()
+TileTexIndex TileTexCache::allocate()
 {
 	if (m_open_pages.empty()) {
 		m_pages.emplace_back(std::move(create_page()));
@@ -44,7 +49,7 @@ TileCache::tex_idx_t TileCache::allocate()
 
 	uint16_t tex_idx = page.free_list.back();
 
-	assert(tex_idx < TILE_CHUNK_SIZE);
+	assert(tex_idx < TILE_PAGE_SIZE);
 
 	page.free_list.pop_back();
 
@@ -52,13 +57,13 @@ TileCache::tex_idx_t TileCache::allocate()
 		m_open_pages.pop();
 	}
 
-	return tex_idx_t{
+	return TileTexIndex{
 		.page = page_idx,
 		.tex = tex_idx,
 	};
 }
 
-void TileCache::deallocate(tex_idx_t idx)
+void TileTexCache::deallocate(TileTexIndex idx)
 {
 	TilePage &page = m_pages[idx.page];
 
@@ -69,7 +74,7 @@ void TileCache::deallocate(tex_idx_t idx)
 	page.free_list.push_back(idx.tex);
 }
 
-void TileCache::reserve(uint32_t count)
+void TileTexCache::reserve(uint32_t count)
 {
 	assert(count <= MAX_TILES);
 
@@ -89,18 +94,18 @@ void TileCache::reserve(uint32_t count)
 	}
 }
 
-TileCache::tex_idx_t TileCache::evict_one()
+TileTexIndex TileTexCache::evict_one()
 {
 	assert(!m_lru.empty());
 	
-	std::pair<TileCode, tex_idx_t> ent = m_lru.back();
+	std::pair<TileCode, TileTexIndex> ent = m_lru.back();
 	m_lru.pop_back();
 	m_map.erase(ent.first);
 
 	return ent.second;
 }
 
-void TileCache::insert(TileCode code, tex_idx_t idx)
+void TileTexCache::insert(TileCode code, TileTexIndex idx)
 {
 	assert(m_map.find(code) == m_map.end());
 
@@ -108,12 +113,12 @@ void TileCache::insert(TileCode code, tex_idx_t idx)
 	m_map[code] = m_lru.begin();
 }
 
-TileCache::TileCache()
+TileTexCache::TileTexCache()
 {
 
 }
 
-void TileCache::get_textures(
+void TileTexCache::get_textures(
 	const std::span<TileCode> tiles, 
 	std::vector<TileTexIndex>& textures,
 	std::vector<std::pair<TileCode,TileTexIndex>>& new_tiles
@@ -129,7 +134,7 @@ void TileCache::get_textures(
 
 		const bool found = it != m_map.end();
 
-		tex_idx_t idx {};
+		TileTexIndex idx {};
 
 		if (found) {
 			lru_list_t::iterator ent = it->second;
@@ -142,15 +147,19 @@ void TileCache::get_textures(
 			insert(code, idx);
 		}
 
-		TileTexIndex tex_idx = {
-			.array = m_pages[idx.page].tex_array,
-			.page_idx = idx.page,
-			.tex_idx = idx.tex
-		};
-
-		textures.push_back(tex_idx);
-		if (!found) new_tiles.push_back({code, tex_idx});
+		textures.push_back(idx);
+		if (!found) new_tiles.push_back({code, idx});
 	}
 
 	log_info("TileCache::get_textures : loaded %ld new tile textures",new_tiles.size());
+}
+
+void TileTexCache::bind_texture_arrays(uint32_t base) const 
+{
+	assert(m_pages.size() <= MAX_TILE_PAGES);
+
+	for (size_t i = 0; i < m_pages.size(); ++i) {
+		glActiveTexture(GL_TEXTURE0 + base + i);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, m_pages[i].tex_array);	
+	}
 }

@@ -46,20 +46,14 @@ struct TilePage
 
 struct TileTexIndex
 {
-	GLuint array;
-	uint16_t page_idx;
-	uint16_t tex_idx;
+	alignas(4)
+	uint16_t page;
+	uint16_t tex;
 };
 
-class TileCache
+class TileTexCache
 {
-	struct tex_idx_t
-	{
-		uint16_t page;
-		uint16_t tex;
-	};
-
-	typedef std::list<std::pair<TileCode,tex_idx_t>> lru_list_t;
+	typedef std::list<std::pair<TileCode,TileTexIndex>> lru_list_t;
 
 	// TODO : Robin hood hash table instead of this
 	lru_list_t m_lru;
@@ -78,22 +72,24 @@ class TileCache
 	std::vector<TilePage> m_pages;
 
 private:
-	tex_idx_t allocate();
-	void deallocate(tex_idx_t idx);
+	TileTexIndex allocate();
+	void deallocate(TileTexIndex idx);
 	void reserve(uint32_t count);
 
-	tex_idx_t evict_one();
+	TileTexIndex evict_one();
 
-	void insert(TileCode, tex_idx_t);
+	void insert(TileCode, TileTexIndex);
 
 public:
-	TileCache();
+	TileTexCache();
 
 	void get_textures(
 		const std::span<TileCode> tiles, 
 		std::vector<TileTexIndex>& textures,
 		std::vector<std::pair<TileCode,TileTexIndex>>& new_tiles
 	);
+
+	void bind_texture_arrays(uint32_t base) const;
 };
 
 #endif //TILE_CACHE_H

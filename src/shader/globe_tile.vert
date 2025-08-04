@@ -1,24 +1,12 @@
 #version 450 core
+
 #extension GL_GOOGLE_include_directive : require
 #include "framedata.glsl"
 #include "common.glsl"
-
-struct tile_code_t
-{
-	uint face;
-	uint zoom; 
-	uint idx;
-};
-
-struct aabb2_t
-{
-	vec2 min, max;
-};
+#include "globe.glsl"
 
 //------------------------------------------------------------------------------
 // Vert
-
-layout (binding = 0) uniform sampler2D u_tex;
 
 layout (location = 0) in vec3 pos;
 layout (location = 1) in vec2 uv;
@@ -26,11 +14,12 @@ layout (location = 2) in vec3 normal;
 layout (location = 3) in uint code_left;
 layout (location = 4) in uint code_right;
 
-layout (location = 0) out vec3 frag_pos;
-layout (location = 1) out vec2 frag_uv;
-layout (location = 2) out vec3 frag_normal;
-layout (location = 3) out vec4 fcolor;
+layout (location = 0) out vec3 out_pos;
+layout (location = 1) out vec2 out_uv;
+layout (location = 2) out vec3 out_normal;
+layout (location = 3) out vec4 out_color;
 layout (location = 4) flat out tile_code_t out_code;
+layout (location = 7) flat out tex_idx_t out_tex_idx;
 
 uint TILE_CODE_FACE_BITS_MASK = 0x70000000;
 uint TILE_CODE_FACE_BITS_SHIFT = 0;
@@ -102,11 +91,16 @@ void main()
 
 	//wpos += n*0.1*d;
 
-	frag_pos = wpos.xyz;
-	frag_uv = uv;
-	frag_normal = n.xyz;
-	fcolor = c;
+	uint tile_idx = gl_VertexID/TILE_VERT_COUNT;
+	tex_idx_t tex_idx = decode_tex_idx(tex_indices[tile_idx]);
+	//tex_idx.tex = tile_idx;
+
+	out_pos = wpos.xyz;
+	out_uv = uv;
+	out_normal = n.xyz;
+	out_color = c;
 	out_code = code;
+	out_tex_idx = tex_idx;
 
 	gl_Position = (pv*wpos);
 }

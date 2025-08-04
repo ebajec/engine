@@ -338,8 +338,12 @@ LoadResult create_render_data(ResourceTable *rt, RenderData &data)
 
 	data.vbo = create_buffer(rt, MAX_TILES*TILE_VERT_COUNT*sizeof(GlobeVertex),
 						  GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
-
 	if (!data.vbo)
+		goto load_failed;
+
+	data.ssbo = create_buffer(rt, MAX_TILES*sizeof(TileTexIndex),
+						  GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
+	if (!data.ssbo)
 		goto load_failed;
 
 	data.ibo = create_buffer(rt, sizeof(uint32_t)*6*TILE_VERT_COUNT);
@@ -388,14 +392,27 @@ static LoadResult update_render_data(
 		create_tile_verts(code, parents[i], &verts[offset]);
 	}
 
-	size_t verts_bytes = verts.size()*sizeof(GlobeVertex);
-
+	//-----------------------------------------------------------------------------
+	// vbo
+	
 	const GLBuffer *buf = rt->get<GLBuffer>(globe->render_data.vbo);
 
 	glBindBuffer(GL_ARRAY_BUFFER, buf->id);
 	void *ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
 
-	memcpy(ptr, verts.data(), verts_bytes);
+	memcpy(ptr, verts.data(), verts.size()*sizeof(GlobeVertex));
+
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+
+	//-----------------------------------------------------------------------------
+	// tex indices
+	
+	const GLBuffer *ssbo = rt->get<GLBuffer>(globe->render_data.ssbo);
+
+	glBindBuffer(GL_ARRAY_BUFFER, ssbo->id);
+	ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+
+	memcpy(ptr, textures.data(), textures.size()*sizeof(TileTexIndex));
 
 	glUnmapBuffer(GL_ARRAY_BUFFER);
 
@@ -428,7 +445,7 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	globe->verts.clear();
 
 	const Camera * p_camera = g_camera_debug->get_camera(); 
-	static int zoom = 3;
+	static int zoom = 0;
 
 	ImGui::Begin("Globe debug");
 	ImGui::SliderInt("res", &zoom, 0, 8, "%d");
@@ -482,11 +499,16 @@ void globe_record_draw_cmds(const RenderContext& ctx, const Globe *globe)
 {
 	const RenderData &data = globe->render_data;
 
-	ctx.bind_material(data.material);
-
 	const GLBuffer* vbo = ctx.table->get<GLBuffer>(data.vbo); 
 	const GLBuffer* ibo = ctx.table->get<GLBuffer>(data.ibo); 
+	const GLBuffer* ssbo = ctx.table->get<GLBuffer>(data.ssbo);
 
+	ctx.bind_material(data.material);
+
+	globe->cache.bind_texture_arrays(1);
+
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo->id); 
+	
 	glBindVertexArray(data.vao);
 
 	glBindVertexBuffer(0, vbo->id, 0, sizeof(GlobeVertex));

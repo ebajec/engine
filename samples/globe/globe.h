@@ -30,6 +30,9 @@ namespace globe
 		BufferID vbo;
 		BufferID ibo;
 
+		// texture array indices
+		BufferID ssbo;
+
 		MaterialID material;
 		GLuint vao;
 
@@ -43,7 +46,7 @@ namespace globe
 
 		RenderData render_data;
 
-		TileCache cache;
+		TileTexCache cache;
 	};
 
 

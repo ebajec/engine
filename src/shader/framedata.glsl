@@ -1,7 +1,7 @@
 #ifndef FRAMEDATA_GLSL
 #define FRAMEDATA_GLSL
 
-#define FRAMEDATA_BINDING 5
+#define FRAMEDATA_BINDING 16
 
 struct framedata_t
 {

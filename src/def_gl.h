@@ -35,7 +35,7 @@ enum ModelType
 enum gl_renderer_bindings
 {
 	GL_RENDERER_COLOR_ATTACHMENT_BINDING = 0,
-	GL_RENDERER_FRAMEDATA_BINDING = 5
+	GL_RENDERER_FRAMEDATA_BINDING = 16
 };
 
 struct Framedata
