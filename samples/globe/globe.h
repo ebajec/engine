@@ -25,14 +25,23 @@ namespace globe
 		};
 	};
 
+	struct RenderData
+	{
+		BufferID vbo;
+		BufferID ibo;
+
+		MaterialID material;
+		GLuint vao;
+
+		std::vector<DrawCommand> cmds;
+	};
+
 	struct Globe
 	{
 		std::vector<TileCode> tiles;
 		std::vector<GlobeVertex> verts;
-		std::vector<uint32_t> indices;
 
-		ModelID modelID;
-		MaterialID materialID;
+		RenderData render_data;
 
 		TileCache cache;
 	};
@@ -45,8 +54,6 @@ namespace globe
 
 //------------------------------------------------------------------------------
 // Loaders
-
-	extern ResourceLoaderFns loader_fns;
 
 	LoadResult globe_create(Globe *globe, ResourceTable *table);
 	LoadResult globe_update(Globe *globe, ResourceTable *table, GlobeUpdateInfo *info);

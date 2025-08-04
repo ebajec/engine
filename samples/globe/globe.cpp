@@ -2,6 +2,7 @@
 #include "gl_debug.h"
 #include "camera_controller.h"
 #include "geometry.h"
+#include "buffer.h"
 
 #include "tile_cache.h"
 
@@ -216,7 +217,150 @@ aabb2_t sub_rect(TileCode parent, TileCode child)
 	return morton_u64_to_rect_f64(child.idx, (uint8_t)diff);
 }
 
-static void create_mesh(
+GLuint globe_vao()
+{
+	GLuint vao;
+	glGenVertexArrays(1,&vao);
+
+	glBindVertexArray(vao);
+
+	glEnableVertexArrayAttrib(vao,0);
+	glEnableVertexArrayAttrib(vao,1);
+	glEnableVertexArrayAttrib(vao,2);
+	glEnableVertexArrayAttrib(vao,3);
+	glEnableVertexArrayAttrib(vao,4);
+
+	glVertexAttribFormat(0,3,GL_FLOAT,0,offsetof(GlobeVertex,pos));
+	glVertexAttribFormat(1,2,GL_FLOAT,0,offsetof(GlobeVertex,uv));
+	glVertexAttribFormat(2,3,GL_FLOAT,0,offsetof(GlobeVertex,normal));
+	glVertexAttribIFormat(3,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,left));
+	glVertexAttribIFormat(4,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,right));
+
+	glVertexAttribBinding(0,0);
+	glVertexAttribBinding(1,0);
+	glVertexAttribBinding(2,0);
+	glVertexAttribBinding(3,0);
+	glVertexAttribBinding(4,0);
+
+	glBindVertexArray(0);
+
+	return vao;
+}
+
+
+static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_verts)
+{
+	uint8_t f = code.face;
+
+	aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
+	aabb2_t rect_tex = sub_rect(parent, code);
+
+	double factor = 1.0/(double)(TILE_VERT_WIDTH-1);
+
+	glm::dvec2 uv;
+
+	size_t idx = 0;
+	for (uint32_t i = 0; i < TILE_VERT_WIDTH; ++i) {
+		uv.x = (double)i*factor;
+		for (uint32_t j = 0; j < TILE_VERT_WIDTH; ++j) {
+			uv.y = (double)j*factor;
+
+			glm::dvec2 face_uv = glm::mix(rect.min,rect.max,uv);
+			glm::dvec2 tex_uv = glm::mix(rect_tex.min,rect_tex.max,uv);
+			glm::dvec3 p = cube_to_globe(f, face_uv);
+
+			GlobeVertex vert = {
+				.pos = glm::vec3(p),
+				.uv = glm::vec2(tex_uv),
+				.normal = glm::vec3(p),
+				.code = code
+			};
+
+			out_verts[idx++] = vert;
+		}
+	}
+}
+
+std::vector<DrawCommand> draw_cmds(size_t count) 
+{
+	std::vector<DrawCommand> cmds (count);
+
+	size_t index_count = 6 * TILE_VERT_COUNT;
+
+	for (size_t i = 0; i < count; ++i) {
+		DrawCommand cmd = {
+			.count = 6*TILE_VERT_COUNT,
+			.instanceCount = 1, 
+			.firstIndex = 0,
+			.baseVertex = static_cast<int>(i * TILE_VERT_COUNT),
+			.baseInstance = 0
+		};
+
+		cmds[i] = cmd;
+	}
+
+	return cmds;
+}
+
+std::vector<uint32_t> create_tile_indices()
+{
+	static const uint32_t n = TILE_VERT_WIDTH;
+	std::vector<uint32_t> indices;
+	for (uint32_t i = 0; i < n; ++i) {
+		for (uint32_t j = 0; j < n; ++j) {
+			uint32_t in = std::min(i + 1,n - 1);
+			uint32_t jn = std::min(j + 1,n - 1);
+
+			indices.push_back((n) * i  + j); 
+			indices.push_back((n) * in + j); 
+			indices.push_back((n) * in + jn); 
+
+			indices.push_back((n) * i  + j);
+			indices.push_back((n) * in + jn);
+			indices.push_back((n) * i  + jn);
+		}
+	}
+
+	return indices;
+}
+
+LoadResult create_render_data(ResourceTable *rt, RenderData &data)
+{
+	LoadResult result = RESULT_SUCCESS;
+
+	std::vector<uint32_t> tile_indices = create_tile_indices();
+
+	data.vao = globe_vao();
+	data.material = load_material_file(rt, "material/globe_tile.yaml");
+
+	if (!data.material)
+		goto load_failed;
+
+	data.vbo = create_buffer(rt, MAX_TILES*TILE_VERT_COUNT*sizeof(GlobeVertex),
+						  GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
+
+	if (!data.vbo)
+		goto load_failed;
+
+	data.ibo = create_buffer(rt, sizeof(uint32_t)*6*TILE_VERT_COUNT);
+	if (!data.ibo)
+		goto load_failed;
+
+	result = upload_buffer(rt, data.ibo, tile_indices.data(), 
+			   tile_indices.size()*sizeof(uint32_t));
+
+	if (result)
+		goto load_failed;
+
+	return result;
+load_failed:
+	if (data.vbo) rt->destroy_handle(data.vbo);
+	if (data.ibo) rt->destroy_handle(data.ibo);
+	return RESULT_ERROR;
+}
+
+static LoadResult update_render_data(
+	ResourceTable *rt,
 	Globe *globe,
 	glm::dvec3 origin,
 	const std::vector<TileCode>& parents, 
@@ -225,7 +369,6 @@ static void create_mesh(
 {
 	const std::vector<TileCode>& tiles = globe->tiles;
 	std::vector<GlobeVertex>& verts = globe->verts;
-	std::vector<uint32_t>&indices = globe->indices;
 
 	uint32_t count = std::min((uint32_t)tiles.size(),(uint32_t)MAX_TILES);
 	if (tiles.size() > MAX_TILES) {
@@ -236,97 +379,53 @@ static void create_mesh(
 
 	log_info("globe::create_mesh : total globe vertices : %d",total);
 
-	verts.reserve(total);
-	indices.reserve(6*total);
-
-	static const uint32_t n = TILE_VERT_WIDTH;
-
+	verts.resize(total);
+	uint32_t offset = 0;
 	for (uint32_t i = 0; i < count; ++i) {
+		size_t offset = i * TILE_VERT_COUNT;	
+
 		TileCode code = tiles[i];
-
-		uint8_t f = code.face;
-
-		aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
-		aabb2_t rect_tex = sub_rect(parents[i], code);
-
-		uint32_t offset = static_cast<uint32_t>(verts.size());
-
-		double factor = 1.0/(double)(n-1);
-
-		glm::dvec2 uv;
-		for (uint32_t i = 0; i < n; ++i) {
-			uv.x = (double)i*factor;
-			for (uint32_t j = 0; j < n; ++j) {
-				uv.y = (double)j*factor;
-
-				glm::dvec2 face_uv = glm::mix(rect.min,rect.max,uv);
-				glm::dvec2 tex_uv = glm::mix(rect_tex.min,rect_tex.max,uv);
-				glm::dvec3 p = cube_to_globe(f, face_uv);
-
-				GlobeVertex vert = {
-					.pos = glm::vec3(p),
-					.uv = glm::vec2(tex_uv),
-					.normal = glm::vec3(p),
-					.code = code
-				};
-
-				verts.push_back(vert);
-			}
-		}
-
-		// TODO : Set up indirect draw calls so this is not required.
-		for (uint32_t i = 0; i < n; ++i) {
-			for (uint32_t j = 0; j < n; ++j) {
-				uint32_t in = std::min(i + 1,n - 1);
-				uint32_t jn = std::min(j + 1,n - 1);
-
-				indices.push_back(offset + (n) * i  + j); 
-				indices.push_back(offset + (n) * in + j); 
-				indices.push_back(offset + (n) * in + jn); 
-
-				indices.push_back(offset + (n) * i  + j);
-				indices.push_back(offset + (n) * in + jn);
-				indices.push_back(offset + (n) * i  + jn);
-			}
-		}
+		create_tile_verts(code, parents[i], &verts[offset]);
 	}
 
-	return;
+	size_t verts_bytes = verts.size()*sizeof(GlobeVertex);
+
+	const GLBuffer *buf = rt->get<GLBuffer>(globe->render_data.vbo);
+
+	glBindBuffer(GL_ARRAY_BUFFER, buf->id);
+	void *ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+
+	memcpy(ptr, verts.data(), verts_bytes);
+
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+
+	globe->render_data.cmds = draw_cmds(count);
+
+	return RESULT_SUCCESS;
 };
+
 
 //------------------------------------------------------------------------------
 // Interface
 
-LoadResult globe_create(Globe *globe, ResourceTable *table)
+LoadResult globe_create(Globe *globe, ResourceTable *rt)
 {
-	ResourceHandle h = table->create_handle(RESOURCE_TYPE_MODEL);
+	LoadResult result = create_render_data(rt, globe->render_data);
 
-	if (h == RESOURCE_HANDLE_NULL)
-		return RESULT_ERROR;
-
-	LoadResult result = table->allocate(h, nullptr);
-
-	MaterialID material = load_material_file(table, "material/globe_tile.yaml");
-
-	if (!material || result != RESULT_SUCCESS)
+	if (result != RESULT_SUCCESS)
 		goto load_failed;
 
-	globe->modelID = h;
-	globe->materialID = material;
-
-	globe::init_debug(table);
+	globe::init_debug(rt);
 
 	return result;
 load_failed:
-	table->destroy_handle(h);
 	return result;
 }
 
-LoadResult globe_update(Globe *globe, ResourceTable *table, GlobeUpdateInfo *info)
+LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 {
 	globe->tiles.clear();
 	globe->verts.clear();
-	globe->indices.clear();
 
 	const Camera * p_camera = g_camera_debug->get_camera(); 
 	static int zoom = 3;
@@ -372,9 +471,7 @@ LoadResult globe_update(Globe *globe, ResourceTable *table, GlobeUpdateInfo *inf
 	std::vector<std::pair<TileCode,TileTexIndex>> new_textures;
 	globe->cache.get_textures(globe->tiles,tile_textures,new_textures);
 
-	create_mesh(globe,pos,globe->tiles,tile_textures);
-
-	LoadResult result = table->upload(globe->modelID,"globe",globe);
+	LoadResult result = update_render_data(rt,globe,pos,globe->tiles,tile_textures);
 	
 	globe::update_boxes();
 
@@ -383,66 +480,31 @@ LoadResult globe_update(Globe *globe, ResourceTable *table, GlobeUpdateInfo *inf
 
 void globe_record_draw_cmds(const RenderContext& ctx, const Globe *globe)
 {
-	ctx.bind_material(globe->materialID);
-	ctx.draw_cmd_basic_mesh3d(globe->modelID,glm::mat4(1.0f));
-	globe::draw_boxes(ctx);
-}
+	const RenderData &data = globe->render_data;
 
-//------------------------------------------------------------------------------
-// Loader functions
+	ctx.bind_material(data.material);
 
-static LoadResult globe_upload_fn(ResourceTable *table, void *res, void *into);
+	const GLBuffer* vbo = ctx.table->get<GLBuffer>(data.vbo); 
+	const GLBuffer* ibo = ctx.table->get<GLBuffer>(data.ibo); 
 
-ResourceLoaderFns loader_fns = { 
-	.loader_fn = globe_upload_fn,
-	.post_load_fn = nullptr
-};
+	glBindVertexArray(data.vao);
 
-LoadResult globe_upload_fn(ResourceTable *table, void *res, void *usr)
-{
-	const Globe *globe = static_cast<const Globe*>(usr);
-	GLModel *model = static_cast<GLModel*>(res);
+	glBindVertexBuffer(0, vbo->id, 0, sizeof(GlobeVertex));
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo->id);
 
-	model->type = MODEL_TYPE_MESH_3D;
-	model->icount = globe->indices.size();
-	model->vcount = globe->verts.size();
-	model->vsize = sizeof(GlobeVertex);
-	model->isize = sizeof(uint32_t);
+	glMultiDrawElementsIndirect(
+		GL_TRIANGLES, 
+		GL_UNSIGNED_INT, 
+		data.cmds.data(), 
+		data.cmds.size(), 
+		0
+	);
 
-	glBindVertexArray(model->vao);
-
-
-	size_t vsize = globe->verts.size()*sizeof(GlobeVertex);
-	glBindBuffer(GL_ARRAY_BUFFER, model->vbo);
-	glBufferData(GL_ARRAY_BUFFER, (GLsizei)vsize, globe->verts.data(), GL_DYNAMIC_DRAW);
-
-	size_t isize = globe->indices.size()*sizeof(uint32_t);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model->ibo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizei)isize, globe->indices.data(), GL_DYNAMIC_DRAW);
-
-	glEnableVertexArrayAttrib(model->vao,0);
-	glEnableVertexArrayAttrib(model->vao,1);
-	glEnableVertexArrayAttrib(model->vao,2);
-	glEnableVertexArrayAttrib(model->vao,3);
-	glEnableVertexArrayAttrib(model->vao,4);
-	glVertexAttribPointer(0,3,GL_FLOAT,0,sizeof(GlobeVertex),(void*)offsetof(GlobeVertex,pos));
-	glVertexAttribPointer(1,2,GL_FLOAT,0,sizeof(GlobeVertex),(void*)offsetof(GlobeVertex,uv));
-	glVertexAttribPointer(2,3,GL_FLOAT,0,sizeof(GlobeVertex),(void*)offsetof(GlobeVertex,normal));
-	glVertexAttribIPointer(3,1,GL_UNSIGNED_INT,sizeof(GlobeVertex),(void*)offsetof(GlobeVertex,left));
-	glVertexAttribIPointer(4,1,GL_UNSIGNED_INT,sizeof(GlobeVertex),(void*)offsetof(GlobeVertex,right));
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
 
 	glBindVertexArray(0);
-	LoadResult result = RESULT_SUCCESS;
 
-	if (result != RESULT_SUCCESS) {
-		log_error("Failed to upload globe mesh");
-		return result;
-	}
-
-	if (gl_check_err())
-		return RESULT_ERROR;
-
-	return result;
+	globe::draw_boxes(ctx);
 }
 
 }; // namespace globe

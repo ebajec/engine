@@ -244,14 +244,6 @@ struct LinePoint
 	float padding;
 };
 
-typedef  struct {
-        uint  count;
-        uint  instanceCount;
-        uint  firstIndex;
-        int  baseVertex;
-        uint  baseInstance;
-} DrawElementsIndirectCommand;
-
 struct RandomLine : AppComponent 
 {
 	GLRenderer *renderer;
@@ -261,7 +253,7 @@ struct RandomLine : AppComponent
 
 	std::vector<uint32_t> indices;
 	std::vector<LinePoint> points;
-	std::vector<DrawElementsIndirectCommand> cmds;
+	std::vector<DrawCommand> cmds;
 	std::vector<uint32_t> draw_counts;
 
 	gl_vbo vbo;
@@ -333,7 +325,7 @@ struct RandomLine : AppComponent
 					pt.length = 0;
 			}
 
-			DrawElementsIndirectCommand cmd = {
+			DrawCommand cmd = {
 				.count = sizeof(idx)/sizeof(idx[0]),
 				.instanceCount = count - 1,
 				.firstIndex = 0,
@@ -362,7 +354,7 @@ struct RandomLine : AppComponent
 		glGenBuffers(1,&cmd_buf);
 
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER,cmd_buf);
-		glBufferData(GL_SHADER_STORAGE_BUFFER, cmds.size()*sizeof(DrawElementsIndirectCommand), cmds.data(), GL_STATIC_READ);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, cmds.size()*sizeof(DrawCommand), cmds.data(), GL_STATIC_READ);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER,0);
 
 		glBindVertexArray(vao);

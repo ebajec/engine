@@ -183,7 +183,6 @@ int main(int argc, char* argv[])
 		.resource_path = resource_path
 	};
 	std::shared_ptr<ResourceTable> rt = ResourceTable::create(&resource_table_info); 
-	rt->register_loader("globe", globe::loader_fns);
 	ImageLoader::registration(rt.get());
 	ModelLoader::registration(rt.get());
 

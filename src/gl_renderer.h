@@ -18,6 +18,15 @@
 class GLRenderer;
 struct FrameContext;
 
+struct DrawCommand 
+{
+    uint  count;
+    uint  instanceCount;
+    uint  firstIndex;
+    int  baseVertex;
+    uint  baseInstance;
+};
+
 struct Camera
 {
 	glm::mat4 proj;
