@@ -7,8 +7,10 @@ file(GLOB SOURCES
     "imgui/*.cpp"
     "imgui/backends/imgui_impl_glfw.cpp"
     "imgui/backends/imgui_impl_opengl3.cpp"
+	"implot/implot.cpp"
+	"implot/implot_items.cpp"
     )
 
 add_library(imgui STATIC ${SOURCES})
 
-target_include_directories(imgui PUBLIC imgui)
+target_include_directories(imgui PUBLIC imgui implot)

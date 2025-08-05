@@ -21,7 +21,7 @@ void main()
 	vec4 pos = vec4(0,0,0,1);
 	pos.x += bool(vidx & 0x1) ? -1 : 1;
 	pos.y += bool(vidx & 0x2) ? -1 : 1;
-	pos.z += bool(vidx & 0x4) ? -0.5 : 1;
+	pos.z += bool(vidx & 0x4) ? -1 : 1;
 
 	vec4 wpos = inv*pos;
 	out_pos = wpos;

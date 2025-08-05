@@ -150,8 +150,6 @@ void TileTexCache::get_textures(
 		textures.push_back(idx);
 		if (!found) new_tiles.push_back({code, idx});
 	}
-
-	log_info("TileCache::get_textures : loaded %ld new tile textures",new_tiles.size());
 }
 
 void TileTexCache::bind_texture_arrays(uint32_t base) const 

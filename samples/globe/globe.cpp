@@ -10,6 +10,7 @@
 #include "debug/camera_debug_view.h"
 
 #include <imgui.h>
+#include <implot.h>
 
 #include <glm/vec3.hpp>
 #include <glm/mat3x3.hpp>
@@ -81,14 +82,6 @@ static constexpr TileCode tile_code_refine(TileCode code, quadrant_t quadrant)
 	return code;
 }
 
-struct select_tiles_params
-{
-	frustum_t frust;
-	double res;
-	glm::dvec3 origin;
-	glm::dvec2 origin_uv;
-};
-
 static glm::dvec3 tile_diff(glm::dvec3 p, glm::dvec2 p_uv, aabb2_t tile, uint8_t face)
 {
 	p_uv = glm::clamp(p_uv,tile.min,tile.max);
@@ -98,9 +91,15 @@ static glm::dvec3 tile_diff(glm::dvec3 p, glm::dvec2 p_uv, aabb2_t tile, uint8_t
 	return diff;
 }
 
+struct select_tiles_rec_params : select_tiles_params
+{
+	glm::dvec2 origin_uv;
+};
+
 static inline int select_tiles_rec(
 	std::vector<TileCode> &out, 
 	const select_tiles_params *params,
+	glm::dvec2 origin_uv,
 	TileCode code)
 {
 	const bool enable_boxes = g_enable_boxes;
@@ -130,6 +129,9 @@ static inline int select_tiles_rec(
 		box = aabb_add(box, cube_to_globe(code.face, 0.5*(rect.ur() + rect.lr())));
 	}
 
+	if (!intersects(box, params->frust_box))
+		return 0;
+
 	for (uint8_t i = 0; i < 6; ++i) {
 		if (classify(box, params->frust.planes[i]) > 0) { 
 			return 0;
@@ -139,7 +141,7 @@ static inline int select_tiles_rec(
 	// TODO : Use the integral of the product of view direction and surface normal
 	// over a tile to approximate the visible area.
 	
-	glm::dvec3 tile_nearest_diff = tile_diff(params->origin,params->origin_uv,rect,code.face);
+	glm::dvec3 tile_nearest_diff = tile_diff(params->origin,origin_uv,rect,code.face);
 	double d_min_sq = dot(tile_nearest_diff,params->frust.planes[4].n);
 	d_min_sq = std::max(tile_scale_factor * d_min_sq * d_min_sq,1e-6);
 
@@ -162,7 +164,7 @@ static inline int select_tiles_rec(
 
 	int status = 0;
 	for (uint8_t i = 0; i < 4; ++i) {
-		status += select_tiles_rec(out, params, children[i]);
+		status += select_tiles_rec(out, params, origin_uv, children[i]);
 	}
 
 	// If status is zero than no tiles were added, so add this tile
@@ -177,33 +179,22 @@ static inline int select_tiles_rec(
 
 
 void select_tiles(
-	std::vector<TileCode>& tiles,
-	const frustum_t& frust, 
-	glm::dvec3 center, 
-	double res
+	select_tiles_params& params,
+	std::vector<TileCode>& tiles
 )
 {
-	res = std::max(res,1e-5);
+	params.res = std::max(params.res, 1e-5);
 
-	select_tiles_params params = {
-		.frust = frust,
-		.res = res,
-		.origin = center,
-		.origin_uv = glm::vec2(0)
-	};
- 
 	for (uint8_t f = 0; f < CUBE_FACES; ++f) {
-		params.origin_uv = globe_to_cube_face(center,f);
+		glm::dvec2 origin_uv = globe_to_cube_face(params.origin,f);
 
 		TileCode code = {
 			.face = f,
 			.zoom = 0,
 			.idx = 0
 		};
-		select_tiles_rec(tiles, &params, code); 
+		select_tiles_rec(tiles, &params, origin_uv, code); 
 	}
-
-	log_info("globe::select_tiles : selected %d tiles",tiles.size());
 }
 
 aabb2_t sub_rect(TileCode parent, TileCode child)
@@ -381,8 +372,6 @@ static LoadResult update_render_data(
 
 	uint32_t total = TILE_VERT_COUNT*count;
 
-	log_info("globe::create_mesh : total globe vertices : %d",total);
-
 	verts.resize(total);
 	uint32_t offset = 0;
 	for (uint32_t i = 0; i < count; ++i) {
@@ -421,6 +410,39 @@ static LoadResult update_render_data(
 	return RESULT_SUCCESS;
 };
 
+void plot_tile_counts(size_t total, size_t new_tiles)
+{
+		static std::vector<float> times;
+		static std::vector<float> new_counts;
+		static std::vector<float> tile_counts;
+		static int scroll = 0;
+		static size_t samples = 500;
+		static float avg = 0;
+
+		float count = (float)total;
+
+		if (tile_counts.size() < samples) 
+			tile_counts.resize(samples,0);
+		if (new_counts.size() < samples) 
+			new_counts.resize(samples,0);
+		if (times.size() < samples) 
+			times.resize(samples,0);
+
+		tile_counts[scroll] = count;
+		new_counts[scroll] = (float)new_tiles;
+		times[scroll] = glfwGetTime();
+
+		scroll = (scroll + 1)%samples;
+
+		avg = 0.99*avg + 0.01*count;
+
+		if (ImPlot::BeginPlot("Tile selection",ImVec2(200,200))) {
+			ImPlot::SetupAxesLimits(times[scroll], times[scroll  ? scroll - 1 : samples - 1], 0, 2*avg,ImPlotCond_Always);
+			ImPlot::PlotLine("Tile count", times.data(), tile_counts.data(),samples,ImPlotCond_Always, scroll);
+			ImPlot::PlotLine("New count", times.data(), new_counts.data(),samples,ImPlotCond_Always, scroll);
+			ImPlot::EndPlot();
+		}
+}
 
 //------------------------------------------------------------------------------
 // Interface
@@ -441,13 +463,11 @@ load_failed:
 
 LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 {
-	globe->tiles.clear();
-	globe->verts.clear();
-
 	const Camera * p_camera = g_camera_debug->get_camera(); 
 	static int zoom = 0;
 
-	ImGui::Begin("Globe debug");
+	ImGui::Begin("Globe debug");	
+
 	ImGui::SliderInt("res", &zoom, 0, 8, "%d");
 
 	if (ImGui::Button(g_enable_boxes ? 
@@ -464,7 +484,8 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	}
 	if (!p_camera) p_camera = info->camera;
 
-	ImGui::End();
+	globe->tiles.clear();
+	globe->verts.clear();
 
 	//----------------------------------------------------------------------------
 	// Adjust the test frustum to only go to the horizon
@@ -472,7 +493,7 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	glm::mat4 pv = p_camera->proj*p_camera->view;
 	frustum_t frust = camera_frustum(pv);
 
-	double resolution = globe::tile_area((uint8_t)zoom);
+	double resolution = tile_area((uint8_t)zoom);
 	glm::dvec3 pos = camera_get_pos(p_camera->view);
 	double r_horizon = sqrt(std::max(dot(pos,pos) - 1.,0.));
 
@@ -481,16 +502,29 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 
 	//-----------------------------------------------------------------------------
 	// Process visible tiles
+	
+	select_tiles_params params = {
+		.frust = frust,
+		.frust_box = frust_cull_box(frust),
+		.origin = pos,
+		.res = resolution,
+	};
 
-	globe::select_tiles(globe->tiles, frust, pos, resolution);
+	g_disp->add(params.frust_box);
+
+	globe::select_tiles(params, globe->tiles);
 
 	std::vector<TileTexIndex> tile_textures;
 	std::vector<std::pair<TileCode,TileTexIndex>> new_textures;
+
 	globe->cache.get_textures(globe->tiles,tile_textures,new_textures);
 
 	LoadResult result = update_render_data(rt,globe,pos,globe->tiles,tile_textures);
 	
 	globe::update_boxes();
+
+	plot_tile_counts(globe->tiles.size(), new_textures.size());
+	ImGui::End();
 
 	return result;
 }

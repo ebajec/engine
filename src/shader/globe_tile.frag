@@ -107,11 +107,12 @@ void main()
 
 	vec4 color = FACE_COLORS[in_code.face];
 	color *= f;
+	color = in_color;
 	color.w = 0.5;
 
 	vec3 sun = normalize(vec3(-1,-1,3));
 
-	if (false) {
+	if (true) {
 		vec3 dx = dFdx(in_pos);
 		vec3 dy = dFdy(in_pos);
 		vec3 n = normalize(cross(dx,dy));
@@ -120,9 +121,9 @@ void main()
 
 	vec3 uvw = vec3(in_uv, in_tex_idx.tex);
 
-	//color = texture(u_tex_arrays[in_tex_idx.page], uvw);
+	//vec4 ncolor = texture(u_tex_arrays[in_tex_idx.page], uvw);
 	//color = (float(in_tex_idx.tex)/7.0)*FACE_COLORS[0];
-	color = unpackUnorm4x8(64*in_tex_idx.tex*(in_tex_idx.page + 1));
+	vec4 ncolor = unpackUnorm4x8(64*in_tex_idx.tex*(in_tex_idx.page + 1));
 
-	FragColor = color;
+	FragColor = ncolor;
 }

@@ -2,6 +2,7 @@
 #define TILE_CACHE_H
 
 #include "texture_loader.h"
+#include "tiling.h"
 
 // STL
 #include <unordered_map>
@@ -16,27 +17,6 @@ static constexpr uint32_t TILE_SIZE = 256;
 static constexpr uint32_t TILE_PAGE_SIZE = 64;
 static constexpr uint32_t MAX_TILE_PAGES = 16;
 static constexpr uint32_t MAX_TILES = TILE_PAGE_SIZE*MAX_TILE_PAGES;
-
-union TileCode
-{
-	struct {
-		uint8_t face : 3;
-		uint8_t zoom : 5;
-		uint64_t idx : 56;
-	};
-	uint64_t u64;
-
-	constexpr bool operator == (const TileCode& other) const {
-		return u64 == other.u64;
-	}
-};
-
-struct TileCodeHash
-{
-	constexpr size_t operator()(const TileCode& code) const {
-		return std::hash<uint64_t>{}(code.u64);
-	}
-};
 
 struct TilePage
 {

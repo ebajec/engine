@@ -6,6 +6,7 @@ build-*/
 imgui.ini
 
 deps/imgui/imgui
+deps/imgui/implot
 deps/glad/glad
 deps/spirv-reflect/spirv-reflect
 deps/stb/stb

@@ -16,6 +16,7 @@
 
 // imgui
 #include <imgui.h>
+#include <implot.h>
 #include <backends/imgui_impl_glfw.h>
 #include "backends/imgui_impl_opengl3.h"
 
@@ -175,6 +176,8 @@ int main(int argc, char* argv[])
 		log_error("Failed to initialize applicaition window");
 		return EXIT_FAILURE;
 	}
+
+	ImPlot::CreateContext();
 	
 	//-------------------------------------------------------------------------------------------------
 	// Resource tables
@@ -271,6 +274,7 @@ int main(int argc, char* argv[])
 
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
+	ImPlot::DestroyContext();
 	ImGui::DestroyContext();
 
 	glfwDestroyWindow(window);

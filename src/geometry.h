@@ -87,6 +87,8 @@ struct frustum_t
 	};
 };
 
+static inline aabb3_t aabb_bounding(glm::dvec3 *pts, size_t count);
+
 static inline frustum_t camera_frustum(glm::mat4 m)
 {
 	m = transpose(m);
@@ -98,8 +100,8 @@ static inline frustum_t camera_frustum(glm::mat4 m)
 			case FRUSTUM_PLANE_RIGHT: p = m[3] - m[0]; break; // right
 			case FRUSTUM_PLANE_DOWN:  p = m[3] + m[1]; break; // bottom
 			case FRUSTUM_PLANE_UP:    p = m[3] - m[1]; break; // top
-			case FRUSTUM_PLANE_NEAR:   p = m[3] + m[2]; break; // near
-			case FRUSTUM_PLANE_FAR:  p = m[3] - m[2]; break; // far
+			case FRUSTUM_PLANE_NEAR:  p = m[3] + m[2]; break; // near
+			case FRUSTUM_PLANE_FAR:   p = m[3] - m[2]; break; // far
 		}
 
 		float r_inv = 1.0f / length(glm::vec3(p));
@@ -108,6 +110,31 @@ static inline frustum_t camera_frustum(glm::mat4 m)
 	}
 	
 	return frust;
+}
+
+static inline aabb3_t frust_cull_box(const frustum_t& frust)
+{
+	// TODO : make this less hacky (we probably don't need to solve 4 linear systems?) 
+	glm::dmat3 m1 = glm::transpose(glm::dmat3(frust.far.n,frust.right.n,frust.up.n));
+	glm::dmat3 m2 = glm::transpose(glm::dmat3(frust.far.n,frust.left.n,frust.up.n));
+	glm::dmat3 m3 = glm::transpose(glm::dmat3(frust.far.n,frust.right.n,frust.down.n));
+	glm::dmat3 m4 = glm::transpose(glm::dmat3(frust.far.n,frust.left.n,frust.down.n));
+
+	glm::dvec3 p[8] = {
+		glm::inverse(m1) * glm::dvec3(frust.far.d,frust.right.d,frust.up.d),
+		glm::inverse(m2) * glm::dvec3(frust.far.d,frust.left.d,frust.up.d),
+		glm::inverse(m3) * glm::dvec3(frust.far.d,frust.right.d,frust.down.d),	
+		glm::inverse(m4) * glm::dvec3(frust.far.d,frust.left.d,frust.down.d)	
+	};
+
+	glm::dvec3 back = frust.far.n * (frust.far.d + frust.near.d);
+
+	p[4] = p[0] - back;
+	p[5] = p[1] - back;
+	p[6] = p[2] - back;
+	p[7] = p[3] - back;
+
+	return aabb_bounding(p, 8);
 }
 
 static constexpr bool aabb_contains(aabb2_t box, glm::dvec2 v)
@@ -152,12 +179,20 @@ static inline bool within_frustum(glm::dvec3 v, frustum_t frust)
 	return true;
 }
 
-
 static inline bool intersects(const aabb2_t& box, const circle_t &circ)
 {
 	glm::dvec2 nearest = glm::clamp(circ.c, box.ll(),box.ur());
 	glm::dvec2 d = circ.c - nearest;
     return dot(d,d) < circ.r*circ.r;
+}
+
+static inline bool intersects(const aabb3_t& b1, const aabb3_t& b2)
+{
+	return !(
+		b1.x1 < b2.x0 || b2.x1 < b1.x0 ||
+		b1.y1 < b2.y0 || b2.y1 < b1.y0 ||
+		b1.z1 < b2.z0 || b2.z1 < b1.z0 
+	);
 }
 
 static inline int classify(const aabb3_t& box, const plane_t& pl)
