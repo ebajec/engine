@@ -53,12 +53,9 @@ void main()
 
 	vec3 uvw = vec3(in_uv, in_tex_idx.tex);
 
-	vec4 color = texture(u_tex,in_uv);
-	//vec4 color = FACE_COLORS[in_code.face];
-	//color *= f;
-	//color = in_color;
-	//color.w = 0.5;
-	color = texture(u_tex_arrays[in_tex_idx.page], uvw);
+	float val = texture(u_tex_arrays[in_tex_idx.page], uvw).r;
+
+	vec4 color = mix(vec4(0,0.5,0,1), vec4(0.4,0.45,0.5,1), clamp(5*val,0,1));
 
 	vec3 sun = normalize(vec3(-1,-1,3));
 

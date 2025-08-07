@@ -3,7 +3,7 @@
 
 #include <cstring>
 
-TilePage create_page()
+TilePage create_page(GLuint format)
 {
 	TilePage page{};
 
@@ -11,7 +11,7 @@ TilePage create_page()
 	glTextureStorage3D(
 		page.tex_array, 
 		1, 
-		GL_RGBA8, 
+		format, 
 		TILE_WIDTH, 
 		TILE_WIDTH, 
 		TILE_PAGE_SIZE
@@ -39,7 +39,7 @@ void destroy_page(TilePage &page)
 TileTexIndex TileTexCache::allocate()
 {
 	if (m_open_pages.empty()) {
-		m_pages.emplace_back(std::move(create_page()));
+		m_pages.emplace_back(std::move(create_page(m_data_format)));
 		m_open_pages.push(m_pages.size() - 1);
 	}
 
@@ -91,7 +91,7 @@ void TileTexCache::reserve(uint32_t count)
 	m_pages.reserve(req);
 
 	for (size_t i = 0; i < diff; ++i) {
-		m_pages.emplace_back(std::move(create_page()));
+		m_pages.emplace_back(std::move(create_page(m_data_format)));
 		m_open_pages.push(m_pages.size() - 1);
 	}
 }
@@ -180,7 +180,7 @@ void TileTexCache::synchronous_upload(
 	GLuint pbo;
 	glCreateBuffers(1, &pbo);
 
-	size_t img_size = TILE_SIZE*sizeof(float);
+	size_t img_size = TILE_SIZE*m_data_size;
 
 	GLsizeiptr total_size = uploads.size()*img_size;
 
@@ -224,8 +224,8 @@ void TileTexCache::synchronous_upload(
 			TILE_WIDTH,
 			TILE_WIDTH,
 			1,
-			GL_RGBA,
-			GL_UNSIGNED_BYTE,
+			m_img_format,
+			m_data_type,
 			(void*)offset
 		);
 	}

@@ -88,7 +88,7 @@ void main()
 	float d = sin(f*wpos.x - 2*t)*cos(f*wpos.y - 2*t)*
 			sin(f*wpos.z + 2*t)*cos(f*wpos.z + 2*t);
 
-	wpos += 0.1*n*(length(val.xyz));
+	wpos += 0.1*n*(val.r);
 	//wpos += 0.1*n*(length(val) - 0.5);
 	//wpos += n*0.1*d;
 

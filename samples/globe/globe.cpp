@@ -441,50 +441,6 @@ void plot_tile_counts(size_t total, size_t new_tiles)
 		}
 }
 
-uint32_t rgba(float r, float g, float b, float a)
-{
-	uint32_t R = ((uint32_t)(255*r)) << 24;
-	uint32_t G = ((uint32_t)(255*g)) << 16;
-	uint32_t B = ((uint32_t)(255*b)) << 8;
-	uint32_t A = ((uint32_t)(255*a)) << 0;
-
-	return R|G|B|A; 
-}
-
-void test_upload(TileCode code, void *dst, void *usr)
-{
-	uint32_t *data = static_cast<uint32_t*>(dst);
-
-	aabb2_t rect = morton_u64_to_rect_f64(code.idx, code.zoom);
-
-	float d = 1.0/(float)(TILE_WIDTH - 1);
-
-	glm::vec2 uv = glm::vec2(0);
-	size_t idx = 0;
-	for (size_t i = 0; i < TILE_WIDTH; ++i) {
-		for (size_t j = 0; j < TILE_WIDTH; ++j) {
-			glm::vec2 f = glm::vec2(rect.min) + 
-				uv * glm::vec2((rect.max - rect.min));
-
-			glm::dvec3 p = cube_to_globe(code.face, f);
-
-			p = glm::abs(p);
-
-			float c = 15;
-			float g = sin(c*p.x)*cos(c*p.y)*
-					  sin(c*p.z)*cos(c*p.z);
-
-			data[idx++] = rgba(1,g*g,0.2,g*g);	
-			uv.x += d;
-		}
-		uv.x = 0;
-		uv.y += d;
-	}
-
-	return;
-}
-
-
 //------------------------------------------------------------------------------
 // Interface
 
@@ -565,7 +521,6 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	std::vector<TileTexUpload> new_textures;
 
 	globe->cache.get_textures(data_tiles,tile_textures,new_textures);
-
 	globe->cache.synchronous_upload(&globe->dataset, new_textures);
 
 	LoadResult result = update_render_data(rt,globe,
