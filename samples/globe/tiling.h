@@ -12,6 +12,8 @@
 #include <cstdint>
 #include <cfloat>
 
+static constexpr uint32_t CUBE_FACES = 6;
+
 union TileCode
 {
 	struct {

@@ -36,14 +36,11 @@ static std::unique_ptr<CameraDebugView> g_camera_debug;
 
 namespace globe
 {
-
-static constexpr uint32_t CUBE_FACES = 6;
-
 static constexpr uint32_t TILE_VERT_WIDTH = 32;
 static constexpr uint32_t TILE_VERT_COUNT = 
 	TILE_VERT_WIDTH*TILE_VERT_WIDTH;
 
-static constexpr double tile_scale_factor = 128;
+static constexpr double tile_scale_factor = 72;
 
 enum quadrant_t
 {
@@ -142,8 +139,12 @@ static inline int select_tiles_rec(
 	// over a tile to approximate the visible area.
 	
 	glm::dvec3 tile_nearest_diff = tile_diff(params->origin,origin_uv,rect,code.face);
-	double d_min_sq = dot(tile_nearest_diff,params->frust.planes[4].n);
-	d_min_sq = std::max(tile_scale_factor * d_min_sq * d_min_sq,1e-6);
+	
+	//double d_min_sq = dot(tile_nearest_diff,params->frust.planes[4].n);
+	//d_min_sq *= d_min_sq;
+	double d_min_sq = dot(tile_nearest_diff,tile_nearest_diff);
+
+	d_min_sq = std::max(tile_scale_factor * d_min_sq,1e-6);
 
 	glm::dvec3 mid = cube_to_globe(code.face, 0.5*(rect.ur() + rect.ll()));
 
@@ -363,7 +364,6 @@ static LoadResult update_render_data(
 )
 {
 	const std::vector<TileCode>& tiles = globe->tiles;
-	std::vector<GlobeVertex>& verts = globe->verts;
 
 	uint32_t count = std::min((uint32_t)tiles.size(),(uint32_t)MAX_TILES);
 	if (tiles.size() > MAX_TILES) {
@@ -371,15 +371,6 @@ static LoadResult update_render_data(
 	}
 
 	uint32_t total = TILE_VERT_COUNT*count;
-
-	verts.resize(total);
-	uint32_t offset = 0;
-	for (uint32_t i = 0; i < count; ++i) {
-		size_t offset = i * TILE_VERT_COUNT;	
-
-		TileCode code = tiles[i];
-		create_tile_verts(code, parents[i], &verts[offset]);
-	}
 
 	//-----------------------------------------------------------------------------
 	// vbo
@@ -389,7 +380,13 @@ static LoadResult update_render_data(
 	glBindBuffer(GL_ARRAY_BUFFER, buf->id);
 	void *ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
 
-	memcpy(ptr, verts.data(), verts.size()*sizeof(GlobeVertex));
+	uint32_t offset = 0;
+	for (uint32_t i = 0; i < count; ++i) {
+		size_t offset = i * TILE_VERT_COUNT;	
+
+		TileCode code = tiles[i];
+		create_tile_verts(code, parents[i], (GlobeVertex*)ptr + offset);
+	}
 
 	glUnmapBuffer(GL_ARRAY_BUFFER);
 
@@ -444,6 +441,50 @@ void plot_tile_counts(size_t total, size_t new_tiles)
 		}
 }
 
+uint32_t rgba(float r, float g, float b, float a)
+{
+	uint32_t R = ((uint32_t)(255*r)) << 24;
+	uint32_t G = ((uint32_t)(255*g)) << 16;
+	uint32_t B = ((uint32_t)(255*b)) << 8;
+	uint32_t A = ((uint32_t)(255*a)) << 0;
+
+	return R|G|B|A; 
+}
+
+void test_upload(TileCode code, void *dst, void *usr)
+{
+	uint32_t *data = static_cast<uint32_t*>(dst);
+
+	aabb2_t rect = morton_u64_to_rect_f64(code.idx, code.zoom);
+
+	float d = 1.0/(float)(TILE_WIDTH - 1);
+
+	glm::vec2 uv = glm::vec2(0);
+	size_t idx = 0;
+	for (size_t i = 0; i < TILE_WIDTH; ++i) {
+		for (size_t j = 0; j < TILE_WIDTH; ++j) {
+			glm::vec2 f = glm::vec2(rect.min) + 
+				uv * glm::vec2((rect.max - rect.min));
+
+			glm::dvec3 p = cube_to_globe(code.face, f);
+
+			p = glm::abs(p);
+
+			float c = 15;
+			float g = sin(c*p.x)*cos(c*p.y)*
+					  sin(c*p.z)*cos(c*p.z);
+
+			data[idx++] = rgba(1,g*g,0.2,g*g);	
+			uv.x += d;
+		}
+		uv.x = 0;
+		uv.y += d;
+	}
+
+	return;
+}
+
+
 //------------------------------------------------------------------------------
 // Interface
 
@@ -455,6 +496,9 @@ LoadResult globe_create(Globe *globe, ResourceTable *rt)
 		goto load_failed;
 
 	globe::init_debug(rt);
+
+	globe->dataset = std::move(TileDataCache::create(
+		test_upload,nullptr, TILE_SIZE*sizeof(uint32_t)));
 
 	return result;
 load_failed:
@@ -485,7 +529,6 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	if (!p_camera) p_camera = info->camera;
 
 	globe->tiles.clear();
-	globe->verts.clear();
 
 	//----------------------------------------------------------------------------
 	// Adjust the test frustum to only go to the horizon
@@ -514,16 +557,23 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 
 	globe::select_tiles(params, globe->tiles);
 
+	size_t count = globe->tiles.size();
+
+	std::vector<TileCode> data_tiles = globe->dataset.load(globe->tiles);
+
 	std::vector<TileTexIndex> tile_textures;
-	std::vector<std::pair<TileCode,TileTexIndex>> new_textures;
+	std::vector<TileTexUpload> new_textures;
 
-	globe->cache.get_textures(globe->tiles,tile_textures,new_textures);
+	globe->cache.get_textures(data_tiles,tile_textures,new_textures);
 
-	LoadResult result = update_render_data(rt,globe,pos,globe->tiles,tile_textures);
+	globe->cache.synchronous_upload(&globe->dataset, new_textures);
+
+	LoadResult result = update_render_data(rt,globe,
+		pos,data_tiles,tile_textures);
 	
 	globe::update_boxes();
 
-	plot_tile_counts(globe->tiles.size(), new_textures.size());
+	plot_tile_counts(count, new_textures.size());
 	ImGui::End();
 
 	return result;

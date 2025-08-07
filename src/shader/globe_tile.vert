@@ -74,32 +74,31 @@ void main()
 	vec4 wpos = vec4(pos, 1);
 	vec4 n = vec4(normal,0);
 
-	tile_code_t code = from_input(code_left,code_right);
+	uint tile_idx = gl_VertexID/TILE_VERT_COUNT;
+	tex_idx_t tex_idx = decode_tex_idx(tex_indices[tile_idx]);
 
-	aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
+	vec3 uvw = vec3(uv, tex_idx.tex);
+	vec4 val = texture(u_tex_arrays[tex_idx.page], uvw);
 
-	vec2 drect = rect.max - rect.min;
-
-	vec4 c = texture(u_tex,rect.min + uv*drect);
-
+	//tile_code_t code = from_input(code_left,code_right);
+	//aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
+	//vec2 drect = rect.max - rect.min;
+	//vec4 c = texture(u_tex,rect.min + uv*drect);
 	float f = 15;
-
 	float d = sin(f*wpos.x - 2*t)*cos(f*wpos.y - 2*t)*
 			sin(f*wpos.z + 2*t)*cos(f*wpos.z + 2*t);
 
-	//wpos += n*0.05*length(c);
-
+	wpos += 0.1*n*(length(val.xyz));
+	//wpos += 0.1*n*(length(val) - 0.5);
 	//wpos += n*0.1*d;
 
-	uint tile_idx = gl_VertexID/TILE_VERT_COUNT;
-	tex_idx_t tex_idx = decode_tex_idx(tex_indices[tile_idx]);
 	//tex_idx.tex = tile_idx;
 
 	out_pos = wpos.xyz;
 	out_uv = uv;
 	out_normal = n.xyz;
-	out_color = c;
-	out_code = code;
+	out_color = val;
+	//out_code = code;
 	out_tex_idx = tex_idx;
 
 	gl_Position = (pv*wpos);

@@ -3,6 +3,7 @@
 
 #include "texture_loader.h"
 #include "tiling.h"
+#include "dataset.h"
 
 // STL
 #include <unordered_map>
@@ -13,8 +14,9 @@
 // libc
 #include <cstdint>
 
-static constexpr uint32_t TILE_SIZE = 256;
-static constexpr uint32_t TILE_PAGE_SIZE = 64;
+static constexpr uint32_t TILE_WIDTH = 256;
+static constexpr uint32_t TILE_SIZE = TILE_WIDTH*TILE_WIDTH;
+static constexpr uint32_t TILE_PAGE_SIZE = 128;
 static constexpr uint32_t MAX_TILE_PAGES = 16;
 static constexpr uint32_t MAX_TILES = TILE_PAGE_SIZE*MAX_TILE_PAGES;
 
@@ -31,7 +33,12 @@ struct TileTexIndex
 	uint16_t tex;
 };
 
-class TileTexCache
+struct TileTexUpload
+{
+	TileCode code;
+	TileTexIndex idx;
+};
+struct TileTexCache
 {
 	typedef std::list<std::pair<TileCode,TileTexIndex>> lru_list_t;
 
@@ -66,10 +73,13 @@ public:
 	void get_textures(
 		const std::span<TileCode> tiles, 
 		std::vector<TileTexIndex>& textures,
-		std::vector<std::pair<TileCode,TileTexIndex>>& new_tiles
+		std::vector<TileTexUpload>& new_tiles
 	);
 
 	void bind_texture_arrays(uint32_t base) const;
+
+	void synchronous_upload(const TileDataCache *data_cache,
+		std::span<TileTexUpload> uploads);
 };
 
 #endif //TILE_CACHE_H

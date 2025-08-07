@@ -6,6 +6,7 @@
 #include "resource_table.h"
 #include "tiling.h"
 #include "tile_cache.h"
+#include "dataset.h"
 
 #include <vector>
 
@@ -42,11 +43,11 @@ namespace globe
 	struct Globe
 	{
 		std::vector<TileCode> tiles;
-		std::vector<GlobeVertex> verts;
 
 		RenderData render_data;
 
 		TileTexCache cache;
+		TileDataCache dataset;
 	};
 
 

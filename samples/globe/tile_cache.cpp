@@ -1,6 +1,8 @@
 #include "tile_cache.h"
 #include "utils/log.h"
 
+#include <cstring>
+
 TilePage create_page()
 {
 	TilePage page{};
@@ -9,16 +11,16 @@ TilePage create_page()
 	glTextureStorage3D(
 		page.tex_array, 
 		1, 
-		GL_R32F, 
-		TILE_SIZE, 
-		TILE_SIZE, 
+		GL_RGBA8, 
+		TILE_WIDTH, 
+		TILE_WIDTH, 
 		TILE_PAGE_SIZE
 	);
 
 	glTextureParameteri(page.tex_array, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTextureParameteri(page.tex_array, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTextureParameteri(page.tex_array, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTextureParameteri(page.tex_array, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTextureParameteri(page.tex_array, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
 	page.free_list.resize(TILE_PAGE_SIZE);
 
@@ -121,7 +123,7 @@ TileTexCache::TileTexCache()
 void TileTexCache::get_textures(
 	const std::span<TileCode> tiles, 
 	std::vector<TileTexIndex>& textures,
-	std::vector<std::pair<TileCode,TileTexIndex>>& new_tiles
+	std::vector<TileTexUpload>& new_tiles
 )
 {
 	size_t tile_count = std::min(tiles.size(),(size_t)MAX_TILES);
@@ -145,10 +147,14 @@ void TileTexCache::get_textures(
 			idx = (m_map.size() >= MAX_TILES) ? 
 				evict_one() : allocate();
 			insert(code, idx);
+
+			new_tiles.push_back(TileTexUpload{
+				.code = code, 
+				.idx = idx
+			});
 		}
 
 		textures.push_back(idx);
-		if (!found) new_tiles.push_back({code, idx});
 	}
 }
 
@@ -161,3 +167,73 @@ void TileTexCache::bind_texture_arrays(uint32_t base) const
 		glBindTexture(GL_TEXTURE_2D_ARRAY, m_pages[i].tex_array);	
 	}
 }
+
+void TileTexCache::synchronous_upload(
+	const TileDataCache *data_cache,
+	std::span<TileTexUpload> uploads 
+)
+{
+	if (!uploads.size())
+		return;
+
+	log_info("uploading %ld tiles...",uploads.size());
+	GLuint pbo;
+	glCreateBuffers(1, &pbo);
+
+	size_t img_size = TILE_SIZE*sizeof(float);
+
+	GLsizeiptr total_size = uploads.size()*img_size;
+
+	glNamedBufferStorage(
+		pbo,
+		total_size,
+		nullptr,
+		GL_MAP_WRITE_BIT | 
+		GL_MAP_PERSISTENT_BIT | 
+		GL_MAP_COHERENT_BIT | 
+		GL_DYNAMIC_STORAGE_BIT
+	);
+
+	void* mapped = glMapNamedBufferRange(
+		pbo, 
+		0, 
+		total_size, 
+		GL_MAP_WRITE_BIT | 
+		GL_MAP_PERSISTENT_BIT | 
+		GL_MAP_COHERENT_BIT
+	);
+
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER,pbo);
+	for (size_t i = 0; i < uploads.size(); ++i) {
+		TileTexUpload upload = uploads[i];
+
+		size_t idx = upload.idx.tex;
+		size_t offset = i*img_size;
+		size_t size = 0;
+
+		uint8_t* dst = reinterpret_cast<uint8_t*>(mapped) + offset;
+		const uint8_t *src = data_cache->get_block(upload.code,&size);
+
+		memcpy(dst,src,size);
+
+		glTextureSubImage3D(
+			m_pages[upload.idx.page].tex_array,
+			0,
+			0,0,
+			idx,
+			TILE_WIDTH,
+			TILE_WIDTH,
+			1,
+			GL_RGBA,
+			GL_UNSIGNED_BYTE,
+			(void*)offset
+		);
+	}
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER,pbo);
+
+	glUnmapNamedBuffer(pbo);
+
+	glDeleteBuffers(1,&pbo);
+}
+
+

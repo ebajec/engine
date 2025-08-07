@@ -4,4 +4,4 @@ shaders:
 bindings:
   - name: u_tex
     type: sampler2D
-    path: image/pepe.jpg
+    path: image/tux.png

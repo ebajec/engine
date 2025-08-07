@@ -6,7 +6,7 @@ include(clang-warnings)
 set(TARGET globe)
 project(${TARGET})
 
-add_executable(${TARGET} main.cpp globe.cpp tile_cache.cpp)
+add_executable(${TARGET} main.cpp globe.cpp tile_cache.cpp dataset.cpp)
 
 target_link_libraries(${TARGET} PRIVATE
 	samples

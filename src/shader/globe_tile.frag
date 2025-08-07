@@ -44,71 +44,21 @@ uint cube_face(vec3 v)
 	return argmax;
 }
 
-struct plane_t 
-{
-	vec3 n;
-	float d;
-};
-
-struct frustum_t
-{
-	plane_t planes[6];
-};
-
-frustum_t camera_frustum(mat4 m)
-{
-	m = transpose(m);
-	frustum_t frust;
-	for (int i = 0; i < 6; ++i) {
-		vec4 p;
-		switch (i) {
-			case 0: p = m[3] + m[0]; break; // left
-			case 1: p = m[3] - m[0]; break; // right
-			case 2: p = m[3] + m[1]; break; // bottom
-			case 3: p = m[3] - m[1]; break; // top
-			case 4: p = m[3] + m[2]; break; // near
-			case 5: p = m[3] - m[2]; break; // far
-		}
-
-		float r_inv = 1.0f / length(vec3(p));
-		frust.planes[i].n = -vec3(p) * r_inv;
-		frust.planes[i].d = p.w * r_inv;
-	}
-	
-	return frust;
-}
-
-bool cull_plane(vec3 v, plane_t pl)
-{
-	return dot(v,pl.n) < pl.d;
-}
-
-bool within_frustum(vec3 v, frustum_t frust)
-{
-	for (uint i = 0; i < 6; ++i) {
-		bool res = cull_plane(v,frust.planes[i]);
-		if (!res)
-			return res;
-	}
-	return true;
-}
-
 void main()
 {
-	//frustum_t frust = camera_frustum(matrices[0]);
-
-	//if (!within_frustum(in_pos, frust))
-	// 	discard;
-
 	vec2 uv = in_uv;
 
 	float r = length(uv - vec2(0.5));
 	float f = exp(-16*pow(1-r,4));
 
-	vec4 color = FACE_COLORS[in_code.face];
-	color *= f;
-	color = in_color;
-	color.w = 0.5;
+	vec3 uvw = vec3(in_uv, in_tex_idx.tex);
+
+	vec4 color = texture(u_tex,in_uv);
+	//vec4 color = FACE_COLORS[in_code.face];
+	//color *= f;
+	//color = in_color;
+	//color.w = 0.5;
+	color = texture(u_tex_arrays[in_tex_idx.page], uvw);
 
 	vec3 sun = normalize(vec3(-1,-1,3));
 
@@ -116,14 +66,10 @@ void main()
 		vec3 dx = dFdx(in_pos);
 		vec3 dy = dFdy(in_pos);
 		vec3 n = normalize(cross(dx,dy));
-		color = 0.8*in_color*max(dot(n, sun),0) + 0.2*in_color;
+		color = 0.8*color*max(dot(n, sun),0) + 0.2*color;
 	}
 
-	vec3 uvw = vec3(in_uv, in_tex_idx.tex);
+	//vec4 ncolor = unpackUnorm4x8(64*in_tex_idx.tex*(in_tex_idx.page + 1));
 
-	//vec4 ncolor = texture(u_tex_arrays[in_tex_idx.page], uvw);
-	//color = (float(in_tex_idx.tex)/7.0)*FACE_COLORS[0];
-	vec4 ncolor = unpackUnorm4x8(64*in_tex_idx.tex*(in_tex_idx.page + 1));
-
-	FragColor = ncolor;
+	FragColor = mix(color,vec4(in_uv,0,1),0.0);
 }
