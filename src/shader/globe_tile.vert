@@ -18,7 +18,6 @@ layout (location = 0) out vec3 out_pos;
 layout (location = 1) out vec2 out_uv;
 layout (location = 2) out vec3 out_normal;
 layout (location = 3) out vec4 out_color;
-layout (location = 4) flat out tile_code_t out_code;
 layout (location = 7) flat out tex_idx_t out_tex_idx;
 
 uint TILE_CODE_FACE_BITS_MASK = 0x70000000;
@@ -82,25 +81,12 @@ void main()
 	vec3 uvw = vec3(uv, tex_idx.tex);
 
 	vec4 val = texture(u_tex_arrays[tex_idx.page], uvw);
-	//vec4 val = texelFetch(u_tex_arrays[tex_idx.page], ivec3(
-	//	clamp(uv*256,0,255),tex_idx.tex),0);
-
-	//tile_code_t code = from_input(code_left,code_right);
-	//aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
-	//vec2 drect = rect.max - rect.min;
-	//vec4 c = texture(u_tex,rect.min + uv*drect);
 
 	wpos += n*(val.r);
-	//wpos += 0.1*n*(length(val) - 0.5);
-	//wpos += n*0.1*d;
-
-	//tex_idx.tex = tile_idx;
-
 	out_pos = wpos.xyz;
 	out_uv = uv;
 	out_normal = n.xyz;
 	out_color = val;
-	//out_code = code;
 	out_tex_idx = tex_idx;
 
 	gl_Position = (pv*wpos);

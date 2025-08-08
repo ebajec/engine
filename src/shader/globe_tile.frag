@@ -12,7 +12,6 @@ layout (location = 0) in vec3 in_pos;
 layout (location = 1) in vec2 in_uv;
 layout (location = 2) in vec3 in_normal;
 layout (location = 3) in vec4 in_color;
-layout (location = 4) flat in tile_code_t in_code;
 layout (location = 7) flat in tex_idx_t in_tex_idx;
 
 layout (location = 0) out vec4 FragColor;
@@ -66,7 +65,5 @@ void main()
 		color = 0.8*color*max(dot(n, sun),0) + 0.2*color;
 	}
 
-	//vec4 ncolor = unpackUnorm4x8(64*in_tex_idx.tex*(in_tex_idx.page + 1));
-
-	FragColor = mix(color,vec4(in_uv,0,1),0.0);
+	FragColor = mix(color,vec4(in_uv,0,1),0.5);
 }

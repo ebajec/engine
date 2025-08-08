@@ -36,6 +36,7 @@ struct TileTexUpload
 	TileCode code;
 	TileTexIndex idx;
 };
+
 struct TileTexCache
 {
 	typedef std::list<std::pair<TileCode,TileTexIndex>> lru_list_t;
