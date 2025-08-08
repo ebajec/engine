@@ -196,7 +196,12 @@ struct SphericalMotionCamera
 		glm::dquat a_new = q*glm::dquat(0,right)*glm::conjugate(q);
 
 		right = glm::dvec3(a_new.x,a_new.y,a_new.z);
-}
+	}
+
+	glm::dvec3 get_pos()
+	{
+		return height*up;
+	}
 
 	glm::mat4 get_view()
 	{

@@ -14,8 +14,6 @@
 // libc
 #include <cstdint>
 
-static constexpr uint32_t TILE_WIDTH = 256;
-static constexpr uint32_t TILE_SIZE = TILE_WIDTH*TILE_WIDTH;
 static constexpr uint32_t TILE_PAGE_SIZE = 128;
 static constexpr uint32_t MAX_TILE_PAGES = 16;
 static constexpr uint32_t MAX_TILES = TILE_PAGE_SIZE*MAX_TILE_PAGES;
@@ -73,8 +71,6 @@ private:
 	void insert(TileCode, TileTexIndex);
 
 public:
-	TileTexCache();
-
 	void get_textures(
 		const std::span<TileCode> tiles, 
 		std::vector<TileTexIndex>& textures,
@@ -86,38 +82,5 @@ public:
 	void synchronous_upload(const TileDataCache *data_cache,
 		std::span<TileTexUpload> uploads);
 };
-
-static inline void test_upload(TileCode code, void *dst, void *usr)
-{
-	float *data = static_cast<float*>(dst);
-
-	aabb2_t rect = morton_u64_to_rect_f64(code.idx, code.zoom);
-
-	float d = 1.0/(float)(TILE_WIDTH - 1);
-
-	glm::vec2 uv = glm::vec2(0);
-	size_t idx = 0;
-	for (size_t i = 0; i < TILE_WIDTH; ++i) {
-		for (size_t j = 0; j < TILE_WIDTH; ++j) {
-			glm::vec2 f = glm::vec2(rect.min) + 
-				uv * glm::vec2((rect.max - rect.min));
-
-			glm::dvec3 p = cube_to_globe(code.face, f);
-
-			float c = 15;
-			float g = sin(c*p.x)*cos(c*p.y)*
-					  sin(c*p.z)*cos(c*p.z);
-
-			data[idx++] = g;	
-			uv.x += d;
-		}
-		uv.x = 0;
-		uv.y += d;
-	}
-
-	return;
-}
-
-
 
 #endif //TILE_CACHE_H

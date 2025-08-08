@@ -117,7 +117,7 @@ RenderContext FrameContext::begin_pass(const BeginPassInfo *info)
 
 	RenderContext ctx = {
 		.renderer = renderer,
-		.table = table,
+		.rt = table,
 		.target = info->target,
 		.frame_ubo = ubo
 	};
@@ -172,7 +172,7 @@ void GLRenderer::present(RenderTargetID id, uint32_t w, uint32_t h) const
 
 void RenderContext::bind_material(MaterialID id) const
 {
-	const GLMaterial *material = table->get<GLMaterial>(id); 
+	const GLMaterial *material = rt->get<GLMaterial>(id); 
 
 	if (!material) {
 		log_error("Material does not exist with id %d", id);
@@ -184,13 +184,13 @@ void RenderContext::bind_material(MaterialID id) const
 		GLTextureBinding tex_bind = pair.second;
 
 		TextureID texID = tex_bind.id;
-		const GLImage *tex = table->get<GLImage>(texID);
+		const GLImage *tex = rt->get<GLImage>(texID);
 
 		GLint filter = GL_LINEAR;
 
 		if (!tex) {
 			const RendererDefaults * defaults = renderer->get_defaults();
-			tex = table->get<GLImage>(defaults->textures.missing);
+			tex = rt->get<GLImage>(defaults->textures.missing);
 			filter = GL_NEAREST;
 
 			assert(tex);
@@ -211,14 +211,14 @@ void RenderContext::bind_material(MaterialID id) const
 
 void RenderContext::draw_cmd_mesh_outline(ModelID meshID) const
 {
-	const GLModel *model = table->get<GLModel>(meshID);
+	const GLModel *model = rt->get<GLModel>(meshID);
 	glBindVertexArray(model->vao);
 	glDrawElements(GL_LINES,(int)model->icount,GL_UNSIGNED_INT,NULL);
 }
 
 void RenderContext::draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T) const
 {
-	const GLModel *model = table->get<GLModel>(meshID);
+	const GLModel *model = rt->get<GLModel>(meshID);
 	//glEnable(GL_CULL_FACE);
 	//glCullFace(GL_FRONT);
 	//glFrontFace(GL_CCW);

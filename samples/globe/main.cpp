@@ -243,6 +243,11 @@ int main(int argc, char* argv[])
 
 		app->onFrameUpdateCallback(window);
 
+		glm::dvec3 p = sphere_camera->control.get_pos();
+
+		sphere_camera->control.min_height = 
+			2*view_component->near + globe->source->sample_elevation_at(p); 
+
 		Camera camera = {
 			.proj = view_component->get_proj(),
 			.view = sphere_camera->control.get_view()

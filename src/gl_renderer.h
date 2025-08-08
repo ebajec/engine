@@ -41,7 +41,7 @@ struct BeginPassInfo
 struct RenderContext
 {
 	const GLRenderer *renderer;
-	ResourceTable *table;
+	ResourceTable *rt;
 	RenderTargetID target;
 	BufferID frame_ubo;
 

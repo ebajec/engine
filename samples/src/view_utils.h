@@ -122,7 +122,6 @@ struct SphereCameraComponent : AppComponent
 		ImGui::SliderFloat("speed", &speed, 0.0, 1, "%.5f");
 		ImGui::End();
 
-		control.min_height = view_component->near; 
 		control.move((double)g_.dt*speed*keydir);
 	}
 };

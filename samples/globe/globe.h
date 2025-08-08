@@ -46,8 +46,9 @@ namespace globe
 
 		RenderData render_data;
 
-		TileTexCache cache;
-		TileDataCache dataset;
+		std::unique_ptr<TileTexCache> tex_cache;
+		std::unique_ptr<TileDataCache> data_cache;
+		std::unique_ptr<TileDataSource> source;
 	};
 
 
@@ -58,6 +59,8 @@ namespace globe
 
 	struct select_tiles_params
 	{
+		const TileDataSource * source;
+
 		frustum_t frust;
 		aabb3_t frust_box;
 		glm::dvec3 origin;

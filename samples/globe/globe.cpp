@@ -93,28 +93,28 @@ struct select_tiles_rec_params : select_tiles_params
 	glm::dvec2 origin_uv;
 };
 
-static inline int select_tiles_rec(
-	std::vector<TileCode> &out, 
-	const select_tiles_params *params,
-	glm::dvec2 origin_uv,
-	TileCode code)
+static aabb3_t tile_box(const TileDataSource *source, TileCode code) 
 {
-	const bool enable_boxes = g_enable_boxes;
-
-	if (code.zoom > 23)
-		return 0;
-
 	aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
+	glm::dvec2 mid_uv = 0.5*(rect.ur() + rect.ll());
+
+	// TODO: Don't sample here if it can be avoided (i.e., compute min/max in 
+	// a quadtree for tiles)
+	
+	float samples[5] = {
+         source->sample_elevation_at(rect.ll(),code.face),
+         source->sample_elevation_at(rect.lr(),code.face),
+         source->sample_elevation_at(rect.ul(),code.face),
+         source->sample_elevation_at(rect.ur(),code.face),
+         source->sample_elevation_at(mid_uv,code.face)   
+	};
 
 	glm::dvec3 p[5] = {
-		cube_to_globe(code.face, rect.ll()),
-		cube_to_globe(code.face, rect.lr()),
-		cube_to_globe(code.face, rect.ul()),
-		cube_to_globe(code.face, rect.ur()),
-
-		// the last one is not always necessary right now, but will be
-		// with elevation
-		cube_to_globe(code.face, 0.5*(rect.ur() + rect.ll())),
+		(1.0 + samples[0])*cube_to_globe(code.face, rect.ll()),
+		(1.0 + samples[1])*cube_to_globe(code.face, rect.lr()),
+		(1.0 + samples[2])*cube_to_globe(code.face, rect.ul()),
+		(1.0 + samples[3])*cube_to_globe(code.face, rect.ur()),
+		(1.0 + samples[4])*cube_to_globe(code.face, mid_uv),
 	};
 
 	aabb3_t box = aabb_bounding(p, sizeof(p)/sizeof(p[0]));
@@ -126,6 +126,22 @@ static inline int select_tiles_rec(
 		box = aabb_add(box, cube_to_globe(code.face, 0.5*(rect.ur() + rect.lr())));
 	}
 
+	return box;
+}
+
+static inline int select_tiles_rec(
+	std::vector<TileCode> &out, 
+	const select_tiles_params *params,
+	glm::dvec2 origin_uv,
+	TileCode code)
+{
+	const bool enable_boxes = g_enable_boxes;
+
+	if (code.zoom > 23)
+		return 0;
+
+	aabb3_t box = tile_box(params->source,code);
+
 	if (!intersects(box, params->frust_box))
 		return 0;
 
@@ -135,18 +151,8 @@ static inline int select_tiles_rec(
 		}
 	}
 
-	// TODO : Use the integral of the product of view direction and surface normal
-	// over a tile to approximate the visible area.
-	
-	glm::dvec3 tile_nearest_diff = tile_diff(params->origin,origin_uv,rect,code.face);
-	
-	//double d_min_sq = dot(tile_nearest_diff,params->frust.planes[4].n);
-	//d_min_sq *= d_min_sq;
-	double d_min_sq = dot(tile_nearest_diff,tile_nearest_diff);
-
+	double d_min_sq = aabb3_dist_sq(box, params->origin);
 	d_min_sq = std::max(tile_scale_factor * d_min_sq,1e-6);
-
-	glm::dvec3 mid = cube_to_globe(code.face, 0.5*(rect.ur() + rect.ll()));
 
 	double area = tile_area(code.zoom);
 
@@ -208,37 +214,6 @@ aabb2_t sub_rect(TileCode parent, TileCode child)
 
 	return morton_u64_to_rect_f64(child.idx, (uint8_t)diff);
 }
-
-GLuint globe_vao()
-{
-	GLuint vao;
-	glGenVertexArrays(1,&vao);
-
-	glBindVertexArray(vao);
-
-	glEnableVertexArrayAttrib(vao,0);
-	glEnableVertexArrayAttrib(vao,1);
-	glEnableVertexArrayAttrib(vao,2);
-	glEnableVertexArrayAttrib(vao,3);
-	glEnableVertexArrayAttrib(vao,4);
-
-	glVertexAttribFormat(0,3,GL_FLOAT,0,offsetof(GlobeVertex,pos));
-	glVertexAttribFormat(1,2,GL_FLOAT,0,offsetof(GlobeVertex,uv));
-	glVertexAttribFormat(2,3,GL_FLOAT,0,offsetof(GlobeVertex,normal));
-	glVertexAttribIFormat(3,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,left));
-	glVertexAttribIFormat(4,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,right));
-
-	glVertexAttribBinding(0,0);
-	glVertexAttribBinding(1,0);
-	glVertexAttribBinding(2,0);
-	glVertexAttribBinding(3,0);
-	glVertexAttribBinding(4,0);
-
-	glBindVertexArray(0);
-
-	return vao;
-}
-
 
 static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_verts)
 {
@@ -316,6 +291,36 @@ std::vector<uint32_t> create_tile_indices()
 	return indices;
 }
 
+GLuint globe_vao()
+{
+	GLuint vao;
+	glGenVertexArrays(1,&vao);
+
+	glBindVertexArray(vao);
+
+	glEnableVertexArrayAttrib(vao,0);
+	glEnableVertexArrayAttrib(vao,1);
+	glEnableVertexArrayAttrib(vao,2);
+	glEnableVertexArrayAttrib(vao,3);
+	glEnableVertexArrayAttrib(vao,4);
+
+	glVertexAttribFormat(0,3,GL_FLOAT,0,offsetof(GlobeVertex,pos));
+	glVertexAttribFormat(1,2,GL_FLOAT,0,offsetof(GlobeVertex,uv));
+	glVertexAttribFormat(2,3,GL_FLOAT,0,offsetof(GlobeVertex,normal));
+	glVertexAttribIFormat(3,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,left));
+	glVertexAttribIFormat(4,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,right));
+
+	glVertexAttribBinding(0,0);
+	glVertexAttribBinding(1,0);
+	glVertexAttribBinding(2,0);
+	glVertexAttribBinding(3,0);
+	glVertexAttribBinding(4,0);
+
+	glBindVertexArray(0);
+
+	return vao;
+}
+
 LoadResult create_render_data(ResourceTable *rt, RenderData &data)
 {
 	LoadResult result = RESULT_SUCCESS;
@@ -367,7 +372,8 @@ static LoadResult update_render_data(
 
 	uint32_t count = std::min((uint32_t)tiles.size(),(uint32_t)MAX_TILES);
 	if (tiles.size() > MAX_TILES) {
-		log_warn("Selected tile count is large (%ld)! Limiting to %d", tiles.size(), MAX_TILES);
+		log_warn("Selected tile count is large (%ld)! Limiting to %d", 
+			tiles.size(), MAX_TILES);
 	}
 
 	uint32_t total = TILE_VERT_COUNT*count;
@@ -434,9 +440,13 @@ void plot_tile_counts(size_t total, size_t new_tiles)
 		avg = 0.99*avg + 0.01*count;
 
 		if (ImPlot::BeginPlot("Tile selection",ImVec2(200,200))) {
-			ImPlot::SetupAxesLimits(times[scroll], times[scroll  ? scroll - 1 : samples - 1], 0, 2*avg,ImPlotCond_Always);
-			ImPlot::PlotLine("Tile count", times.data(), tile_counts.data(),samples,ImPlotCond_Always, scroll);
-			ImPlot::PlotLine("New count", times.data(), new_counts.data(),samples,ImPlotCond_Always, scroll);
+			ImPlot::SetupAxesLimits(times[scroll], 
+			   times[scroll  ? scroll - 1 : samples - 1], 
+			   0, 2*avg,ImPlotCond_Always);
+			ImPlot::PlotLine("Tile count", times.data(), 
+				tile_counts.data(), samples, ImPlotCond_Always, scroll);
+			ImPlot::PlotLine("New count", times.data(), 
+				new_counts.data(), samples, ImPlotCond_Always, scroll);
 			ImPlot::EndPlot();
 		}
 }
@@ -453,8 +463,15 @@ LoadResult globe_create(Globe *globe, ResourceTable *rt)
 
 	globe::init_debug(rt);
 
-	globe->dataset = std::move(TileDataCache::create(
-		test_upload,nullptr, TILE_SIZE*sizeof(uint32_t)));
+	globe->data_cache.reset(
+		TileDataCache::create(TILE_SIZE*sizeof(float))
+	);
+	globe->source.reset(
+		TileDataSource::create()
+	);
+	globe->tex_cache.reset(
+		new TileTexCache{}
+	);
 
 	return result;
 load_failed:
@@ -491,13 +508,22 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	
 	glm::mat4 pv = p_camera->proj*p_camera->view;
 	frustum_t frust = camera_frustum(pv);
-
 	double resolution = tile_area((uint8_t)zoom);
 	glm::dvec3 pos = camera_get_pos(p_camera->view);
-	double r_horizon = sqrt(std::max(dot(pos,pos) - 1.,0.));
 
-	glm::dvec3 n_far = frust.far.n;
-	frust.far.d = dot(pos,n_far) + r_horizon;
+	if (true) {
+		static double h_max = 0.1;
+		static double h_min = -0.1;
+
+		double r_min = 1.0 + h_min;
+		double r_max = 1.0 + h_max;
+
+		double r_horizon = sqrt(std::max(dot(pos,pos) - r_min*r_min,0.));
+		double r_horizon_max  = sqrt(std::max(r_max * r_max - r_min*r_min,0.));
+
+		glm::dvec3 n_far = frust.far.n;
+		frust.far.d = dot(pos,n_far) + r_horizon + r_horizon_max;
+	}
 
 	//-----------------------------------------------------------------------------
 	// Process visible tiles
@@ -515,13 +541,14 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 
 	size_t count = globe->tiles.size();
 
-	std::vector<TileCode> data_tiles = globe->dataset.load(globe->tiles);
+	std::vector<TileCode> data_tiles = globe->data_cache->load(
+		*globe->source, globe->tiles);
 
 	std::vector<TileTexIndex> tile_textures;
 	std::vector<TileTexUpload> new_textures;
 
-	globe->cache.get_textures(data_tiles,tile_textures,new_textures);
-	globe->cache.synchronous_upload(&globe->dataset, new_textures);
+	globe->tex_cache->get_textures(data_tiles,tile_textures,new_textures);
+	globe->tex_cache->synchronous_upload(globe->data_cache.get(), new_textures);
 
 	LoadResult result = update_render_data(rt,globe,
 		pos,data_tiles,tile_textures);
@@ -538,13 +565,13 @@ void globe_record_draw_cmds(const RenderContext& ctx, const Globe *globe)
 {
 	const RenderData &data = globe->render_data;
 
-	const GLBuffer* vbo = ctx.table->get<GLBuffer>(data.vbo); 
-	const GLBuffer* ibo = ctx.table->get<GLBuffer>(data.ibo); 
-	const GLBuffer* ssbo = ctx.table->get<GLBuffer>(data.ssbo);
+	const GLBuffer* vbo = ctx.rt->get<GLBuffer>(data.vbo); 
+	const GLBuffer* ibo = ctx.rt->get<GLBuffer>(data.ibo); 
+	const GLBuffer* ssbo = ctx.rt->get<GLBuffer>(data.ssbo);
 
 	ctx.bind_material(data.material);
 
-	globe->cache.bind_texture_arrays(1);
+	globe->tex_cache->bind_texture_arrays(1);
 
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo->id); 
 	

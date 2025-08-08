@@ -115,11 +115,6 @@ void TileTexCache::insert(TileCode code, TileTexIndex idx)
 	m_map[code] = m_lru.begin();
 }
 
-TileTexCache::TileTexCache()
-{
-
-}
-
 void TileTexCache::get_textures(
 	const std::span<TileCode> tiles, 
 	std::vector<TileTexIndex>& textures,

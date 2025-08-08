@@ -4,13 +4,68 @@
 
 #include <imgui.h>
 
-TileDataCache TileDataCache::create(TileLoaderFunc loader, void* usr, size_t tile_size)
+static void test_loader_fn(TileCode code, void *dst, void *usr);
+static float test_elev_fn(glm::dvec2 uv, uint8_t f);
+
+//------------------------------------------------------------------------------
+// TileDataSource
+
+TileDataSource 
+*TileDataSource::create(TileLoaderFunc loader, void* usr)
 {
-	TileDataCache cache {};
-	cache.m_block_size = tile_size;
-	cache.m_loader = loader;
-	cache.m_loader_usr = usr;
-	cache.m_blocks.reset(new uint8_t[cache.m_block_cap*cache.m_block_size]);
+	TileDataSource *source = new TileDataSource;
+
+	source->m_loader = loader ? loader : test_loader_fn;
+	source->m_usr = usr;
+
+	return source;
+}
+
+void TileDataSource::load(TileCode code, void* dst) const
+{
+	m_loader(code,dst,m_usr);
+}
+
+TileCode TileDataSource::find(TileCode code) const
+{
+	auto end = m_data.end();
+	auto it = m_data.find(code);
+
+	while (code.zoom > m_debug_zoom && it == end) {
+		code.idx >>= 2;
+		--code.zoom;
+
+		it = m_data.find(code);
+	} 
+
+	return (it == end) ? code : it->first;
+}
+
+float TileDataSource::sample_elevation_at(glm::dvec2 uv, uint8_t f) const
+{
+	return test_elev_fn(uv,f);
+}
+
+float TileDataSource::sample_elevation_at(glm::dvec3 p) const
+{
+	glm::dvec2 uv;
+	uint8_t f;
+	globe_to_cube(p, &uv, &f);
+
+	return test_elev_fn(uv,f);
+}
+//------------------------------------------------------------------------------
+// TileDataCache
+
+TileDataCache 
+*TileDataCache::create(size_t tile_size)
+{
+	TileDataCache *cache = new TileDataCache{};
+
+	size_t size = cache->m_block_cap*tile_size;
+	
+	cache->m_block_size = tile_size;
+	cache->m_blocks.reset(new uint8_t[size]);
 	return cache;
 }
 
@@ -35,30 +90,20 @@ const uint8_t *TileDataCache::get_block(TileCode code, size_t *size) const
 	return &m_blocks[it->second->block];
 }
 
-std::vector<TileCode> TileDataCache::load(const std::span<TileCode> tiles)
+std::vector<TileCode> TileDataCache::load(
+	const TileDataSource& source, const std::span<TileCode> tiles)
 {
-	auto end = m_data.end();
-
 	std::vector<TileCode> loaded (tiles.size());
 
-	ImGui::SliderInt("Max zoom", &m_debug_zoom, 0, 24);
+
+	ImGui::SliderInt("Max zoom", const_cast<int*>(&source.m_debug_zoom), 0, 24);
 
 	for (size_t i = 0; i < tiles.size(); ++i) {
 		TileCode code = tiles[i];
-
-		auto it = m_data.find(code);
-
-		while (code.zoom > m_debug_zoom && it == end) {
-			code.idx >>= 2;
-			--code.zoom;
-
-			it = m_data.find(code);
-		}
-		loaded[i] = (it == end) ? code : it->first;
+		loaded[i] = source.find(code);
 	}
 
 	std::vector<std::pair<TileCode, uint8_t*>> loads;
-
 	for (TileCode code : loaded) {
 		auto it = m_map.find(code);
 		if (it != m_map.end()) {
@@ -79,9 +124,50 @@ std::vector<TileCode> TileDataCache::load(const std::span<TileCode> tiles)
 	}
 
 	for (auto pair : loads) {
-		m_loader(pair.first, pair.second, m_loader_usr);
+		source.load(pair.first, pair.second);
 	}
 
 	return loaded;
 }
+
+float test_elev_fn(glm::dvec2 uv, uint8_t f)
+{
+	glm::dvec3 p = cube_to_globe(f, uv);
+
+	float c = 15;
+	float g = sin(c*p.x)*cos(c*p.y)*
+			  sin(c*p.z)*cos(c*p.z);
+
+	g *= 0.1;
+
+	return g;
+}
+
+void test_loader_fn(TileCode code, void *dst, void *usr)
+{
+	float *data = static_cast<float*>(dst);
+
+	aabb2_t rect = morton_u64_to_rect_f64(code.idx, code.zoom);
+
+	float d = 1.0/(float)(TILE_WIDTH - 1);
+
+	glm::vec2 uv = glm::vec2(0);
+	size_t idx = 0;
+	for (size_t i = 0; i < TILE_WIDTH; ++i) {
+		for (size_t j = 0; j < TILE_WIDTH; ++j) {
+			glm::vec2 f = glm::vec2(rect.min) + 
+				uv * glm::vec2((rect.max - rect.min));
+
+			float g = test_elev_fn(f, code.face);
+			data[idx++] = g;
+			uv.x += d;
+		}
+		uv.x = 0;
+		uv.y += d;
+	}
+
+	return;
+}
+
+
 

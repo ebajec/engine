@@ -63,7 +63,7 @@ struct circle_t
 
 struct obb_t
 {
-	glm::dmat3x2 T;
+	glm::dmat4 T;
 	glm::dvec2 limits;
 };
 

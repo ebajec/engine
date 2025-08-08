@@ -9,7 +9,7 @@
 // Vert
 
 layout (location = 0) in vec3 pos;
-layout (location = 1) in vec2 uv;
+layout (location = 1) in vec2 in_uv;
 layout (location = 2) in vec3 normal;
 layout (location = 3) in uint code_left;
 layout (location = 4) in uint code_right;
@@ -77,18 +77,20 @@ void main()
 	uint tile_idx = gl_VertexID/TILE_VERT_COUNT;
 	tex_idx_t tex_idx = decode_tex_idx(tex_indices[tile_idx]);
 
+	vec2 uv = vec2(1.0/512.0) + in_uv*(1-1.0/256.0); 
+
 	vec3 uvw = vec3(uv, tex_idx.tex);
+
 	vec4 val = texture(u_tex_arrays[tex_idx.page], uvw);
+	//vec4 val = texelFetch(u_tex_arrays[tex_idx.page], ivec3(
+	//	clamp(uv*256,0,255),tex_idx.tex),0);
 
 	//tile_code_t code = from_input(code_left,code_right);
 	//aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
 	//vec2 drect = rect.max - rect.min;
 	//vec4 c = texture(u_tex,rect.min + uv*drect);
-	float f = 15;
-	float d = sin(f*wpos.x - 2*t)*cos(f*wpos.y - 2*t)*
-			sin(f*wpos.z + 2*t)*cos(f*wpos.z + 2*t);
 
-	wpos += 0.1*n*(val.r);
+	wpos += n*(val.r);
 	//wpos += 0.1*n*(length(val) - 0.5);
 	//wpos += n*0.1*d;
 
