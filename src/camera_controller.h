@@ -284,7 +284,7 @@ struct MotionCamera
 		double cos_tht = cos(tht);
 
 		glm::dvec3 X = glm::vec3(-cos_tht, -sin_tht, 0);
-		glm::dvec3 Y = glm::vec3(sin_tht, -cos_tht, 0);
+		glm::dvec3 Y = glm::vec3(-sin_tht, cos_tht, 0);
 		glm::dvec3 Z = glm::vec3(0,0,1);
 
 		glm::dvec3 V = X*dir.x + Y*dir.y + Z*dir.z;

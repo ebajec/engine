@@ -81,8 +81,8 @@ struct MotionCameraComponent : BaseViewComponent
 
 	MotionCameraComponent(ResourceTable *table, uint32_t w, uint32_t h) : BaseViewComponent(table, w, h) 
 	{
-		glm::vec3 eye = glm::vec3(2,0,0);
-		control = MotionCamera::from_normal(glm::vec3(1,0,0),eye);
+		glm::vec3 eye = glm::vec3(0,0,10);
+		control = MotionCamera::from_normal(glm::vec3(1,0,-1),eye);
 	}
 	virtual void cursorPosCallback(double xpos, double ypos) override 
 	{
@@ -112,13 +112,13 @@ struct MotionCameraComponent : BaseViewComponent
 
 	virtual void onFrameUpdateCallback() override
 	{
-		static float speed = 10;
+		static float speed = 100;
 		
 		ImGui::Begin("Demo Window");
 		ImGui::SliderFloat("FOV", &fov, 0.0f, PI, "%.3f");
 		ImGui::SliderFloat("near", &near, 0.0, 1.0, "%.5f");
 		ImGui::SliderFloat("far", &far, near, 2000, "%.5f");
-		ImGui::SliderFloat("speed", &speed, 0.0, 1, "%.5f");
+		ImGui::SliderFloat("speed", &speed, 0.0, 100, "%.5f");
 		ImGui::End();
 
 		control.update(speed*g_.dt);
@@ -235,14 +235,24 @@ struct line_uniforms_t
 {
 	uint count;
 	float thickness;
+	float join_thres;
 };
 
 struct LinePoint
 {
 	glm::vec2 pos;
 	float length;
-	float padding;
+	uint32_t padding;
 };
+
+struct LineMetadata
+{
+};
+
+glm::vec2 vec2_from_complex(std::complex<float> c)
+{
+	return glm::vec2(c.real(),c.imag());
+}
 
 struct RandomLine : AppComponent 
 {
@@ -253,6 +263,7 @@ struct RandomLine : AppComponent
 
 	std::vector<uint32_t> indices;
 	std::vector<LinePoint> points;
+
 	std::vector<DrawCommand> cmds;
 	std::vector<uint32_t> draw_counts;
 
@@ -273,13 +284,7 @@ struct RandomLine : AppComponent
 		uint32_t id;
 	};
 
-	
-	static constexpr uint32_t verts[] = {
-		0x0,0x1,0x2,0x3//,0x4,0x6	
-	};
-
 	static constexpr uint32_t idx[] = {
-		//0,4,2, 5,4,2, 5,4,1, 3,5,1
 		0,1,2, 2,1,3
 	};
 
@@ -292,28 +297,26 @@ struct RandomLine : AppComponent
 		std::complex<float> c = 1;
 		std::complex<float> v = 0;
 
-		LinePoint pt = {};
 
 		uint32_t segs = 10;
 
 		size_t offset = 0;
 		for (uint32_t k = 0; k < segs; ++k) { 
-			for (uint32_t i = 0; i < count; ++i) {
 
-				v += (0.5f + 0.5f*urandf())*c;
+			LinePoint pt = {};
 
-				float tht = PI*(1.0 - 2.0*urandf());
-				c *= std::polar<float>(1, tht);
+			uint32_t N = count + 2*k;
 
-				glm::vec2 next = glm::vec2(v.real(),v.imag());
+			for (uint32_t i = 0; i < N; ++i) {
+				glm::vec2 pos = glm::vec2(v.real(),v.imag());
 
-				float t = TWOPI*(float)i/(float)(count - 1);
-				//next = glm::vec2(1+sin(t) - cos(7*t), cos(t) + sin(7*t));
+				float t = TWOPI*(float)i/(float)(N - 1);
 
-				if (i > 0)
-					pt.length += glm::length(next - pt.pos); 
+				pos = vec2_from_complex(std::polar<float>(1,t) + v);
 
-				pt.pos = next;
+				pt.length += (i > 0) ? glm::length(pos - pt.pos) : 0; 
+				pt.pos = pos;
+				pt.padding = k;
 
 				points.push_back(pt);
 
@@ -321,9 +324,16 @@ struct RandomLine : AppComponent
 				if (i + 1 < count)
 					indices.push_back(i + 1);
 
-				if (pt.length > 1e3)
+				if (pt.length > 1e5)
 					pt.length = 0;
+
+				v += (0.5f + 0.5f*urandf())*c;
+
+				float tht = PI*(1.0 - 2.0*urandf());
+				c *= std::polar<float>(1, tht);
 			}
+
+			v += 5.f*(0.5f + 0.5f*urandf())*c;
 
 			DrawCommand cmd = {
 				.count = sizeof(idx)/sizeof(idx[0]),
@@ -335,10 +345,6 @@ struct RandomLine : AppComponent
 
 			cmds.push_back(cmd);
 			draw_counts.push_back(cmd.instanceCount);
-
-			pt.length = 0;	
-			v += 10.f*(0.5f + 0.5f*urandf())*c;
-			pt.pos = glm::vec2(v.real(),v.imag());
 
 			offset += points.size();
 		}
@@ -357,19 +363,16 @@ struct RandomLine : AppComponent
 		glBufferData(GL_SHADER_STORAGE_BUFFER, cmds.size()*sizeof(DrawCommand), cmds.data(), GL_STATIC_READ);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER,0);
 
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ibo);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(idx), idx, GL_STATIC_READ);
+
 		glBindVertexArray(vao);
-
-		glBindBuffer(GL_ARRAY_BUFFER,vbo);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_READ);
-
 		glEnableVertexArrayAttrib(vao,0);
 		glVertexAttribIPointer(0, 1, GL_UNSIGNED_INT, 0, (void*)0);
 
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ibo);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(idx), idx, GL_STATIC_READ);
 
 		glBindVertexArray(0);
-		glBindBuffer(GL_ARRAY_BUFFER,0);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
 
 		//----------------------------------------------------------------------------
@@ -435,11 +438,13 @@ struct RandomLine : AppComponent
 
 		glDrawElementsInstanced(
 			GL_TRIANGLES, 
-			sizeof(idx)/sizeof(uint32_t), 
+			6, 
 			GL_UNSIGNED_INT, 
 			nullptr, 
 			points.size() - 1
 		);
+
+		glBindVertexArray(0);
 
 		glDisable(GL_BLEND);
 		glDepthMask(GL_TRUE);
@@ -623,9 +628,9 @@ int main(int argc, char* argv[])
 
 		RenderContext ctx = frame.begin_pass(&passInfo);
 
-		//renderer->bind_material(default_meshID);
-		//renderer->draw_cmd_basic_mesh3d(sphereID,glm::mat4(1.0f));
-		ctx.bind_material(globe_tileID);
+		//ctx.bind_material(default_meshID);
+		//ctx.draw_cmd_basic_mesh3d(sphereID,glm::mat4(1.0f));
+
 		app->renderComponents(&ctx);
 		frame.end_pass(&ctx);
 		renderer->end_frame(&frame);

@@ -20,7 +20,7 @@ target_link_libraries(${TARGET} PUBLIC
 	spirv-reflect-static
 	stb
     OpenGL::GL
-	yaml-cpp::yaml-cpp
+	yaml-cpp
     glm::glm)
 
 enable_clang_warnings(${TARGET})

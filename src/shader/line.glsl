@@ -1,21 +1,21 @@
 #ifndef LINE_GLSL
 #define LINE_GLSL
 
-struct line_uniforms_t
-{
-	uint count;
-	float thickness;
-};
+#include "framedata.glsl"
 
 layout (std140, binding = 0) uniform LineUniforms
 {
-	line_uniforms_t ubo;
+	uint u_count;
+	float u_thickness;
 };
 
 layout (binding = 1) uniform sampler2D u_tex;
 
-bool limit_join(float delta)
+const uint LEFT_ENDPOINT = 0x1;
+const uint RIGHT_ENDPOINT = 0x2;
+
+bool limit_join(float delta, float width)
 {
-	return abs(delta) > 4*ubo.thickness;
+	return abs(delta) > 60*width;
 }
 #endif // LINE_GLSL

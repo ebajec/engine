@@ -1,7 +1,8 @@
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
-#include "framedata.glsl"
-#include "common.glsl"
+
+//------------------------------------------------------------------------------
+// Impl
 
 #include "line.glsl"
 #include "line_frag_defs.glsl"
@@ -10,10 +11,7 @@ const uint type = JOIN_TYPE_ROUND;
 
 float signed_dist(vec2 p, vec2 d, JoinInfo join)
 {
-	float sd = d.x > 0 ? length(p) : d.y;
-	sd *= join.sgnX*join.delta_sgn/join.width;
-
-	return sd;
+	return dot(p, vec2(in_X.y, -in_X.x));
 }
 
 void main()
@@ -35,7 +33,6 @@ void main()
 	uv.y = -fbuf + (1.0 + 2.*fbuf) * uv.y;
 
 	uv.x *= (1.0 + 2.0*fbuf);
-
 
  	uv.x -= u_frame.t;
 

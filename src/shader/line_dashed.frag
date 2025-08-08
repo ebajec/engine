@@ -1,7 +1,8 @@
 #version 460 core
 #extension GL_GOOGLE_include_directive : require
-#include "framedata.glsl"
-#include "common.glsl"
+
+//------------------------------------------------------------------------------
+// Impl
 
 #include "line.glsl"
 #include "line_frag_defs.glsl"
@@ -35,13 +36,4 @@ void main()
 	//if (d.x > 0)
 	//	FragColor = vec4(0,0,1,0.5);
 
-	vec4 palette[5] = {
-		vec4(1,0,0,1),
-		vec4(0,1,0,1),
-		vec4(0,0,1,1),
-		vec4(0,1,1,1),
-		vec4(1,0,1,1)
-	};
-
-	//FragColor = vec4(palette[uint(mod(dbg_draw,5))]) * (4.0/(1.0 + dbg_draw));
 }

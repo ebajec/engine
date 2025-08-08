@@ -1,177 +1,225 @@
-#version 430 core
+#version 460 core
 #extension GL_GOOGLE_include_directive : require
-#include "framedata.glsl"
-#include "common.glsl"
+
+//------------------------------------------------------------------------------
+// Impl
+
 #include "line.glsl"
 
 struct vert_data_t
 {
 	vec2 pos;
 	float len;
-	float padding;
+	uint padding;
 };
 
-layout (location = 0) in uint id;
+struct metadata_t
+{
+    uint base;
+    uint count;
+};
 
 layout (std430, binding = 0) buffer Vertices
 {
 	vert_data_t data[];
 };
 
-layout (location = 0) out vec4 frag_pos;
-layout (location = 1) out vec2 out_uv;
-
-layout (location = 2) flat out vec2 dir;
-layout (location = 3) flat out vec2 center;
-
-layout (location = 4) flat out float out_length;
-
-layout (location = 5) out float out_total_length;
-
-layout (location = 6) flat out uint instance_id;
-
-const uint SIDE_LEFT = 0;
-const uint SIDE_RIGHT = 0x1;
-
-const uint VERT_LOWER = 0x0;
-const uint VERT_UPPER = 0x2;
-
-const uint MID_BIT = 0x4;
-
-const uint ID_LOWER_LEFT = 0;
-const uint ID_LOWER_RIGHT = 1;
-const uint ID_UPPER_LEFT = 2;
-const uint ID_UPPER_RIGHT = 3;
-
-vec2 normal_bisector(vec2 v1, vec2 v2)
+layout (std430, binding = 1) buffer Metadata
 {
-	float d1 = length(v1);
-	float d2 = length(v2);
+	metadata_t meta[];
+};
 
-	float denom = length(d1*v2 + d2*v1);
+layout (location = 0) out vec2 out_pos;
+layout (location = 1) out vec2 out_uv;
+layout (location = 5) out float out_total_length;
+layout (location = 2) out float out_width;
 
-	if (denom < 0.00001)
-		return v1;
+layout (location = 4) flat out float out_mid_weight;
+layout (location = 10) flat out vec2 out_p0;
+layout (location = 11) flat out vec2 out_p1;
+layout (location = 12) flat out vec2 out_X;
+layout (location = 17) flat out vec2 out_s;
+layout (location = 14) flat out vec2 out_deltas;
+layout (location = 16) flat out vec2 out_join_angles;
+layout (location = 18) flat out vec2 out_join_dir[2];
+layout (location = 21) flat out vec2 out_hypot;
+layout (location = 22) flat out uint out_endpoint;
+layout (location = 20) flat out uint dbg_draw;
 
-	return (d1*v2 - d2*v1)/denom;
+const uint RIGHT_BIT = 0x1;
+const uint TOP_BIT = 0x2;
+const float ROOT2 = 1.41421356237;
+
+float cross2(vec2 v1, vec2 v2)
+{
+	return v1.x*v2.y-v1.y*v2.x;
 }
 
-vec2 intersect_join(vec2 a, vec2 b, vec2 c, vec2 N)
+struct JoinResult
 {
-	vec2 ba = a - b;
-	vec2 bc = c - b;
+	vec2 B;
+	float delta;
+};
 
-	vec2 B = normal_bisector(ba,bc);
+JoinResult compute_join_offset(vec2 v1, vec2 v2, float w)
+{
+	// Assumption: |v1| = |v2| = 1
+	float v1v2 = dot(v1,v2);
 
-	float d = dot(b-a,B);
+	float sinr2 = sqrt(1-v1v2);
+	float cosr2 = sqrt(1+v1v2);
 
-	if (d < 0.00001)
-		return a + N + (b-a);
+	float frac = sinr2/cosr2;
 
-	float t = max(dot(b-a-N,B)/d,0);
+	float winding = sign(cross2(v1,v2));
 
-	return a + N + t*(b-a);
+	float delta = w*winding*frac;
+	vec2 B = sinr2 < 1e-6 ? v1 : winding * (v1 - v2) / (ROOT2 * sinr2);
+
+	JoinResult result;
+	result.B = B;
+	result.delta = delta;
+	return result;
+}
+
+const bool loop = false;
+
+uint next_idx(uint idx) {
+	return (idx) < u_count ? idx + 1 : idx;
+
+	uint tmp = (idx + 1 < u_count) ?
+		idx + 1 :
+		(loop ? 1 : idx);
+	return tmp;
+}
+
+uint prev_idx(uint idx) {
+	return idx > 0 ? idx - 1 : 0;
+
+	uint tmp = (idx > 0) ?
+		idx - 1 :
+		(loop ? u_count - 1 : 0);
+	return tmp;
 }
 
 void main()
 {
-	uint idx = gl_InstanceID; 
+	uint idx = gl_InstanceID;
+	uint id = gl_VertexID;
 
-	vert_data_t v[2] = {data[idx],data[idx + 1]};
+	vert_data_t verts[4];
 
-	vec4 p0 = vec4(v[0].pos,0,1);
-	vec4 p1 = vec4(v[1].pos,0,1);
-	vec2 dp = p1.xy - p0.xy;
+	uint id_prev = prev_idx(idx);
+	vert_data_t v_prev = data[id_prev];
 
-	float len = length(dp);
+	uint id_next = next_idx(idx + 1);
+	vert_data_t v_next = data[id_next];
 
-	vec2 X_abs = dp/len;
+	verts[0] = v_prev;
+	verts[1] = data[idx];
+	verts[2] = data[next_idx(idx)];
+	verts[3] = v_next;
 
-	vec2 X = X_abs;
-	vec2 Y = vec2(X.y, -X.x);
+	dbg_draw = verts[1].padding;
 
-	vec2 uv = vec2(1,1);
+	float s0 = verts[1].len;
+	float s1 = verts[2].len;
 
-	uint vert = id & 0x2;
-	if (vert == VERT_LOWER) {
-		Y = -Y;	
-		uv.y = 0;
-	} else if (vert == VERT_UPPER) {
-		Y = Y;
-		uv.y = 1;
+	vec2 p0 = verts[1].pos;
+	vec2 p1 = verts[2].pos;
+
+	float len = s1 - s0;
+	float inv_len = len > 1e-6 ? 1.0/len : 0;
+
+	vec2 seg = p1 - p0;
+
+	vec2 X = seg*inv_len;
+	vec2 Y = vec2(X.y,-X.x);
+
+	float scale = (u_frame.pv*vec4(p0,0,1)).w;
+	float width = u_thickness;
+
+	float len_prev = verts[1].len - verts[0].len;
+	float len_next = verts[3].len - verts[2].len;
+
+	bool top = bool(id & TOP_BIT);
+	bool right = bool(id & RIGHT_BIT);
+
+	float sgnY = top ? 1 : -1;
+	float sgnX = right ? 1 : -1;
+
+	uint endpoint = 
+		RIGHT_ENDPOINT*uint((len_next < 0) || (idx == u_count)) | 
+		LEFT_ENDPOINT*uint((len_prev < 0) || ((idx == 0)));
+
+	//-------------------------------------------------------------------
+	// Join offset at p0
+
+	vec2 p_prev = (verts[0].pos - p0)/(len_prev);
+	JoinResult j0 = compute_join_offset(p_prev,-X,width);
+	float delta0 = -j0.delta;
+
+	//-------------------------------------------------------------------
+	// Join offset at p1
+
+	vec2 p_next = (verts[3].pos - p1)/(len_next);
+	JoinResult j1 = compute_join_offset(X,p_next,width);
+	float delta1 = j1.delta;
+
+	//-------------------------------------------------------------------
+	// Compute vertex position
+
+	vec2 p = right ? p1 : p0;
+	float delta = right ? delta1 : delta0;
+
+	float dX = sgnY*delta;
+	float dY = sgnY*width;
+
+	if (limit_join(delta,width) || 
+		(bool(endpoint & LEFT_ENDPOINT) && sgnX < 0) ||
+		(bool(endpoint & RIGHT_ENDPOINT) && sgnX > 0) 
+	) {
+		dX = sgnX*width;
 	}
-	Y *= ubo.thickness;
+	delta0 = (idx == 0) ? width : delta0;
 
-	vec2 offset = vec2(0);
-	vec4 p = vec4(0);
-	vec4 a = vec4(0); 
-	vec4 b = vec4(0);
+	vec2 vpos = p + dY*Y + dX*X;
 
-	float s0 = v[0].len;
-	float s1 = v[1].len;
-	float ds = s1 - s0;
-	float s = 0;
+	gl_Position = u_frame.pv * vec4(vpos,0,1);
 
-	uint side = id & 0x1;
+	//-------------------------------------------------------------------
+	// Adjust uvs to accomodate for joins
 
-	if (side == SIDE_LEFT) {
-		uint id_prev = (idx > 0) ? idx - 1 : 0;
-		a = p1;
-		p = p0;
-		b = vec4(data[id_prev].pos,0,1);
+	vec2 uv = vec2(right ? 1 : 0, top ? 0 : 1);
+	uv.x += dX*inv_len;
 
-		X *= -1;
-		uv.x = 0;
+	//-------------------------------------------------------------------
+	// shader stage outputs
 
-		s = s0;
-	} 
-	else if (side == SIDE_RIGHT) {
-		uint id_next = (idx + 2 < ubo.count) ? idx + 2: idx;
-		a = p0;
-		p = p1;
-		b = vec4(data[id_next].pos,0,1);
+	// interpolated outputs
+	out_pos = vpos;
+	out_uv = uv;
+	out_total_length = s0 + uv.x*(s1 - s0);
+	out_width = width;
 
-		uv.x = 1;
-		s = s1;
-	}
+	// flat outputs, constant across segment
+	out_mid_weight = 1.0/(1.0 + abs(delta1/delta0));
 
-	vec2 final;
-	bool is_mid = bool(id & MID_BIT); 
+	out_p0 = p0;
+	out_p1 = p1;
+	out_X = X;
+	out_deltas = vec2(delta0,delta1);
+	out_join_angles = vec2(
+		atan(abs(delta0),width),
+		atan(abs(delta1),width));
+	out_s = vec2(s0,s1);
+	out_hypot = vec2(
+		sqrt(delta0*delta0 + width*width),
+		sqrt(delta1*delta1 + width*width));
 
-	if (is_mid) {
-	  	final = 0.5*(p.xy + a.xy) + Y;
-		uv.x = 0.5;
-		s = s0 + 0.5*ds;
-	} else {
-	  	final = intersect_join(a.xy,p.xy,b.xy,Y);
+	out_join_dir[0] = j0.B;
+	out_join_dir[1] = j1.B;
 
-		float factor = len/ubo.thickness; 
-		vec2 r = final.xy - p.xy;
-		float extra = dot(r,X_abs);
-
-		uv.x += extra/len;
-	}
-
-	vec4 pos = vec4(final.x,final.y,p.z,p.w);
-
-	gl_Position = u_frame.pv * pos;
-
-	frag_pos = pos;
-	dir = X;
-	center = p.xy;
-
-	out_uv = vec2(uv.x*(0.5*len/ubo.thickness),uv.y);
-	out_total_length = s;
-
-	instance_id = gl_InstanceID;
-	out_length = len;
-
-	// This is so the provoking vertex passes the 
-	// correct values for flat shader outputs
-	if (is_mid && bool(id & VERT_UPPER)) {
-		center = p1.xy;
-		dir = -X;
-	}
-
+	out_endpoint = endpoint;
 }
 
