@@ -65,5 +65,5 @@ void main()
 		color = 0.8*color*max(dot(n, sun),0) + 0.2*color;
 	}
 
-	FragColor = mix(color,vec4(in_uv,0,1),0.5);
+	FragColor = mix(color,vec4(in_uv,0,1),0.0);
 }

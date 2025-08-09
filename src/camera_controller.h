@@ -203,6 +203,12 @@ struct SphericalMotionCamera
 		return height*up;
 	}
 
+	void set_min_height(double h)
+	{
+		min_height = h;
+		height = std::max(1. + min_height, height);
+	}
+
 	glm::mat4 get_view()
 	{
 		glm::vec3 fwd = glm::normalize(glm::cross(up,right));
