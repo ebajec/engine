@@ -3,6 +3,6 @@
 
 #include <functional>
 
-extern void g_schedule_task(std::function<void(void*)> &&task);
+extern void g_schedule_task(std::function<void(void)> &&task);
 
 #endif // THREAD_POOL_H
