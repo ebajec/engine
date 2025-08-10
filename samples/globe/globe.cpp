@@ -220,7 +220,8 @@ static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_v
 	uint8_t f = code.face;
 
 	aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
-	aabb2_t rect_tex = sub_rect(parent, code);
+	aabb2_t rect_tex = parent == TILE_CODE_NONE ? 
+		aabb2_t{.x0 = 0, .y0 = 0, .x1 = 1, .y1 = 1} : sub_rect(parent, code);
 
 	double factor = 1.0/(double)(TILE_VERT_WIDTH-1);
 
@@ -464,13 +465,13 @@ LoadResult globe_create(Globe *globe, ResourceTable *rt)
 	globe::init_debug(rt);
 
 	globe->data_cache.reset(
-		TileDataCache::create(TILE_SIZE*sizeof(float))
+		TileCPUCache::create(TILE_SIZE*sizeof(float))
 	);
 	globe->source.reset(
 		TileDataSource::create()
 	);
 	globe->tex_cache.reset(
-		new TileTexCache{}
+		new TileGPUCache{}
 	);
 
 	return result;
@@ -548,7 +549,7 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	std::vector<TileTexUpload> new_textures;
 
 	globe->tex_cache->get_textures(data_tiles,tile_textures,new_textures);
-	globe->tex_cache->synchronous_upload(globe->data_cache.get(), new_textures);
+	globe->tex_cache->asynchronous_upload(globe->data_cache.get(), new_textures);
 
 	LoadResult result = update_render_data(rt,globe,
 		pos,data_tiles,tile_textures);

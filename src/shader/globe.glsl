@@ -41,5 +41,10 @@ tex_idx_t decode_tex_idx(uint idx)
 	return tex_idx;
 }
 
+bool is_valid(tex_idx_t idx)
+{
+	return !(idx.page == 0xFFFFFFFF && idx.tex == 0xFFFFFFFF);
+}
+
 #endif // GLOBE_GLSL
 

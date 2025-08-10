@@ -52,7 +52,12 @@ void main()
 
 	vec3 uvw = vec3(in_uv, in_tex_idx.tex);
 
-	float val = texture(u_tex_arrays[in_tex_idx.page], uvw).r;
+	bool valid = is_valid(in_tex_idx);
+
+	if (!valid) 
+		discard;
+
+	float val = valid ? texture(u_tex_arrays[in_tex_idx.page], uvw).r : 0;
 
 	vec4 color = mix(vec4(0,0.5,0,1), vec4(0.4,0.45,0.5,1), clamp(20*val,0,1));
 
@@ -62,7 +67,7 @@ void main()
 		vec3 dx = dFdx(in_pos);
 		vec3 dy = dFdy(in_pos);
 		vec3 n = normalize(cross(dx,dy));
-		color = 0.8*color*max(dot(n, sun),0) + 0.2*color;
+		color = mix(color*max(dot(n, sun),0),color,0.5);
 	}
 
 	FragColor = mix(color,vec4(in_uv,0,1),0.0);

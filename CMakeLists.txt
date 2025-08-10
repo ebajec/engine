@@ -40,6 +40,19 @@ message(STATUS "AddressSanitizer Enabled")
   )
 endif()
 
+option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+if(ENABLE_TSAN AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU"))
+	message(STATUS "ThreadSanitizer Enabled")
+	add_compile_options(
+    -fsanitize=thread
+    -fno-omit-frame-pointer    
+    -g                          
+  )
+	add_link_options(
+    -fsanitize=thread
+  )
+endif()
+
 
 set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -mavx2")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")

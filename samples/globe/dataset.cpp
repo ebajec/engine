@@ -1,8 +1,11 @@
 #include "dataset.h"
 #include "tiling.h"
 #include "utils/log.h"
+#include "thread_pool.h"
 
 #include <imgui.h>
+
+#include <atomic>
 
 static void test_loader_fn(TileCode code, void *dst, void *usr);
 static float test_elev_fn(glm::dvec2 uv, uint8_t f);
@@ -57,10 +60,32 @@ float TileDataSource::sample_elevation_at(glm::dvec3 p) const
 //------------------------------------------------------------------------------
 // TileDataCache
 
-TileDataCache 
-*TileDataCache::create(size_t tile_size)
+TileCode TileCPUCache::find_best(TileCode code) const
 {
-	TileDataCache *cache = new TileDataCache{};
+	auto end = m_map.end();
+	auto it = m_map.find(code);
+
+	TileCPULoadState state = TILE_DATA_STATE_EMPTY;
+
+	while (code.zoom > 0 && state != TILE_DATA_STATE_READY) {
+		code.idx >>= 2;
+		--code.zoom;
+
+		it = m_map.find(code);
+
+		if (it != end) {
+			log_info("Found parent tile %d",code);
+			state = it->second->state;
+		}
+	} 
+
+	return (state == TILE_DATA_STATE_READY) ? it->first : TILE_CODE_NONE;
+}
+
+TileCPUCache 
+*TileCPUCache::create(size_t tile_size)
+{
+	TileCPUCache *cache = new TileCPUCache{};
 
 	size_t size = cache->m_block_cap*tile_size;
 	
@@ -69,62 +94,150 @@ TileDataCache
 	return cache;
 }
 
-size_t TileDataCache::evict()
+size_t TileCPUCache::evict()
 {
-	entry_t ent = m_lru.back();
-	m_lru.pop_back();
+	entry_t &ent = m_lru.back();
+
+	TileCPULoadState state;
+	do {
+		state = ent.state.load();
+		if (state == TILE_DATA_STATE_LOADING || 
+			state == TILE_DATA_STATE_CANCELLED || ent.refs > 0) {
+			return UINT64_MAX;
+		}
+	} while (!ent.state.compare_exchange_weak(state, TILE_DATA_STATE_EMPTY));
+
+	if (m_map.find(ent.code) == m_map.end()) {
+		log_error("Failed to evict entry at %d; not contained in table!",ent.code.u64);
+		return UINT64_MAX;
+	}
+
+	size_t offset = ent.block_offset;
+
 	m_map.erase(ent.code);	
-	return ent.block;
+	m_lru.pop_back();
+
+	return offset;
 }
 
-const uint8_t *TileDataCache::get_block(TileCode code, size_t *size) const
+const uint8_t *TileCPUCache::acquire_block(TileCode code, size_t *size,
+									   std::atomic<TileCPULoadState> **p_state) const
 {
 	auto it = m_map.find(code);
 
 	if (it == m_map.end()) {
 		log_error("TileDataCache::get_block : Failed to find tile with id %ld",
 			code.u64);
+		return nullptr;
 	}
-
+	if (p_state) *p_state = &it->second->state;
 	if (size) *size = m_block_size;
-	return &m_blocks[it->second->block];
+
+	return &m_blocks[it->second->block_offset];
 }
 
-std::vector<TileCode> TileDataCache::load(
+std::optional<TileDataRef> TileCPUCache::acquire_block(TileCode code) const
+{
+	auto it = m_map.find(code);
+
+	if (it == m_map.end()) {
+		log_error("acquire_block: Failed to find tile with code %ld (face=%d,zoom=%d,idx=%d)",
+			code.u64, code.face,code.zoom,code.idx);
+		return std::nullopt;
+	}
+
+	if (it->second->state != TILE_DATA_STATE_READY) 
+		return std::nullopt;
+
+	TileDataRef ref = {
+		.data = &m_blocks[it->second->block_offset],
+		.size = m_block_size,
+		.p_state = &it->second->state,
+		.p_refs = &it->second->refs,
+	};
+
+	ref.p_refs->fetch_add(1);
+
+	return ref;
+}
+void TileCPUCache::release_block(TileDataRef ref) const
+{
+	ref.p_refs->fetch_sub(1);
+}
+
+void load_thread_fn(const TileDataSource *source, TileCPUCache::entry_t *ent, uint8_t* dst)
+{
+	TileCPULoadState state;
+	do {
+		state = ent->state.load();
+		if (state != TILE_DATA_STATE_QUEUED)
+			return;
+	} while (!ent->state.compare_exchange_weak(state, TILE_DATA_STATE_LOADING));
+
+	source->load(ent->code, dst);
+
+	ent->state.store(TILE_DATA_STATE_READY);
+}
+
+std::vector<TileCode> TileCPUCache::load(
 	const TileDataSource& source, const std::span<TileCode> tiles)
 {
-	std::vector<TileCode> loaded (tiles.size());
-
+	std::vector<TileCode> available (tiles.size());
 
 	ImGui::SliderInt("Max zoom", const_cast<int*>(&source.m_debug_zoom), 0, 24);
 
 	for (size_t i = 0; i < tiles.size(); ++i) {
 		TileCode code = tiles[i];
-		loaded[i] = source.find(code);
+		available[i] = source.find(code);
 	}
 
-	std::vector<std::pair<TileCode, uint8_t*>> loads;
-	for (TileCode code : loaded) {
-		auto it = m_map.find(code);
+	std::vector<TileCode> loaded (tiles.size());
+
+	std::vector<entry_t*> loads;
+	for (size_t i = 0; i < available.size(); ++i) {
+		TileCode ideal = available[i];
+		TileCode code = TILE_CODE_NONE; 
+
+		auto it = m_map.find(ideal);
 		if (it != m_map.end()) {
 			lru_list_t::iterator ent = it->second;
 			m_lru.splice(m_lru.begin(), m_lru, ent);
+
+			TileCPULoadState state = ent->state.load(); 
+			if (state != TILE_DATA_STATE_READY) {
+				continue;
+			}
+			code = ideal;
 		} else {
-			size_t block = m_block_idx < m_block_cap ? 
+			size_t offset = m_block_idx < m_block_cap ? 
 				(m_block_idx++)*m_block_size : evict();	
 
-			m_lru.push_front({
-				.code = code,
-				.block = block 
-			});
-			m_map[code] = m_lru.begin();
+			entry_t &ent = m_lru.emplace_front();
+			ent.code = ideal,
+			ent.block_offset = offset,
+			ent.state = TILE_DATA_STATE_EMPTY,
+			ent.refs = 0,
 
-			loads.push_back({code,&m_blocks[block]});
+			m_map[ideal] = m_lru.begin();
+
+			loads.push_back(&m_lru.front());
 		}
+
+		if (code == TILE_CODE_NONE) {
+			code = find_best(ideal);
+		}
+
+		loaded[i] = code;
 	}
 
-	for (auto pair : loads) {
-		source.load(pair.first, pair.second);
+
+	for (entry_t *ent : loads) {
+		uint8_t *dst = &m_blocks[ent->block_offset];
+
+		ent->state.store(TILE_DATA_STATE_QUEUED);
+		g_schedule_task([=](){
+			load_thread_fn(&source, ent, dst);
+		});
 	}
 
 	return loaded;

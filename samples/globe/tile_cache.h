@@ -13,13 +13,24 @@
 
 // libc
 #include <cstdint>
+#include <atomic>
 
 static constexpr uint32_t TILE_PAGE_SIZE = 128;
 static constexpr uint32_t MAX_TILE_PAGES = 16;
 static constexpr uint32_t MAX_TILES = TILE_PAGE_SIZE*MAX_TILE_PAGES;
 
+enum TileGPULoadState
+{
+	TILE_TEX_STATE_EMPTY,
+	TILE_TEX_STATE_READY,
+	TILE_TEX_STATE_QUEUED,
+	TILE_TEX_STATE_UPLOADING,
+	TILE_TEX_STATE_CANCELLED
+};
+
 struct TilePage
 {
+	std::atomic<TileGPULoadState> states[TILE_PAGE_SIZE];
 	std::vector<uint16_t> free_list;
 	GLuint tex_array;
 };
@@ -29,7 +40,13 @@ struct TileTexIndex
 	alignas(4)
 	uint16_t page;
 	uint16_t tex;
+
+	constexpr bool is_valid() const {
+		return page != UINT16_MAX && tex != UINT16_MAX;
+	}
 };
+
+static TileTexIndex TILE_INDEX_NONE = {UINT16_MAX,UINT16_MAX};
 
 struct TileTexUpload
 {
@@ -37,7 +54,7 @@ struct TileTexUpload
 	TileTexIndex idx;
 };
 
-struct TileTexCache
+struct TileGPUCache
 {
 	typedef std::list<std::pair<TileCode,TileTexIndex>> lru_list_t;
 
@@ -55,12 +72,13 @@ struct TileTexCache
 		std::greater<uint16_t>
 	> m_open_pages;
 
-	std::vector<TilePage> m_pages;
+	std::vector<std::unique_ptr<TilePage>> m_pages;
 
 	GLuint m_data_format = GL_R32F;
 	GLuint m_img_format = GL_RED;
 	GLuint m_data_type = GL_FLOAT;
 	GLuint m_data_size = sizeof(float);
+	GLuint m_tile_size_bytes = sizeof(float)*TILE_SIZE;
 
 private:
 	TileTexIndex allocate();
@@ -80,7 +98,10 @@ public:
 
 	void bind_texture_arrays(uint32_t base) const;
 
-	void synchronous_upload(const TileDataCache *data_cache,
+	void asynchronous_upload(const TileCPUCache *data_cache,
+		std::span<TileTexUpload> uploads);
+
+	void synchronous_upload(const TileCPUCache *data_cache,
 		std::span<TileTexUpload> uploads);
 };
 

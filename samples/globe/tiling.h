@@ -27,6 +27,7 @@ union TileCode
 		return u64 == other.u64;
 	}
 };
+static constexpr TileCode TILE_CODE_NONE = {.u64 = 0xFFFFFFFFFFFFFFFF};
 
 struct TileCodeHash
 {

@@ -80,9 +80,12 @@ void main()
 
 	vec3 uvw = vec3(uv, tex_idx.tex);
 
-	vec4 val = texture(u_tex_arrays[tex_idx.page], uvw);
+	bool valid = is_valid(tex_idx); 
+
+	vec4 val = valid ? texture(u_tex_arrays[tex_idx.page], uvw) : vec4(0);
 
 	wpos += n*(val.r);
+
 	out_pos = wpos.xyz;
 	out_uv = uv;
 	out_normal = n.xyz;
