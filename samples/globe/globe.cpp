@@ -3,6 +3,7 @@
 #include "camera_controller.h"
 #include "geometry.h"
 #include "buffer.h"
+#include "thread_pool.h"
 
 #include "tile_cache.h"
 
@@ -388,12 +389,24 @@ static LoadResult update_render_data(
 	void *ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
 
 	uint32_t offset = 0;
+
+	std::atomic_int ctr = count;
+
 	for (uint32_t i = 0; i < count; ++i) {
 		size_t offset = i * TILE_VERT_COUNT;	
 
 		TileCode code = tiles[i];
-		create_tile_verts(code, parents[i], (GlobeVertex*)ptr + offset);
+		GlobeVertex * dst = (GlobeVertex*)ptr + offset;
+		TileCode parent = parents[i];
+
+		g_schedule_task([=,&ctr](){
+			create_tile_verts(code, parent, dst);
+			--ctr;	
+		});
 	}
+
+	while (ctr > 0)
+		std::this_thread::yield();
 
 	glUnmapBuffer(GL_ARRAY_BUFFER);
 
