@@ -70,6 +70,5 @@ void main()
 		color = mix(color*max(dot(n, sun),0),color,0.5);
 	}
 
-	FragColor = mix(color,vec4(in_uv,0,1),0.0);
-	FragColor = texture(u_tex, in_uv);
+	FragColor = mix(color,vec4(in_uv,0,1),0.4);
 }

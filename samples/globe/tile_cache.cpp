@@ -37,36 +37,7 @@ void destroy_page(TilePage &page)
 	glDeleteTextures(1,&page.tex_array);
 }
 
-TileTexIndex TileGPUCache::allocate()
-{
-	if (m_open_pages.empty()) {
-		m_pages.emplace_back(std::move(create_page(m_data_format)));
-		m_open_pages.push(m_pages.size() - 1);
-	}
-
-	uint16_t page_idx = m_open_pages.top(); 
-
-	assert(page_idx < m_pages.size());
-
-	TilePage *page = m_pages[page_idx].get();
-
-	uint16_t tex_idx = page->free_list.back();
-
-	assert(tex_idx < TILE_PAGE_SIZE);
-
-	page->free_list.pop_back();
-
-	if (page->free_list.empty()) {
-		m_open_pages.pop();
-	}
-
-	return TileTexIndex{
-		.page = page_idx,
-		.tex = tex_idx,
-	};
-}
-
-void TileGPUCache::deallocate(TileTexIndex idx)
+void TileGPUCache::deallocate(TileGPUIndex idx)
 {
 	TilePage *page = m_pages[idx.page].get();
 
@@ -97,13 +68,42 @@ void TileGPUCache::reserve(uint32_t count)
 	}
 }
 
-TileTexIndex TileGPUCache::evict_one()
+TileGPUIndex TileGPUCache::allocate()
+{
+	if (m_open_pages.empty()) {
+		m_pages.emplace_back(std::move(create_page(m_data_format)));
+		m_open_pages.push(m_pages.size() - 1);
+	}
+
+	uint16_t page_idx = m_open_pages.top(); 
+
+	assert(page_idx < m_pages.size());
+
+	TilePage *page = m_pages[page_idx].get();
+
+	uint16_t tex_idx = page->free_list.back();
+
+	assert(tex_idx < TILE_PAGE_SIZE);
+
+	page->free_list.pop_back();
+
+	if (page->free_list.empty()) {
+		m_open_pages.pop();
+	}
+
+	return TileGPUIndex{
+		.page = page_idx,
+		.tex = tex_idx,
+	};
+}
+
+TileGPUIndex TileGPUCache::evict_one()
 {
 	assert(!m_lru.empty());
 	
-	std::pair<TileCode, TileTexIndex> ent = m_lru.back();
+	std::pair<TileCode, TileGPUIndex> ent = m_lru.back();
 
-	TileTexIndex idx = ent.second;
+	TileGPUIndex idx = ent.second;
 
 	std::atomic<TileGPULoadState> *tex_state = &m_pages[idx.page]->states[idx.tex]; 
 
@@ -124,7 +124,7 @@ TileTexIndex TileGPUCache::evict_one()
 	return ent.second;
 }
 
-void TileGPUCache::insert(TileCode code, TileTexIndex idx)
+void TileGPUCache::insert(TileCode code, TileGPUIndex idx)
 {
 	assert(m_map.find(code) == m_map.end());
 
@@ -132,10 +132,10 @@ void TileGPUCache::insert(TileCode code, TileTexIndex idx)
 	m_map[code] = m_lru.begin();
 }
 
-void TileGPUCache::update(
+size_t TileGPUCache::update(
 	const TileCPUCache *cpu_cache,
 	const std::span<TileCode> tiles, 
-	std::vector<TileTexIndex>& textures,
+	std::vector<TileGPUIndex>& textures,
 	std::vector<TileTexUpload>& new_tiles
 )
 {
@@ -155,7 +155,7 @@ void TileGPUCache::update(
 
 		const bool found = it != m_map.end();
 
-		TileTexIndex idx = TILE_INDEX_NONE;
+		TileGPUIndex idx = TILE_INDEX_NONE;
 
 		if (found) {
 			lru_list_t::iterator ent = it->second;
@@ -180,6 +180,8 @@ void TileGPUCache::update(
 	}
 
 	asynchronous_upload(cpu_cache, new_tiles);
+
+	return new_tiles.size();
 }
 
 struct UploadContext
@@ -195,7 +197,7 @@ struct TileTexUploadData
 	std::atomic<TileGPULoadState> *p_state;
 	size_t offset;
 	TileCode code;
-	TileTexIndex idx;
+	TileGPUIndex idx;
 	TileDataRef data_ref;
 };
 
@@ -230,6 +232,9 @@ cleanup:
 	--ctx->refs;
 	return;
 }
+
+//------------------------------------------------------------------------------
+// Loading
 
 void TileGPUCache::asynchronous_upload(const TileCPUCache *data_cache,
 	std::span<TileTexUpload> uploads)
@@ -269,7 +274,7 @@ void TileGPUCache::asynchronous_upload(const TileCPUCache *data_cache,
 	for (size_t i = 0; i < uploads.size(); ++i) {
 		TileTexUpload upload = uploads[i];
 
-		TileTexIndex idx = upload.idx;
+		TileGPUIndex idx = upload.idx;
 
 		if (!idx.is_valid()) {
 			upload_data[i].idx = TILE_INDEX_NONE;

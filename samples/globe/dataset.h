@@ -5,11 +5,13 @@
 
 #include <unordered_map>
 #include <list>
+#include <queue>
 #include <memory>
 #include <atomic>
 
 static constexpr uint32_t TILE_WIDTH = 256;
 static constexpr uint32_t TILE_SIZE = TILE_WIDTH*TILE_WIDTH;
+static constexpr size_t TILE_CPU_PAGE_SIZE = 16;
 
 enum TileCPULoadState
 {
@@ -53,35 +55,60 @@ struct TileDataRef
 	std::atomic_int *p_refs;
 };
 
+struct TileCPUIndex
+{
+	uint32_t page;
+	uint32_t ent;
+
+	bool is_valid() {
+		return page != UINT32_MAX && ent != UINT32_MAX;
+	}
+};
+
+static constexpr TileCPUIndex TILE_CPU_INDEX_NONE = {UINT32_MAX,UINT32_MAX};
+
 struct TileCPUCache
 {
-	struct entry_t
-	{
-		TileCode code;
-		size_t block_offset;
-		std::atomic<TileCPULoadState> state;
-		std::atomic_int refs;
-	};
-
-	typedef std::list<entry_t> lru_list_t;
+	typedef std::list<TileCPUIndex> lru_list_t;
 
 	std::unordered_map<
 		TileCode, 
 		lru_list_t::iterator, 
 		TileCodeHash
 	> m_map;
-
 	lru_list_t m_lru;
 
-	std::unique_ptr<uint8_t[]> m_blocks;
-	size_t m_block_idx = 0;
-	size_t m_block_cap = 1 << 12;
-	size_t m_block_size;
+	struct entry_t
+	{
+		TileCode code;
+		std::atomic<TileCPULoadState> state;
+		std::atomic_int refs;
+	};
 
+	struct page_t
+	{
+		entry_t entries[TILE_CPU_PAGE_SIZE];
+		std::vector<uint32_t> free_list;
+		std::unique_ptr<uint8_t[]> mem;
+	};
+
+	std::priority_queue<
+		uint16_t, 
+		std::vector<uint16_t>, 
+		std::greater<uint16_t>
+	> m_open_pages;
+
+	std::vector<std::unique_ptr<page_t>> m_pages;
+
+	size_t m_block_size;
+	size_t m_capacity = 1 << 13;
 private:
-	size_t evict();	
-	size_t allocate();
+	TileCPUIndex evict_one();	
+	TileCPUIndex allocate();
+
 	TileCode find_best(TileCode code) const;
+	entry_t *get_entry(TileCPUIndex idx) const;
+	uint8_t *get_block(TileCPUIndex idx) const;
 public:
 	static TileCPUCache *create(size_t tile_size);
 

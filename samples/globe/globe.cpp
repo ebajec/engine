@@ -340,7 +340,7 @@ LoadResult create_render_data(ResourceTable *rt, RenderData &data)
 	if (!data.vbo)
 		goto load_failed;
 
-	data.ssbo = create_buffer(rt, MAX_TILES*sizeof(TileTexIndex),
+	data.ssbo = create_buffer(rt, MAX_TILES*sizeof(TileGPUIndex),
 						  GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
 	if (!data.ssbo)
 		goto load_failed;
@@ -367,7 +367,7 @@ static LoadResult update_render_data(
 	Globe *globe,
 	glm::dvec3 origin,
 	const std::vector<TileCode>& parents, 
-	const std::vector<TileTexIndex> &textures
+	const std::vector<TileGPUIndex> &textures
 )
 {
 	const std::vector<TileCode>& tiles = globe->tiles;
@@ -418,7 +418,7 @@ static LoadResult update_render_data(
 	glBindBuffer(GL_ARRAY_BUFFER, ssbo->id);
 	ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
 
-	memcpy(ptr, textures.data(), textures.size()*sizeof(TileTexIndex));
+	memcpy(ptr, textures.data(), textures.size()*sizeof(TileGPUIndex));
 
 	glUnmapBuffer(GL_ARRAY_BUFFER);
 
@@ -558,7 +558,7 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	std::vector<TileCode> data_tiles = globe->cpu_cache->update(
 		*globe->source, globe->tiles);
 
-	std::vector<TileTexIndex> tile_textures;
+	std::vector<TileGPUIndex> tile_textures;
 	std::vector<TileTexUpload> new_textures;
 
 	globe->gpu_cache->update(globe->cpu_cache.get(),data_tiles,tile_textures,new_textures);

@@ -35,7 +35,7 @@ struct TilePage
 	GLuint tex_array;
 };
 
-struct TileTexIndex
+struct TileGPUIndex
 {
 	alignas(4)
 	uint16_t page;
@@ -46,17 +46,17 @@ struct TileTexIndex
 	}
 };
 
-static TileTexIndex TILE_INDEX_NONE = {UINT16_MAX,UINT16_MAX};
+static TileGPUIndex TILE_INDEX_NONE = {UINT16_MAX,UINT16_MAX};
 
 struct TileTexUpload
 {
 	TileCode code;
-	TileTexIndex idx;
+	TileGPUIndex idx;
 };
 
 struct TileGPUCache
 {
-	typedef std::list<std::pair<TileCode,TileTexIndex>> lru_list_t;
+	typedef std::list<std::pair<TileCode,TileGPUIndex>> lru_list_t;
 
 	// TODO : Robin hood hash table instead of this
 	lru_list_t m_lru;
@@ -81,19 +81,19 @@ struct TileGPUCache
 	GLuint m_tile_size_bytes = sizeof(float)*TILE_SIZE;
 
 private:
-	TileTexIndex allocate();
-	void deallocate(TileTexIndex idx);
+	TileGPUIndex allocate();
+	void deallocate(TileGPUIndex idx);
 	void reserve(uint32_t count);
 
-	TileTexIndex evict_one();
+	TileGPUIndex evict_one();
 
-	void insert(TileCode, TileTexIndex);
+	void insert(TileCode, TileGPUIndex);
 
 public:
-	void update(
+	size_t update(
 		const TileCPUCache *cpu_cache,
 		const std::span<TileCode> tiles, 
-		std::vector<TileTexIndex>& textures,
+		std::vector<TileGPUIndex>& textures,
 		std::vector<TileTexUpload>& new_tiles
 	);
 
