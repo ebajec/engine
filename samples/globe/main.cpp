@@ -99,6 +99,37 @@ void handle_sigint(int sig)
 		glfwSetWindowShouldClose(g_window,GLFW_TRUE);
 }
 
+void plot_frame_times(float delta)
+{
+	delta *= 1000.f;
+	static std::vector<float> times;
+	static std::vector<float> deltas;
+	static int scroll = 0;
+	static size_t samples = 500;
+	static float avg = 0;
+
+	if (deltas.size() < samples) 
+		deltas.resize(samples,0);
+	if (times.size() < samples) 
+		times.resize(samples,0);
+
+	deltas[scroll] = (float)delta;
+	times[scroll] = glfwGetTime();
+
+	scroll = (scroll + 1)%samples;
+
+	avg = 0.99*avg + 0.01*delta;
+
+	if (ImPlot::BeginPlot("Frame times (ms)",ImVec2(200,200))) {
+		ImPlot::SetupAxesLimits(times[scroll], 
+		   times[scroll  ? scroll - 1 : samples - 1], 
+		   0, 2*avg,ImPlotCond_Always);
+		ImPlot::PlotLine("time", times.data(), 
+			deltas.data(), samples, ImPlotCond_Always, scroll);
+		ImPlot::EndPlot();
+	}
+}
+
 int main(int argc, char* argv[])
 {
 	stbi_set_flip_vertically_on_load(true);
@@ -231,6 +262,8 @@ int main(int argc, char* argv[])
 
 	//-----------------------------------------------------------------------------
 	// main loop
+	
+	double t0 = 0, t1 = 0;
 
 	while (!glfwWindowShouldClose(window)) {
 		hot_retable->process_updates();
@@ -238,6 +271,11 @@ int main(int argc, char* argv[])
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
+
+		plot_frame_times(t1 - t0);
+
+		t0 = t1;
+		t1 = glfwGetTime();
 
 		glfwPollEvents();
 

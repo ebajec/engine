@@ -61,14 +61,51 @@ void main()
 
 	vec4 color = mix(vec4(0,0.5,0,1), vec4(0.4,0.45,0.5,1), clamp(20*val,0,1));
 
-	vec3 sun = normalize(vec3(-1,-1,3));
+	color = texture(u_tex, in_uv);
+
+	float t = TWOPI*fract(u_frame.t*0.0001);
+
+	vec2 z = vec2(cos(t),sin(t));
+
+	vec3 sun[4] = { 
+		vec3(z.x,z.y,z.x),
+		normalize(vec3(z.y,-z.x,0.5)),
+		vec3(0,z.y,z.x),
+		vec3(0,0,1),
+	};
+
+	vec4 sun_colors[4] = { 
+		vec4(1,0,0,1),
+		vec4(0,1,0,1),
+		vec4(0,0,1,1),
+		vec4(1,1,1,1),
+	};
 
 	if (true) {
 		vec3 dx = dFdx(in_pos);
 		vec3 dy = dFdy(in_pos);
 		vec3 n = normalize(cross(dx,dy));
-		color = mix(color*max(dot(n, sun),0),color,0.5);
+
+		vec3 V = view_dir();
+
+		vec4 diffuse = vec4(0);
+		float spec = 0;
+
+		for (int i = 0; i < 4; ++i) {
+			vec3 L = sun[i];
+			vec4 C = sun_colors[i];
+
+			diffuse += color*C*max(dot(n, L),0);
+			
+			vec3 R = reflect(L,n);
+
+			spec += pow(max(dot(V,R),0),32);
+		}
+
+		spec = min(spec,0.2);
+
+		color = mix(diffuse,mix(color,vec4(0,0,0.5,0),0.5),0.2) + spec*vec4(1);
 	}
 
-	FragColor = mix(color,vec4(in_uv,0,1),0.4);
+	FragColor = mix(color,vec4(0,in_uv,1),0.0);
 }

@@ -7,6 +7,9 @@
 
 #include <atomic>
 
+static int MAX_TILES_IN_FLIGHT = 9;
+static std::atomic_int g_tiles_in_flight = 0;
+
 static void test_loader_fn(TileCode code, void *dst, void *usr,
 						   const std::atomic<TileCPULoadState> *p_state);
 static float test_elev_fn(glm::dvec2 uv, uint8_t f);
@@ -60,6 +63,15 @@ float TileDataSource::sample_elevation_at(glm::dvec3 p) const
 //------------------------------------------------------------------------------
 // TileDataCache
 
+TileCPUCache 
+*TileCPUCache::create(size_t tile_size, size_t capacity)
+{
+	TileCPUCache *cache = new TileCPUCache{};
+	cache->m_block_size = tile_size;
+	cache->m_capacity = (std::max(capacity,(size_t)1) - 1)/tile_size + tile_size;
+	return cache;
+}
+
 TileCPUCache::entry_t *TileCPUCache::get_entry(TileCPUIndex idx) const
 {
 	return &m_pages[idx.page]->entries[idx.ent];
@@ -70,10 +82,12 @@ uint8_t *TileCPUCache::get_block(TileCPUIndex idx) const
 	return &m_pages[idx.page]->mem[idx.ent*m_block_size];
 }
 
-TileCode TileCPUCache::find_best(TileCode code) const
+TileCode TileCPUCache::find_best(TileCode code)
 {
 	auto end = m_map.end();
 	auto it = m_map.find(code);
+
+	TileCode in = code;
 
 	TileCPULoadState state = TILE_DATA_STATE_EMPTY;
 
@@ -84,21 +98,19 @@ TileCode TileCPUCache::find_best(TileCode code) const
 		it = m_map.find(code);
 
 		if (it != end) {
-			//log_info("Found parent tile %d",code);
 			state = get_entry(*(it->second))->state;
 		}
 	} 
 
-	return (state == TILE_DATA_STATE_READY) ? it->first : TILE_CODE_NONE;
-}
+	if (state == TILE_DATA_STATE_READY) {
+		lru_list_t::iterator l_it = it->second;
+		m_lru.splice(m_lru.begin(), m_lru, l_it);
+		return it->first;
+	}
 
-TileCPUCache 
-*TileCPUCache::create(size_t tile_size)
-{
-	TileCPUCache *cache = new TileCPUCache{};
-	cache->m_block_size = tile_size;
-	//cache->m_blocks.reset(new uint8_t[size]);
-	return cache;
+	//log_info("No loaded parent found for tile %d",in);
+
+	return TILE_CODE_NONE;
 }
 
 TileCPUCache::page_t *create_page(size_t block_size)
@@ -165,7 +177,7 @@ TileCPUIndex TileCPUCache::evict_one()
 		return TILE_CPU_INDEX_NONE;
 	}
 
-	log_info("evicted tile %d",ent->code);
+	//log_info("evicted tile %d",ent->code);
 	m_map.erase(ent->code);	
 	m_lru.pop_back();
 
@@ -224,7 +236,8 @@ void TileCPUCache::release_block(TileDataRef ref) const
 	ref.p_refs->fetch_sub(1);
 }
 
-void load_thread_fn(const TileDataSource *source, TileCPUCache::entry_t *ent, uint8_t* dst)
+void load_thread_fn(
+	const TileDataSource *source, TileCPUCache::entry_t *ent, uint8_t* dst)
 {
 	TileCPULoadState state;
 	do {
@@ -247,7 +260,7 @@ void load_thread_fn(const TileDataSource *source, TileCPUCache::entry_t *ent, ui
 		}
 	} while(!ent->state.compare_exchange_weak(state, TILE_DATA_STATE_READY));
 
-	log_info("Tile %d ready",ent->code);
+	//log_info("Tile %d ready",ent->code);
 }
 
 std::vector<TileCode> TileCPUCache::update(
@@ -283,7 +296,7 @@ std::vector<TileCode> TileCPUCache::update(
 				if (ent->refs > 0) 
 					log_error("Empty tile has %d references",ent->refs.load());
 				loads.push_back({idx,ent});
-				continue;
+				goto end_loop;
 			}
 
 			if (state == TILE_DATA_STATE_READY)
@@ -293,7 +306,7 @@ std::vector<TileCode> TileCPUCache::update(
 	  			evict_one() : allocate();
 
 			if (!idx.is_valid()) 
-				continue;
+				goto end_loop;
 
 			m_lru.push_front(idx);
 			m_map[ideal] = m_lru.begin();
@@ -306,38 +319,41 @@ std::vector<TileCode> TileCPUCache::update(
 			loads.push_back({idx,ent});
 		}
 
-		if (code == TILE_CODE_NONE) {
+	end_loop:
+		if (code == TILE_CODE_NONE)
 			code = find_best(ideal);
-		}
-
 		loaded[i] = code;
 	}
 
 	for (auto [idx, ent] : loads) {
 		uint8_t *dst = get_block(idx);
 
-		log_info("Loading tile %d",ent->code);
+		if (g_tiles_in_flight < MAX_TILES_IN_FLIGHT) {
+			//log_info("Loading tile %d",ent->code);
 
-		ent->state.store(TILE_DATA_STATE_QUEUED);
-		g_schedule_blocking([=](){
-			load_thread_fn(&source, ent, dst);
-		});
+			ent->state.store(TILE_DATA_STATE_QUEUED);
+			g_schedule_blocking([=](){
+				++g_tiles_in_flight;
+				load_thread_fn(&source, ent, dst);
+				--g_tiles_in_flight;
+			});
+		}
 	}
 
 	return loaded;
 }
 
-static constexpr size_t coeff_count = 10;
+static constexpr size_t coeff_count = 8;
 static float coeffs[coeff_count] = {};
 
 void init_coeffs()
 {
 	for (size_t i = 0; i < coeff_count; ++i) {
-		coeffs[i] = (1.0 - (float)rand())/(float)RAND_MAX/(float)(i + 1); 
+		coeffs[i] = (1.0 - (float)rand())/(float)RAND_MAX; 
 	}
 }
 
-float test_elev_fn(glm::dvec2 uv, uint8_t f)
+float test_elev_fn2(glm::dvec2 uv, uint8_t f, uint8_t zoom)
 {
 	glm::dvec3 p = cube_to_globe(f, uv);
 
@@ -350,12 +366,18 @@ float test_elev_fn(glm::dvec2 uv, uint8_t f)
 
 	float g = 0;
 	for (size_t i = 0; i < coeff_count; ++i) {
-		g += coeffs[i]*sin(i*p.x)*cos(i*p.y)*sin(i*p.z)*cos(i*p.z);
+		float c = 4*(i + 1);
+		g += coeffs[i]*sin(c*p.x)*sin(c*p.y)*sin(c*p.z)/c;
 	}
 
-	g *= 0.3;
+	g *= 0.4;
 
 	return g;
+}
+
+float test_elev_fn(glm::dvec2 uv, uint8_t f)
+{
+	return test_elev_fn2(uv, f,coeff_count);
 }
 
 void test_loader_fn(TileCode code, void *dst, void *usr, 
@@ -377,7 +399,7 @@ void test_loader_fn(TileCode code, void *dst, void *usr,
 			glm::vec2 f = glm::vec2(rect.min) + 
 				uv * glm::vec2((rect.max - rect.min));
 
-			float g = test_elev_fn(f, code.face);
+			float g = test_elev_fn2(f, code.face, code.zoom);
 			data[idx++] = g;
 			uv.x += d;
 		}

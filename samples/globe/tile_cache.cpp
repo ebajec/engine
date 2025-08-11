@@ -111,10 +111,10 @@ TileGPUIndex TileGPUCache::evict_one()
 	do {
 		state = tex_state->load(); 
 		if (state == TILE_TEX_STATE_CANCELLED) 
-			return TILE_INDEX_NONE;
+			return TILE_GPU_INDEX_NONE;
 		if (state == TILE_TEX_STATE_UPLOADING) {
 			tex_state->store(TILE_TEX_STATE_CANCELLED);
-			return TILE_INDEX_NONE;
+			return TILE_GPU_INDEX_NONE;
 		}
 	} while(!tex_state->compare_exchange_weak(state, TILE_TEX_STATE_EMPTY));
 
@@ -130,58 +130,6 @@ void TileGPUCache::insert(TileCode code, TileGPUIndex idx)
 
 	m_lru.push_front({code,idx});
 	m_map[code] = m_lru.begin();
-}
-
-size_t TileGPUCache::update(
-	const TileCPUCache *cpu_cache,
-	const std::span<TileCode> tiles, 
-	std::vector<TileGPUIndex>& textures,
-	std::vector<TileTexUpload>& new_tiles
-)
-{
-	size_t tile_count = std::min(tiles.size(),(size_t)MAX_TILES);
-
-	reserve(tile_count);
-
-	for (size_t i = 0; i < tile_count; ++i) {
-		TileCode code = tiles[i];
-
-		if (code == TILE_CODE_NONE) {
-			textures.push_back(TILE_INDEX_NONE);
-			continue;
-		}
-
-		auto it = m_map.find(code);
-
-		const bool found = it != m_map.end();
-
-		TileGPUIndex idx = TILE_INDEX_NONE;
-
-		if (found) {
-			lru_list_t::iterator ent = it->second;
-			m_lru.splice(m_lru.begin(), m_lru, ent);
-			idx = ent->second;
-
-		} else {
-			idx = (m_map.size() >= MAX_TILES) ? 
-				evict_one() : allocate();
-
-			if (idx.is_valid()) {
-				insert(code, idx);
-
-				new_tiles.push_back(TileTexUpload{
-					.code = code, 
-					.idx = idx
-				});
-			}
-		}
-
-		textures.push_back(idx);
-	}
-
-	asynchronous_upload(cpu_cache, new_tiles);
-
-	return new_tiles.size();
 }
 
 struct UploadContext
@@ -233,6 +181,58 @@ cleanup:
 	return;
 }
 
+
+size_t TileGPUCache::update(
+	const TileCPUCache *cpu_cache,
+	const std::span<TileCode> tiles, 
+	std::vector<TileGPUIndex>& textures,
+	std::vector<TileTexUpload>& new_tiles
+)
+{
+	size_t tile_count = std::min(tiles.size(),(size_t)MAX_TILES);
+
+	reserve(tile_count);
+
+	for (size_t i = 0; i < tile_count; ++i) {
+		TileCode code = tiles[i];
+
+		if (code == TILE_CODE_NONE) {
+			textures.push_back(TILE_GPU_INDEX_NONE);
+			//log_info("Empty texture loaded at position %d in tile list", i); continue;
+		}
+
+		auto it = m_map.find(code);
+
+		const bool found = it != m_map.end();
+
+		TileGPUIndex idx = TILE_GPU_INDEX_NONE;
+
+		if (found) {
+			lru_list_t::iterator ent = it->second;
+			m_lru.splice(m_lru.begin(), m_lru, ent);
+			idx = ent->second;
+		} else {
+			idx = (m_map.size() >= MAX_TILES) ? 
+				evict_one() : allocate();
+
+			if (idx.is_valid()) {
+				insert(code, idx);
+
+				new_tiles.push_back(TileTexUpload{
+					.code = code, 
+					.idx = idx
+				});
+			}
+		}
+
+		textures.push_back(idx);
+	}
+
+	asynchronous_upload(cpu_cache, new_tiles);
+
+	return new_tiles.size();
+}
+
 //------------------------------------------------------------------------------
 // Loading
 
@@ -277,14 +277,15 @@ void TileGPUCache::asynchronous_upload(const TileCPUCache *data_cache,
 		TileGPUIndex idx = upload.idx;
 
 		if (!idx.is_valid()) {
-			upload_data[i].idx = TILE_INDEX_NONE;
+			upload_data[i].idx = TILE_GPU_INDEX_NONE;
 			continue;
 		}
 
 		std::optional<TileDataRef> ref = data_cache->acquire_block(upload.code); 
 
 		if (!ref) {
-			upload_data[i].idx = TILE_INDEX_NONE;
+			upload_data[i].idx = TILE_GPU_INDEX_NONE;
+			log_error("Queued upload for incomplete tile %d", upload.code);
 			continue;
 		} 
 		TileTexUploadData data = {

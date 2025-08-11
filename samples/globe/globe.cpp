@@ -31,6 +31,18 @@
 #define QUATPI 0.785398163397
 #endif
 
+#ifndef KILOBYTE
+#define KILOBYTE ((size_t)1024)
+#endif
+
+#ifndef MEGABYTE
+#define MEGABYTE (KILOBYTE*KILOBYTE)
+#endif
+
+#ifndef GIGABYTE
+#define GIGABYTE (MEGABYTE*KILOBYTE)
+#endif
+
 static bool g_enable_boxes;
 static std::unique_ptr<BoxDebugView> g_disp;
 static std::unique_ptr<CameraDebugView> g_camera_debug;
@@ -130,8 +142,14 @@ static aabb3_t tile_box(const TileDataSource *source, TileCode code)
 	return box;
 }
 
+struct selection_entry_t
+{
+	TileCode code;
+	double dist;
+};
+
 static inline int select_tiles_rec(
-	std::vector<TileCode> &out, 
+	std::vector<selection_entry_t> &out, 
 	const select_tiles_params *params,
 	glm::dvec2 origin_uv,
 	TileCode code)
@@ -158,7 +176,7 @@ static inline int select_tiles_rec(
 	double area = tile_area(code.zoom);
 
 	if (area/d_min_sq < params->res) {
-		out.push_back(code);
+		out.push_back({code,d_min_sq});
 		if(enable_boxes) g_disp->add(box);
 		return 1;
 	}
@@ -177,14 +195,13 @@ static inline int select_tiles_rec(
 
 	// If status is zero than no tiles were added, so add this tile
 	if (!status) {
-		out.push_back(code);
+		out.push_back({code,d_min_sq});
 		if (enable_boxes) g_disp->add(box);
 		return 1;
 	}
 
 	return status;
 }
-
 
 void select_tiles(
 	select_tiles_params& params,
@@ -193,6 +210,7 @@ void select_tiles(
 {
 	params.res = std::max(params.res, 1e-5);
 
+	std::vector<selection_entry_t> selection;
 	for (uint8_t f = 0; f < CUBE_FACES; ++f) {
 		glm::dvec2 origin_uv = globe_to_cube_face(params.origin,f);
 
@@ -201,7 +219,17 @@ void select_tiles(
 			.zoom = 0,
 			.idx = 0
 		};
-		select_tiles_rec(tiles, &params, origin_uv, code); 
+		select_tiles_rec(selection, &params, origin_uv, code); 
+	}
+
+	constexpr auto comp = [](const selection_entry_t &a, const selection_entry_t &b) {
+		return a.dist < b.dist;
+	};
+	std::sort(selection.begin(), selection.end(), comp);
+	tiles.resize(selection.size());
+
+	for (size_t i = 0; i < selection.size(); ++i) {
+		tiles[i] = selection[i].code;
 	}
 }
 
@@ -399,10 +427,10 @@ static LoadResult update_render_data(
 		GlobeVertex * dst = (GlobeVertex*)ptr + offset;
 		TileCode parent = parents[i];
 
-		//g_schedule_task([=,&ctr](){
+		g_schedule_task([=,&ctr](){
 			create_tile_verts(code, parent, dst);
 			--ctr;	
-		//});
+		});
 	}
 
 	while (ctr > 0)
@@ -478,7 +506,7 @@ LoadResult globe_create(Globe *globe, ResourceTable *rt)
 	globe::init_debug(rt);
 
 	globe->cpu_cache.reset(
-		TileCPUCache::create(TILE_SIZE*sizeof(float))
+		TileCPUCache::create(TILE_SIZE*sizeof(float),(size_t)4*GIGABYTE)
 	);
 	globe->source.reset(
 		TileDataSource::create()
@@ -562,7 +590,6 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	std::vector<TileTexUpload> new_textures;
 
 	globe->gpu_cache->update(globe->cpu_cache.get(),data_tiles,tile_textures,new_textures);
-	//globe->gpu_cache->asynchronous_upload(globe->cpu_cache.get(), new_textures);
 
 	LoadResult result = update_render_data(rt,globe,
 		pos,data_tiles,tile_textures);
@@ -594,6 +621,10 @@ void globe_record_draw_cmds(const RenderContext& ctx, const Globe *globe)
 	glBindVertexBuffer(0, vbo->id, 0, sizeof(GlobeVertex));
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo->id);
 
+	glEnable(GL_CULL_FACE);
+	glCullFace(GL_BACK);
+	glFrontFace(GL_CCW);
+
 	glMultiDrawElementsIndirect(
 		GL_TRIANGLES, 
 		GL_UNSIGNED_INT, 
@@ -601,6 +632,8 @@ void globe_record_draw_cmds(const RenderContext& ctx, const Globe *globe)
 		data.cmds.size(), 
 		0
 	);
+
+	glDisable(GL_CULL_FACE);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
 

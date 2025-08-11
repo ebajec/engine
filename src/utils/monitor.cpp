@@ -3,6 +3,12 @@
 #include <string.h>
 #include <cstdlib>
 
+#ifndef KILOBYTE
+#define KILOBYTE 1024
+#endif
+
+#define MONITOR_MAX_EVENT_BUFFER 64*KILOBYTE
+
 static int pathcat(char* dest, const char* src, size_t maxlen)
 {
     if (!dest || !src) return -1;

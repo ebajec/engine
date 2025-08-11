@@ -8,12 +8,6 @@
 #include <atomic>
 #endif 
 
-#ifndef KILOBYTE
-#define KILOBYTE 1024
-#endif
-
-#define MONITOR_MAX_EVENT_BUFFER 64*KILOBYTE
-
 #define MONITOR_FLAGS_CREATE 0x01
 #define MONITOR_FLAGS_DELETE 0x02
 #define MONITOR_FLAGS_MODIFY 0x04

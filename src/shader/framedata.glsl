@@ -17,4 +17,10 @@ layout (binding = FRAMEDATA_BINDING) uniform Framedata
 	framedata_t u_frame;
 };
 
+vec3 view_dir()
+{
+	mat4 m = transpose(u_frame.v);
+	return -m[2].xyz;
+}
+
 #endif // FRAMEDATA_GLSL

@@ -46,7 +46,7 @@ struct TileGPUIndex
 	}
 };
 
-static TileGPUIndex TILE_INDEX_NONE = {UINT16_MAX,UINT16_MAX};
+static TileGPUIndex TILE_GPU_INDEX_NONE = {UINT16_MAX,UINT16_MAX};
 
 struct TileTexUpload
 {

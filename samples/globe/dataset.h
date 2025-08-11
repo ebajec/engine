@@ -11,7 +11,7 @@
 
 static constexpr uint32_t TILE_WIDTH = 256;
 static constexpr uint32_t TILE_SIZE = TILE_WIDTH*TILE_WIDTH;
-static constexpr size_t TILE_CPU_PAGE_SIZE = 16;
+static constexpr size_t TILE_CPU_PAGE_SIZE = 32;
 
 enum TileCPULoadState
 {
@@ -101,16 +101,16 @@ struct TileCPUCache
 	std::vector<std::unique_ptr<page_t>> m_pages;
 
 	size_t m_block_size;
-	size_t m_capacity = 1 << 13;
+	size_t m_capacity = 1 << 14;
 private:
 	TileCPUIndex evict_one();	
 	TileCPUIndex allocate();
 
-	TileCode find_best(TileCode code) const;
+	TileCode find_best(TileCode code);
 	entry_t *get_entry(TileCPUIndex idx) const;
 	uint8_t *get_block(TileCPUIndex idx) const;
 public:
-	static TileCPUCache *create(size_t tile_size);
+	static TileCPUCache *create(size_t tile_size, size_t capacity);
 
 	std::vector<TileCode> update(
 		const TileDataSource& source, 
