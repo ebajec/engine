@@ -399,10 +399,10 @@ static LoadResult update_render_data(
 		GlobeVertex * dst = (GlobeVertex*)ptr + offset;
 		TileCode parent = parents[i];
 
-		g_schedule_task([=,&ctr](){
+		//g_schedule_task([=,&ctr](){
 			create_tile_verts(code, parent, dst);
 			--ctr;	
-		});
+		//});
 	}
 
 	while (ctr > 0)
@@ -477,13 +477,13 @@ LoadResult globe_create(Globe *globe, ResourceTable *rt)
 
 	globe::init_debug(rt);
 
-	globe->data_cache.reset(
+	globe->cpu_cache.reset(
 		TileCPUCache::create(TILE_SIZE*sizeof(float))
 	);
 	globe->source.reset(
 		TileDataSource::create()
 	);
-	globe->tex_cache.reset(
+	globe->gpu_cache.reset(
 		new TileGPUCache{}
 	);
 
@@ -555,14 +555,14 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 
 	size_t count = globe->tiles.size();
 
-	std::vector<TileCode> data_tiles = globe->data_cache->load(
+	std::vector<TileCode> data_tiles = globe->cpu_cache->update(
 		*globe->source, globe->tiles);
 
 	std::vector<TileTexIndex> tile_textures;
 	std::vector<TileTexUpload> new_textures;
 
-	globe->tex_cache->get_textures(data_tiles,tile_textures,new_textures);
-	globe->tex_cache->asynchronous_upload(globe->data_cache.get(), new_textures);
+	globe->gpu_cache->update(globe->cpu_cache.get(),data_tiles,tile_textures,new_textures);
+	//globe->gpu_cache->asynchronous_upload(globe->cpu_cache.get(), new_textures);
 
 	LoadResult result = update_render_data(rt,globe,
 		pos,data_tiles,tile_textures);
@@ -585,7 +585,7 @@ void globe_record_draw_cmds(const RenderContext& ctx, const Globe *globe)
 
 	ctx.bind_material(data.material);
 
-	globe->tex_cache->bind_texture_arrays(1);
+	globe->gpu_cache->bind_texture_arrays(1);
 
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo->id); 
 	

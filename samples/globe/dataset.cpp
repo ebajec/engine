@@ -7,7 +7,8 @@
 
 #include <atomic>
 
-static void test_loader_fn(TileCode code, void *dst, void *usr);
+static void test_loader_fn(TileCode code, void *dst, void *usr,
+						   const std::atomic<TileCPULoadState> *p_state);
 static float test_elev_fn(glm::dvec2 uv, uint8_t f);
 
 //------------------------------------------------------------------------------
@@ -26,7 +27,6 @@ TileDataSource
 
 void TileDataSource::load(TileCode code, void* dst) const
 {
-	m_loader(code,dst,m_usr);
 }
 
 TileCode TileDataSource::find(TileCode code) const
@@ -74,7 +74,7 @@ TileCode TileCPUCache::find_best(TileCode code) const
 		it = m_map.find(code);
 
 		if (it != end) {
-			log_info("Found parent tile %d",code);
+			//log_info("Found parent tile %d",code);
 			state = it->second->state;
 		}
 	} 
@@ -103,6 +103,7 @@ size_t TileCPUCache::evict()
 		state = ent.state.load();
 		if (state == TILE_DATA_STATE_LOADING || 
 			state == TILE_DATA_STATE_CANCELLED || ent.refs > 0) {
+			ent.state.store(TILE_DATA_STATE_CANCELLED);
 			return UINT64_MAX;
 		}
 	} while (!ent.state.compare_exchange_weak(state, TILE_DATA_STATE_EMPTY));
@@ -114,6 +115,7 @@ size_t TileCPUCache::evict()
 
 	size_t offset = ent.block_offset;
 
+	log_info("evicted tile %d",ent.code);
 	m_map.erase(ent.code);	
 	m_lru.pop_back();
 
@@ -167,19 +169,30 @@ void TileCPUCache::release_block(TileDataRef ref) const
 
 void load_thread_fn(const TileDataSource *source, TileCPUCache::entry_t *ent, uint8_t* dst)
 {
+	log_info("loading tile %d",ent->code);
 	TileCPULoadState state;
 	do {
 		state = ent->state.load();
-		if (state != TILE_DATA_STATE_QUEUED)
+		if (state == TILE_DATA_STATE_CANCELLED) {
+			ent->state.store(TILE_DATA_STATE_EMPTY);
+			log_info("load cancelled successfully (tile %d)",ent->code);
 			return;
+		}
 	} while (!ent->state.compare_exchange_weak(state, TILE_DATA_STATE_LOADING));
 
-	source->load(ent->code, dst);
+	source->m_loader(ent->code,dst,source->m_usr,&ent->state);
 
-	ent->state.store(TILE_DATA_STATE_READY);
+	do {
+		state = ent->state.load();
+		if (state == TILE_DATA_STATE_CANCELLED) {
+			ent->state.store(TILE_DATA_STATE_EMPTY);
+			log_info("load cancelled successfully (tile %d)",ent->code);
+			return;
+		}
+	} while(!ent->state.compare_exchange_weak(state, TILE_DATA_STATE_READY));
 }
 
-std::vector<TileCode> TileCPUCache::load(
+std::vector<TileCode> TileCPUCache::update(
 	const TileDataSource& source, const std::span<TileCode> tiles)
 {
 	std::vector<TileCode> available (tiles.size());
@@ -202,12 +215,17 @@ std::vector<TileCode> TileCPUCache::load(
 		if (it != m_map.end()) {
 			lru_list_t::iterator ent = it->second;
 			m_lru.splice(m_lru.begin(), m_lru, ent);
-
 			TileCPULoadState state = ent->state.load(); 
-			if (state != TILE_DATA_STATE_READY) {
+
+			if (state == TILE_DATA_STATE_EMPTY) {
+				if (ent->refs > 0) 
+					log_error("Empty tile has %d references",ent->refs.load());
+				loads.push_back(&m_lru.front());
 				continue;
 			}
-			code = ideal;
+
+			if (state == TILE_DATA_STATE_READY)
+				code = ideal;
 		} else {
 			size_t offset = m_block_idx < m_block_cap ? 
 				(m_block_idx++)*m_block_size : evict();	
@@ -235,7 +253,7 @@ std::vector<TileCode> TileCPUCache::load(
 		uint8_t *dst = &m_blocks[ent->block_offset];
 
 		ent->state.store(TILE_DATA_STATE_QUEUED);
-		g_schedule_task([=](){
+		g_schedule_blocking([=](){
 			load_thread_fn(&source, ent, dst);
 		});
 	}
@@ -243,20 +261,39 @@ std::vector<TileCode> TileCPUCache::load(
 	return loaded;
 }
 
+static constexpr size_t coeff_count = 10;
+static float coeffs[coeff_count] = {};
+
+void init_coeffs()
+{
+	for (size_t i = 0; i < coeff_count; ++i) {
+		coeffs[i] = (1.0 - (float)rand())/(float)RAND_MAX/(float)(i + 1); 
+	}
+}
+
 float test_elev_fn(glm::dvec2 uv, uint8_t f)
 {
 	glm::dvec3 p = cube_to_globe(f, uv);
 
-	float c = 15;
-	float g = sin(c*p.x)*cos(c*p.y)*
-			  sin(c*p.z)*cos(c*p.z);
+	static int init = 0;
 
-	g *= 0.1;
+	if (!init) {
+		++init;
+		init_coeffs();
+	}
+
+	float g = 0;
+	for (size_t i = 0; i < coeff_count; ++i) {
+		g += coeffs[i]*sin(i*p.x)*cos(i*p.y)*sin(i*p.z)*cos(i*p.z);
+	}
+
+	g *= 0.3;
 
 	return g;
 }
 
-void test_loader_fn(TileCode code, void *dst, void *usr)
+void test_loader_fn(TileCode code, void *dst, void *usr, 
+					const std::atomic<TileCPULoadState> *p_state)
 {
 	float *data = static_cast<float*>(dst);
 
@@ -267,6 +304,9 @@ void test_loader_fn(TileCode code, void *dst, void *usr)
 	glm::vec2 uv = glm::vec2(0);
 	size_t idx = 0;
 	for (size_t i = 0; i < TILE_WIDTH; ++i) {
+		if (p_state->load() == TILE_DATA_STATE_CANCELLED)
+			return;
+
 		for (size_t j = 0; j < TILE_WIDTH; ++j) {
 			glm::vec2 f = glm::vec2(rect.min) + 
 				uv * glm::vec2((rect.max - rect.min));

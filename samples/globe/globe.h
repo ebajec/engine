@@ -46,8 +46,8 @@ namespace globe
 
 		RenderData render_data;
 
-		std::unique_ptr<TileGPUCache> tex_cache;
-		std::unique_ptr<TileCPUCache> data_cache;
+		std::unique_ptr<TileGPUCache> gpu_cache;
+		std::unique_ptr<TileCPUCache> cpu_cache;
 		std::unique_ptr<TileDataSource> source;
 	};
 

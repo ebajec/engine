@@ -78,9 +78,15 @@ public:
 };
 
 static ThreadPool g_pool;
+static ThreadPool g_block_pool;
 
 void g_schedule_task(std::function<void(void)>&& task)
 {
 	g_pool.schedule(std::move(task));
+}
+
+void g_schedule_blocking(std::function<void(void)> &&task)
+{
+	g_block_pool.schedule(std::move(task));
 }
 

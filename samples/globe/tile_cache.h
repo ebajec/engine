@@ -90,7 +90,8 @@ private:
 	void insert(TileCode, TileTexIndex);
 
 public:
-	void get_textures(
+	void update(
+		const TileCPUCache *cpu_cache,
 		const std::span<TileCode> tiles, 
 		std::vector<TileTexIndex>& textures,
 		std::vector<TileTexUpload>& new_tiles

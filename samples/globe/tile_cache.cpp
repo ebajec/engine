@@ -132,7 +132,8 @@ void TileGPUCache::insert(TileCode code, TileTexIndex idx)
 	m_map[code] = m_lru.begin();
 }
 
-void TileGPUCache::get_textures(
+void TileGPUCache::update(
+	const TileCPUCache *cpu_cache,
 	const std::span<TileCode> tiles, 
 	std::vector<TileTexIndex>& textures,
 	std::vector<TileTexUpload>& new_tiles
@@ -177,6 +178,8 @@ void TileGPUCache::get_textures(
 
 		textures.push_back(idx);
 	}
+
+	asynchronous_upload(cpu_cache, new_tiles);
 }
 
 struct UploadContext

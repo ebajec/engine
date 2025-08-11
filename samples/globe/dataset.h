@@ -11,7 +11,16 @@
 static constexpr uint32_t TILE_WIDTH = 256;
 static constexpr uint32_t TILE_SIZE = TILE_WIDTH*TILE_WIDTH;
 
-typedef void(*TileLoaderFunc)(TileCode code, void* dst, void* usr);
+enum TileCPULoadState
+{
+	TILE_DATA_STATE_EMPTY,
+	TILE_DATA_STATE_READY,
+	TILE_DATA_STATE_LOADING,
+	TILE_DATA_STATE_QUEUED,
+	TILE_DATA_STATE_CANCELLED,
+};
+
+typedef void(*TileLoaderFunc)(TileCode code, void* dst, void* usr, const std::atomic<TileCPULoadState>* p_state);
 
 struct TileDataSource
 {
@@ -34,15 +43,6 @@ struct TileDataSource
 
 	float sample_elevation_at(glm::dvec2 uv, uint8_t f) const;
 	float sample_elevation_at(glm::dvec3 p) const;
-};
-
-enum TileCPULoadState
-{
-	TILE_DATA_STATE_EMPTY,
-	TILE_DATA_STATE_READY,
-	TILE_DATA_STATE_LOADING,
-	TILE_DATA_STATE_QUEUED,
-	TILE_DATA_STATE_CANCELLED,
 };
 
 struct TileDataRef
@@ -75,7 +75,7 @@ struct TileCPUCache
 
 	std::unique_ptr<uint8_t[]> m_blocks;
 	size_t m_block_idx = 0;
-	size_t m_block_cap = 1 << 14;
+	size_t m_block_cap = 1 << 12;
 	size_t m_block_size;
 
 private:
@@ -85,7 +85,7 @@ private:
 public:
 	static TileCPUCache *create(size_t tile_size);
 
-	std::vector<TileCode> load(
+	std::vector<TileCode> update(
 		const TileDataSource& source, 
 		const std::span<TileCode> tiles);
 	const uint8_t *acquire_block(TileCode code, size_t *size, 

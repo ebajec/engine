@@ -71,4 +71,5 @@ void main()
 	}
 
 	FragColor = mix(color,vec4(in_uv,0,1),0.0);
+	FragColor = texture(u_tex, in_uv);
 }
