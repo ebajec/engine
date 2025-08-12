@@ -61,6 +61,26 @@ struct TileCodeHash
 		return (uint8_t)argmax;
 	}
 
+	static inline glm::vec3 face_to_world(glm::vec3 v, uint face)
+	{
+		switch (face)
+		{
+		case 0:
+			return glm::vec3(v.z,v.x,v.y);
+		case 1:
+			return glm::vec3(-v.x,v.z,v.y);
+		case 2:
+			return glm::vec3(-v.y,v.x,v.z);
+		case 3:
+			return glm::vec3(-v.z,v.x,-v.y);
+		case 4:
+			return glm::vec3(v.x,-v.z,v.y);
+		case 5:
+			return glm::vec3(v.y,v.x,-v.z);
+		} 
+		return glm::vec3(0);
+	}
+
 	inline constexpr glm::dmat3 cube_faces_d(uint8_t face)
 	{
 		switch (face) {
@@ -106,9 +126,7 @@ struct TileCodeHash
 
 	static inline glm::dvec2 globe_to_cube_face(glm::dvec3 p, uint8_t f)
 	{
-		glm::dmat3 m = cube_faces_d(f);
-
-		p = m*p;
+		p = face_to_world(p,f);
 		p /= copysign(std::max(fabs(p.z),1e-14),p.z);
 
 		glm::dvec2 uv = 0.5 * (glm::dvec2(1.0) + glm::dvec2(p.x,p.y));

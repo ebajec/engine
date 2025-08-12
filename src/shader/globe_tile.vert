@@ -65,6 +65,53 @@ tile_code_t from_input(uint left, uint right)
 	return code;
 }
 
+vec3 surface_normal(tex_idx_t idx, vec2 uv)
+{
+	uint pg = idx.page;
+	uint tx = idx.tex;
+
+	float h = 1.0/512.0;
+
+	float u1 = clamp(uv.x - h,0,1);
+	float u2 = clamp(uv.x + h,0,1);
+
+	float fu1 = texture(u_tex_arrays[pg], vec3(uv + vec2(u1,0), tx)).r;
+	float fu2 = texture(u_tex_arrays[pg], vec3(uv + vec2(u2,0), tx)).r;
+
+	float dfdu = (fu2 - fu1)/(u2 - u1);
+
+	float v1 = clamp(uv.y - h,0,1);
+	float v2 = clamp(uv.y + h,0,1);
+
+	float fv1 = texture(u_tex_arrays[pg], vec3(uv + vec2(0,v1), tx)).r;
+	float fv2 = texture(u_tex_arrays[pg], vec3(uv + vec2(0,v2), tx)).r;
+
+	float dfdv = (fv2 - fv1)/(v2 - v1);
+
+	vec3 N = normalize(vec3(-dfdu,-dfdv,1));
+
+	return N;
+}
+
+vec3 face_to_world(vec3 v, uint face)
+{
+	switch (face)
+	{
+	case 0:
+		return vec3(v.z,v.x,v.y);
+	case 1:
+		return vec3(-v.x,v.z,v.y);
+	case 2:
+		return vec3(-v.y,v.x,v.z);
+	case 3:
+		return vec3(-v.z,v.x,-v.y);
+	case 4:
+		return vec3(v.x,-v.z,v.y);
+	case 5:
+		return vec3(v.y,v.x,-v.z);
+	}
+}
+
 void main()
 {
 	float t = u_frame.t;
@@ -76,15 +123,22 @@ void main()
 	uint tile_idx = gl_VertexID/TILE_VERT_COUNT;
 	tex_idx_t tex_idx = decode_tex_idx(tex_indices[tile_idx]);
 
+	tile_code_t code = from_input(code_left,code_right);
+
 	vec2 uv = vec2(1.0/512.0) + in_uv*(1-1.0/256.0); 
-
 	vec3 uvw = vec3(uv, tex_idx.tex);
-
 	bool valid = is_valid(tex_idx); 
 
-	vec4 val = valid ? texture(u_tex_arrays[tex_idx.page], uvw) : vec4(0);
+	vec3 N = vec3(0);
+	vec4 val = vec4(0);
 
-	wpos += n*(val.r);
+	if (valid) {
+		val = texture(u_tex_arrays[tex_idx.page], uvw);
+		N = surface_normal(tex_idx,uv);
+		N = face_to_world(N,code.face);
+
+		wpos += n*(val.r);
+	}
 
 	out_pos = wpos.xyz;
 	out_uv = uv;

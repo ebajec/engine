@@ -1,6 +1,7 @@
 #include "gpu_cache.h"
 #include "utils/log.h"
 #include "thread_pool.h"
+#include "gl_debug.h"
 
 #include <cstring>
 
@@ -132,56 +133,6 @@ void TileGPUCache::insert(TileCode code, TileGPUIndex idx)
 	m_map[code] = m_lru.begin();
 }
 
-struct UploadContext
-{
-	GLuint pbo;
-	const TileCPUCache* data_cache;
-	void* mapped;
-	std::atomic_int refs; 
-};
-
-struct TileTexUploadData
-{
-	std::atomic<TileGPULoadState> *p_state;
-	size_t offset;
-	TileCode code;
-	TileGPUIndex idx;
-	TileDataRef data_ref;
-};
-
-void tile_upload_fn(
-	UploadContext *ctx,
-	TileTexUploadData data
-)
-{
-	TileDataRef ref = data.data_ref;
-	// Should always be valid if it got this far.
-	assert(ref.data && ref.p_state && ref.p_refs);
-
-	uint8_t* dst = reinterpret_cast<uint8_t*>(ctx->mapped) + data.offset; 
-
-	TileGPULoadState gpu_state;
-	do {
-		gpu_state = data.p_state->load();
-		if (gpu_state == TILE_TEX_STATE_CANCELLED) {
-			log_info("tile_upload_fn : Cancelled upload");
-			goto cleanup;
-		}
-		if (gpu_state != TILE_TEX_STATE_QUEUED) {
-			log_error("tile_upload_fn : Invalid tile state");
-			goto cleanup;
-		}
-	} while (!data.p_state->compare_exchange_weak(gpu_state, TILE_TEX_STATE_UPLOADING));
-
-	memcpy(dst,ref.data,ref.size);
-
-cleanup:
-	ctx->data_cache->release_block(ref);
-	--ctx->refs;
-	return;
-}
-
-
 size_t TileGPUCache::update(
 	const TileCPUCache *cpu_cache,
 	const std::span<TileCode> tiles, 
@@ -233,9 +184,107 @@ size_t TileGPUCache::update(
 	return new_tiles.size();
 }
 
-UploadContext *upload_context_create()
+struct TileTexUploadData
 {
+	TileDataRef data_ref;
+	std::atomic<TileGPULoadState> *p_state;
+	size_t offset;
+	TileCode code;
+	TileGPUIndex idx;
+};
+
+struct GPUUploadContext
+{
+	GLuint pbo;
+	std::atomic_int refs; 
+	void* mapped;
+	size_t cap;
+};
+
+GPUUploadContext *upload_context_create(size_t cap)
+{
+	GPUUploadContext *ctx  = new GPUUploadContext{};
+	glCreateBuffers(1,&ctx->pbo);
+	ctx->refs = 0;
+	ctx->cap = cap;
+	
+	glNamedBufferStorage(
+		ctx->pbo,
+		cap,
+		nullptr,
+		GL_MAP_WRITE_BIT | 
+		GL_MAP_PERSISTENT_BIT | 
+		GL_MAP_COHERENT_BIT | 
+		GL_DYNAMIC_STORAGE_BIT
+	);
+
+	if (gl_check_err())
+		goto create_failed;
+
+	ctx->mapped = glMapNamedBufferRange(
+		ctx->pbo, 
+		0, 
+		cap, 
+		GL_MAP_WRITE_BIT | 
+		GL_MAP_PERSISTENT_BIT | 
+		GL_MAP_COHERENT_BIT
+	);
+
+	if (gl_check_err())
+		goto create_failed;
+
+	return ctx;
+
+create_failed:
+	if (ctx->pbo) glDeleteBuffers(1,&ctx->pbo);
+	delete ctx;
+	return nullptr;
 }
+
+void upload_context_destroy(GPUUploadContext *ctx)
+{
+	assert(ctx);
+
+	glUnmapNamedBuffer(ctx->pbo);
+	glDeleteBuffers(1,&ctx->pbo);
+
+	delete ctx;
+}
+
+void tile_upload_fn(
+	const TileCPUCache *cpu_cache,
+	GPUUploadContext *ctx,
+	TileTexUploadData data
+)
+{
+	TileDataRef ref = data.data_ref;
+	// Should always be valid if it got this far.
+	assert(ref.data && ref.p_state && ref.p_refs);
+
+	uint8_t* dst = reinterpret_cast<uint8_t*>(ctx->mapped) + data.offset; 
+
+	TileGPULoadState gpu_state;
+	do {
+		gpu_state = data.p_state->load();
+		if (gpu_state == TILE_TEX_STATE_CANCELLED) {
+			log_info("tile_upload_fn : Cancelled upload");
+			goto cleanup;
+		}
+		if (gpu_state != TILE_TEX_STATE_QUEUED) {
+			log_error("tile_upload_fn : Invalid tile state");
+			goto cleanup;
+		}
+	} while (!data.p_state->compare_exchange_weak(gpu_state, TILE_TEX_STATE_UPLOADING));
+
+	memcpy(dst,ref.data,ref.size);
+
+cleanup:
+	cpu_cache->release_block(ref);
+	--ctx->refs;
+	return;
+}
+
+
 
 //------------------------------------------------------------------------------
 // Loading
@@ -246,69 +295,56 @@ void TileGPUCache::asynchronous_upload(const TileCPUCache *cpu_cache,
 	if (!uploads.size())
 		return;
 
-	std::unique_ptr<UploadContext> ctx (new UploadContext{});
-	glCreateBuffers(1,&ctx->pbo);
-	ctx->refs = 0;
-	ctx->data_cache = cpu_cache;
-	
-	GLsizeiptr total_size = uploads.size()*m_tile_size_bytes;
-
-	glNamedBufferStorage(
-		ctx->pbo,
-		total_size,
-		nullptr,
-		GL_MAP_WRITE_BIT | 
-		GL_MAP_PERSISTENT_BIT | 
-		GL_MAP_COHERENT_BIT | 
-		GL_DYNAMIC_STORAGE_BIT
-	);
-
-	ctx->mapped = glMapNamedBufferRange(
-		ctx->pbo, 
-		0, 
-		total_size, 
-		GL_MAP_WRITE_BIT | 
-		GL_MAP_PERSISTENT_BIT | 
-		GL_MAP_COHERENT_BIT
-	);
-
 	std::vector<TileTexUploadData> upload_data;
 	upload_data.reserve(uploads.size());
 
-	UploadContext *p_ctx = ctx.get();
+	size_t offset = 0;
+
 	for (size_t i = 0; i < uploads.size(); ++i) {
 		TileTexUpload upload = uploads[i];
 
 		TileGPUIndex idx = upload.idx;
 
 		if (!idx.is_valid()) {
-			//upload_data[i].idx = TILE_GPU_INDEX_NONE;
 			continue;
 		}
 
 		std::optional<TileDataRef> ref = cpu_cache->acquire_block(upload.code); 
 
 		if (!ref) {
-			//upload_data[i].idx = TILE_GPU_INDEX_NONE;
 			log_error("Queued upload for incomplete tile %d", upload.code);
 			continue;
 		} 
 
 		TileTexUploadData data = {
+			.data_ref = *ref,
 			.p_state = &m_pages[idx.page]->states[idx.tex],
-			.offset = i*m_tile_size_bytes,
+			.offset = offset,
 			.code = upload.code,
 			.idx = idx,
-			.data_ref = *ref
 		};
 
 		data.p_state->store(TILE_TEX_STATE_QUEUED);
 
 		upload_data.push_back(data);
 
+		offset += m_tile_size_bytes;
+	}
+
+	if (upload_data.empty()) {
+		return;
+	}
+
+	size_t total_size = upload_data.size()*m_tile_size_bytes;
+
+	std::unique_ptr<GPUUploadContext,decltype(&upload_context_destroy)> ctx (
+		upload_context_create(total_size),upload_context_destroy);
+
+	GPUUploadContext* p_ctx = ctx.get();
+	for (const TileTexUploadData& data : upload_data) {
 		++ctx->refs;
 		g_schedule_task([=](){
-			tile_upload_fn(p_ctx, data);
+			tile_upload_fn(cpu_cache,p_ctx, data);
 		});
 	}
 
@@ -345,12 +381,8 @@ void TileGPUCache::asynchronous_upload(const TileCPUCache *cpu_cache,
 			m_data_type,
 			(void*)(data.offset)
 		);
-
 		data.p_state->store(TILE_TEX_STATE_READY);
 	}
-	glUnmapNamedBuffer(ctx->pbo);
-	glBindBuffer(GL_PIXEL_PACK_BUFFER,0);
-	glDeleteBuffers(1,&ctx->pbo);
 }
 
 void TileGPUCache::synchronous_upload(
