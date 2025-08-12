@@ -16,10 +16,10 @@ layout (location = 17) flat in vec2 in_s;
 layout (location = 14) flat in vec2 in_deltas;
 layout (location = 16) flat in vec2 in_join_angles;
 layout (location = 18) flat in vec2 in_join_dir[2];
+layout (location = 20) flat in uint dbg_draw;
 layout (location = 21) flat in vec2 in_hypot;
 layout (location = 22) flat in uint in_endpoint;
-
-layout (location = 20) flat in uint dbg_draw;
+layout (location = 23) flat in vec2 in_bevel;
 
 layout (location = 0) out vec4 FragColor;
 
@@ -36,6 +36,7 @@ struct JoinInfo
 	float sgnX;
 	float delta_sgn;
 	float hypot;
+	float bevel;
 	vec2 center;
 	vec2 B;
 	mat2 frame;
@@ -64,17 +65,24 @@ JoinInfo create_join()
 		in_s[1] - abs(join.delta);
 	join.B = join.delta_sgn*in_join_dir[side];
 	join.hypot = in_hypot[side];
+	join.bevel = in_bevel[side];
 
 	return join;
 }
 
 bool clip_join(vec2 p, vec2 d, JoinInfo join, uint type)
 {
+	bool clip = false;
+
+	float w_sq = join.width * join.width;
+
 	switch (type) {
 	case JOIN_TYPE_ROUND:
-		return d.x > 0 && dot(d,d) > join.width*join.width;
-	case JOIN_TYPE_BEVEL:
-		return dot(p,join.B) > join.width;
+		return d.x > 0 && dot(d,d) > w_sq;
+	case JOIN_TYPE_BEVEL: {
+		float prod = dot(p,join.B); 
+		return prod > 0 && (prod > join.bevel);
+	}
 	}
 
 	return false;
@@ -136,7 +144,7 @@ vec2 compute_corner_uv(vec2 p, vec2 d, JoinInfo join, uint type)
 			float tht = tht2 - tht1;
 			float cos_tht = dot(diff/r,join.B);
 
-			float h = 2*join.hypot - delta_abs*sin(tht2);
+			float h = join.hypot + join.bevel;
 
 			float uv_y_norm = r*cos_tht/h;
 

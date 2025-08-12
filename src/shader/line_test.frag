@@ -7,7 +7,7 @@
 #include "line.glsl"
 #include "line_frag_defs.glsl"
 
-const uint type = JOIN_TYPE_BEVEL;
+const uint type = JOIN_TYPE_ROUND;
 
 float signed_dist(vec2 p, vec2 d, JoinInfo join)
 {
@@ -29,7 +29,6 @@ void main()
 	}
 
 	if (signed_dist(p,d,join) < 0) {
-		//discard;
 		FragColor += vec4(0,0,0.5,0.5);
 	}
 
@@ -48,7 +47,15 @@ void main()
 		vec4(1,1,0,1)
 	};
 
-	//FragColor += vec4(vec3(float(mod(dbg_draw,10)/10)),0.6);
 	FragColor = palette[dbg_draw%6];
 	FragColor.a = 0.5;
+
+	//FragColor += 0.1*texture(u_tex,uv);
+
+	if (d.x > 0) {
+		FragColor.g += 1;
+	}
+	if (join.sgnX < 0) {
+		FragColor.b += 1;
+	}
 }

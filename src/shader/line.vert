@@ -42,9 +42,10 @@ layout (location = 17) flat out vec2 out_s;
 layout (location = 14) flat out vec2 out_deltas;
 layout (location = 16) flat out vec2 out_join_angles;
 layout (location = 18) flat out vec2 out_join_dir[2];
+layout (location = 20) flat out uint dbg_draw;
 layout (location = 21) flat out vec2 out_hypot;
 layout (location = 22) flat out uint out_endpoint;
-layout (location = 20) flat out uint dbg_draw;
+layout (location = 23) flat out vec2 out_bevel;
 
 const uint RIGHT_BIT = 0x1;
 const uint TOP_BIT = 0x2;
@@ -213,9 +214,18 @@ void main()
 		atan(abs(delta0),width),
 		atan(abs(delta1),width));
 	out_s = vec2(s0,s1);
+
+	float w_sq = width * width;
+	float d0_sq = delta0 * delta0;
+	float d1_sq = delta1 * delta1;
+
 	out_hypot = vec2(
-		sqrt(delta0*delta0 + width*width),
-		sqrt(delta1*delta1 + width*width));
+		sqrt(d0_sq + w_sq),
+		sqrt(d1_sq + w_sq));
+	out_bevel = vec2(
+		sqrt(w_sq*(1 - d0_sq/(w_sq + d0_sq))),
+		sqrt(w_sq*(1 - d1_sq/(w_sq + d1_sq)))
+	);
 
 	out_join_dir[0] = j0.B;
 	out_join_dir[1] = j1.B;

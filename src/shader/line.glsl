@@ -16,6 +16,6 @@ const uint RIGHT_ENDPOINT = 0x2;
 
 bool limit_join(float delta, float width)
 {
-	return abs(delta) > 60*width;
+	return abs(delta) > 6*width;
 }
 #endif // LINE_GLSL
