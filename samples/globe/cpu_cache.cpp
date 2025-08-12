@@ -1,4 +1,5 @@
-#include "dataset.h"
+#include "cpu_cache.h"
+
 #include "tiling.h"
 #include "utils/log.h"
 #include "thread_pool.h"
@@ -343,7 +344,7 @@ std::vector<TileCode> TileCPUCache::update(
 	return loaded;
 }
 
-static constexpr size_t coeff_count = 8;
+static constexpr size_t coeff_count = 50;
 static float coeffs[coeff_count] = {};
 
 void init_coeffs()

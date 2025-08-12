@@ -5,8 +5,9 @@
 #include "gl_renderer.h"
 #include "resource_table.h"
 #include "tiling.h"
-#include "tile_cache.h"
-#include "dataset.h"
+
+#include "gpu_cache.h"
+#include "cpu_cache.h"
 
 #include <vector>
 

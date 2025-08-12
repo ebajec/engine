@@ -61,8 +61,6 @@ void main()
 
 	vec4 color = mix(vec4(0,0.5,0,1), vec4(0.4,0.45,0.5,1), clamp(20*val,0,1));
 
-	color = texture(u_tex, in_uv);
-
 	float t = TWOPI*fract(u_frame.t*0.0001);
 
 	vec2 z = vec2(cos(t),sin(t));

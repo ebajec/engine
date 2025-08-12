@@ -5,7 +5,8 @@
 #include "buffer.h"
 #include "thread_pool.h"
 
-#include "tile_cache.h"
+#include "cpu_cache.h"
+#include "gpu_cache.h"
 
 #include "debug/box_debug_view.h"
 #include "debug/camera_debug_view.h"
