@@ -65,30 +65,35 @@ tile_code_t from_input(uint left, uint right)
 	return code;
 }
 
-vec3 surface_normal(tex_idx_t idx, vec2 uv)
+vec2 adjust_uv_for_clamp(vec2 uv)
+{
+	return vec2(1.0/512.0) + uv*(1-1.0/256.0); 
+}
+
+vec3 surface_normal(tex_idx_t idx, vec2 uv, uint zoom)
 {
 	uint pg = idx.page;
 	uint tx = idx.tex;
 
 	float h = 1.0/512.0;
 
-	float u1 = clamp(uv.x - h,0,1);
-	float u2 = clamp(uv.x + h,0,1);
+	float u1 = clamp(uv.x - h,h,1 - h);
+	float u2 = clamp(uv.x + h,h,1 - h);
 
 	float fu1 = texture(u_tex_arrays[pg], vec3(vec2(u1,uv.y), tx)).r;
 	float fu2 = texture(u_tex_arrays[pg], vec3(vec2(u2,uv.y), tx)).r;
 
 	float dfdu = (fu2 - fu1)/(u2 - u1);
 
-	float v1 = clamp(uv.y - h,0,1);
-	float v2 = clamp(uv.y + h,0,1);
+	float v1 = clamp(uv.y - h,h,1 - h);
+	float v2 = clamp(uv.y + h,h,1 - h);
 
 	float fv1 = texture(u_tex_arrays[pg], vec3(vec2(uv.x,v1), tx)).r;
 	float fv2 = texture(u_tex_arrays[pg], vec3(vec2(uv.x,v2), tx)).r;
 
 	float dfdv = (fv2 - fv1)/(v2 - v1);
 
-	vec3 N = normalize(vec3(-dfdu,-dfdv,1));
+	vec3 N = normalize(vec3(-dfdu,-dfdv,1.0/(1<<zoom)));
 
 	return N;
 }
@@ -96,21 +101,35 @@ vec3 surface_normal(tex_idx_t idx, vec2 uv)
 vec3 face_to_world(vec3 v, uint face)
 {
 	switch (face)
+	//{
+	//case 0:
+	//	return vec3(v.y,v.z,v.x);
+	//case 1:
+	//	return vec3(-v.x,v.z,v.y);
+	//case 2:
+	//	return vec3(v.y,-v.x,v.z);
+	//case 3:
+	//	return vec3(v.y,-v.z,-v.x);
+	//case 4:
+	//	return vec3(v.x,v.z,-v.y);
+	//case 5:
+	//	return vec3(v.y,v.x,-v.z);
+	//} 
 	{
 	case 0:
-		return vec3(v.y,v.z,v.x);
+		return vec3(v.z,v.x,v.y);
 	case 1:
 		return vec3(-v.x,v.z,v.y);
 	case 2:
-		return vec3(v.y,-v.x,v.z);
+		return vec3(-v.y,v.x,v.z);
 	case 3:
-		return vec3(v.y,-v.z,-v.x);
+		return vec3(-v.z,v.x,-v.y);
 	case 4:
-		return vec3(v.x,v.z,-v.y);
+		return vec3(v.x,-v.z,v.y);
 	case 5:
 		return vec3(v.y,v.x,-v.z);
 	} 
-	return vec3(0);
+	//return vec3(0);
 }
 
 void main()
@@ -126,7 +145,7 @@ void main()
 
 	tile_code_t code = from_input(code_left,code_right);
 
-	vec2 uv = vec2(1.0/512.0) + in_uv*(1-1.0/256.0); 
+	vec2 uv = adjust_uv_for_clamp(in_uv); 
 	vec3 uvw = vec3(uv, tex_idx.tex);
 	bool valid = is_valid(tex_idx); 
 
@@ -135,8 +154,18 @@ void main()
 
 	if (valid) {
 		val = texture(u_tex_arrays[tex_idx.page], uvw);
-		N = surface_normal(tex_idx,uv);
+		N = surface_normal(tex_idx,uv,code.zoom);
 		N = face_to_world(N,code.face);
+
+		vec3 axis = cross(face_to_world(vec3(0,0,1),code.face),normal);
+		float len = length(axis);
+		if (len > 1e-6) {
+			float tht = asin(len);
+			vec4 q = qexp(axis/len,1.*tht);
+			vec4 qr = qmult(qmult(q,vec4(N,0)),qconj(q));
+			N = qr.xyz;
+		}
+		
 
 		wpos += n*(val.r);
 	}

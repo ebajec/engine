@@ -284,7 +284,6 @@ int main(int argc, char* argv[])
 		glm::dvec3 p = sphere_camera->control.get_pos();
 		double elev = globe->source->sample_elevation_at(p);
 
-		printf("elevation : %f\n",elev);
 		sphere_camera->control.set_min_height(
 			2*view_component->near + elev);
 

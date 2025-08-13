@@ -56,7 +56,7 @@ mat3 frame()
 	vec3 dSdu = normalize(duv2.y*dp1 - duv1.y*dp2);
 	vec3 dSdv = normalize(-duv2.x*dp1 + duv1.x*dp2);
 
-	vec3 N = cross(dSdu,dSdv);
+	vec3 N = normalize(cross(dSdu,dSdv));
 
 	return mat3(dSdu, dSdv, N);
 }
@@ -98,11 +98,11 @@ void main()
 	};
 
 	if (true) {
-		vec3 dx = dFdx(in_pos);
-		vec3 dy = dFdy(in_pos);
-		vec3 n = normalize(cross(dx,dy));
-		//mat3 TBN = frame();
-		//vec3 n = TBN[2];
+		//vec3 dx = dFdx(in_pos);
+		//vec3 dy = dFdy(in_pos);
+		//vec3 n = normalize(cross(dx,dy));
+		mat3 TBN = frame();
+		vec3 n = in_normal;
 
 		vec3 V = view_dir();
 
@@ -120,10 +120,13 @@ void main()
 			spec += pow(max(dot(V,R),0),32);
 		}
 
-		spec = min(spec,0.2);
+		spec = min(spec,0.1);
 
 		color = mix(diffuse,mix(color,vec4(0,0,0.5,0),0.5),0.2) + spec*vec4(1);
 	}
 
 	FragColor = mix(color,vec4(0,in_uv,1),0.0);
+	//FragColor = vec4(in_normal,1);
+	//FragColor = mix(FragColor,FACE_COLORS[cube_face(in_pos)],0.0);
+	//FragColor = mix(FragColor,vec4(0,in_uv,1),0.0);
 }

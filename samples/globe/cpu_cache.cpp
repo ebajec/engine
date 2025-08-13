@@ -368,7 +368,7 @@ float test_elev_fn2(glm::dvec2 uv, uint8_t f, uint8_t zoom)
 	float g = 0;
 	for (size_t i = 0; i < coeff_count; ++i) {
 		float c = 4*(i + 1);
-		g += coeffs[i]*sin(c*p.x)*sin(c*p.y)*sin(c*p.z)/c;
+		g += (coeffs[i]/c)*sin(c*p.x)*cos(c*p.y)*sin(c*p.z)*cos(c*p.z*p.x);
 	}
 
 	g *= 0.4;

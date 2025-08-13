@@ -22,18 +22,39 @@ mat3 qmat3(quat q)
     );
 }
 
-quat qexp(vec3 v, float t)
+vec4 qexp(vec3 v, float t)
 {
 	t *= 0.5;
 	v *= sin(t);
 
-	quat q;
+	vec4 q;
 	q.w = cos(t);
 	q.x = v.x;
 	q.y = v.y;
 	q.z = v.z;
 
 	return q;
+}
+
+vec4 qmult(vec4 a, vec4 b)
+{
+    vec3 av = a.xyz, bv = b.xyz;
+    float aw = a.w,   bw = b.w;
+
+    vec3 v = aw * bv + bw * av + cross(av, bv);
+    float w = aw * bw - dot(av, bv);
+    return vec4(v, w);
+}
+
+vec4 qconj(vec4 q)
+{
+	vec4 qp;
+	qp.w = q.w; 
+	qp.x = -q.x; 
+	qp.y = -q.y; 
+	qp.z = -q.z; 
+
+	return qp;
 }
 
 #endif // COMMON_GLSL

@@ -271,7 +271,7 @@ static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_v
 				.pos = glm::vec3(p),
 				.uv = glm::vec2(tex_uv),
 				.normal = glm::vec3(p),
-				.code = code
+				.code = parent
 			};
 
 			out_verts[idx++] = vert;
