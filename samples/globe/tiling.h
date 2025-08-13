@@ -63,18 +63,33 @@ struct TileCodeHash
 
 	static inline glm::vec3 face_to_world(glm::vec3 v, uint face)
 	{
+		//switch (face)
+		//{
+		//case 0:
+		//	return glm::vec3(v.z,v.x,v.y);
+		//case 1:
+		//	return glm::vec3(-v.x,v.z,v.y);
+		//case 2:
+		//	return glm::vec3(-v.y,v.x,v.z);
+		//case 3:
+		//	return glm::vec3(-v.z,v.x,-v.y);
+		//case 4:
+		//	return glm::vec3(v.x,-v.z,v.y);
+		//case 5:
+		//	return glm::vec3(v.y,v.x,-v.z);
+		//} 
 		switch (face)
 		{
 		case 0:
-			return glm::vec3(v.z,v.x,v.y);
+			return glm::vec3(v.y,v.z,v.x);
 		case 1:
 			return glm::vec3(-v.x,v.z,v.y);
 		case 2:
-			return glm::vec3(-v.y,v.x,v.z);
+			return glm::vec3(v.y,-v.x,v.z);
 		case 3:
-			return glm::vec3(-v.z,v.x,-v.y);
+			return glm::vec3(v.y,-v.z,-v.x);
 		case 4:
-			return glm::vec3(v.x,-v.z,v.y);
+			return glm::vec3(v.x,v.z,-v.y);
 		case 5:
 			return glm::vec3(v.y,v.x,-v.z);
 		} 

@@ -75,16 +75,16 @@ vec3 surface_normal(tex_idx_t idx, vec2 uv)
 	float u1 = clamp(uv.x - h,0,1);
 	float u2 = clamp(uv.x + h,0,1);
 
-	float fu1 = texture(u_tex_arrays[pg], vec3(uv + vec2(u1,0), tx)).r;
-	float fu2 = texture(u_tex_arrays[pg], vec3(uv + vec2(u2,0), tx)).r;
+	float fu1 = texture(u_tex_arrays[pg], vec3(vec2(u1,uv.y), tx)).r;
+	float fu2 = texture(u_tex_arrays[pg], vec3(vec2(u2,uv.y), tx)).r;
 
 	float dfdu = (fu2 - fu1)/(u2 - u1);
 
 	float v1 = clamp(uv.y - h,0,1);
 	float v2 = clamp(uv.y + h,0,1);
 
-	float fv1 = texture(u_tex_arrays[pg], vec3(uv + vec2(0,v1), tx)).r;
-	float fv2 = texture(u_tex_arrays[pg], vec3(uv + vec2(0,v2), tx)).r;
+	float fv1 = texture(u_tex_arrays[pg], vec3(vec2(uv.x,v1), tx)).r;
+	float fv2 = texture(u_tex_arrays[pg], vec3(vec2(uv.x,v2), tx)).r;
 
 	float dfdv = (fv2 - fv1)/(v2 - v1);
 
@@ -98,18 +98,19 @@ vec3 face_to_world(vec3 v, uint face)
 	switch (face)
 	{
 	case 0:
-		return vec3(v.z,v.x,v.y);
+		return vec3(v.y,v.z,v.x);
 	case 1:
 		return vec3(-v.x,v.z,v.y);
 	case 2:
-		return vec3(-v.y,v.x,v.z);
+		return vec3(v.y,-v.x,v.z);
 	case 3:
-		return vec3(-v.z,v.x,-v.y);
+		return vec3(v.y,-v.z,-v.x);
 	case 4:
-		return vec3(v.x,-v.z,v.y);
+		return vec3(v.x,v.z,-v.y);
 	case 5:
 		return vec3(v.y,v.x,-v.z);
-	}
+	} 
+	return vec3(0);
 }
 
 void main()
@@ -142,7 +143,7 @@ void main()
 
 	out_pos = wpos.xyz;
 	out_uv = uv;
-	out_normal = n.xyz;
+	out_normal = N;
 	out_color = val;
 	out_tex_idx = tex_idx;
 

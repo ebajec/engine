@@ -367,8 +367,6 @@ struct RandomLine : AppComponent
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(idx), idx, GL_STATIC_READ);
 
 		glBindVertexArray(vao);
-		glEnableVertexArrayAttrib(vao,0);
-		glVertexAttribIPointer(0, 1, GL_UNSIGNED_INT, 0, (void*)0);
 
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ibo);
 
@@ -436,11 +434,12 @@ struct RandomLine : AppComponent
 		//	0
 		//);
 
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
 		glDrawElementsInstanced(
 			GL_TRIANGLES, 
 			6, 
 			GL_UNSIGNED_INT, 
-			nullptr, 
+			idx, 
 			points.size() - 1
 		);
 

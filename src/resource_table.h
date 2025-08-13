@@ -2,6 +2,7 @@
 #define RESOURCE_TABLE_H
 
 #include "def_gl.h"
+#include "utils/log.h"
 
 #include <utils/monitor.h>
 
@@ -159,11 +160,21 @@ struct ResourceTable
 	const T *get(ResourceHandle h)
 	{
 		assert(h != RESOURCE_HANDLE_NULL);
+		
+		if (!h) {
+			log_error("Null handle passed",h);
+			return nullptr;
+		}
 
 		if (h > entries.size()) 
 			return nullptr;
 
 		ResourceEntry *ent = entries[h - 1].get(); 
+
+		if (!ent) {
+			log_error("Resource does not exist with id %d!",h);
+			return nullptr;
+		}
 
 		if (ent->type == RESOURCE_TYPE_NONE)
 			return nullptr;

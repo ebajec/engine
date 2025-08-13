@@ -43,6 +43,24 @@ uint cube_face(vec3 v)
 	return argmax;
 }
 
+mat3 frame()
+{
+	vec3 dp1 = dFdx(in_pos);
+	vec3 dp2 = dFdy(in_pos);
+
+	vec2 duv1 = dFdx(in_uv);
+	vec2 duv2 = dFdy(in_uv);
+
+	float det = duv1.x*duv2.y - duv2.x*duv1.y;
+
+	vec3 dSdu = normalize(duv2.y*dp1 - duv1.y*dp2);
+	vec3 dSdv = normalize(-duv2.x*dp1 + duv1.x*dp2);
+
+	vec3 N = cross(dSdu,dSdv);
+
+	return mat3(dSdu, dSdv, N);
+}
+
 void main()
 {
 	vec2 uv = in_uv;
@@ -83,6 +101,8 @@ void main()
 		vec3 dx = dFdx(in_pos);
 		vec3 dy = dFdy(in_pos);
 		vec3 n = normalize(cross(dx,dy));
+		//mat3 TBN = frame();
+		//vec3 n = TBN[2];
 
 		vec3 V = view_dir();
 
