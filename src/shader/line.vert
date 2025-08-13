@@ -103,6 +103,8 @@ uint prev_idx(uint idx) {
 	return tmp;
 }
 
+const bool connect_all = false;
+
 void main()
 {
 	uint idx = gl_InstanceID;
@@ -130,6 +132,18 @@ void main()
 	vec2 p1 = verts[2].pos;
 
 	float len = s1 - s0;
+	float len_prev = verts[1].len - verts[0].len;
+	float len_next = verts[3].len - verts[2].len;
+
+	if (connect_all) {
+		if (len_next < 0) 
+			len_next = length(verts[3].pos - verts[2].pos);
+		if (len_prev < 0) 
+			len_prev = length(verts[1].pos - verts[0].pos);
+		if (len < 0) 
+			len = length(verts[1].pos - verts[2].pos);
+	}
+
 	float inv_len = len > 1e-6 ? 1.0/len : 0;
 
 	vec2 seg = p1 - p0;
@@ -139,9 +153,6 @@ void main()
 
 	float scale = (u_frame.pv*vec4(p0,0,1)).w;
 	float width = u_thickness;
-
-	float len_prev = verts[1].len - verts[0].len;
-	float len_next = verts[3].len - verts[2].len;
 
 	bool top = bool(id & TOP_BIT);
 	bool right = bool(id & RIGHT_BIT);
