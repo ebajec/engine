@@ -137,13 +137,13 @@ TileCPUIndex TileCPUCache::allocate()
 
 	uint16_t page = m_open_pages.top(); 
 
-	assert(page_idx < m_pages.size());
+	assert(page < m_pages.size());
 
 	page_t *p_page = m_pages[page].get();
 
 	uint16_t ent = p_page->free_list.back();
 
-	assert(tex_idx < TILE_PAGE_SIZE);
+	assert(ent < TILE_CPU_PAGE_SIZE);
 
 	p_page->free_list.pop_back();
 
