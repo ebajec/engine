@@ -19,6 +19,12 @@ struct metadata_t
     uint count;
 };
 
+struct edge_t
+{
+	uint u; 
+	uint v;
+};
+
 layout (std430, binding = 0) buffer Vertices
 {
 	vert_data_t data[];
@@ -27,6 +33,11 @@ layout (std430, binding = 0) buffer Vertices
 layout (std430, binding = 1) buffer Metadata
 {
 	metadata_t meta[];
+};
+
+layout (std430, binding = 2) buffer Indices
+{
+	uvec2 indices[];
 };
 
 layout (location = 0) out vec2 out_pos;
@@ -67,15 +78,17 @@ JoinResult compute_join_offset(vec2 v1, vec2 v2, float w)
 	// Assumption: |v1| = |v2| = 1
 	float v1v2 = dot(v1,v2);
 
-	float sinr2 = sqrt(1-v1v2);
-	float cosr2 = sqrt(1+v1v2);
+	float sin_tht = cross2(v1,v2);
+	float cos_tht = dot(v1,v2);
 
-	float frac = sinr2/cosr2;
+	if (cos_tht < -0.999) {
+		return JoinResult(vec2(0),0); 
+	}
 
-	float winding = sign(cross2(v1,v2));
+	float tan_tht_2 = sin_tht/(1+cos_tht);
 
-	float delta = w*winding*frac;
-	vec2 B = sinr2 < 1e-6 ? v1 : winding * (v1 - v2) / (ROOT2 * sinr2);
+	float delta = w*tan_tht_2;
+	vec2 B = sign(sin_tht)*normalize(v1 - v2);
 
 	JoinResult result;
 	result.B = B;
@@ -87,41 +100,38 @@ const bool loop = false;
 
 uint next_idx(uint idx) {
 	return (idx) < u_count ? idx + 1 : idx;
-
-	uint tmp = (idx + 1 < u_count) ?
-		idx + 1 :
-		(loop ? 1 : idx);
-	return tmp;
 }
 
 uint prev_idx(uint idx) {
 	return idx > 0 ? idx - 1 : 0;
-
-	uint tmp = (idx > 0) ?
-		idx - 1 :
-		(loop ? u_count - 1 : 0);
-	return tmp;
 }
 
-const bool connect_all = false;
+bool use_edges = false;
 
 void main()
 {
 	uint idx = gl_InstanceID;
-	uint id = gl_VertexID;
 
 	vert_data_t verts[4];
 
-	uint id_prev = prev_idx(idx);
-	vert_data_t v_prev = data[id_prev];
+	if (use_edges) {
+		uvec2 e0 = indices[prev_idx(idx)];
+		uvec2 e1 = indices[idx];
+		uvec2 e2 = indices[next_idx(idx)];
 
-	uint id_next = next_idx(idx + 1);
-	vert_data_t v_next = data[id_next];
+		verts[0] = e1.x == e0.y ? data[e0.x] : data[e1.x];
+		verts[1] = data[e1.x];
+		verts[2] = data[e1.y];
+		verts[3] = e1.y == e2.x ? data[e2.y] : data[e1.y];
+	} else {
+		uint prev = prev_idx(idx);
+		uint next = next_idx(idx);
 
-	verts[0] = v_prev;
-	verts[1] = data[idx];
-	verts[2] = data[next_idx(idx)];
-	verts[3] = v_next;
+		verts[0] = data[prev];
+		verts[1] = data[idx];
+		verts[2] = data[next];
+		verts[3] = data[next_idx(next)];
+	}
 
 	dbg_draw = verts[1].padding;
 
@@ -135,24 +145,17 @@ void main()
 	float len_prev = verts[1].len - verts[0].len;
 	float len_next = verts[3].len - verts[2].len;
 
-	if (connect_all) {
-		if (len_next < 0) 
-			len_next = length(verts[3].pos - verts[2].pos);
-		if (len_prev < 0) 
-			len_prev = length(verts[1].pos - verts[0].pos);
-		if (len < 0) 
-			len = length(verts[1].pos - verts[2].pos);
-	}
+	bool left_end = (len_prev < 1e-7) || (idx == 0);
+	bool right_end = (len_next < 1e-7) || (idx == u_count);
 
 	float inv_len = len > 1e-6 ? 1.0/len : 0;
 
-	vec2 seg = p1 - p0;
-
-	vec2 X = seg*inv_len;
+	vec2 X = (p1 - p0)*inv_len;
 	vec2 Y = vec2(X.y,-X.x);
 
-	float scale = (u_frame.pv*vec4(p0,0,1)).w;
 	float width = u_thickness;
+
+	uint id = gl_VertexID;
 
 	bool top = bool(id & TOP_BIT);
 	bool right = bool(id & RIGHT_BIT);
@@ -160,44 +163,45 @@ void main()
 	float sgnY = top ? 1 : -1;
 	float sgnX = right ? 1 : -1;
 
-	uint endpoint = 
-		RIGHT_ENDPOINT*uint((len_next < 0) || (idx == u_count)) | 
-		LEFT_ENDPOINT*uint((len_prev < 0) || ((idx == 0)));
-
 	//-------------------------------------------------------------------
 	// Join offset at p0
 
-	vec2 p_prev = (verts[0].pos - p0)/(len_prev);
+	vec2 p_prev = left_end ? vec2(0) : (verts[0].pos - p0)/(len_prev);
 	JoinResult j0 = compute_join_offset(p_prev,-X,width);
 	float delta0 = -j0.delta;
 
 	//-------------------------------------------------------------------
 	// Join offset at p1
 
-	vec2 p_next = (verts[3].pos - p1)/(len_next);
+	vec2 p_next = right_end ? vec2(0) : (verts[3].pos - p1)/(len_next);
 	JoinResult j1 = compute_join_offset(X,p_next,width);
 	float delta1 = j1.delta;
+
+	delta0 = (idx == 0) ? width : delta0;
 
 	//-------------------------------------------------------------------
 	// Compute vertex position
 
+	float mid = 1.0/(1.0 + abs(delta1/delta0));
+	
 	vec2 p = right ? p1 : p0;
 	float delta = right ? delta1 : delta0;
 
-	float dX = sgnY*delta;
+	float dX = right ? 
+		max(sgnY*delta,-(len * (1.0 - mid))) : 
+		min(sgnY*delta, len*mid);
+
 	float dY = sgnY*width;
 
 	if (limit_join(delta,width) || 
-		(bool(endpoint & LEFT_ENDPOINT) && sgnX < 0) ||
-		(bool(endpoint & RIGHT_ENDPOINT) && sgnX > 0) 
+		(left_end && sgnX < 0) ||
+		(right_end && sgnX > 0) 
 	) {
 		dX = sgnX*width;
 	}
-	delta0 = (idx == 0) ? width : delta0;
-
 	vec2 vpos = p + dY*Y + dX*X;
 
-	gl_Position = u_frame.pv * vec4(vpos,0,1);
+	gl_Position = u_frame.pv*vec4(vpos,0,1);
 
 	//-------------------------------------------------------------------
 	// Adjust uvs to accomodate for joins
@@ -215,7 +219,7 @@ void main()
 	out_width = width;
 
 	// flat outputs, constant across segment
-	out_mid_weight = 1.0/(1.0 + abs(delta1/delta0));
+	out_mid_weight = abs(delta0) > 0 ? mid : 0;
 
 	out_p0 = p0;
 	out_p1 = p1;
@@ -241,6 +245,6 @@ void main()
 	out_join_dir[0] = j0.B;
 	out_join_dir[1] = j1.B;
 
-	out_endpoint = endpoint;
+	out_endpoint = LEFT_ENDPOINT*uint(left_end) | RIGHT_ENDPOINT*uint(right_end);
 }
 

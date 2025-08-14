@@ -257,7 +257,7 @@ struct RandomLine : AppComponent
 
 	std::shared_ptr<BaseViewComponent> view;
 
-	std::vector<uint32_t> indices;
+	std::vector<glm::uvec2> indices;
 	std::vector<LinePoint> points;
 
 	std::vector<DrawCommand> cmds;
@@ -297,11 +297,13 @@ struct RandomLine : AppComponent
 		uint32_t segs = 10;
 
 		size_t offset = 0;
+
+		uint32_t edge = 0;
 		for (uint32_t k = 0; k < segs; ++k) { 
 
 			LinePoint pt = {};
 
-			uint32_t N = count + 2*k;
+			uint32_t N = count;// + 2*k;
 
 			for (uint32_t i = 0; i < N; ++i) {
 				glm::vec2 pos = glm::vec2(v.real(),v.imag());
@@ -316,9 +318,10 @@ struct RandomLine : AppComponent
 
 				points.push_back(pt);
 
-				indices.push_back(i);
-				if (i + 1 < count)
-					indices.push_back(i + 1);
+				if (i + 1 < N) {
+					indices.push_back(glm::uvec2(edge, edge + 1));
+					++edge;
+				}
 
 				if (pt.length > 1e5)
 					pt.length = 0;
@@ -328,6 +331,8 @@ struct RandomLine : AppComponent
 				float tht = PI*(1.0 - 2.0*urandf());
 				c *= std::polar<float>(1, tht);
 			}
+
+			++edge;
 
 			v += 5.f*(0.5f + 0.5f*urandf())*c;
 
@@ -359,13 +364,11 @@ struct RandomLine : AppComponent
 		glBufferData(GL_SHADER_STORAGE_BUFFER, cmds.size()*sizeof(DrawCommand), cmds.data(), GL_STATIC_READ);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER,0);
 
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ibo);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(idx), idx, GL_STATIC_READ);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER,ibo);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, indices.size()*sizeof(glm::uvec2), indices.data(), GL_STATIC_READ);
 
 		glBindVertexArray(vao);
-
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ibo);
-
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
 		glBindVertexArray(0);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
 
@@ -402,7 +405,7 @@ struct RandomLine : AppComponent
 		}
 		ImGui::End();
 
-		uniforms.count = points.size();
+		uniforms.count = indices.size();
 
 		glBindBuffer(GL_UNIFORM_BUFFER,ubo);
 		glBufferData(GL_UNIFORM_BUFFER,sizeof(uniforms),&uniforms,GL_DYNAMIC_READ);
@@ -413,7 +416,8 @@ struct RandomLine : AppComponent
 		ctx->bind_material(material);
 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, cmd_buf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, cmd_buf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ibo);
 
 		glDepthMask(GL_FALSE);        // but don’t write any passing depth back into the buffer
 		glEnable(GL_BLEND);
@@ -436,7 +440,7 @@ struct RandomLine : AppComponent
 			6, 
 			GL_UNSIGNED_INT, 
 			idx, 
-			points.size() - 1
+			indices.size()
 		);
 
 		glBindVertexArray(0);
