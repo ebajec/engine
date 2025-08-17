@@ -60,5 +60,4 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
 
 add_subdirectory(deps)
 add_subdirectory(src)
-add_subdirectory(samples)
 
