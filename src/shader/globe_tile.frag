@@ -79,7 +79,7 @@ void main()
 
 	vec4 color = mix(vec4(0,0.5,0,1), vec4(0.4,0.45,0.5,1), clamp(20*val,0,1));
 
-	float t = TWOPI*fract(u_frame.t*0.0001);
+	float t = TWOPI*fract(u_frame.t*0.001);
 
 	vec2 z = vec2(cos(t),sin(t));
 
@@ -98,10 +98,6 @@ void main()
 	};
 
 	if (true) {
-		//vec3 dx = dFdx(in_pos);
-		//vec3 dy = dFdy(in_pos);
-		//vec3 n = normalize(cross(dx,dy));
-		mat3 TBN = frame();
 		vec3 n = in_normal;
 
 		vec3 V = view_dir();
@@ -113,7 +109,9 @@ void main()
 			vec3 L = sun[i];
 			vec4 C = sun_colors[i];
 
-			diffuse += color*C*max(dot(n, L),0);
+			float f = max(dot(n, L),0);
+
+			diffuse += color*C*f;
 			
 			vec3 R = reflect(L,n);
 
@@ -128,5 +126,5 @@ void main()
 	FragColor = mix(color,vec4(0,in_uv,1),0.0);
 	//FragColor = vec4(in_normal,1);
 	//FragColor = mix(FragColor,FACE_COLORS[cube_face(in_pos)],0.0);
-	//FragColor = mix(FragColor,vec4(0,in_uv,1),0.0);
+	//FragColor = mix(FragColor,vec4(0,in_uv,1),0.8);
 }

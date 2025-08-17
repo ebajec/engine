@@ -344,7 +344,7 @@ std::vector<TileCode> TileCPUCache::update(
 	return loaded;
 }
 
-static constexpr size_t coeff_count = 50;
+static constexpr size_t coeff_count = 20;
 static float coeffs[coeff_count] = {};
 
 void init_coeffs()

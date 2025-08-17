@@ -54,7 +54,7 @@ static constexpr uint32_t TILE_VERT_WIDTH = 32;
 static constexpr uint32_t TILE_VERT_COUNT = 
 	TILE_VERT_WIDTH*TILE_VERT_WIDTH;
 
-static constexpr double tile_scale_factor = 72;
+static constexpr double tile_scale_factor = 32;
 
 enum quadrant_t
 {

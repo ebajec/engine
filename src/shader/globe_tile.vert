@@ -29,7 +29,7 @@ uint TILE_CODE_ZOOM_BITS_SHIFT = 3;
 uint TILE_CODE_IDX_BITS_MASK = 
 	~(TILE_CODE_FACE_BITS_MASK | TILE_CODE_ZOOM_BITS_MASK);
 
-aabb2_t morton_u64_to_rect_f64(uint index, uint level)
+aabb2_t morton_u32_to_rect_f32(uint index, uint level)
 {
     aabb2_t extent;
 	extent.min = vec2(0);
@@ -70,7 +70,27 @@ vec2 adjust_uv_for_clamp(vec2 uv)
 	return vec2(1.0/512.0) + uv*(1-1.0/256.0); 
 }
 
-vec3 surface_normal(tex_idx_t idx, vec2 uv, uint zoom)
+vec3 face_to_world(vec3 v, uint face)
+{
+	switch (face)
+	{
+	case 0:
+		return vec3(v.z,v.x,v.y);
+	case 1:
+		return vec3(-v.x,v.z,v.y);
+	case 2:
+		return vec3(-v.y,v.x,v.z);
+	case 3:
+		return vec3(-v.z,v.x,-v.y);
+	case 4:
+		return vec3(v.x,-v.z,v.y);
+	case 5:
+		return vec3(v.y,v.x,-v.z);
+	} 
+	return vec3(0);
+}
+
+vec2 tex_grad(tex_idx_t idx, vec2 uv, uint zoom)
 {
 	uint pg = idx.page;
 	uint tx = idx.tex;
@@ -93,43 +113,23 @@ vec3 surface_normal(tex_idx_t idx, vec2 uv, uint zoom)
 
 	float dfdv = (fv2 - fv1)/(v2 - v1);
 
-	vec3 N = normalize(vec3(-dfdu,-dfdv,1.0/(1<<zoom)));
-
-	return N;
+	return vec2(dfdu,dfdv)*(1<<zoom);
 }
 
-vec3 face_to_world(vec3 v, uint face)
+vec3 globe_normal(float f, vec2 df, vec2 uv)
 {
-	switch (face)
-	//{
-	//case 0:
-	//	return vec3(v.y,v.z,v.x);
-	//case 1:
-	//	return vec3(-v.x,v.z,v.y);
-	//case 2:
-	//	return vec3(v.y,-v.x,v.z);
-	//case 3:
-	//	return vec3(v.y,-v.z,-v.x);
-	//case 4:
-	//	return vec3(v.x,v.z,-v.y);
-	//case 5:
-	//	return vec3(v.y,v.x,-v.z);
-	//} 
-	{
-	case 0:
-		return vec3(v.z,v.x,v.y);
-	case 1:
-		return vec3(-v.x,v.z,v.y);
-	case 2:
-		return vec3(-v.y,v.x,v.z);
-	case 3:
-		return vec3(-v.z,v.x,-v.y);
-	case 4:
-		return vec3(v.x,-v.z,v.y);
-	case 5:
-		return vec3(v.y,v.x,-v.z);
-	} 
-	//return vec3(0);
+	float u = uv.x;
+	float v = uv.y;
+	float frac = pow(1 + u*u + v*v,-3.0/2.0);
+	vec3 Su = vec3(1 + v*v, -u*v, -u)*frac;
+	vec3 Sv = vec3(-u*v, 1 + u*u, -v)*frac;
+
+	vec3 N = normalize(cross(Su,Sv));
+
+	vec3 Mu = Su*(1.0 + f) + N*df.x;
+	vec3 Mv = Sv*(1.0 + f) + N*df.y;
+
+	return normalize(cross(Mu,Mv));
 }
 
 void main()
@@ -154,20 +154,16 @@ void main()
 
 	if (valid) {
 		val = texture(u_tex_arrays[tex_idx.page], uvw);
-		N = surface_normal(tex_idx,uv,code.zoom);
+		float f = val.r;
+		vec2 df = tex_grad(tex_idx, uv, code.zoom);
+
+		aabb2_t rect = morton_u32_to_rect_f32(code.idx,code.zoom);
+		vec2 uv_face = mix(rect.min,rect.max,in_uv);
+
+		N = globe_normal(f,df,2.0*uv_face - vec2(1.0));
 		N = face_to_world(N,code.face);
 
-		vec3 axis = cross(face_to_world(vec3(0,0,1),code.face),normal);
-		float len = length(axis);
-		if (len > 1e-6) {
-			float tht = asin(len);
-			vec4 q = qexp(axis/len,1.*tht);
-			vec4 qr = qmult(qmult(q,vec4(N,0)),qconj(q));
-			N = qr.xyz;
-		}
-		
-
-		wpos += n*(val.r);
+		wpos += n*f;
 	}
 
 	out_pos = wpos.xyz;
