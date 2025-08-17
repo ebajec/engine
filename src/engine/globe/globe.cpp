@@ -73,7 +73,7 @@ void init_debug(ResourceTable *table) {
 	g_enable_boxes = false;
 }
 
-void draw_boxes(RenderContext const & ctx)
+static void draw_boxes(RenderContext const & ctx)
 {
 	ctx.bind_material(g_disp->material);
 	if (g_enable_boxes)
@@ -96,6 +96,7 @@ static constexpr TileCode tile_code_refine(TileCode code, quadrant_t quadrant)
 	return code;
 }
 
+/*
 static glm::dvec3 tile_diff(glm::dvec3 p, glm::dvec2 p_uv, aabb2_t tile, uint8_t face)
 {
 	p_uv = glm::clamp(p_uv,tile.min,tile.max);
@@ -104,6 +105,7 @@ static glm::dvec3 tile_diff(glm::dvec3 p, glm::dvec2 p_uv, aabb2_t tile, uint8_t
 
 	return diff;
 }
+*/
 
 struct select_tiles_rec_params : select_tiles_params
 {
@@ -127,11 +129,11 @@ static aabb3_t tile_box(const TileDataSource *source, TileCode code)
 	};
 
 	glm::dvec3 p[5] = {
-		(1.0 + samples[0])*cube_to_globe(code.face, rect.ll()),
-		(1.0 + samples[1])*cube_to_globe(code.face, rect.lr()),
-		(1.0 + samples[2])*cube_to_globe(code.face, rect.ul()),
-		(1.0 + samples[3])*cube_to_globe(code.face, rect.ur()),
-		(1.0 + samples[4])*cube_to_globe(code.face, mid_uv),
+		(1.0 + (double)samples[0])*cube_to_globe(code.face, rect.ll()),
+		(1.0 + (double)samples[1])*cube_to_globe(code.face, rect.lr()),
+		(1.0 + (double)samples[2])*cube_to_globe(code.face, rect.ul()),
+		(1.0 + (double)samples[3])*cube_to_globe(code.face, rect.ur()),
+		(1.0 + (double)samples[4])*cube_to_globe(code.face, mid_uv),
 	};
 
 	aabb3_t box = aabb_bounding(p, sizeof(p)/sizeof(p[0]));
@@ -237,7 +239,7 @@ void select_tiles(
 	}
 }
 
-aabb2_t sub_rect(TileCode parent, TileCode child)
+static aabb2_t sub_rect(TileCode parent, TileCode child)
 {
 	if (parent.zoom >= child.zoom)
 		return aabb2_t{.x0 = 0,.y0 = 0, .x1 = 1, .y1 = 1};
@@ -282,11 +284,9 @@ static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_v
 	}
 }
 
-std::vector<DrawCommand> draw_cmds(size_t count) 
+static std::vector<DrawCommand> draw_cmds(size_t count) 
 {
 	std::vector<DrawCommand> cmds (count);
-
-	size_t index_count = 6 * TILE_VERT_COUNT;
 
 	for (size_t i = 0; i < count; ++i) {
 		DrawCommand cmd = {
@@ -303,7 +303,7 @@ std::vector<DrawCommand> draw_cmds(size_t count)
 	return cmds;
 }
 
-std::vector<uint32_t> create_tile_indices()
+static std::vector<uint32_t> create_tile_indices()
 {
 	static const uint32_t n = TILE_VERT_WIDTH;
 	std::vector<uint32_t> indices;
@@ -325,7 +325,7 @@ std::vector<uint32_t> create_tile_indices()
 	return indices;
 }
 
-GLuint globe_vao()
+static GLuint globe_vao()
 {
 	GLuint vao;
 	glGenVertexArrays(1,&vao);
@@ -355,7 +355,7 @@ GLuint globe_vao()
 	return vao;
 }
 
-LoadResult create_render_data(ResourceTable *rt, RenderData &data)
+static LoadResult create_render_data(ResourceTable *rt, RenderData &data)
 {
 	LoadResult result = RESULT_SUCCESS;
 
@@ -410,7 +410,7 @@ static LoadResult update_render_data(
 			tiles.size(), MAX_TILES);
 	}
 
-	uint32_t total = TILE_VERT_COUNT*count;
+	//uint32_t total = TILE_VERT_COUNT*count;
 
 	//-----------------------------------------------------------------------------
 	// vbo
@@ -422,10 +422,10 @@ static LoadResult update_render_data(
 
 	uint32_t offset = 0;
 
-	std::atomic_int ctr = count;
+	std::atomic_uint32_t ctr = count;
 
 	for (uint32_t i = 0; i < count; ++i) {
-		size_t offset = i * TILE_VERT_COUNT;	
+		offset = i * TILE_VERT_COUNT;	
 
 		TileCode code = tiles[i];
 		GlobeVertex * dst = (GlobeVertex*)ptr + offset;
@@ -459,12 +459,12 @@ static LoadResult update_render_data(
 	return RESULT_SUCCESS;
 };
 
-void plot_tile_counts(size_t total, size_t new_tiles)
+static void plot_tile_counts(size_t total, size_t new_tiles)
 {
 		static std::vector<float> times;
 		static std::vector<float> new_counts;
 		static std::vector<float> tile_counts;
-		static int scroll = 0;
+		static size_t scroll = 0;
 		static size_t samples = 500;
 		static float avg = 0;
 
@@ -479,20 +479,20 @@ void plot_tile_counts(size_t total, size_t new_tiles)
 
 		tile_counts[scroll] = count;
 		new_counts[scroll] = (float)new_tiles;
-		times[scroll] = glfwGetTime();
+		times[scroll] = (float)glfwGetTime();
 
 		scroll = (scroll + 1)%samples;
 
-		avg = 0.99*avg + 0.01*count;
+		avg = 0.99f*avg + 0.01f*count;
 
 		if (ImPlot::BeginPlot("Tile selection",ImVec2(200,200))) {
-			ImPlot::SetupAxesLimits(times[scroll], 
-			   times[scroll  ? scroll - 1 : samples - 1], 
-			   0, 2*avg,ImPlotCond_Always);
+			ImPlot::SetupAxesLimits((double)times[scroll], 
+			   (double)times[scroll  ? scroll - 1 : samples - 1], 
+			   0, 2*(double)avg,ImPlotCond_Always);
 			ImPlot::PlotLine("Tile count", times.data(), 
-				tile_counts.data(), samples, ImPlotCond_Always, scroll);
+				tile_counts.data(), (int)samples, ImPlotCond_Always, (int)scroll);
 			ImPlot::PlotLine("New count", times.data(), 
-				new_counts.data(), samples, ImPlotCond_Always, scroll);
+				new_counts.data(), (int)samples, ImPlotCond_Always, (int)scroll);
 			ImPlot::EndPlot();
 		}
 }
@@ -575,6 +575,7 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	// Process visible tiles
 	
 	select_tiles_params params = {
+		.source = globe->source.get(),
 		.frust = frust,
 		.frust_box = frust_cull_box(frust),
 		.origin = pos,
@@ -632,7 +633,7 @@ void globe_record_draw_cmds(const RenderContext& ctx, const Globe *globe)
 		GL_TRIANGLES, 
 		GL_UNSIGNED_INT, 
 		data.cmds.data(), 
-		data.cmds.size(), 
+		(GLsizei)data.cmds.size(), 
 		0
 	);
 

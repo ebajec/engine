@@ -70,6 +70,9 @@ public:
 
 		LoadResult result = upload_buffer(m_rt, m_ubo, &pv, sizeof(pv));
 
+		if (result)
+			return;
+
 		ctx.bind_material(frust_material);
 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_rt->get<GLBuffer>(m_ubo)->id);

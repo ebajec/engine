@@ -4,6 +4,7 @@
 #include "globe/gpu_cache.h"
 #include "utils/log.h"
 
+#include <thread>
 #include <cstring>
 
 struct GPUUploadContext

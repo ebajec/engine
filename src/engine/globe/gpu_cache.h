@@ -3,8 +3,6 @@
 
 #include <opengl.h>
 
-#include "resource/resource_table.h"
-
 #include "tiling.h"
 #include "cpu_cache.h"
 
