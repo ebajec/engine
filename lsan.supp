@@ -1,0 +1,5 @@
+leak:libgtk-3.so.0
+leak:libfontconfig.so.1
+leak:libglfw.so.3
+leak:gl_buffer_create
+

@@ -1,0 +1,16 @@
+called_from_lib:libgallium-25.1.4.so
+called_from_lib:libglib-2.0.so
+called_from_lib:libgio-2.0.so.0
+called_from_lib:libdrm_amdgpu.so.1
+called_from_lib:libfontconfig.so.1
+called_from_lib:libpangoft2-1.0.so.0
+called_from_lib:libgobject-2.0.so.0
+called_from_lib:libgtk-3.so.0
+called_from_lib:libgdk_pixbuf-2.0.so.0
+called_from_lib:libatk-1.0.so.0
+called_from_lib:libdecor-0.so.0
+called_from_lib:libgvfscommon.so
+called_from_lib:libgvfsdbus.so
+called_from_lib:libgdk-3.so.0
+called_from_lib:libpango-1.0.so.0
+called_from_lib:libpangocairo-1.0.so.0
