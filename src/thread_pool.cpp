@@ -85,7 +85,7 @@ void g_schedule_task(std::function<void(void)>&& task)
 	g_pool.schedule(std::move(task));
 }
 
-void g_schedule_blocking(std::function<void(void)> &&task)
+void g_schedule_background(std::function<void(void)> &&task)
 {
 	g_block_pool.schedule(std::move(task));
 }

@@ -68,8 +68,8 @@ TileCPUCache
 *TileCPUCache::create(size_t tile_size, size_t capacity)
 {
 	TileCPUCache *cache = new TileCPUCache{};
-	cache->m_block_size = tile_size;
-	cache->m_capacity = (std::max(capacity,(size_t)1) - 1)/tile_size + tile_size;
+	cache->m_tile_size = tile_size;
+	cache->m_tile_cap = (std::max(capacity,(size_t)1) - 1)/tile_size + 1;
 	return cache;
 }
 
@@ -80,7 +80,7 @@ TileCPUCache::entry_t *TileCPUCache::get_entry(TileCPUIndex idx) const
 
 uint8_t *TileCPUCache::get_block(TileCPUIndex idx) const
 {
-	return &m_pages[idx.page]->mem[idx.ent*m_block_size];
+	return &m_pages[idx.page]->mem[idx.ent*m_tile_size];
 }
 
 TileCode TileCPUCache::find_best(TileCode code)
@@ -90,20 +90,20 @@ TileCode TileCPUCache::find_best(TileCode code)
 
 	TileCode in = code;
 
-	TileCPULoadState state = TILE_DATA_STATE_EMPTY;
+	TileCPULoadStatus status = TILE_CPU_STATE_EMPTY;
 
-	while (code.zoom > 0 && state != TILE_DATA_STATE_READY) {
+	while (code.zoom > 0 && status != TILE_DATA_STATE_READY) {
 		code.idx >>= 2;
 		--code.zoom;
 
 		it = m_map.find(code);
 
 		if (it != end) {
-			state = get_entry(*(it->second))->state;
+			status = get_entry(*(it->second))->state.load().status;
 		}
 	} 
 
-	if (state == TILE_DATA_STATE_READY) {
+	if (status == TILE_DATA_STATE_READY) {
 		lru_list_t::iterator l_it = it->second;
 		m_lru.splice(m_lru.begin(), m_lru, l_it);
 		return it->first;
@@ -131,7 +131,7 @@ TileCPUCache::page_t *create_page(size_t block_size)
 TileCPUIndex TileCPUCache::allocate()
 {
 	if (m_open_pages.empty()) {
-		m_pages.emplace_back(std::move(create_page(m_block_size)));
+		m_pages.emplace_back(std::move(create_page(m_tile_size)));
 		m_open_pages.push(m_pages.size() - 1);
 	}
 
@@ -163,22 +163,37 @@ TileCPUIndex TileCPUCache::evict_one()
 	TileCPUIndex idx = m_lru.back(); 
 	entry_t *ent = get_entry(idx);
 
-	TileCPULoadState state;
+	TileCPULoadState state = ent->state.load();
+	TileCPULoadState desired = {TILE_CPU_STATE_EMPTY,0};
 	do {
-		state = ent->state.load();
-		if (state == TILE_DATA_STATE_LOADING || 
-			state == TILE_DATA_STATE_CANCELLED || ent->refs > 0) {
-			ent->state.store(TILE_DATA_STATE_CANCELLED);
+		if (state.refs > 0) {
+			log_info("Could not evict tile %d from CPU cache; in use",ent->code);
 			return TILE_CPU_INDEX_NONE;
 		}
-	} while (!ent->state.compare_exchange_weak(state, TILE_DATA_STATE_EMPTY));
+
+		if (state.status == TILE_DATA_STATE_CANCELLED) {
+			return TILE_CPU_INDEX_NONE;
+		}
+
+		if (state.status == TILE_DATA_STATE_LOADING || 
+			state.status == TILE_DATA_STATE_QUEUED)
+			desired = {TILE_DATA_STATE_CANCELLED, state.refs};
+		else 
+			desired = {TILE_CPU_STATE_EMPTY,0};
+	} while (!ent->state.compare_exchange_weak(state, desired));
+
+	if (desired.status == TILE_DATA_STATE_CANCELLED) {
+		log_info("Cancelled load for tile %d",ent->code.u64);
+		return TILE_CPU_INDEX_NONE;
+	}
 
 	if (m_map.find(ent->code) == m_map.end()) {
 		log_error("Failed to evict entry at %d; not contained in table!",ent->code.u64);
 		return TILE_CPU_INDEX_NONE;
 	}
 
-	//log_info("evicted tile %d",ent->code);
+	//log_info("Evicted tile %d from CPU cache",ent->code);
+
 	m_map.erase(ent->code);	
 	m_lru.pop_back();
 
@@ -200,7 +215,7 @@ const uint8_t *TileCPUCache::acquire_block(TileCode code, size_t *size,
 	entry_t *ent = get_entry(idx);
 
 	if (p_state) *p_state = &ent->state;
-	if (size) *size = m_block_size;
+	if (size) *size = m_tile_size;
 
 	return get_block(idx);
 }
@@ -218,48 +233,69 @@ std::optional<TileDataRef> TileCPUCache::acquire_block(TileCode code) const
 	TileCPUIndex idx = *it->second;
 	entry_t *ent = get_entry(idx);
 
-	if (ent->state != TILE_DATA_STATE_READY) 
-		return std::nullopt;
+	TileCPULoadState state = ent->state.load();
+	do {
+		if (state.status != TILE_DATA_STATE_READY)
+			return std::nullopt;
+	} while (!ent->state.compare_exchange_weak(state, {
+		TILE_DATA_STATE_READY, state.refs + 1
+	}));
+
+	//log_info("Acquired tile %d from CPU cache");
 
 	TileDataRef ref = {
 		.data = get_block(idx),
-		.size = m_block_size,
-		.p_state = &ent->state,
-		.p_refs = &ent->refs,
+		.size = m_tile_size,
+		.p_state = &ent->state
 	};
-
-	ref.p_refs->fetch_add(1);
 
 	return ref;
 }
 void TileCPUCache::release_block(TileDataRef ref) const
 {
-	ref.p_refs->fetch_sub(1);
+	TileCPULoadState state = ref.p_state->load();
+	TileCPULoadState desired;
+	do {
+		if (state.refs == 1) 
+			desired = {TILE_DATA_STATE_READY, 0};
+		else 
+			desired = {TILE_DATA_STATE_READY,state.refs - 1};
+	} while (!ref.p_state->compare_exchange_weak(state, desired));
+
+	//log_info("Released tile %d from CPU cache");
 }
 
 void load_thread_fn(
-	const TileDataSource *source, TileCPUCache::entry_t *ent, uint8_t* dst)
+	const TileDataSource *source, 
+	TileCode code,
+	std::atomic<TileCPULoadState> *p_state, 
+	uint8_t* dst)
 {
 	TileCPULoadState state;
 	do {
-		state = ent->state.load();
-		if (state == TILE_DATA_STATE_CANCELLED) {
-			ent->state.store(TILE_DATA_STATE_EMPTY);
-			log_info("load cancelled successfully (tile %d)",ent->code);
+		state = p_state->load();
+		if (state.status == TILE_DATA_STATE_CANCELLED) {
+			p_state->store({TILE_CPU_STATE_EMPTY,state.refs});
+			log_info("load cancelled successfully (tile %d)",code);
 			return;
 		}
-	} while (!ent->state.compare_exchange_weak(state, TILE_DATA_STATE_LOADING));
+	} while (!p_state->compare_exchange_weak(state, {
+		TILE_DATA_STATE_LOADING,state.refs}));
 
-	source->m_loader(ent->code,dst,source->m_usr,&ent->state);
 
+	source->m_loader(code,dst,source->m_usr,p_state);
+
+	TileCPULoadStatus desired_status = TILE_DATA_STATE_READY;
 	do {
-		state = ent->state.load();
-		if (state == TILE_DATA_STATE_CANCELLED) {
-			ent->state.store(TILE_DATA_STATE_EMPTY);
-			log_info("load cancelled successfully (tile %d)",ent->code);
-			return;
-		}
-	} while(!ent->state.compare_exchange_weak(state, TILE_DATA_STATE_READY));
+		state = p_state->load();
+		if (state.status == TILE_DATA_STATE_CANCELLED)
+			desired_status = TILE_CPU_STATE_EMPTY;
+		else 
+			desired_status = TILE_DATA_STATE_READY;
+	} while(!p_state->compare_exchange_weak(state, {desired_status,state.refs}));
+
+	if (desired_status == TILE_CPU_STATE_EMPTY) 
+		log_info("load cancelled successfully (tile %d)",code);
 
 	//log_info("Tile %d ready",ent->code);
 }
@@ -276,10 +312,10 @@ std::vector<TileCode> TileCPUCache::update(
 		available[i] = source.find(code);
 	}
 
-	std::vector<TileCode> loaded (tiles.size());
+	std::vector<TileCode> loaded (tiles.size(),TILE_CODE_NONE);
 
 	std::vector<std::pair<TileCPUIndex,entry_t*>> loads;
-	for (size_t i = 0; i < available.size(); ++i) {
+	for (size_t i = 0; i < std::min(available.size(),m_tile_cap); ++i) {
 		TileCode ideal = available[i];
 		TileCode code = TILE_CODE_NONE; 
 
@@ -293,17 +329,17 @@ std::vector<TileCode> TileCPUCache::update(
 
 			TileCPULoadState state = ent->state.load(); 
 
-			if (state == TILE_DATA_STATE_EMPTY) {
-				if (ent->refs > 0) 
-					log_error("Empty tile has %d references",ent->refs.load());
+			if (state.status == TILE_CPU_STATE_EMPTY) {
+				if (state.refs > 0) 
+					log_error("Empty tile has %d references",state.refs);
 				loads.push_back({idx,ent});
 				goto end_loop;
 			}
 
-			if (state == TILE_DATA_STATE_READY)
+			if (state.status == TILE_DATA_STATE_READY)
 				code = ideal;
 		} else {
-			TileCPUIndex idx = m_map.size() >= m_capacity ?
+			TileCPUIndex idx = m_map.size() >= m_tile_cap ?
 	  			evict_one() : allocate();
 
 			if (!idx.is_valid()) 
@@ -314,8 +350,7 @@ std::vector<TileCode> TileCPUCache::update(
 
 			entry_t *ent = get_entry(idx);
 			ent->code = ideal,
-			ent->state = TILE_DATA_STATE_EMPTY,
-			ent->refs = 0,
+			ent->state = {TILE_CPU_STATE_EMPTY, 0},
 
 			loads.push_back({idx,ent});
 		}
@@ -332,10 +367,10 @@ std::vector<TileCode> TileCPUCache::update(
 		if (g_tiles_in_flight < MAX_TILES_IN_FLIGHT) {
 			//log_info("Loading tile %d",ent->code);
 
-			ent->state.store(TILE_DATA_STATE_QUEUED);
-			g_schedule_blocking([=](){
+			ent->state.store({TILE_DATA_STATE_QUEUED, 0});
+			g_schedule_background([=](){
 				++g_tiles_in_flight;
-				load_thread_fn(&source, ent, dst);
+				load_thread_fn(&source, ent->code, &ent->state, dst);
 				--g_tiles_in_flight;
 			});
 		}
@@ -344,7 +379,7 @@ std::vector<TileCode> TileCPUCache::update(
 	return loaded;
 }
 
-static constexpr size_t coeff_count = 20;
+static constexpr size_t coeff_count = 5;
 static float coeffs[coeff_count] = {};
 
 void init_coeffs()
@@ -393,7 +428,7 @@ void test_loader_fn(TileCode code, void *dst, void *usr,
 	glm::vec2 uv = glm::vec2(0);
 	size_t idx = 0;
 	for (size_t i = 0; i < TILE_WIDTH; ++i) {
-		if (p_state->load() == TILE_DATA_STATE_CANCELLED)
+		if (p_state->load().status == TILE_DATA_STATE_CANCELLED)
 			return;
 
 		for (size_t j = 0; j < TILE_WIDTH; ++j) {

@@ -132,6 +132,8 @@ void gl_model_destroy(ResourceTable *table, void *res)
 	if(model->vao) glDeleteVertexArrays(1,&model->vao);
 	if(model->vbo) glDeleteBuffers(1,&model->vbo);
 	if(model->ibo) glDeleteBuffers(1,&model->ibo);
+
+	delete model;
 }
 
 void ModelLoader::registration(ResourceTable *table)

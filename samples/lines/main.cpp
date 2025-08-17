@@ -529,13 +529,13 @@ int main(int argc, char* argv[])
 	ModelLoader::registration(table.get());
 	ImageLoader::registration(table.get());
 
-	std::shared_ptr<ResourceHotReloader> hot_retable = ResourceHotReloader::create(table);
+	std::shared_ptr<ResourceHotReloader> hot_retable = ResourceHotReloader::create(table.get());
 
 	//-------------------------------------------------------------------------------------------------
 	// Renderer
 
 	GLRendererCreateInfo renderer_info = {
-		.resource_table = table
+		.resource_table = table.get()
 	};
 
 	std::shared_ptr<GLRenderer> renderer = GLRenderer::create(&renderer_info);

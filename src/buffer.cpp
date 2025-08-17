@@ -16,16 +16,24 @@ LoadResult gl_buffer_create(ResourceTable *table, void **res, void *usr)
 
 	GLBuffer *buf = new GLBuffer{};
 	glCreateBuffers(1,&buf->id);
+
+	if (gl_check_err()) {
+		goto failure;
+	}
+
 	glNamedBufferStorage(buf->id,(GLsizei)ci->size, nullptr,ci->flags);
 
 	if (gl_check_err()) {
-		delete buf;
-		return RESULT_ERROR;
+		goto failure;
 	}
 
 	*res = buf;
 
 	return RESULT_SUCCESS;
+failure:
+	if (buf && buf->id) glDeleteBuffers(1,&buf->id);
+	if (buf) delete buf;
+	return RESULT_ERROR;
 }
 
 void gl_buffer_destroy(ResourceTable *table, void *res)

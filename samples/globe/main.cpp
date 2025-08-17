@@ -216,20 +216,20 @@ int main(int argc, char* argv[])
 	ResourceTableCreateInfo resource_table_info = {
 		.resource_path = resource_path
 	};
-	std::shared_ptr<ResourceTable> rt = ResourceTable::create(&resource_table_info); 
+	std::unique_ptr<ResourceTable> rt = ResourceTable::create(&resource_table_info); 
 	ImageLoader::registration(rt.get());
 	ModelLoader::registration(rt.get());
 
-	std::shared_ptr<ResourceHotReloader> hot_retable = ResourceHotReloader::create(rt);
+	std::unique_ptr<ResourceHotReloader> reloader = ResourceHotReloader::create(rt.get());
 
 	//-------------------------------------------------------------------------------------------------
 	// Renderer
 
 	GLRendererCreateInfo renderer_info = {
-		.resource_table = rt
+		.resource_table = rt.get()
 	};
 
-	std::shared_ptr<GLRenderer> renderer = GLRenderer::create(&renderer_info);
+	std::unique_ptr<GLRenderer> renderer = GLRenderer::create(&renderer_info);
 
 	if (!renderer) {
 		log_error("Failed to create renderer!");
@@ -266,7 +266,7 @@ int main(int argc, char* argv[])
 	double t0 = 0, t1 = 0;
 
 	while (!glfwWindowShouldClose(window)) {
-		hot_retable->process_updates();
+		reloader->process_updates();
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -316,10 +316,15 @@ int main(int argc, char* argv[])
         glfwSwapBuffers(window);   
 	}
 
+	renderer.reset(nullptr);
+	reloader.reset(nullptr);
+
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImPlot::DestroyContext();
 	ImGui::DestroyContext();
+
+	rt.reset(nullptr);
 
 	glfwDestroyWindow(window);
 	glfwTerminate();

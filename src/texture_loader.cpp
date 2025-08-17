@@ -108,9 +108,10 @@ static LoadResult gl_image_create_from_disk(ResourceTable *loader, ResourceHandl
 	result = loader->upload(h,"image" ,rgba); 
 
 	if (result != RESULT_SUCCESS) {
-		return result;
+		goto cleanup;
 	}
-
+cleanup:
+	if (rgba) free(rgba);
 	return result;
 }
 

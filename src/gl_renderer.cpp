@@ -14,7 +14,7 @@
 
 struct gl_renderer_impl
 {
-	std::shared_ptr<ResourceTable> table;
+	ResourceTable *table;
 
 	// TODO: Pool per-frame ubos by the number of frames in flight
 	BufferID frame_ubo;
@@ -48,7 +48,7 @@ std::unique_ptr<GLRenderer> GLRenderer::create(const GLRendererCreateInfo* info)
 
 	impl->table = info->resource_table;
 
-	LoadResult result = renderer_defaults_init(impl->table.get(), &impl->defaults);
+	LoadResult result = renderer_defaults_init(impl->table, &impl->defaults);
 
 	if (result != RESULT_SUCCESS) {
 		return nullptr;
@@ -71,6 +71,7 @@ std::unique_ptr<GLRenderer> GLRenderer::create(const GLRendererCreateInfo* info)
 
 GLRenderer::~GLRenderer()
 {
+	delete impl;
 }
 
 const RendererDefaults *GLRenderer::get_defaults() const 
@@ -83,7 +84,7 @@ FrameContext GLRenderer::begin_frame(FrameBeginInfo const *info)
 	const GLBuffer *ubo = impl->table->get<GLBuffer>(impl->frame_ubo);
 
 	FrameContext ctx {};
-	ctx.table = impl->table.get();
+	ctx.table = impl->table;
 	ctx.renderer = this;
 	ctx.data = framedata_create(info->camera);
 	ctx.ubo = impl->frame_ubo;

@@ -72,7 +72,7 @@ struct FrameContext
 
 struct GLRendererCreateInfo
 {
-	std::shared_ptr<ResourceTable> resource_table;
+	ResourceTable *resource_table;
 };
 
 typedef struct gl_renderer_impl gl_renderer_impl;

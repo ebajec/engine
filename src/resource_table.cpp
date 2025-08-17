@@ -63,7 +63,7 @@ static void monitor_callback(void *usr, utils::monitor_event_t event)
 	watcher->updates.push_back(std::move(update_info));
 }
 
-std::unique_ptr<ResourceHotReloader> ResourceHotReloader::create(std::shared_ptr<ResourceTable> table)
+std::unique_ptr<ResourceHotReloader> ResourceHotReloader::create(ResourceTable* table)
 {
 	std::unique_ptr<ResourceHotReloader> watcher (new ResourceHotReloader);
 	watcher->table = table;
@@ -118,7 +118,7 @@ LoadResult ResourceHotReloader::process_updates()
 			continue;
 		}
 
-		LoadResult res = reload_file_resource(table.get(),id);
+		LoadResult res = reload_file_resource(table,id);
 
 		if (res) {
 			log_error("Failed to reload resource : %s",info.path.c_str());
@@ -163,6 +163,7 @@ void ResourceTable::register_loader(std::string_view key, ResourceLoaderFns fns)
 
 ResourceTable::~ResourceTable()
 {
+	log_info("Clearing resource table");
 	for (size_t i = 0; i < entries.size(); ++i) {
 		ResourceHandle h = (uint32_t)i + 1;
 		destroy_handle(h);
@@ -219,6 +220,9 @@ void ResourceTable::destroy_handle(ResourceHandle h)
 	if (ent->reload_info) {
 		log_info("Deleted resource at location %s",ent->reload_info->path.c_str());
 		ent->reload_info.reset(nullptr);
+	} else {
+		log_info("Deleted resource with id %d (%s)",h,
+		   resource_type_strings[type]);
 	}
 
 	std::unique_lock<std::shared_mutex> lock(mut);

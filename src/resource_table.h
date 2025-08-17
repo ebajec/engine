@@ -24,6 +24,8 @@
 
 #define RESOURCE_HANDLE_NULL 0
 
+#define stringify(arg) #arg
+
 enum ResourceType :uint8_t
 {
 	RESOURCE_TYPE_NONE,
@@ -34,6 +36,17 @@ enum ResourceType :uint8_t
 	RESOURCE_TYPE_SHADER,
 	RESOURCE_TYPE_RENDER_TARGET,
 	RESOURCE_TYPE_MAX_ENUM
+};
+
+static const char* resource_type_strings[RESOURCE_TYPE_MAX_ENUM] =
+{
+	stringify(RESOURCE_TYPE_NONE),
+	stringify(RESOURCE_TYPE_MATERIAL),
+	stringify(RESOURCE_TYPE_MODEL),
+	stringify(RESOURCE_TYPE_IMAGE),
+	stringify(RESOURCE_TYPE_BUFFER),
+	stringify(RESOURCE_TYPE_SHADER),
+	stringify(RESOURCE_TYPE_RENDER_TARGET)
 };
 
 enum ResourceLoaderType
@@ -195,13 +208,13 @@ struct ResourceUpdateInfo
 
 struct ResourceHotReloader
 {
-	std::shared_ptr<ResourceTable> table;
+	ResourceTable *table;
 	std::unique_ptr<utils::monitor> monitor;
 
 	std::mutex mut;
 	std::vector<ResourceUpdateInfo> updates;
 
-	static std::unique_ptr<ResourceHotReloader> create(std::shared_ptr<ResourceTable> table);
+	static std::unique_ptr<ResourceHotReloader> create(ResourceTable *table);
 	LoadResult process_updates();
 };
 

@@ -13,13 +13,22 @@ static constexpr uint32_t TILE_WIDTH = 256;
 static constexpr uint32_t TILE_SIZE = TILE_WIDTH*TILE_WIDTH;
 static constexpr size_t TILE_CPU_PAGE_SIZE = 32;
 
-enum TileCPULoadState
+enum TileCPULoadStatus
 {
-	TILE_DATA_STATE_EMPTY,
+	TILE_CPU_STATE_EMPTY,
 	TILE_DATA_STATE_READY,
 	TILE_DATA_STATE_LOADING,
 	TILE_DATA_STATE_QUEUED,
 	TILE_DATA_STATE_CANCELLED,
+};
+
+union TileCPULoadState
+{
+	struct alignas(8) {
+		TileCPULoadStatus status;
+		uint32_t refs;
+	};
+	uint64_t u64;
 };
 
 typedef void(*TileLoaderFunc)(TileCode code, void* dst, void* usr, const std::atomic<TileCPULoadState>* p_state);
@@ -52,7 +61,6 @@ struct TileDataRef
 	uint8_t *data;
 	size_t size;
 	std::atomic<TileCPULoadState> *p_state;
-	std::atomic_int *p_refs;
 };
 
 struct TileCPUIndex
@@ -82,7 +90,6 @@ struct TileCPUCache
 	{
 		TileCode code;
 		std::atomic<TileCPULoadState> state;
-		std::atomic_int refs;
 	};
 
 	struct page_t
@@ -100,8 +107,8 @@ struct TileCPUCache
 
 	std::vector<std::unique_ptr<page_t>> m_pages;
 
-	size_t m_block_size;
-	size_t m_capacity = 1 << 14;
+	size_t m_tile_size;
+	size_t m_tile_cap = 1 << 14;
 private:
 	TileCPUIndex evict_one();	
 	TileCPUIndex allocate();

@@ -126,5 +126,8 @@ void main()
 	FragColor = mix(color,vec4(0,in_uv,1),0.0);
 	//FragColor = vec4(in_normal,1);
 	//FragColor = mix(FragColor,FACE_COLORS[cube_face(in_pos)],0.0);
-	//FragColor = mix(FragColor,vec4(0,in_uv,1),0.8);
+
+	vec2 diff = 2.0*in_uv - vec2(1.0);
+
+	FragColor = FragColor + 0.1*dot(diff,diff)*vec4(1,0,0,1);
 }

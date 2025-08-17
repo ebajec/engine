@@ -507,7 +507,7 @@ LoadResult globe_create(Globe *globe, ResourceTable *rt)
 	globe::init_debug(rt);
 
 	globe->cpu_cache.reset(
-		TileCPUCache::create(TILE_SIZE*sizeof(float),(size_t)4*GIGABYTE)
+		TileCPUCache::create(TILE_SIZE*sizeof(float),(size_t)1*GIGABYTE)
 	);
 	globe->source.reset(
 		TileDataSource::create()
@@ -590,14 +590,14 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	std::vector<TileGPUIndex> tile_textures;
 	std::vector<TileTexUpload> new_textures;
 
-	globe->gpu_cache->update(globe->cpu_cache.get(),data_tiles,tile_textures,new_textures);
+	size_t new_count = globe->gpu_cache->update(globe->cpu_cache.get(),data_tiles,tile_textures,new_textures);
 
 	LoadResult result = update_render_data(rt,globe,
 		pos,data_tiles,tile_textures);
 	
 	globe::update_boxes();
 
-	plot_tile_counts(count, new_textures.size());
+	plot_tile_counts(count, new_count);
 	ImGui::End();
 
 	return result;

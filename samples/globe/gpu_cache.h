@@ -1,7 +1,8 @@
 #ifndef TILE_CACHE_H
 #define TILE_CACHE_H
 
-#include "texture_loader.h"
+#include "resource_table.h"
+
 #include "tiling.h"
 #include "cpu_cache.h"
 
@@ -21,11 +22,11 @@ static constexpr uint32_t MAX_TILES = TILE_PAGE_SIZE*MAX_TILE_PAGES;
 
 enum TileGPULoadState
 {
-	TILE_TEX_STATE_EMPTY,
-	TILE_TEX_STATE_READY,
-	TILE_TEX_STATE_QUEUED,
-	TILE_TEX_STATE_UPLOADING,
-	TILE_TEX_STATE_CANCELLED
+	TILE_GPU_STATE_EMPTY,
+	TILE_GPU_STATE_READY,
+	TILE_GPU_STATE_QUEUED,
+	TILE_GPU_STATE_UPLOADING,
+	TILE_GPU_STATE_CANCELLED
 };
 
 struct TilePage
@@ -47,6 +48,15 @@ struct TileGPUIndex
 };
 
 static TileGPUIndex TILE_GPU_INDEX_NONE = {UINT16_MAX,UINT16_MAX};
+
+struct TileGPUUploadData
+{
+	TileDataRef data_ref;
+	std::atomic<TileGPULoadState> *p_state;
+	size_t offset;
+	TileCode code;
+	TileGPUIndex idx;
+};
 
 struct TileTexUpload
 {
@@ -89,6 +99,9 @@ private:
 
 	void insert(TileCode, TileGPUIndex);
 
+	void asynchronous_upload(const TileCPUCache *cpu_cache,
+		std::span<TileGPUUploadData> upload_data);
+
 public:
 	size_t update(
 		const TileCPUCache *cpu_cache,
@@ -98,9 +111,6 @@ public:
 	);
 
 	void bind_texture_arrays(uint32_t base) const;
-
-	void asynchronous_upload(const TileCPUCache *data_cache,
-		std::span<TileTexUpload> uploads);
 
 	void synchronous_upload(const TileCPUCache *data_cache,
 		std::span<TileTexUpload> uploads);

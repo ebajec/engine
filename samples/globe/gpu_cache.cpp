@@ -5,6 +5,65 @@
 
 #include <cstring>
 
+struct GPUUploadContext
+{
+	GLuint pbo;
+	std::atomic_int refs; 
+	void* mapped;
+	size_t cap;
+};
+
+GPUUploadContext *upload_context_create(size_t cap)
+{
+	GPUUploadContext *ctx  = new GPUUploadContext{};
+	glCreateBuffers(1,&ctx->pbo);
+	ctx->refs = 0;
+	ctx->cap = cap;
+	
+	glNamedBufferStorage(
+		ctx->pbo,
+		cap,
+		nullptr,
+		GL_MAP_WRITE_BIT | 
+		GL_MAP_PERSISTENT_BIT | 
+		GL_MAP_COHERENT_BIT | 
+		GL_DYNAMIC_STORAGE_BIT
+	);
+
+	if (gl_check_err())
+		goto failure;
+
+	ctx->mapped = glMapNamedBufferRange(
+		ctx->pbo, 
+		0, 
+		cap, 
+		GL_MAP_WRITE_BIT | 
+		GL_MAP_PERSISTENT_BIT | 
+		GL_MAP_COHERENT_BIT
+	);
+
+	if (gl_check_err())
+		goto failure;
+
+	return ctx;
+
+failure:
+	if (ctx->pbo) glDeleteBuffers(1,&ctx->pbo);
+	delete ctx;
+	return nullptr;
+}
+
+void upload_context_destroy(GPUUploadContext *ctx)
+{
+	assert(ctx);
+
+	glUnmapNamedBuffer(ctx->pbo);
+	glDeleteBuffers(1,&ctx->pbo);
+
+	delete ctx;
+}
+
+
 std::unique_ptr<TilePage> create_page(GLuint format)
 {
 	std::unique_ptr<TilePage> page (new TilePage{});
@@ -108,16 +167,17 @@ TileGPUIndex TileGPUCache::evict_one()
 
 	std::atomic<TileGPULoadState> *tex_state = &m_pages[idx.page]->states[idx.tex]; 
 
-	TileGPULoadState state;
+	TileGPULoadState state = tex_state->load();
 	do {
-		state = tex_state->load(); 
-		if (state == TILE_TEX_STATE_CANCELLED) 
+		if (state == TILE_GPU_STATE_CANCELLED) 
 			return TILE_GPU_INDEX_NONE;
-		if (state == TILE_TEX_STATE_UPLOADING) {
-			tex_state->store(TILE_TEX_STATE_CANCELLED);
+		if (state == TILE_GPU_STATE_UPLOADING || state == TILE_GPU_STATE_QUEUED) {
+			tex_state->store(TILE_GPU_STATE_CANCELLED);
 			return TILE_GPU_INDEX_NONE;
 		}
-	} while(!tex_state->compare_exchange_weak(state, TILE_TEX_STATE_EMPTY));
+	} while(!tex_state->compare_exchange_weak(state, TILE_GPU_STATE_EMPTY));
+
+	//log_info("Evicted tile %d from GPU cache",ent.first);
 
 	m_lru.pop_back();
 	m_map.erase(ent.first);
@@ -144,12 +204,15 @@ size_t TileGPUCache::update(
 
 	reserve(tile_count);
 
+	std::vector<TileGPUUploadData> upload_data;
+	size_t offset = 0;
+
 	for (size_t i = 0; i < tile_count; ++i) {
 		TileCode code = tiles[i];
 
 		if (code == TILE_CODE_NONE) {
 			textures.push_back(TILE_GPU_INDEX_NONE);
-			//log_info("Empty texture loaded at position %d in tile list", i); continue;
+			continue;
 		}
 
 		auto it = m_map.find(code);
@@ -162,99 +225,53 @@ size_t TileGPUCache::update(
 			lru_list_t::iterator ent = it->second;
 			m_lru.splice(m_lru.begin(), m_lru, ent);
 			idx = ent->second;
+
+			std::atomic<TileGPULoadState>* p_state = &m_pages[idx.page]->states[idx.tex]; 
+
 		} else {
+			std::optional<TileDataRef> ref = cpu_cache->acquire_block(code); 
+			if (!ref) {
+				log_warn("Failed to queue upload for incomplete tile %d", code);
+				textures.push_back(idx);
+				continue;
+			} 
+
 			idx = (m_map.size() >= MAX_TILES) ? 
 				evict_one() : allocate();
 
 			if (idx.is_valid()) {
 				insert(code, idx);
 
-				new_tiles.push_back(TileTexUpload{
-					.code = code, 
-					.idx = idx
-				});
+				std::atomic<TileGPULoadState> * p_state = &m_pages[idx.page]->states[idx.tex]; 
+				TileGPUUploadData data = {
+					.data_ref = *ref,
+					.p_state = p_state,
+					.offset = offset,
+					.code = code,
+					.idx = idx,
+				};
+
+				data.p_state->store(TILE_GPU_STATE_QUEUED);
+				upload_data.push_back(data);
+
+				offset += m_tile_size_bytes;
+			} else {
+				cpu_cache->release_block(*ref);
 			}
 		}
 
 		textures.push_back(idx);
 	}
 
-	asynchronous_upload(cpu_cache, new_tiles);
+	asynchronous_upload(cpu_cache, upload_data);
 
-	return new_tiles.size();
-}
-
-struct TileTexUploadData
-{
-	TileDataRef data_ref;
-	std::atomic<TileGPULoadState> *p_state;
-	size_t offset;
-	TileCode code;
-	TileGPUIndex idx;
-};
-
-struct GPUUploadContext
-{
-	GLuint pbo;
-	std::atomic_int refs; 
-	void* mapped;
-	size_t cap;
-};
-
-GPUUploadContext *upload_context_create(size_t cap)
-{
-	GPUUploadContext *ctx  = new GPUUploadContext{};
-	glCreateBuffers(1,&ctx->pbo);
-	ctx->refs = 0;
-	ctx->cap = cap;
-	
-	glNamedBufferStorage(
-		ctx->pbo,
-		cap,
-		nullptr,
-		GL_MAP_WRITE_BIT | 
-		GL_MAP_PERSISTENT_BIT | 
-		GL_MAP_COHERENT_BIT | 
-		GL_DYNAMIC_STORAGE_BIT
-	);
-
-	if (gl_check_err())
-		goto create_failed;
-
-	ctx->mapped = glMapNamedBufferRange(
-		ctx->pbo, 
-		0, 
-		cap, 
-		GL_MAP_WRITE_BIT | 
-		GL_MAP_PERSISTENT_BIT | 
-		GL_MAP_COHERENT_BIT
-	);
-
-	if (gl_check_err())
-		goto create_failed;
-
-	return ctx;
-
-create_failed:
-	if (ctx->pbo) glDeleteBuffers(1,&ctx->pbo);
-	delete ctx;
-	return nullptr;
-}
-
-void upload_context_destroy(GPUUploadContext *ctx)
-{
-	assert(ctx);
-
-	glUnmapNamedBuffer(ctx->pbo);
-	glDeleteBuffers(1,&ctx->pbo);
-
-	delete ctx;
+	return upload_data.size();
 }
 
 void tile_upload_fn(
 	const TileCPUCache *cpu_cache,
 	GPUUploadContext *ctx,
-	TileTexUploadData data
+	TileGPUUploadData data
 )
 {
 	TileDataRef ref = data.data_ref;
@@ -266,15 +283,15 @@ void tile_upload_fn(
 	TileGPULoadState gpu_state;
 	do {
 		gpu_state = data.p_state->load();
-		if (gpu_state == TILE_TEX_STATE_CANCELLED) {
+		if (gpu_state == TILE_GPU_STATE_CANCELLED) {
 			log_info("tile_upload_fn : Cancelled upload");
 			goto cleanup;
 		}
-		if (gpu_state != TILE_TEX_STATE_QUEUED) {
+		if (gpu_state != TILE_GPU_STATE_QUEUED) {
 			log_error("tile_upload_fn : Invalid tile state");
 			goto cleanup;
 		}
-	} while (!data.p_state->compare_exchange_weak(gpu_state, TILE_TEX_STATE_UPLOADING));
+	} while (!data.p_state->compare_exchange_weak(gpu_state, TILE_GPU_STATE_UPLOADING));
 
 	memcpy(dst,ref.data,ref.size);
 
@@ -284,56 +301,14 @@ cleanup:
 	return;
 }
 
-
-
 //------------------------------------------------------------------------------
 // Loading
 
 void TileGPUCache::asynchronous_upload(const TileCPUCache *cpu_cache,
-	std::span<TileTexUpload> uploads)
+	std::span<TileGPUUploadData> upload_data)
 {
-	if (!uploads.size())
+	if (!upload_data.size())
 		return;
-
-	std::vector<TileTexUploadData> upload_data;
-	upload_data.reserve(uploads.size());
-
-	size_t offset = 0;
-
-	for (size_t i = 0; i < uploads.size(); ++i) {
-		TileTexUpload upload = uploads[i];
-
-		TileGPUIndex idx = upload.idx;
-
-		if (!idx.is_valid()) {
-			continue;
-		}
-
-		std::optional<TileDataRef> ref = cpu_cache->acquire_block(upload.code); 
-
-		if (!ref) {
-			log_error("Queued upload for incomplete tile %d", upload.code);
-			continue;
-		} 
-
-		TileTexUploadData data = {
-			.data_ref = *ref,
-			.p_state = &m_pages[idx.page]->states[idx.tex],
-			.offset = offset,
-			.code = upload.code,
-			.idx = idx,
-		};
-
-		data.p_state->store(TILE_TEX_STATE_QUEUED);
-
-		upload_data.push_back(data);
-
-		offset += m_tile_size_bytes;
-	}
-
-	if (upload_data.empty()) {
-		return;
-	}
 
 	size_t total_size = upload_data.size()*m_tile_size_bytes;
 
@@ -341,11 +316,15 @@ void TileGPUCache::asynchronous_upload(const TileCPUCache *cpu_cache,
 		upload_context_create(total_size),upload_context_destroy);
 
 	GPUUploadContext* p_ctx = ctx.get();
-	for (const TileTexUploadData& data : upload_data) {
+	for (const TileGPUUploadData& tmp_data : upload_data) {
+		TileGPUUploadData data = tmp_data;
+
 		++ctx->refs;
+
 		g_schedule_task([=](){
 			tile_upload_fn(cpu_cache,p_ctx, data);
 		});
+
 	}
 
 	while (ctx->refs > 0) {
@@ -354,7 +333,7 @@ void TileGPUCache::asynchronous_upload(const TileCPUCache *cpu_cache,
 
 	glBindBuffer(GL_PIXEL_UNPACK_BUFFER,ctx->pbo);
 	for (size_t i = 0; i < upload_data.size(); ++i) {
-		TileTexUploadData data = upload_data[i];
+		TileGPUUploadData data = upload_data[i];
 
 		if (!data.idx.is_valid()) {
 			log_error("Invalid index in queued texture uploads (this should never happen)");
@@ -364,8 +343,8 @@ void TileGPUCache::asynchronous_upload(const TileCPUCache *cpu_cache,
 		TileGPULoadState state = data.p_state->load(); 
 
 		// TODO : Will probably need CAS here eventually? Keep in in mind.
-		if (state == TILE_TEX_STATE_CANCELLED) {
-			data.p_state->store(TILE_TEX_STATE_EMPTY);
+		if (state == TILE_GPU_STATE_CANCELLED) {
+			data.p_state->store(TILE_GPU_STATE_EMPTY);
 			continue;
 		}
 
@@ -381,7 +360,7 @@ void TileGPUCache::asynchronous_upload(const TileCPUCache *cpu_cache,
 			m_data_type,
 			(void*)(data.offset)
 		);
-		data.p_state->store(TILE_TEX_STATE_READY);
+		data.p_state->store(TILE_GPU_STATE_READY);
 	}
 }
 
