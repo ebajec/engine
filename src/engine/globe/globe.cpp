@@ -157,7 +157,6 @@ struct selection_entry_t
 static inline int select_tiles_rec(
 	std::vector<selection_entry_t> &out, 
 	const select_tiles_params *params,
-	glm::dvec2 origin_uv,
 	TileCode code)
 {
 	const bool enable_boxes = g_enable_boxes;
@@ -196,7 +195,7 @@ static inline int select_tiles_rec(
 
 	int status = 0;
 	for (uint8_t i = 0; i < 4; ++i) {
-		status += select_tiles_rec(out, params, origin_uv, children[i]);
+		status += select_tiles_rec(out, params, children[i]);
 	}
 
 	// If status is zero than no tiles were added, so add this tile
@@ -218,14 +217,13 @@ void select_tiles(
 
 	std::vector<selection_entry_t> selection;
 	for (uint8_t f = 0; f < CUBE_FACES; ++f) {
-		glm::dvec2 origin_uv = globe_to_cube_face(params.origin,f);
 
 		TileCode code = {
 			.face = f,
 			.zoom = 0,
 			.idx = 0
 		};
-		select_tiles_rec(selection, &params, origin_uv, code); 
+		select_tiles_rec(selection, &params, code); 
 	}
 
 	constexpr auto comp = [](const selection_entry_t &a, const selection_entry_t &b) {
