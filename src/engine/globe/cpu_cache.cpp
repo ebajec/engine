@@ -405,11 +405,12 @@ static float test_elev_fn2(glm::dvec2 uv, uint8_t f, uint8_t zoom)
 
 	float g = 0;
 	for (size_t i = 0; i < coeff_count; ++i) {
-		double c = 4*((double)i + 1);
-		g += (coeffs[i]/(float)c)*(float)(sin(c*p.x)*cos(c*p.y)*sin(c*p.z)*cos(c*p.z*p.x));
+		double idx = (double)i + 1;
+		double c = 512*(idx);
+		g += (coeffs[i]/(float)idx)*(float)(sin(c*p.x)*cos(c*p.y)*sin(c*p.z)*cos(c*p.z*p.x));
 	}
 
-	g *= 0.4f;
+	g *= 0.001f;
 
 	return g;
 }

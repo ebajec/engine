@@ -556,8 +556,8 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	glm::dvec3 pos = camera_get_pos(p_camera->view);
 
 	if (true) {
-		static double h_max = 0.1;
-		static double h_min = -0.1;
+		static double h_max = 0.001;
+		static double h_min = -0.001;
 
 		double r_min = 1.0 + h_min;
 		double r_max = 1.0 + h_max;

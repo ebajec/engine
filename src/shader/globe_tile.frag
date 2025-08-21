@@ -59,8 +59,17 @@ void main()
 
 	float val = valid ? texture(u_tex_arrays[in_tex_idx.page], uvw).r : 0;
 
-	vec4 color = mix(vec4(0,0.5,0,1), vec4(0.4,0.45,0.5,1), clamp(20*val,0,1));
-
+	float s = 1.0 + 1000*val; 
+	vec4 color = 
+	mix(
+		mix(
+			vec4(1,0.0,0,1),
+			vec4(0,0.5,0,1),
+			clamp(2*s,0,1)
+		), 
+		vec4(0.4,0.45,0.5,1), 
+		clamp(2*s - 1,0,1)
+	);
 	float t = TWOPI*fract(u_frame.t*0.001);
 
 	vec2 z = vec2(cos(t),sin(t));
@@ -73,9 +82,9 @@ void main()
 	};
 
 	vec4 sun_colors[4] = { 
-		vec4(1,0,0,1),
-		vec4(0,1,0,1),
-		vec4(0,0,1,1),
+		0.3*vec4(1,1,1,1),
+		0.3*vec4(1,1,1,1),
+		0.3*vec4(1,1,1,1),
 		vec4(1,1,1,1),
 	};
 
@@ -102,7 +111,10 @@ void main()
 
 		spec = min(spec,0.1);
 
-		color = mix(diffuse,mix(color,vec4(0,0,0.5,0),0.5),0.2) + spec*vec4(1);
+		vec4 ambient = mix(color,vec4(0,0,0.05,0),0.5); 
+		color = clamp(mix(diffuse,ambient,0.2 - 1000*val),
+				vec4(0),color) 
+				+ spec*vec4(1);
 	}
 
 	FragColor = mix(color,vec4(0,in_uv,1),0.0);
@@ -111,5 +123,5 @@ void main()
 
 	vec2 diff = 2.0*in_uv - vec2(1.0);
 
-	FragColor = FragColor + 0.1*dot(diff,diff)*vec4(1,0,0,1);
+	FragColor = FragColor + 0.0*dot(diff,diff)*vec4(1,0,0,1);
 }
