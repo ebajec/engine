@@ -19,12 +19,6 @@ struct metadata_t
     uint count;
 };
 
-struct edge_t
-{
-	uint u; 
-	uint v;
-};
-
 layout (std430, binding = 0) buffer Vertices
 {
 	vert_data_t data[];
@@ -88,15 +82,14 @@ JoinResult compute_join_offset(vec2 v1, vec2 v2, float w)
 	float tan_tht_2 = sin_tht/(1+cos_tht);
 
 	float delta = w*tan_tht_2;
-	vec2 B = sign(sin_tht)*normalize(v1 - v2);
+	vec2 B = (abs(sin_tht) < 1e-4) ? 
+		vec2(-v1.y,v1.x) : (sign(sin_tht)*normalize(v1 - v2));
 
 	JoinResult result;
 	result.B = B;
 	result.delta = delta;
 	return result;
 }
-
-const bool loop = false;
 
 uint next_idx(uint idx) {
 	return (idx) < u_count ? idx + 1 : idx;
@@ -106,7 +99,7 @@ uint prev_idx(uint idx) {
 	return idx > 0 ? idx - 1 : 0;
 }
 
-bool use_edges = false;
+bool use_edges = true;
 
 void main()
 {

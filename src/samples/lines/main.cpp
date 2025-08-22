@@ -310,7 +310,7 @@ struct RandomLine : AppComponent
 
 				float t = TWOPI*(float)i/(float)(N - 1);
 
-				pos = vec2_from_complex(std::polar<float>(1,t) + v);
+				pos = 10.f*vec2_from_complex(std::polar<float>(1,t) + v);
 
 				pt.length += (i > 0) ? glm::length(pos - pt.pos) : 0; 
 				pt.pos = pos;
@@ -328,8 +328,8 @@ struct RandomLine : AppComponent
 
 				v += (0.5f + 0.5f*urandf())*c;
 
-				float tht = PI*(1.0 - 2.0*urandf());
-				c *= std::polar<float>(1, tht);
+			float tht = PI*(1.0 - 2.0*urandf());
+			c *= std::polar<float>(1, tht);
 			}
 
 			++edge;
@@ -529,7 +529,7 @@ int main(int argc, char* argv[])
 	ModelLoader::registration(table.get());
 	ImageLoader::registration(table.get());
 
-	std::shared_ptr<ResourceHotReloader> hot_retable = ResourceHotReloader::create(table.get());
+	std::shared_ptr<ResourceHotReloader> reloader = ResourceHotReloader::create(table.get());
 
 	//-------------------------------------------------------------------------------------------------
 	// Renderer
@@ -609,7 +609,7 @@ int main(int argc, char* argv[])
 	// main loop
 
 	while (!glfwWindowShouldClose(window)) {
-		hot_retable->process_updates();
+		reloader->process_updates();
 
 		glfwPollEvents();
 
