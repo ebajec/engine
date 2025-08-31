@@ -248,6 +248,15 @@ static aabb2_t sub_rect(TileCode parent, TileCode child)
 	return morton_u64_to_rect_f64(child.idx, (uint8_t)diff);
 }
 
+static glm::vec3 globe_tangent(glm::dvec2 uv)
+{
+	double u = uv.x;
+	double v = uv.y;
+	double frac = pow(1 + u*u + v*v,-3.0/2.0);
+	return glm::dvec3(1 + v*v, -u*v, -u)*frac;
+}
+
+
 static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_verts)
 {
 	uint8_t f = code.face;
@@ -274,6 +283,7 @@ static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_v
 				.pos = glm::vec3(p),
 				.uv = glm::vec2(tex_uv),
 				.normal = glm::vec3(p),
+				.big_uv = face_uv,
 				.code = parent
 			};
 
@@ -335,23 +345,32 @@ static GLuint globe_vao()
 	glEnableVertexArrayAttrib(vao,2);
 	glEnableVertexArrayAttrib(vao,3);
 	glEnableVertexArrayAttrib(vao,4);
+	glEnableVertexArrayAttrib(vao,5);
 
 	glVertexAttribFormat(0,3,GL_FLOAT,0,offsetof(GlobeVertex,pos));
 	glVertexAttribFormat(1,2,GL_FLOAT,0,offsetof(GlobeVertex,uv));
 	glVertexAttribFormat(2,3,GL_FLOAT,0,offsetof(GlobeVertex,normal));
-	glVertexAttribIFormat(3,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,left));
-	glVertexAttribIFormat(4,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,right));
+	glVertexAttribFormat(3,2,GL_FLOAT,0,offsetof(GlobeVertex,big_uv));
+	glVertexAttribIFormat(4,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,left));
+	glVertexAttribIFormat(5,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,right));
 
 	glVertexAttribBinding(0,0);
 	glVertexAttribBinding(1,0);
 	glVertexAttribBinding(2,0);
 	glVertexAttribBinding(3,0);
 	glVertexAttribBinding(4,0);
+	glVertexAttribBinding(5,0);
 
 	glBindVertexArray(0);
 
 	return vao;
 }
+
+struct alignas(16) TileMetadata
+{
+	glm::vec4 coord;
+	TileGPUIndex tex_idx;
+};
 
 static LoadResult create_render_data(ResourceTable *rt, RenderData &data)
 {
@@ -370,7 +389,7 @@ static LoadResult create_render_data(ResourceTable *rt, RenderData &data)
 	if (!data.vbo)
 		goto load_failed;
 
-	data.ssbo = create_buffer(rt, MAX_TILES*sizeof(TileGPUIndex),
+	data.ssbo = create_buffer(rt, MAX_TILES*sizeof(TileMetadata),
 						  GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
 	if (!data.ssbo)
 		goto load_failed;
@@ -407,6 +426,45 @@ static LoadResult update_render_data(
 		log_warn("Selected tile count is large (%ld)! Limiting to %d", 
 			tiles.size(), MAX_TILES);
 	}
+
+	//uint32_t cell_count = 0;
+	//std::unordered_map<TileCode, uint32_t, TileCodeHash> map;
+
+	//for (uint32_t i = 0; i < count; ++i) {
+	//	TileCode code = tiles[i];
+	//	TileCode cell = tile_cell_index(code);
+	//	auto it = map.find(cell);
+	//	if (it == map.end()) {
+	//		map[cell] = ++cell_count;
+	//	}
+	//}
+
+	//double dmin = DBL_MAX;
+	//uint32_t argmin = 0;
+
+	//std::vector<glm::dvec4> coords;
+	//coords.reserve(cell_count);
+
+	//for (auto [cell, idx] : map) {
+	//	//glm::dmat3 frame = tile_frame(cell);
+	//	glm::dvec4 T = cell_transform(cell);
+	//	coords.push_back(T);
+
+	//	double d = glm::length(origin - glm::dvec3(T)); 
+
+	//	if (d < dmin) {
+	//		dmin = d;
+	//		argmin = static_cast<uint32_t>(coords.size() - 1);
+	//	}
+	//}
+
+	//glm::dvec4 origin_coords = glm::dvec4(origin,coords[argmin].w);
+
+	//for (glm::dvec4& coord : coords) {
+	//	glm::dvec3 r = glm::dvec3(coord) - origin;
+	//	double s = origin_coords.w/coord.w;
+	//	coord = glm::dvec4(r,s);
+	//}
 
 	//uint32_t total = TILE_VERT_COUNT*count;
 
@@ -448,7 +506,15 @@ static LoadResult update_render_data(
 	glBindBuffer(GL_ARRAY_BUFFER, ssbo->id);
 	ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
 
-	memcpy(ptr, textures.data(), textures.size()*sizeof(TileGPUIndex));
+	TileMetadata *metadata = static_cast<TileMetadata*>(ptr);
+
+	for (uint32_t i = 0; i < count; ++i) {
+		// TODO : Triple indirection...
+		metadata[i] = {
+			.coord = glm::vec4(0),
+			.tex_idx = textures[i],
+		};
+	}
 
 	glUnmapBuffer(GL_ARRAY_BUFFER);
 
@@ -556,8 +622,8 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	glm::dvec3 pos = camera_get_pos(p_camera->view);
 
 	if (true) {
-		static double h_max = 0.001;
-		static double h_min = -0.001;
+		static double h_max = 0.00138;
+		static double h_min = -0.00138;
 
 		double r_min = 1.0 + h_min;
 		double r_max = 1.0 + h_max;

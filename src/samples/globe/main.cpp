@@ -142,7 +142,7 @@ int main(int argc, char* argv[])
 
 	if (!glfwInit())
 		return EXIT_FAILURE;
-
+	
 	struct {
 		struct{
 			const char *title = "test";
@@ -195,6 +195,8 @@ int main(int argc, char* argv[])
 		fprintf(stderr, "ERROR: Failed to load OpenGL\n");
 		return code; 
 	}
+
+	glfwSwapInterval(1);
 
 	//-------------------------------------------------------------------------------------------------
 	// App

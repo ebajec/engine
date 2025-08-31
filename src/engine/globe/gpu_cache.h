@@ -17,7 +17,7 @@
 #include <atomic>
 
 static constexpr uint32_t TILE_PAGE_SIZE = 128;
-static constexpr uint32_t MAX_TILE_PAGES = 16;
+static constexpr uint32_t MAX_TILE_PAGES = 8;
 static constexpr uint32_t MAX_TILES = TILE_PAGE_SIZE*MAX_TILE_PAGES;
 
 enum TileGPULoadState

@@ -11,8 +11,9 @@
 layout (location = 0) in vec3 pos;
 layout (location = 1) in vec2 in_uv;
 layout (location = 2) in vec3 normal;
-layout (location = 3) in uint code_left;
-layout (location = 4) in uint code_right;
+layout (location = 3) in vec2 face_uv;
+layout (location = 4) in uint code_left;
+layout (location = 5) in uint code_right;
 
 layout (location = 0) out vec3 out_pos;
 layout (location = 1) out vec2 out_uv;
@@ -28,6 +29,8 @@ uint TILE_CODE_ZOOM_BITS_SHIFT = 3;
 
 uint TILE_CODE_IDX_BITS_MASK = 
 	~(TILE_CODE_FACE_BITS_MASK | TILE_CODE_ZOOM_BITS_MASK);
+
+const float GLOBE_SCALE = 0.00138f;
 
 aabb2_t morton_u32_to_rect_f32(uint index, uint level)
 {
@@ -90,7 +93,7 @@ vec3 face_to_world(vec3 v, uint face)
 	return vec3(0);
 }
 
-vec2 tex_grad(tex_idx_t idx, vec2 uv, uint zoom)
+vec2 tex_grad(tex_idx_t idx, vec2 uv)
 {
 	uint pg = idx.page;
 	uint tx = idx.tex;
@@ -113,21 +116,23 @@ vec2 tex_grad(tex_idx_t idx, vec2 uv, uint zoom)
 
 	float dfdv = (fv2 - fv1)/(v2 - v1);
 
-	return vec2(dfdu,dfdv)*(1<<zoom);
+	return vec2(dfdu,dfdv);
 }
 
-vec3 globe_normal(float f, vec2 df, vec2 uv)
+vec3 globe_normal(vec3 n, float f, vec2 df, vec2 uv, uint face, uint zoom)
 {
+	float s = 1 << zoom;
 	float u = uv.x;
 	float v = uv.y;
 	float frac = pow(1 + u*u + v*v,-3.0/2.0);
 	vec3 Su = vec3(1 + v*v, -u*v, -u)*frac;
 	vec3 Sv = vec3(-u*v, 1 + u*u, -v)*frac;
 
-	vec3 N = normalize(cross(Su,Sv));
+	vec3 Mu = face_to_world(Su*(1.0 + f)/s,face) + n*df.x;
+	vec3 Mv = face_to_world(Sv*(1.0 + f)/s,face) + n*df.y;
 
-	vec3 Mu = Su*(1.0 + f) + N*df.x;
-	vec3 Mv = Sv*(1.0 + f) + N*df.y;
+	//vec3 Mu = face_to_world(Su*(1.0),face);
+	//vec3 Mv = face_to_world(Sv*(1.0),face);
 
 	return normalize(cross(Mu,Mv));
 }
@@ -138,38 +143,38 @@ void main()
 	mat4 pv = u_frame.pv;
 
 	vec4 wpos = vec4(pos, 1);
-	vec4 n = vec4(normal,0);
 
 	uint tile_idx = gl_VertexID/TILE_VERT_COUNT;
-	tex_idx_t tex_idx = decode_tex_idx(tex_indices[tile_idx]);
 
+	metadata_t mdata = metadata[tile_idx];
+
+	tex_idx_t tex_idx = decode_tex_idx(mdata.tex_idx);
 	tile_code_t code = from_input(code_left,code_right);
 
 	vec2 uv = adjust_uv_for_clamp(in_uv); 
 	vec3 uvw = vec3(uv, tex_idx.tex);
 	bool valid = is_valid(tex_idx); 
 
+	vec3 n = normal;
+
 	vec3 N = vec3(0);
 	vec4 val = vec4(0);
+	vec2 df = vec2(0);
 
 	if (valid) {
 		val = texture(u_tex_arrays[tex_idx.page], uvw);
 		float f = val.r;
-		vec2 df = tex_grad(tex_idx, uv, code.zoom);
+		df = tex_grad(tex_idx, uv);
 
-		aabb2_t rect = morton_u32_to_rect_f32(code.idx,code.zoom);
-		vec2 uv_face = mix(rect.min,rect.max,in_uv);
+		N = globe_normal(n,f,df,2.0*face_uv - vec2(1.0),code.face,code.zoom);
 
-		N = globe_normal(f,df,2.0*uv_face - vec2(1.0));
-		N = face_to_world(N,code.face);
-
-		wpos += n*f;
+		wpos += vec4(n*f,0);
 	}
 
 	out_pos = wpos.xyz;
 	out_uv = uv;
 	out_normal = N;
-	out_color = val;
+	out_color = vec4(100*df,0,1);
 	out_tex_idx = tex_idx;
 
 	gl_Position = (pv*wpos);

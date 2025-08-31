@@ -20,6 +20,7 @@ namespace globe
 		glm::vec3 pos;
 		glm::vec2 uv;
 		glm::vec3 normal;
+		glm::vec2 big_uv;
 		union {
 			struct {
 				uint32_t left; 

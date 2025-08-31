@@ -19,6 +19,12 @@ struct tex_idx_t
 	uint tex;
 };
 
+struct metadata_t
+{
+	vec4 coord;
+	uint tex_idx;
+};
+
 const uint MAX_TILE_PAGES = 16;
 const uint TILE_VERT_WIDTH = 32;
 const uint TILE_VERT_COUNT = TILE_VERT_WIDTH*TILE_VERT_WIDTH;
@@ -26,9 +32,9 @@ const uint TILE_VERT_COUNT = TILE_VERT_WIDTH*TILE_VERT_WIDTH;
 layout (binding = 0) uniform sampler2D u_tex;
 layout (binding = 1) uniform sampler2DArray u_tex_arrays[MAX_TILE_PAGES];
 
-layout (std430, binding = 0) buffer TexIndices
+layout (std430, binding = 0) buffer Metadata
 {
-	uint tex_indices[];
+	metadata_t metadata[];
 };
 
 tex_idx_t decode_tex_idx(uint idx)

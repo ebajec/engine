@@ -8,8 +8,9 @@
 #include <imgui.h>
 
 #include <atomic>
+#include <thread>
 
-static int MAX_TILES_IN_FLIGHT = 9;
+static int MAX_TILES_IN_FLIGHT = std::thread::hardware_concurrency()/2;
 static std::atomic_int g_tiles_in_flight = 0;
 
 static void test_loader_fn(TileCode code, void *dst, void *usr,
@@ -384,17 +385,25 @@ std::vector<TileCode> TileCPUCache::update(
 
 static constexpr size_t coeff_count = 5;
 static float coeffs[coeff_count] = {};
+static glm::vec3 phases[coeff_count] = {};
+
+static float urandf1()
+{
+	return (1.0f - (float)rand())/(float)RAND_MAX;
+}
 
 static void init_coeffs()
 {
 	for (size_t i = 0; i < coeff_count; ++i) {
 		coeffs[i] = (1.0f - (float)rand())/(float)RAND_MAX; 
+		phases[i] = glm::vec3(
+			urandf1(),urandf1(),urandf1());
 	}
 }
 
 static float test_elev_fn2(glm::dvec2 uv, uint8_t f, uint8_t zoom)
 {
-	glm::dvec3 p = cube_to_globe(f, uv);
+	glm::vec3 p = cube_to_globe(f, uv);
 
 	static int init = 0;
 
@@ -405,12 +414,13 @@ static float test_elev_fn2(glm::dvec2 uv, uint8_t f, uint8_t zoom)
 
 	float g = 0;
 	for (size_t i = 0; i < coeff_count; ++i) {
-		double idx = (double)i + 1;
-		double c = 512*(idx);
-		g += (coeffs[i]/(float)idx)*(float)(sin(c*p.x)*cos(c*p.y)*sin(c*p.z)*cos(c*p.z*p.x));
+		float idx = (float)i + 1.f;
+		float c = 1024.f*(idx);
+		glm::vec3 h = 512.f*phases[i]*TWOPIf;
+		g += (coeffs[i]/(float)idx)*(sinf(c*p.x - h.x)*sinf(c*p.y - h.y)*sinf(c*p.z - h.z));
 	}
 
-	g *= 0.001f;
+	g *= 0.00138f;
 
 	return g;
 }
@@ -436,8 +446,8 @@ void test_loader_fn(TileCode code, void *dst, void *usr,
 			return;
 
 		for (size_t j = 0; j < TILE_WIDTH; ++j) {
-			glm::vec2 f = glm::vec2(rect.min) + 
-				uv * glm::vec2((rect.max - rect.min));
+			glm::vec2 f = glm::mix(rect.min,rect.max,uv);
+			//glm::vec2(rect.min) + uv * glm::vec2((rect.max - rect.min)); 
 
 			float g = test_elev_fn2(f, code.face, code.zoom);
 			data[idx++] = g;

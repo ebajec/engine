@@ -92,8 +92,7 @@ static inline glm::vec3 rotate(glm::vec3 v, glm::vec3 axis, float tht)
 
 static inline glm::vec3 camera_get_pos(glm::mat4 const& view) 
 {
-	glm::mat3 inv = glm::transpose(glm::mat3(view));
-	return inv*(-glm::vec3(view[3]));
+	return -glm::vec3(view[3])*glm::mat3(view);
 
 }
 

@@ -152,15 +152,25 @@ static inline glm::dmat3 tile_frame(TileCode code)
 	return orthonormal_globe_frame(mid, code.face);
 }
 
-static TileCode tile_cell_index(TileCode code)
+static inline TileCode tile_cell_index(TileCode code)
 {
 	uint8_t cell_zoom = code.zoom/8;
 	uint32_t shift = 16*cell_zoom;
 	return TileCode {
-		.zoom = cell_zoom,
+		.zoom = static_cast<uint8_t>(8*cell_zoom),
 		.face = code.face,
 		.idx = code.idx >> shift
 	};
+}
+
+static inline glm::dvec4 cell_transform(TileCode cell)
+{
+	//if (cell.zoom == 0)
+		return glm::dvec4(0,0,0,1);
+
+	aabb2_t rect = morton_u64_to_rect_f64(cell.idx, cell.zoom);
+	glm::dvec3 c = cube_to_globe(cell.face, 0.5*(rect.min + rect.max));
+	return glm::dvec4(c,(double)(1 << cell.zoom));
 }
 
 static inline constexpr TileCode tile_encode(uint8_t zoom, glm::dvec3 p)
