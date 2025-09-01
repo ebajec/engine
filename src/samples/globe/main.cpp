@@ -170,7 +170,12 @@ int main(int argc, char* argv[])
 		}
 	}
 
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
+
 	GLFWmonitor *monitor = glfw_select_monitor(preferred_monitor);
+
 	GLFWwindow *window = glfwCreateWindow(
 		params.win.width, 
 		params.win.height, 
@@ -195,8 +200,6 @@ int main(int argc, char* argv[])
 		fprintf(stderr, "ERROR: Failed to load OpenGL\n");
 		return code; 
 	}
-
-	glfwSwapInterval(1);
 
 	//-------------------------------------------------------------------------------------------------
 	// App

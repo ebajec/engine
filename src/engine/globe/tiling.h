@@ -190,7 +190,9 @@ static inline constexpr TileCode tile_encode(uint8_t zoom, glm::dvec3 p)
 	return code; 
 }
 
-static inline constexpr double tile_area(uint8_t lvl)
+// very rough approximation used to estimate screen error for 
+// a tile. Improve this.
+static inline constexpr double tile_factor(uint8_t lvl)
 {
 	// TODO : Compute the actual surface integral (or approximate with
 	// a series to an acceptable order).

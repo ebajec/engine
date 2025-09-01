@@ -23,7 +23,7 @@ enum TileCPULoadStatus
 	TILE_CPU_STATE_EMPTY,
 	TILE_CPU_STATE_READY,
 	TILE_CPU_STATE_LOADING,
-	TILE_DATA_STATE_QUEUED,
+	TILE_CPU_STATE_QUEUED,
 	TILE_CPU_STATE_CANCELLED,
 };
 
@@ -47,7 +47,7 @@ struct TileDataSource
 		TileCodeHash
 	> m_data;
 
-	int m_debug_zoom = 0;
+	int m_debug_zoom = 8;
 
 	TileLoaderFunc m_loader;
 	void* m_usr;
@@ -87,15 +87,6 @@ static constexpr TileCPUIndex TILE_CPU_INDEX_NONE = {UINT32_MAX,UINT32_MAX};
 
 struct TileCPUCache
 {
-	typedef std::list<TileCPUIndex> lru_list_t;
-
-	std::unordered_map<
-		TileCode, 
-		lru_list_t::iterator, 
-		TileCodeHash
-	> m_map;
-	lru_list_t m_lru;
-
 	struct entry_t
 	{
 		TileCode code;
@@ -108,6 +99,14 @@ struct TileCPUCache
 		std::vector<uint32_t> free_list;
 		std::unique_ptr<uint8_t[]> mem;
 	};
+
+	typedef std::list<TileCPUIndex> lru_list_t;
+
+	lru_list_t m_lru;
+	std::unordered_map<
+		uint64_t, 
+		lru_list_t::iterator 
+	> m_map;
 
 	std::priority_queue<
 		uint16_t, 

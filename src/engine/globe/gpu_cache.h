@@ -17,24 +17,8 @@
 #include <atomic>
 
 static constexpr uint32_t TILE_PAGE_SIZE = 128;
-static constexpr uint32_t MAX_TILE_PAGES = 8;
+static constexpr uint32_t MAX_TILE_PAGES = 16;
 static constexpr uint32_t MAX_TILES = TILE_PAGE_SIZE*MAX_TILE_PAGES;
-
-enum TileGPULoadState
-{
-	TILE_GPU_STATE_EMPTY,
-	TILE_GPU_STATE_READY,
-	TILE_GPU_STATE_QUEUED,
-	TILE_GPU_STATE_UPLOADING,
-	TILE_GPU_STATE_CANCELLED
-};
-
-struct TilePage
-{
-	std::atomic<TileGPULoadState> states[TILE_PAGE_SIZE];
-	std::vector<uint16_t> free_list;
-	GLuint tex_array;
-};
 
 struct TileGPUIndex
 {
@@ -48,6 +32,15 @@ struct TileGPUIndex
 };
 
 static TileGPUIndex TILE_GPU_INDEX_NONE = {UINT16_MAX,UINT16_MAX};
+
+enum TileGPULoadState
+{
+	TILE_GPU_STATE_EMPTY,
+	TILE_GPU_STATE_READY,
+	TILE_GPU_STATE_QUEUED,
+	TILE_GPU_STATE_UPLOADING,
+	TILE_GPU_STATE_CANCELLED
+};
 
 struct TileGPUUploadData
 {
@@ -64,6 +57,13 @@ struct TileTexUpload
 	TileGPUIndex idx;
 };
 
+struct TileGPUPage
+{
+	std::atomic<TileGPULoadState> states[TILE_PAGE_SIZE];
+	std::vector<uint16_t> free_list;
+	GLuint tex_array;
+};
+
 struct TileGPUCache
 {
 	typedef std::list<std::pair<TileCode,TileGPUIndex>> lru_list_t;
@@ -71,9 +71,8 @@ struct TileGPUCache
 	// TODO : Robin hood hash table instead of this
 	lru_list_t m_lru;
 	std::unordered_map<
-		TileCode, 
-		lru_list_t::iterator,
-		TileCodeHash
+		uint64_t, 
+		lru_list_t::iterator
 	> m_map;
 
 	std::priority_queue<
@@ -82,7 +81,7 @@ struct TileGPUCache
 		std::greater<uint16_t>
 	> m_open_pages;
 
-	std::vector<std::unique_ptr<TilePage>> m_pages;
+	std::vector<std::unique_ptr<TileGPUPage>> m_pages;
 
 	GLuint m_data_format = GL_R32F;
 	GLuint m_img_format = GL_RED;
@@ -92,14 +91,12 @@ struct TileGPUCache
 
 	~TileGPUCache();
 private:
+	TileGPUIndex evict_one();
 	TileGPUIndex allocate();
+
 	void deallocate(TileGPUIndex idx);
 	void reserve(uint32_t count);
-
-	TileGPUIndex evict_one();
-
 	void insert(TileCode, TileGPUIndex);
-
 	void asynchronous_upload(const TileCPUCache *cpu_cache,
 		std::span<TileGPUUploadData> upload_data);
 

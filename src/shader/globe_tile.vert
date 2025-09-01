@@ -93,30 +93,36 @@ vec3 face_to_world(vec3 v, uint face)
 	return vec3(0);
 }
 
-vec2 tex_grad(tex_idx_t idx, vec2 uv)
+float sample_elevation(tex_idx_t idx, vec2 uv)
+{
+	return texture(u_tex_arrays[idx.page], vec3(uv, idx.tex)).r;
+}
+
+vec2 tex_grad(tex_idx_t idx, vec2 uv, uint zoom)
 {
 	uint pg = idx.page;
 	uint tx = idx.tex;
 
 	float h = 1.0/512.0;
+	float s = 1 << zoom;
 
 	float u1 = clamp(uv.x - h,h,1 - h);
 	float u2 = clamp(uv.x + h,h,1 - h);
 
-	float fu1 = texture(u_tex_arrays[pg], vec3(vec2(u1,uv.y), tx)).r;
-	float fu2 = texture(u_tex_arrays[pg], vec3(vec2(u2,uv.y), tx)).r;
+	float fu1 = sample_elevation(idx, vec2(u1,uv.y));
+	float fu2 = sample_elevation(idx, vec2(u2,uv.y));
 
 	float dfdu = (fu2 - fu1)/(u2 - u1);
 
 	float v1 = clamp(uv.y - h,h,1 - h);
 	float v2 = clamp(uv.y + h,h,1 - h);
 
-	float fv1 = texture(u_tex_arrays[pg], vec3(vec2(uv.x,v1), tx)).r;
-	float fv2 = texture(u_tex_arrays[pg], vec3(vec2(uv.x,v2), tx)).r;
+	float fv1 = sample_elevation(idx, vec2(uv.x, v1));
+	float fv2 = sample_elevation(idx, vec2(uv.x, v2));
 
 	float dfdv = (fv2 - fv1)/(v2 - v1);
 
-	return vec2(dfdu,dfdv);
+	return vec2(dfdu,dfdv)*s;
 }
 
 vec3 globe_normal(vec3 n, float f, vec2 df, vec2 uv, uint face, uint zoom)
@@ -128,11 +134,8 @@ vec3 globe_normal(vec3 n, float f, vec2 df, vec2 uv, uint face, uint zoom)
 	vec3 Su = vec3(1 + v*v, -u*v, -u)*frac;
 	vec3 Sv = vec3(-u*v, 1 + u*u, -v)*frac;
 
-	vec3 Mu = face_to_world(Su*(1.0 + f)/s,face) + n*df.x;
-	vec3 Mv = face_to_world(Sv*(1.0 + f)/s,face) + n*df.y;
-
-	//vec3 Mu = face_to_world(Su*(1.0),face);
-	//vec3 Mv = face_to_world(Sv*(1.0),face);
+	vec3 Mu = face_to_world(Su*(1.0 + f),face) + n*df.x;
+	vec3 Mv = face_to_world(Sv*(1.0 + f),face) + n*df.y;
 
 	return normalize(cross(Mu,Mv));
 }
@@ -152,19 +155,15 @@ void main()
 	tile_code_t code = from_input(code_left,code_right);
 
 	vec2 uv = adjust_uv_for_clamp(in_uv); 
-	vec3 uvw = vec3(uv, tex_idx.tex);
-	bool valid = is_valid(tex_idx); 
-
 	vec3 n = normal;
 
 	vec3 N = vec3(0);
 	vec4 val = vec4(0);
 	vec2 df = vec2(0);
 
-	if (valid) {
-		val = texture(u_tex_arrays[tex_idx.page], uvw);
-		float f = val.r;
-		df = tex_grad(tex_idx, uv);
+	if (is_valid(tex_idx)) {
+		float f = sample_elevation(tex_idx, uv);
+		df = tex_grad(tex_idx, uv, code.zoom);
 
 		N = globe_normal(n,f,df,2.0*face_uv - vec2(1.0),code.face,code.zoom);
 
@@ -174,7 +173,7 @@ void main()
 	out_pos = wpos.xyz;
 	out_uv = uv;
 	out_normal = N;
-	out_color = vec4(100*df,0,1);
+	out_color = vec4(0.2*df,0,1);
 	out_tex_idx = tex_idx;
 
 	gl_Position = (pv*wpos);

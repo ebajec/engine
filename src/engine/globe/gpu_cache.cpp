@@ -66,9 +66,9 @@ static void upload_context_destroy(GPUUploadContext *ctx)
 }
 
 
-static std::unique_ptr<TilePage> create_page(GLuint format)
+static std::unique_ptr<TileGPUPage> create_page(GLuint format)
 {
-	std::unique_ptr<TilePage> page (new TilePage{});
+	std::unique_ptr<TileGPUPage> page (new TileGPUPage{});
 
 	glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &page->tex_array);
 	glTextureStorage3D(
@@ -94,7 +94,7 @@ static std::unique_ptr<TilePage> create_page(GLuint format)
 	return page;
 }
 
-static void destroy_page(TilePage &page)
+static void destroy_page(TileGPUPage &page)
 {
 	glDeleteTextures(1,&page.tex_array);
 }
@@ -108,7 +108,7 @@ TileGPUCache::~TileGPUCache()
 
 void TileGPUCache::deallocate(TileGPUIndex idx)
 {
-	TilePage *page = m_pages[idx.page].get();
+	TileGPUPage *page = m_pages[idx.page].get();
 
 	if (page->free_list.empty()) {
 		m_open_pages.push(idx.page);
@@ -148,7 +148,7 @@ TileGPUIndex TileGPUCache::allocate()
 
 	assert(page_idx < m_pages.size());
 
-	TilePage *page = m_pages[page_idx].get();
+	TileGPUPage *page = m_pages[page_idx].get();
 
 	uint16_t tex_idx = page->free_list.back();
 
@@ -189,17 +189,17 @@ TileGPUIndex TileGPUCache::evict_one()
 	//log_info("Evicted tile %d from GPU cache",ent.first);
 
 	m_lru.pop_back();
-	m_map.erase(ent.first);
+	m_map.erase(ent.first.u64);
 
 	return ent.second;
 }
 
 void TileGPUCache::insert(TileCode code, TileGPUIndex idx)
 {
-	assert(m_map.find(code) == m_map.end());
+	assert(m_map.find(code.u64) == m_map.end());
 
 	m_lru.push_front({code,idx});
-	m_map[code] = m_lru.begin();
+	m_map[code.u64] = m_lru.begin();
 }
 
 size_t TileGPUCache::update(
@@ -223,7 +223,7 @@ size_t TileGPUCache::update(
 			continue;
 		}
 
-		auto it = m_map.find(code);
+		auto it = m_map.find(code.u64);
 
 		const bool found = it != m_map.end();
 
@@ -281,7 +281,7 @@ static void tile_upload_fn(
 {
 	TileDataRef ref = data.data_ref;
 	// Should always be valid if it got this far.
-	assert(ref.data && ref.p_state && ref.p_refs);
+	assert(ref.data && ref.p_state);
 
 	uint8_t* dst = reinterpret_cast<uint8_t*>(ctx->mapped) + data.offset; 
 

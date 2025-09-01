@@ -33,6 +33,7 @@ namespace globe
 	struct RenderData
 	{
 		BufferID vbo;
+		BufferID indirect;
 		BufferID ibo;
 
 		// texture array indices
@@ -46,6 +47,7 @@ namespace globe
 
 	struct Globe
 	{
+		size_t loaded_count;
 		std::vector<TileCode> tiles;
 
 		RenderData render_data;

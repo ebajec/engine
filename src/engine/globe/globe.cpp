@@ -178,7 +178,7 @@ static inline int select_tiles_rec(
 	double d_min_sq = aabb3_dist_sq(box, params->origin);
 	d_min_sq = std::max(tile_scale_factor * d_min_sq,1e-6);
 
-	double area = tile_area(code.zoom);
+	double area = tile_factor(code.zoom);
 
 	if (area/d_min_sq < params->res) {
 		out.push_back({code,d_min_sq});
@@ -292,25 +292,6 @@ static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_v
 	}
 }
 
-static std::vector<DrawCommand> draw_cmds(size_t count) 
-{
-	std::vector<DrawCommand> cmds (count);
-
-	for (size_t i = 0; i < count; ++i) {
-		DrawCommand cmd = {
-			.count = 6*TILE_VERT_COUNT,
-			.instanceCount = 1, 
-			.firstIndex = 0,
-			.baseVertex = static_cast<int>(i * TILE_VERT_COUNT),
-			.baseInstance = 0
-		};
-
-		cmds[i] = cmd;
-	}
-
-	return cmds;
-}
-
 static std::vector<uint32_t> create_tile_indices()
 {
 	static const uint32_t n = TILE_VERT_WIDTH;
@@ -331,6 +312,21 @@ static std::vector<uint32_t> create_tile_indices()
 	}
 
 	return indices;
+}
+
+static void draw_cmds(DrawCommand * cmds, size_t count) 
+{
+	for (size_t i = 0; i < count; ++i) {
+		DrawCommand cmd = {
+			.count = 6*TILE_VERT_COUNT,
+			.instanceCount = 1, 
+			.firstIndex = 0,
+			.baseVertex = static_cast<int>(i * TILE_VERT_COUNT),
+			.baseInstance = 0
+		};
+
+		cmds[i] = cmd;
+	}
 }
 
 static GLuint globe_vao()
@@ -385,6 +381,11 @@ static LoadResult create_render_data(ResourceTable *rt, RenderData &data)
 		goto load_failed;
 
 	data.vbo = create_buffer(rt, MAX_TILES*TILE_VERT_COUNT*sizeof(GlobeVertex),
+						  GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
+	if (!data.vbo)
+		goto load_failed;
+
+	data.indirect = create_buffer(rt, MAX_TILES*sizeof(DrawCommand),
 						  GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
 	if (!data.vbo)
 		goto load_failed;
@@ -518,7 +519,15 @@ static LoadResult update_render_data(
 
 	glUnmapBuffer(GL_ARRAY_BUFFER);
 
-	globe->render_data.cmds = draw_cmds(count);
+	//-----------------------------------------------------------------------------
+	// Indirect Draw Buffer
+	 const GLBuffer* indirect = rt->get<GLBuffer>(globe->render_data.indirect);
+
+	ptr = glMapNamedBuffer(indirect->id, GL_WRITE_ONLY);
+	draw_cmds(static_cast<DrawCommand*>(ptr), count);
+	glUnmapNamedBuffer(indirect->id);
+
+	//globe->render_data.cmds = draw_cmds(count);
 
 	return RESULT_SUCCESS;
 };
@@ -591,11 +600,12 @@ load_failed:
 LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 {
 	const Camera * p_camera = g_camera_debug->get_camera(); 
-	static int zoom = 0;
+	static int zoom = 5;
 
 	ImGui::Begin("Globe debug");	
 
 	ImGui::SliderInt("res", &zoom, 0, 8, "%d");
+	ImGui::SliderInt("Max zoom", const_cast<int*>(&globe->source->m_debug_zoom), 0, 24);
 
 	if (ImGui::Button(g_enable_boxes ? 
 		"Disable globe tile boxes##globe tile boxes" : 
@@ -618,7 +628,7 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	
 	glm::mat4 pv = p_camera->proj*p_camera->view;
 	frustum_t frust = camera_frustum(pv);
-	double resolution = tile_area((uint8_t)zoom);
+	double resolution = tile_factor((uint8_t)zoom);
 	glm::dvec3 pos = camera_get_pos(p_camera->view);
 
 	if (true) {
@@ -650,22 +660,25 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 
 	globe::select_tiles(params, globe->tiles);
 
-	size_t count = globe->tiles.size();
+	size_t count = std::min(globe->tiles.size(),(size_t)MAX_TILES);
 
+	globe->tiles.resize(count);
 	std::vector<TileCode> data_tiles = globe->cpu_cache->update(
 		*globe->source, globe->tiles);
 
 	std::vector<TileGPUIndex> tile_textures;
 
-	size_t new_count = globe->gpu_cache->update(globe->cpu_cache.get(),data_tiles,tile_textures);
+	size_t new_count = globe->gpu_cache->update(globe->cpu_cache.get(),
+											 data_tiles,tile_textures);
 
 	LoadResult result = update_render_data(rt,globe,
 		pos,data_tiles,tile_textures);
 	
 	globe::update_boxes();
-
 	plot_tile_counts(count, new_count);
 	ImGui::End();
+
+	globe->loaded_count = count;
 
 	return result;
 }
@@ -676,6 +689,7 @@ void globe_record_draw_cmds(const RenderContext& ctx, const Globe *globe)
 
 	const GLBuffer* vbo = ctx.rt->get<GLBuffer>(data.vbo); 
 	const GLBuffer* ibo = ctx.rt->get<GLBuffer>(data.ibo); 
+	const GLBuffer* indirect = ctx.rt->get<GLBuffer>(data.indirect); 
 	const GLBuffer* ssbo = ctx.rt->get<GLBuffer>(data.ssbo);
 
 	ctx.bind_material(data.material);
@@ -688,6 +702,7 @@ void globe_record_draw_cmds(const RenderContext& ctx, const Globe *globe)
 
 	glBindVertexBuffer(0, vbo->id, 0, sizeof(GlobeVertex));
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo->id);
+	glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirect->id);
 
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
@@ -696,14 +711,12 @@ void globe_record_draw_cmds(const RenderContext& ctx, const Globe *globe)
 	glMultiDrawElementsIndirect(
 		GL_TRIANGLES, 
 		GL_UNSIGNED_INT, 
-		data.cmds.data(), 
-		(GLsizei)data.cmds.size(), 
-		0
+		nullptr, 
+		(GLsizei)globe->loaded_count, 
+		sizeof(DrawCommand)	
 	);
 
 	glDisable(GL_CULL_FACE);
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
 
 	glBindVertexArray(0);
 

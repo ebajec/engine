@@ -219,6 +219,7 @@ void RenderContext::draw_cmd_mesh_outline(ModelID meshID) const
 	const GLModel *model = rt->get<GLModel>(meshID);
 	glBindVertexArray(model->vao);
 	glDrawElements(GL_LINES,(int)model->icount,GL_UNSIGNED_INT,NULL);
+	glBindVertexArray(0);
 }
 
 void RenderContext::draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T) const
@@ -230,6 +231,7 @@ void RenderContext::draw_cmd_basic_mesh3d(ModelID meshID, glm::mat4 T) const
 	
 	glBindVertexArray(model->vao);
 	glDrawElements(GL_TRIANGLES,(int)model->icount,GL_UNSIGNED_INT,NULL);
+	glBindVertexArray(0);
 
 	glDisable(GL_CULL_FACE);
 };

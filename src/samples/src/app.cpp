@@ -146,8 +146,6 @@ int glfw_init_gl_basic(GLFWwindow *window)
 		return EXIT_FAILURE;
     }
 
-	std::string extensions ((const char *)glGetString(GL_EXTENSIONS));
-
 	glEnable(GL_DEBUG_OUTPUT);
 	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);       // makes callback synchronous
 
@@ -159,7 +157,7 @@ int glfw_init_gl_basic(GLFWwindow *window)
 							  const GLchar* message,
 							  const void* userParam )
 	{
-		if (severity == GL_DEBUG_SEVERITY_HIGH) {				
+		//if (severity == GL_DEBUG_SEVERITY_HIGH) {				
 			fprintf(stderr,
 				"GL DEBUG: [%u] %s\n"
 				"    Source:   0x%x\n"
@@ -168,7 +166,7 @@ int glfw_init_gl_basic(GLFWwindow *window)
 				"    Message:  %s\n\n",
 				id, (type == GL_DEBUG_TYPE_ERROR ? "** ERROR **" : ""),
 				source, type, severity, message);
-		}
+		//}
 
 	}, nullptr);
 
