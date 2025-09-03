@@ -36,8 +36,255 @@ union TileCPULoadState
 	uint64_t u64;
 };
 
+struct TileDataRef
+{
+	uint8_t *data;
+	size_t size;
+	std::atomic_uint64_t *p_state;
+};
 
-typedef void(*TileLoaderFunc)(TileCode code, void* dst, void* usr, const std::atomic<TileCPULoadState>* p_state);
+struct TileCPUIndex
+{
+	uint32_t page;
+	uint32_t ent;
+
+	bool is_valid() {
+		return page != UINT32_MAX && ent != UINT32_MAX;
+	}
+};
+
+static constexpr TileCPUIndex TILE_CPU_INDEX_NONE = {UINT32_MAX,UINT32_MAX};
+
+struct TileDataSource;
+
+//------------------------------------------------------------------------------
+// begin ct
+
+enum ct_status : uint8_t
+{
+	CT_STATUS_EMPTY,
+	CT_STATUS_READY,
+	CT_STATUS_LOADING,
+	CT_STATUS_QUEUED,
+	CT_STATUS_CANCELLED,
+};
+
+struct alignas(8) ct_state
+{
+	uint8_t status;
+	uint8_t flags;
+	uint16_t gen;
+	uint32_t refs;
+};
+
+static_assert(sizeof(ct_state) == 8);
+
+static const uint64_t CT_STATE_STATUS_SHIFT = 8*offsetof(ct_state,status);
+static const uint64_t CT_STATE_FLAGS_SHIFT 	= 8*offsetof(ct_state,flags);
+static const uint64_t CT_STATE_GEN_SHIFT 	= 8*offsetof(ct_state,gen);
+static const uint64_t CT_STATE_REFS_SHIFT 	= 8*offsetof(ct_state,refs);
+
+static const uint64_t CT_STATE_STATUS_MASK 	= 
+	(uint64_t)(((uint64_t)1 << 8*sizeof(((struct ct_state*)0)->status)) - 1) << CT_STATE_STATUS_SHIFT;
+static const uint64_t CT_STATE_FLAGS_MASK 	= 
+	(uint64_t)(((uint64_t)1 << 8*sizeof(((struct ct_state*)0)->flags)) - 1) << CT_STATE_FLAGS_SHIFT;
+static const uint64_t CT_STATE_GEN_MASK 	= 
+	(uint64_t)(((uint64_t)1 << 8*sizeof(((struct ct_state*)0)->gen)) - 1) << CT_STATE_GEN_SHIFT;
+static const uint64_t CT_STATE_REFS_MASK 	=
+	(uint64_t)(((uint64_t)1 << 8*sizeof(((struct ct_state*)0)->refs)) - 1) << CT_STATE_REFS_SHIFT;
+
+static inline constexpr uint64_t ct_state_pack(ct_state state)
+{
+	uint64_t bits = 0;	
+	bits |= (uint64_t)state.status << CT_STATE_STATUS_SHIFT;
+	bits |= (uint64_t)state.flags << CT_STATE_FLAGS_SHIFT;
+	bits |= (uint64_t)state.gen << CT_STATE_GEN_SHIFT;
+	bits |= (uint64_t)state.refs << CT_STATE_REFS_SHIFT;
+	return bits;
+}
+
+static inline constexpr ct_status ct_state_status(uint64_t bits)
+{
+	return (ct_status)((bits & CT_STATE_STATUS_MASK) >> CT_STATE_STATUS_SHIFT);
+}
+static inline constexpr uint8_t ct_state_flags(uint64_t bits)
+{
+	return (uint8_t)((bits & CT_STATE_FLAGS_MASK) >> CT_STATE_FLAGS_SHIFT);
+}
+static inline constexpr uint16_t ct_state_gen(uint64_t bits)
+{
+	return (uint16_t)((bits & CT_STATE_GEN_MASK) >> CT_STATE_GEN_SHIFT);
+}
+static inline constexpr uint32_t ct_state_refs(uint64_t bits)
+{
+	return (uint32_t)((bits & CT_STATE_REFS_MASK) >> CT_STATE_REFS_SHIFT);
+}
+
+static inline constexpr ct_state ct_state_unpack(uint64_t bits)
+{
+	ct_state state = {
+		.status = ct_state_status(bits),
+		.flags = ct_state_flags(bits),
+		.gen = ct_state_gen(bits),
+		.refs = ct_state_refs(bits),
+	};
+	return state;
+}
+
+static constexpr ct_state ct_state_test_val = {7,13,17,19};
+
+static_assert(ct_state_unpack(ct_state_pack(ct_state_test_val)).status == 7);
+static_assert(ct_state_unpack(ct_state_pack(ct_state_test_val)).flags == 13);
+static_assert(ct_state_unpack(ct_state_pack(ct_state_test_val)).gen == 17);
+static_assert(ct_state_unpack(ct_state_pack(ct_state_test_val)).refs == 19);
+static_assert(ct_state_pack(ct_state_unpack(0xDEADBEEF)) == 0xDEADBEEF);
+
+struct ct_index
+{
+	uint32_t page;
+	uint32_t ent;
+
+	bool is_valid() {
+		return page != UINT32_MAX && ent != UINT32_MAX;
+	}
+};
+static const ct_index CT_INDEX_NONE = {UINT32_MAX, UINT32_MAX};
+
+typedef uint64_t ct_page_handle_t;
+typedef std::atomic_uint64_t ct_atomic_state;
+typedef int(*ct_page_func)(void*, ct_page_handle_t*);
+typedef std::list<ct_index> ct_lru_list;
+
+struct ct_entry 
+{
+	uint64_t key;
+	ct_atomic_state state;
+};
+
+struct ct_page
+{
+	ct_page_handle_t handle;
+	std::vector<uint32_t> free_list;
+	ct_entry *entries;
+};
+
+struct ct_table
+{
+	ct_lru_list lru;
+
+	std::unordered_map<
+		uint64_t, 
+		ct_lru_list::iterator 
+	> map;
+
+	std::priority_queue<
+		uint16_t, 
+		std::vector<uint16_t>, 
+		std::greater<uint16_t>
+	> open_pages;
+
+	std::vector<ct_page> pages;
+
+	size_t page_size;
+	size_t capacity;
+
+	void *usr;
+	ct_page_func page_create;
+};
+
+struct ct_load_result
+{
+	ct_index idx;
+	ct_entry *p_ent;
+	bool needs_load;
+	bool is_ready;
+};
+
+struct ct_table_create_info
+{
+	size_t capacity;
+	size_t page_size;
+
+	void *usr;
+	ct_page_func page_create;
+};
+
+extern int ct_table_create(ct_table **p_ct, ct_table_create_info const *ci);
+extern void ct_table_destroy(ct_table *ct);
+
+extern ct_load_result ct_table_load(ct_table *ct_table, uint64_t key);
+
+//------------------------------------------------------------------------------
+// new
+
+struct TileCPUCache
+{
+	//struct entry_t
+	//{
+	//	TileCode code;
+	//	std::atomic<TileCPULoadState> state;
+	//};
+
+	//struct page_t
+	//{
+	//	entry_t entries[TILE_CPU_PAGE_SIZE];
+	//	std::vector<uint32_t> free_list;
+	//	std::unique_ptr<uint8_t[]> mem;
+	//};
+
+	//typedef std::list<TileCPUIndex> lru_list_t;
+
+	//lru_list_t m_lru;
+	//std::unordered_map<
+	//	uint64_t, 
+	//	lru_list_t::iterator 
+	//> m_map;
+
+	//std::priority_queue<
+	//	uint16_t, 
+	//	std::vector<uint16_t>, 
+	//	std::greater<uint16_t>
+	//> m_open_pages;
+
+	//std::vector<std::unique_ptr<page_t>> m_pages;
+	
+	std::unique_ptr<ct_table,decltype(&ct_table_destroy)> m_ct{
+		nullptr, &ct_table_destroy};
+
+	size_t m_tile_size;
+	size_t m_tile_cap = 1 << 14;
+private:
+	//TileCPUIndex evict_one();	
+	//TileCPUIndex allocate();
+
+	//struct result_t
+	//{
+	//	TileCPUIndex idx;
+	//	entry_t *p_ent;
+	//	bool needs_load;
+	//	bool is_ready;
+	//};
+	//result_t load(uint64_t key);
+
+	//entry_t *get_entry(TileCPUIndex idx) const;
+
+	TileCode find_best(TileCode code);
+	uint8_t *get_block(ct_index idx) const;
+public:
+	static TileCPUCache *create(size_t tile_size, size_t capacity);
+
+	std::vector<TileCode> update(const TileDataSource& source, const std::span<TileCode> tiles);
+	std::optional<TileDataRef> acquire_block(TileCode code) const;
+	void release_block(TileDataRef ref) const;
+
+	const uint8_t *acquire_block(TileCode code, size_t *size, 
+						  ct_atomic_state **p_state) const;
+};
+
+//------------------------------------------------------------------------------
+// Data source
+
+typedef void(*TileLoaderFunc)(TileCode code, void* dst, void* usr, const ct_atomic_state* p_state);
 
 struct TileDataSource
 {
@@ -63,79 +310,5 @@ struct TileDataSource
 };
 
 
-//------------------------------------------------------------------------------
-// Cache
-
-struct TileDataRef
-{
-	uint8_t *data;
-	size_t size;
-	std::atomic<TileCPULoadState> *p_state;
-};
-
-struct TileCPUIndex
-{
-	uint32_t page;
-	uint32_t ent;
-
-	bool is_valid() {
-		return page != UINT32_MAX && ent != UINT32_MAX;
-	}
-};
-
-static constexpr TileCPUIndex TILE_CPU_INDEX_NONE = {UINT32_MAX,UINT32_MAX};
-
-struct TileCPUCache
-{
-	struct entry_t
-	{
-		TileCode code;
-		std::atomic<TileCPULoadState> state;
-	};
-
-	struct page_t
-	{
-		entry_t entries[TILE_CPU_PAGE_SIZE];
-		std::vector<uint32_t> free_list;
-		std::unique_ptr<uint8_t[]> mem;
-	};
-
-	typedef std::list<TileCPUIndex> lru_list_t;
-
-	lru_list_t m_lru;
-	std::unordered_map<
-		uint64_t, 
-		lru_list_t::iterator 
-	> m_map;
-
-	std::priority_queue<
-		uint16_t, 
-		std::vector<uint16_t>, 
-		std::greater<uint16_t>
-	> m_open_pages;
-
-	std::vector<std::unique_ptr<page_t>> m_pages;
-
-	size_t m_tile_size;
-	size_t m_tile_cap = 1 << 14;
-private:
-	TileCPUIndex evict_one();	
-	TileCPUIndex allocate();
-
-	TileCode find_best(TileCode code);
-	entry_t *get_entry(TileCPUIndex idx) const;
-	uint8_t *get_block(TileCPUIndex idx) const;
-public:
-	static TileCPUCache *create(size_t tile_size, size_t capacity);
-
-	std::vector<TileCode> update(
-		const TileDataSource& source, 
-		const std::span<TileCode> tiles);
-	std::optional<TileDataRef> acquire_block(TileCode code) const;
-	void release_block(TileDataRef ref) const;
-
-	const uint8_t *acquire_block(TileCode code, size_t *size, 
-						  std::atomic<TileCPULoadState> **p_state) const;
-};
 
 #endif // DATASET_H
