@@ -147,7 +147,20 @@ struct ct_index
 	bool is_valid() {
 		return page != UINT32_MAX && ent != UINT32_MAX;
 	}
+
+	constexpr bool operator == (const ct_index& other) const {
+		return page == other.page && ent == other.ent;
+	}
 };
+
+struct ct_index_hash_t
+{
+	constexpr size_t operator()(const ct_index& idx) const {
+		uint64_t u64 = ((uint64_t)idx.page << 32) | (uint64_t)(idx.ent);
+		return std::hash<uint64_t>()(u64);
+	}
+};
+
 static const ct_index CT_INDEX_NONE = {UINT32_MAX, UINT32_MAX};
 
 typedef uint64_t ct_page_handle_t;

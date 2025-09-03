@@ -194,7 +194,7 @@ ct_load_result ct_table_load(ct_table *ct, uint64_t key)
 			res.p_ent = ent;
 			res.needs_load = true;
 
-		} else if (state.status == CT_STATUS_EMPTY) {
+		} else if (state.status == CT_STATUS_READY) {
 			res.is_ready = true;
 		}
 	} else {
@@ -585,6 +585,8 @@ std::vector<TileCode> TileCPUCache::update(
 	}
 
 	std::vector<TileCode> loaded (tiles.size(),TILE_CODE_NONE);
+
+	// TODO : We can have duplicate loads right now - fix this
 	std::vector<std::pair<ct_index,ct_entry*>> loads;
 
 	size_t count = std::min(available.size(),m_tile_cap);
