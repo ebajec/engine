@@ -286,13 +286,6 @@ cleanup:
 	return nullptr;
 }
 
-#if 0
-TileCPUCache::entry_t *TileCPUCache::get_entry(TileCPUIndex idx) const
-{
-	return &m_pages[idx.page]->entries[idx.ent];
-}
-#endif
-
 static ct_entry * ct_entry_get(ct_table *ct, ct_index idx)
 {
 	return &ct->pages[idx.page].entries[idx.ent];
@@ -337,81 +330,6 @@ uint8_t *TileCPUCache::get_block(ct_index idx) const
 
 	return &mem[idx.ent*m_tile_size];
 }
-
-#if 0
-TileCPUIndex TileCPUCache::allocate()
-{
-	if (m_open_pages.empty()) {
-		m_pages.emplace_back(std::move(create_page(m_tile_size)));
-		m_open_pages.push(static_cast<uint16_t>(m_pages.size() - 1));
-	}
-
-	uint16_t page = m_open_pages.top(); 
-
-	assert(page < m_pages.size());
-
-	page_t *p_page = m_pages[page].get();
-
-	uint32_t ent = p_page->free_list.back();
-
-	assert(ent < TILE_CPU_PAGE_SIZE);
-
-	p_page->free_list.pop_back();
-
-	if (p_page->free_list.empty()) {
-		m_open_pages.pop();
-	}
-
-	return TileCPUIndex{
-		.page = page,
-		.ent = ent,
-	};
-
-}
-
-TileCPUIndex TileCPUCache::evict_one()
-{
-	TileCPUIndex idx = m_lru.back(); 
-	entry_t *ent = get_entry(idx);
-
-	TileCPULoadState state = ent->state.load();
-	TileCPULoadState desired = {.status = CT_STATUS_EMPTY, .refs = 0};
-	do {
-		if (state.refs > 0) {
-			log_info("Could not evict tile %d from CPU cache; in use",ent->code);
-			return TILE_CPU_INDEX_NONE;
-		}
-
-		if (state.status == CT_STATUS_CANCELLED) {
-			return TILE_CPU_INDEX_NONE;
-		}
-
-		if (state.status == CT_STATUS_LOADING || 
-			state.status == CT_STATUS_QUEUED)
-			desired = {.status = CT_STATUS_CANCELLED, .refs = state.refs};
-		else 
-			desired = {.status = CT_STATUS_EMPTY, .refs = 0};
-	} while (!ent->state.compare_exchange_weak(state, desired));
-
-	if (desired.status == CT_STATUS_CANCELLED) {
-		log_info("Cancelled load for tile %d",ent->code.u64);
-		return TILE_CPU_INDEX_NONE;
-	}
-
-	if (m_map.find(ent->code.u64) == m_map.end()) {
-		log_error("Failed to evict entry at %d; not contained in table!",ent->code.u64);
-		return TILE_CPU_INDEX_NONE;
-	}
-
-	//log_info("Evicted tile %d from CPU cache",ent->code);
-
-	m_map.erase(ent->code.u64);	
-	m_lru.pop_back();
-
-	return idx;
-}
-
-#endif
 
 const uint8_t *TileCPUCache::acquire_block(TileCode code, size_t *size,
 									   std::atomic_uint64_t **p_state) const
@@ -525,55 +443,6 @@ static void load_thread_fn(
 	//log_info("Tile %d ready",ent->code);
 }
 
-#if 0
-TileCPUCache::result_t TileCPUCache::load(uint64_t key)
-{
-	result_t res {};
-
-	auto it = m_map.find(key);
-	if (it != m_map.end()) {
-		lru_list_t::iterator l_ent = it->second;
-		m_lru.splice(m_lru.begin(), m_lru, l_ent);
-
-		TileCPUIndex idx = *it->second;
-		entry_t *ent = get_entry(idx);
-
-		TileCPULoadState state = ent->state.load(); 
-
-		if (state.status == CT_STATUS_EMPTY) {
-			if (state.refs > 0) 
-				log_error("Empty tile has %d references",state.refs);
-
-			res.idx = idx;
-			res.p_ent = ent;
-			res.needs_load = true;
-
-		} else if (state.status == CT_STATUS_READY) {
-			res.is_ready = true;
-		}
-	} else {
-		TileCPUIndex idx = m_map.size() >= m_tile_cap ?
-	  		evict_one() : allocate();
-
-		if (!idx.is_valid()) 
-			return res;
-
-		m_lru.push_front(idx);
-		m_map[key] = m_lru.begin();
-
-		entry_t *ent = get_entry(idx);
-		ent->code.u64 = key,
-		ent->state = {.status = CT_STATUS_EMPTY, .refs = 0},
-
-		res.idx = idx;
-		res.p_ent = ent;
-		res.needs_load = true;
-	}
-
-	return res;
-}
-#endif
-
 std::vector<TileCode> TileCPUCache::update(
 	const TileDataSource& source, const std::span<TileCode> tiles)
 {
@@ -672,7 +541,7 @@ static double test_elev_fn2(glm::dvec2 uv, uint8_t f, uint8_t zoom)
 		g += (coeffs[i]/(double)idx)*(sin(c*p.x - h.x)*sin(c*p.y - h.y)*sin(c*p.z - h.z));
 	}
 
-	g *= 0.00138;
+	g *= 1.138;
 
 	return g;
 }

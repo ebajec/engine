@@ -3,12 +3,12 @@ set(CMAKE_CXX_STANDARD 23)
 
 include(clang-warnings)
 
-set(TARGET globe)
+set(TARGET boxes)
 project(${TARGET})
 
-add_executable(${TARGET} 
-	main.cpp 
-)
+file(GLOB SOURCES "*.cpp" "*.c")
+
+add_executable(${TARGET} ${SOURCES})
 
 target_link_libraries(${TARGET} PRIVATE
 	samples

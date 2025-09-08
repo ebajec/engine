@@ -232,54 +232,12 @@ extern ct_load_result ct_table_load(ct_table *ct_table, uint64_t key);
 
 struct TileCPUCache
 {
-	//struct entry_t
-	//{
-	//	TileCode code;
-	//	std::atomic<TileCPULoadState> state;
-	//};
-
-	//struct page_t
-	//{
-	//	entry_t entries[TILE_CPU_PAGE_SIZE];
-	//	std::vector<uint32_t> free_list;
-	//	std::unique_ptr<uint8_t[]> mem;
-	//};
-
-	//typedef std::list<TileCPUIndex> lru_list_t;
-
-	//lru_list_t m_lru;
-	//std::unordered_map<
-	//	uint64_t, 
-	//	lru_list_t::iterator 
-	//> m_map;
-
-	//std::priority_queue<
-	//	uint16_t, 
-	//	std::vector<uint16_t>, 
-	//	std::greater<uint16_t>
-	//> m_open_pages;
-
-	//std::vector<std::unique_ptr<page_t>> m_pages;
-	
 	std::unique_ptr<ct_table,decltype(&ct_table_destroy)> m_ct{
 		nullptr, &ct_table_destroy};
 
 	size_t m_tile_size;
 	size_t m_tile_cap = 1 << 14;
 private:
-	//TileCPUIndex evict_one();	
-	//TileCPUIndex allocate();
-
-	//struct result_t
-	//{
-	//	TileCPUIndex idx;
-	//	entry_t *p_ent;
-	//	bool needs_load;
-	//	bool is_ready;
-	//};
-	//result_t load(uint64_t key);
-
-	//entry_t *get_entry(TileCPUIndex idx) const;
 
 	TileCode find_best(TileCode code);
 	uint8_t *get_block(ct_index idx) const;

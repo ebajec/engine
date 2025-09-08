@@ -1,6 +1,5 @@
 // local
 #include "camera_controller.h"
-#include "geometry.h"
 
 #include "resource/resource_table.h"
 #include "resource/material_loader.h"
