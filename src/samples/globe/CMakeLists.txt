@@ -3,7 +3,7 @@ set(CMAKE_CXX_STANDARD 23)
 
 include(clang-warnings)
 
-set(TARGET boxes)
+set(TARGET globe)
 project(${TARGET})
 
 file(GLOB SOURCES "*.cpp" "*.c")

@@ -541,7 +541,7 @@ static double test_elev_fn2(glm::dvec2 uv, uint8_t f, uint8_t zoom)
 		g += (coeffs[i]/(double)idx)*(sin(c*p.x - h.x)*sin(c*p.y - h.y)*sin(c*p.z - h.z));
 	}
 
-	g *= 1.138;
+	g *= 0.00138;
 
 	return g;
 }

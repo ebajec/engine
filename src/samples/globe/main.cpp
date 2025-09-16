@@ -34,56 +34,6 @@
 #include <unistd.h>
 #include <signal.h>
 
-size_t levenshtein(const char *s, const char *t) {
-    size_t n = strlen(s), m = strlen(t);
-    size_t *col = (size_t*)malloc((m+1)*sizeof(size_t)),
-           *prev = (size_t*)malloc((m+1)*sizeof(size_t));
-    for (size_t j = 0; j <= m; j++) prev[j] = j;
-
-    for (size_t i = 1; i <= n; i++) {
-        col[0] = i;
-        for (size_t j = 1; j <= m; j++) {
-            size_t cost = (s[i-1] == t[j-1]) ? 0 : 1;
-            size_t del = prev[j] + 1;
-            size_t ins = col[j-1] + 1;
-            size_t sub = prev[j-1] + cost;
-            col[j] = del < ins ? (del < sub ? del : sub)
-                              : (ins < sub ? ins : sub);
-        }
-        memcpy(prev, col, (m+1)*sizeof(size_t));
-    }
-    size_t result = prev[m];
-    free(prev);
-    free(col);
-    return result;
-}
-
-
-GLFWmonitor *glfw_select_monitor(const char* match)
-{
-	if (!match)
-		return NULL;
-
-	int count;
-	GLFWmonitor **monitors = glfwGetMonitors(&count);
-
-	size_t best = 0;
-	size_t score = UINT64_MAX;
-
-	for (int i = 0; i < count; ++i) {
-		const char *name = glfwGetMonitorName(monitors[i]);
-
-		size_t test = levenshtein(name, match);
-
-		if (test < score) {
-			best = i;
-			score = test;
-		}
-	}
-
-	return monitors[best];
-}
-
 static GLFWwindow *g_window = NULL;
 
 void handle_sigint(int sig)
@@ -172,8 +122,6 @@ int main(int argc, char* argv[])
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
-
-	GLFWmonitor *monitor = glfw_select_monitor(preferred_monitor);
 
 	GLFWwindow *window = glfwCreateWindow(
 		params.win.width, 
