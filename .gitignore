@@ -12,6 +12,7 @@ deps/spirv-reflect/spirv-reflect
 deps/stb/stb
 
 resource/shader/*.spv
+src/samples/boxes
 
 perf.*
 
