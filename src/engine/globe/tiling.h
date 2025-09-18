@@ -14,6 +14,7 @@
 
 static constexpr uint32_t CUBE_FACES = 6;
 
+// TODO: Remove the union for portability
 union TileCode
 {
 	struct {

@@ -4,7 +4,7 @@ set(CMAKE_CXX_STANDARD 20)
 project(stb)
 
 file(GLOB SOURCES
-    "stb/src/*.c"
+    "*.c"
     )
 
 add_library(stb STATIC ${SOURCES})
