@@ -9,4 +9,4 @@ file(GLOB SOURCES
 
 add_library(stb STATIC ${SOURCES})
 
-target_include_directories(stb PUBLIC stb/include)
+target_include_directories(stb PUBLIC stb)
