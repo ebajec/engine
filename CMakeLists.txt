@@ -14,7 +14,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(OpenGL_GL_PREFERENCE GLVND)  
 
-set(RESOURCE_PATH "${CMAKE_SOURCE_DIR}/resource")
+set(RESOURCE_PATH "${CMAKE_SOURCE_DIR}/res")
 
 if(RESOURCE_PATH)
 	add_definitions(-DRESOURCE_PATH="${RESOURCE_PATH}")
@@ -59,5 +59,7 @@ set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -mavx2")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
 
 add_subdirectory(deps)
-add_subdirectory(src)
+#add_subdirectory(src)
+add_subdirectory(engine)
+add_subdirectory(samples)
 
