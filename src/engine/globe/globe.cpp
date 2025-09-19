@@ -1,5 +1,5 @@
-#include <opengl.h>
-#include "gl_debug.h"
+#include "renderer/opengl.h"
+#include "renderer/gl_debug.h"
 
 #include "camera_controller.h"
 #include "geometry.h"

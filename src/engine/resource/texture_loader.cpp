@@ -1,8 +1,8 @@
-#include <opengl.h>
+#include "renderer/opengl.h"
 
 #include "resource_table.h"
 #include "texture_loader.h"
-#include "gl_debug.h"
+#include "renderer/gl_debug.h"
 
 #include <vector>
 #include <filesystem>

@@ -1,7 +1,7 @@
 #ifndef RESOURCE_TABLE_H
 #define RESOURCE_TABLE_H
 
-#include "def_gl.h"
+#include "renderer/types.h"
 
 #include <utils/log.h>
 #include <utils/monitor.h>

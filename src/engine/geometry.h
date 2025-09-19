@@ -1,7 +1,7 @@
 #ifndef GEOMETRY_H
 #define GEOMETRY_H
 
-#include "def_gl.h"
+#include "renderer/types.h"
 
 #include <cstdint>
 #include <cmath>

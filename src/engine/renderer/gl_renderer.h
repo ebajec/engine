@@ -1,7 +1,7 @@
 #ifndef GL_RENDERER_H
 #define GL_RENDERER_H
 
-#include <opengl.h>
+#include "renderer/opengl.h"
 
 #include <utils/log.h>
 
@@ -9,7 +9,7 @@
 #include <resource/render_target.h>
 #include <resource/buffer.h>
 
-#include "renderer_defaults.h"
+#include "renderer/defaults.h"
 
 #include <glm/matrix.hpp>
 #include <glm/integer.hpp>

@@ -1,9 +1,9 @@
-#include <opengl.h>
+#include "renderer/opengl.h"
 
-#include "def_gl.h"
-#include "gl_debug.h"
-#include "gl_renderer.h"
-#include "renderer_defaults.h"
+#include "renderer/types.h"
+#include "renderer/gl_debug.h"
+#include "renderer/gl_renderer.h"
+#include "renderer/defaults.h"
 
 #include <resource/material_loader.h>
 #include <resource/shader_loader.h>
@@ -14,7 +14,11 @@
 
 #include <glm/gtc/type_ptr.hpp>
 
-#include <chrono>
+enum gl_renderer_bindings
+{
+	GL_RENDERER_COLOR_ATTACHMENT_BINDING = 0,
+	GL_RENDERER_FRAMEDATA_BINDING = 16
+};
 
 struct gl_renderer_impl
 {

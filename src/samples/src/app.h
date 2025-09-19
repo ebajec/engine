@@ -1,7 +1,7 @@
 #ifndef APP_WINDOW_H
 #define APP_WINDOW_H
 
-#include "gl_renderer.h"
+#include "renderer/gl_renderer.h"
 
 #include <GLFW/glfw3.h>
 

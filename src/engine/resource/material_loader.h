@@ -1,7 +1,7 @@
 #ifndef MATERIAL_LOADER_H
 #define MATERIAL_LOADER_H
 
-#include "def_gl.h"
+#include "renderer/types.h"
 #include "resource_table.h"
 
 struct GLTextureBinding

@@ -1,5 +1,5 @@
 #include "thread_pool.h"
-#include "gl_debug.h"
+#include "renderer/gl_debug.h"
 
 #include "globe/gpu_cache.h"
 #include "utils/log.h"

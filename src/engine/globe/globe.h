@@ -1,7 +1,7 @@
 #ifndef GLOBE_H
 #define GLOBE_H
 
-#include "gl_renderer.h"
+#include "renderer/gl_renderer.h"
 
 #include "geometry.h"
 

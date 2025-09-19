@@ -1,7 +1,7 @@
 // local
 #include "app.h"
 
-#include "gl_renderer.h"
+#include "renderer/gl_renderer.h"
 #include "camera_controller.h"
 #include "geometry.h"
 
@@ -263,12 +263,12 @@ struct RandomLine : AppComponent
 	std::vector<DrawCommand> cmds;
 	std::vector<uint32_t> draw_counts;
 
-	gl_vbo vbo;
-	gl_vbo ibo;
-	gl_vao vao;
+	GLuint vbo;
+	GLuint ibo;
+	GLuint vao;
 
-	gl_ubo ubo;
-	gl_ubo cmd_buf;
+	GLuint ubo;
+	GLuint cmd_buf;
 
 	uint32_t ssbo;
 

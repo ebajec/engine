@@ -1,19 +1,11 @@
-#ifndef DEF_GL_H
-#define DEF_GL_H
+#ifndef RENDERER_TYPE_H
+#define RENDERER_TYPE_H
 
 #include <stdint.h>
 #include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec2.hpp>
-
-typedef uint32_t gl_tex;
-typedef uint32_t gl_renderbuffer;
-typedef uint32_t gl_framebuffer;
-typedef uint32_t gl_ubo;
-typedef uint32_t gl_vao;
-typedef uint32_t gl_vbo;
-typedef uint32_t gl_program;
 
 typedef uint32_t ResourceHandle;
 typedef ResourceHandle ModelID;
@@ -32,12 +24,6 @@ enum ModelType
 	MODEL_TYPE_MESH_2D
 };
 
-enum gl_renderer_bindings
-{
-	GL_RENDERER_COLOR_ATTACHMENT_BINDING = 0,
-	GL_RENDERER_FRAMEDATA_BINDING = 16
-};
-
 struct Framedata
 {
 	glm::mat4 p;
@@ -45,14 +31,6 @@ struct Framedata
 	glm::mat4 pv;
 	glm::vec3 center;
 	float t;
-};
-
-
-struct gl_tex_quad
-{
-	gl_vao vao;
-	gl_vbo vbo;
-	gl_vbo ibo;
 };
 
 struct vertex2d

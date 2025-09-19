@@ -1,4 +1,4 @@
-#include "renderer_defaults.h"
+#include "renderer/defaults.h"
 
 #include <resource/material_loader.h>
 #include <resource/texture_loader.h>

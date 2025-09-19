@@ -1,6 +1,6 @@
-#include <opengl.h>
+#include "renderer/opengl.h"
 
-#include "gl_debug.h"
+#include "renderer/gl_debug.h"
 
 #include "buffer.h"
 

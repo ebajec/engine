@@ -1,4 +1,4 @@
-#include <opengl.h>
+#include "renderer/opengl.h"
 
 #include "resource_table.h"
 #include "material_loader.h"

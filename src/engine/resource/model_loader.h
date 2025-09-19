@@ -8,13 +8,13 @@ struct GLModel
 	int init();
 	ModelType type;
 
-	gl_vao vao;
+	GLuint vao;
 
 	size_t vcount;
 	size_t icount;
 
-	gl_vbo vbo;
-	gl_vbo ibo;
+	GLuint vbo;
+	GLuint ibo;
 	size_t vsize;
 
 	size_t isize;

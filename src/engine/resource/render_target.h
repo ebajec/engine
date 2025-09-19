@@ -5,6 +5,8 @@
 
 #include <cstdint>
 
+#include "renderer/opengl.h"
+
 typedef ResourceHandle RenderTargetID;
 
 struct GLRenderTarget
@@ -12,10 +14,10 @@ struct GLRenderTarget
 	uint32_t w;
 	uint32_t h;
 
-	gl_framebuffer fbo;
-	gl_tex color;
-	gl_renderbuffer depth;
-	gl_ubo ubo;
+	GLuint fbo;
+	GLuint color;
+	GLuint depth;
+	GLuint ubo;
 };
 
 enum RenderTargetCreateFlagBits

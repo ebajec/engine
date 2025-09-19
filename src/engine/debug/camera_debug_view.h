@@ -1,4 +1,4 @@
-#include "gl_renderer.h"
+#include "renderer/gl_renderer.h"
 
 #include <resource/resource_table.h>
 #include <resource/buffer.h>

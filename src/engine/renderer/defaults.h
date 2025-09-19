@@ -1,7 +1,7 @@
 #ifndef RENDERER_DEFAULTS_H
 #define RENDERER_DEFAULTS_H
 
-#include "def_gl.h"
+#include "renderer/types.h"
 #include <resource/resource_table.h>
 
 struct RendererDefaults 

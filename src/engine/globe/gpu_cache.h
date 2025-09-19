@@ -1,7 +1,7 @@
 #ifndef TILE_CACHE_H
 #define TILE_CACHE_H
 
-#include <opengl.h>
+#include "renderer/opengl.h"
 
 #include "tiling.h"
 #include "cpu_cache.h"

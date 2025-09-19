@@ -1,7 +1,7 @@
-#include <opengl.h>
+#include "renderer/opengl.h"
 
-#include "def_gl.h"
-#include "gl_debug.h"
+#include "renderer/types.h"
+#include "renderer/gl_debug.h"
 #include "render_target.h"
 
 static LoadResult gl_render_target_create(ResourceTable *table, void** res, void *usr);
@@ -20,18 +20,18 @@ LoadResult gl_render_target_create(ResourceTable *table, void** res, void *usr)
 	uint32_t w = info->w;
 	uint32_t h = info->h;
 
-	gl_ubo ubo;
+	GLuint ubo;
 	glGenBuffers(1,&ubo);
 	glBindBuffer(GL_UNIFORM_BUFFER,ubo);
 	glBufferData(GL_UNIFORM_BUFFER,sizeof(Framedata),NULL,GL_DYNAMIC_READ);
 	glBindBuffer(GL_UNIFORM_BUFFER,0);
 
-	gl_framebuffer fbo;
+	GLuint fbo;
 	glGenFramebuffers(1,&fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
 	// color attachment is optional
-	gl_tex color {};
+	GLuint color {};
 	if (info->flags & RENDER_TARGET_CREATE_COLOR_BIT)
 	{
 		glGenTextures(1,&color);
@@ -46,7 +46,7 @@ LoadResult gl_render_target_create(ResourceTable *table, void** res, void *usr)
 	}
 
 	// depth attachment is optional
-	gl_renderbuffer depth {};
+	GLuint depth {};
 
 	if (info->flags & RENDER_TARGET_CREATE_DEPTH_BIT)
 	{

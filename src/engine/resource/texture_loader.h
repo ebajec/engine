@@ -2,11 +2,12 @@
 #define IMAGE_LOADER_H
 
 #include "resource_table.h"
-#include "def_gl.h"
+#include "renderer/types.h"
 
+#include "renderer/opengl.h"
 struct GLImage 
 {
-	gl_tex id;
+	GLuint id;
 
 	uint32_t w;
 	uint32_t h;

@@ -1,7 +1,7 @@
 #ifndef CAMERA_CONTROLLER_H
 #define CAMERA_CONTROLLER_H
 
-#include <opengl.h>
+#include "renderer/opengl.h"
 
 #include <glm/vec3.hpp>
 #include <glm/matrix.hpp>
