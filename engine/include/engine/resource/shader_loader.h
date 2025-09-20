@@ -1,3 +1,6 @@
+#ifndef SHADER_LOADER_H
+#define SHADER_LOADER_H
+
 #include "engine/resource/resource_table.h"
 
 #include <memory>
@@ -16,6 +19,11 @@ struct GLShaderModule
 	std::unique_ptr<GLShaderBindings> bindings;
 };
 
+extern ResourceAllocFns g_shader_alloc_fns;
+extern const GLShaderModule *get_shader(ResourceTable *loader, ResourceHandle h);
+
+typedef ResourceHandle ShaderID;
+
 struct ShaderCreateInfo
 {
 	std::string path;
@@ -25,8 +33,6 @@ struct ShaderCreateInfo
 	}
 };
 
-extern ResourceAllocFns g_shader_alloc_fns;
-extern const GLShaderModule *get_shader(ResourceTable *loader, ResourceHandle h);
-
 extern ResourceHandle load_shader_file(ResourceTable *loader, std::string_view path);
 
+#endif // SHADER_LOADER_H

@@ -25,6 +25,9 @@ struct ImageCreateInfo
 	TexFormat fmt;
 };
 
+
+typedef ResourceHandle TextureID;
+
 class ImageLoader
 {
 public:

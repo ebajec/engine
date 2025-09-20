@@ -8,10 +8,21 @@
 #include <glm/vec2.hpp>
 
 typedef uint32_t ResourceHandle;
-typedef ResourceHandle ModelID;
-typedef ResourceHandle ShaderID;
-typedef ResourceHandle TextureID;
-typedef ResourceHandle MaterialID;
+
+struct DrawCommand 
+{
+    uint  count;
+    uint  instanceCount;
+    uint  firstIndex;
+    int  baseVertex;
+    uint  baseInstance;
+};
+
+struct Camera
+{
+	glm::mat4 proj;
+	glm::mat4 view;
+};
 
 enum TexFormat
 {

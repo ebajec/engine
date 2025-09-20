@@ -2,7 +2,6 @@
 #extension GL_GOOGLE_include_directive : require
 #include "framedata.glsl"
 #include "common.glsl"
-
 #include "line_frag_defs.glsl"
 
 const uint type = JOIN_TYPE_ROUND;

@@ -2,7 +2,10 @@
 #define RENDERER_DEFAULTS_H
 
 #include <engine/renderer/types.h>
+
 #include <engine/resource/resource_table.h>
+#include <engine/resource/material_loader.h>
+#include <engine/resource/model_loader.h>
 
 struct RendererDefaults 
 {

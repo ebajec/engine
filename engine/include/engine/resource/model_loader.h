@@ -21,6 +21,12 @@ struct GLModel
 	size_t isize;
 };
 
+extern ResourceAllocFns g_model_alloc_fns;
+
+const GLModel *get_model(ResourceTable *loader, ResourceHandle h);
+
+typedef ResourceHandle ModelID;
+
 struct Mesh2DCreateInfo
 {
 	const vertex2d* data; 
@@ -39,7 +45,6 @@ struct Mesh3DCreateInfo
 	size_t icount;
 };
 
-extern ResourceAllocFns g_model_alloc_fns;
 
 class ModelLoader
 {
@@ -53,7 +58,5 @@ public:
 
 extern ResourceHandle model_create(ResourceTable *loader);
 extern ResourceHandle model_upload(ResourceTable *loader);
-
-const GLModel *get_model(ResourceTable *loader, ResourceHandle h);
 
 #endif // MODEL_LOADER_H

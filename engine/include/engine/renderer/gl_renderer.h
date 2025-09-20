@@ -4,7 +4,10 @@
 #include <engine/renderer/types.h>
 #include <engine/renderer/opengl.h>
 #include <engine/renderer/defaults.h>
+
 #include <engine/resource/resource_table.h>
+#include <engine/resource/model_loader.h>
+#include <engine/resource/material_loader.h>
 #include <engine/resource/render_target.h>
 #include <engine/resource/buffer.h>
 
@@ -15,21 +18,6 @@
 
 class GLRenderer;
 struct FrameContext;
-
-struct DrawCommand 
-{
-    uint  count;
-    uint  instanceCount;
-    uint  firstIndex;
-    int  baseVertex;
-    uint  baseInstance;
-};
-
-struct Camera
-{
-	glm::mat4 proj;
-	glm::mat4 view;
-};
 
 struct BeginPassInfo
 {
@@ -68,6 +56,8 @@ struct FrameContext
 //--------------------------------------------------------------------------------------------------
 // OpenGL renderer
 
+
+
 struct GLRendererCreateInfo
 {
 	ResourceTable *resource_table;
@@ -85,7 +75,6 @@ public:
 
 	FrameContext begin_frame(FrameBeginInfo const *info);
 	void end_frame(FrameContext* ctx);
-
 	void present(RenderTargetID id, uint32_t w, uint32_t h) const;
 
 	const RendererDefaults *get_defaults() const;

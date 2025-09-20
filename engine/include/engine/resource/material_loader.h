@@ -1,8 +1,10 @@
 #ifndef MATERIAL_LOADER_H
 #define MATERIAL_LOADER_H
 
-#include "engine/renderer/types.h"
+#include "engine/resource/texture_loader.h"
+#include "engine/resource/shader_loader.h"
 #include "engine/resource/resource_table.h"
+
 
 struct GLTextureBinding
 {
@@ -25,6 +27,7 @@ struct GLMaterial
 extern ResourceAllocFns g_material_alloc_fns;
 const GLMaterial *get_material(ResourceTable *loader, ResourceHandle h);
 
+typedef ResourceHandle MaterialID;
 
 struct MaterialCreateInfo
 {

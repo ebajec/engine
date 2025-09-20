@@ -3,6 +3,7 @@
 #extension GL_GOOGLE_include_directive : require
 #include "framedata.glsl"
 #include "common.glsl"
+
 #include "globe.glsl"
 
 //------------------------------------------------------------------------------

@@ -13,8 +13,16 @@ EXTENSIONS=(vert frag comp geom tesc tese)
 
 i=0
 
+INCLUDE_FLAGS=""
+
+while INCLUDES= read -r dir; do
+	INCLUDE_FLAGS+=" -I${dir}"
+done < <(find "${INPUT_DIR}" -type d)
+
+echo "Include flags : ${INCLUDE_FLAGS}"
+
 for ext in "${EXTENSIONS[@]}"; do
-  for src in "$INPUT_DIR"/*."$ext"; do
+  for src in "$INPUT_DIR"/*/*."$ext"; do
     # skip if no files match
     [[ -e "$src" ]] || continue
 
@@ -23,7 +31,7 @@ for ext in "${EXTENSIONS[@]}"; do
 
 	if [ ${out} -ot ${src} ]; then
 		echo "Compiling $src → $out"
-		glslangValidator -G -I${INPUT_DIR} "$src" -o "$out"
+		glslangValidator -G ${INCLUDE_FLAGS} "$src" -o "$out"
 		i=$((i + 1))
 	fi
   done
