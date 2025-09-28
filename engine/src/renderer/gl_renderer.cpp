@@ -2,7 +2,7 @@
 
 #include "renderer/types.h"
 #include "renderer/gl_debug.h"
-#include "renderer/gl_renderer.h"
+#include "renderer/renderer.h"
 #include "renderer/defaults.h"
 
 #include <resource/material_loader.h>
@@ -16,13 +16,13 @@
 
 #include <glm/gtc/type_ptr.hpp>
 
-enum gl_renderer_bindings
+enum GLRendererBindings
 {
 	GL_RENDERER_COLOR_ATTACHMENT_BINDING = 0,
 	GL_RENDERER_FRAMEDATA_BINDING = 16
 };
 
-struct gl_renderer_impl
+struct renderer_impl
 {
 	ResourceTable *table;
 
@@ -65,10 +65,10 @@ static Framedata framedata_create(const Camera* camera)
 //--------------------------------------------------------------------------------------------------
 // INTERFACE
 
-std::unique_ptr<GLRenderer> GLRenderer::create(const GLRendererCreateInfo* info)
+std::unique_ptr<Renderer> Renderer::create(const RendererCreateInfo* info)
 {
-	GLRenderer* renderer = new GLRenderer();
-	gl_renderer_impl* impl = renderer->impl = new gl_renderer_impl{};
+	Renderer* renderer = new Renderer();
+	renderer_impl* impl = renderer->impl = new renderer_impl{};
 
 	impl->table = info->resource_table;
 
@@ -90,25 +90,20 @@ std::unique_ptr<GLRenderer> GLRenderer::create(const GLRendererCreateInfo* info)
 		return nullptr;
 	}
 
-	return std::unique_ptr<GLRenderer>(renderer);
+	return std::unique_ptr<Renderer>(renderer);
 }
 
-GLRenderer::~GLRenderer()
+Renderer::~Renderer()
 {
 	delete impl;
 }
 
-const RendererDefaults *GLRenderer::get_defaults() const 
-{
-	return &impl->defaults;
-}
-
-FrameContext GLRenderer::begin_frame(FrameBeginInfo const *info)
+FrameContext Renderer::begin_frame(FrameBeginInfo const *info)
 {
 	const GLBuffer *ubo = impl->table->get<GLBuffer>(impl->frame_ubo);
 
 	FrameContext ctx {};
-	ctx.table = impl->table;
+	ctx.rt = impl->table;
 	ctx.renderer = this;
 	ctx.data = framedata_create(info->camera);
 	ctx.ubo = impl->frame_ubo;
@@ -120,7 +115,7 @@ FrameContext GLRenderer::begin_frame(FrameBeginInfo const *info)
 	return ctx;
 }
 
-void GLRenderer::end_frame(FrameContext *ctx)
+void Renderer::end_frame(FrameContext *ctx)
 {
     GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
     glWaitSync(fence, 0, GL_TIMEOUT_IGNORED);
@@ -132,7 +127,7 @@ RenderContext FrameContext::begin_pass(const BeginPassInfo *info)
 	// don't even bother with this one
 	assert(info);
 
-	const GLRenderTarget* target = table->get<GLRenderTarget>(info->target); 
+	const GLRenderTarget* target = rt->get<GLRenderTarget>(info->target); 
 
 	if (!target) {
 		log_error("Failed to find render target with id %d",info->target);
@@ -142,7 +137,7 @@ RenderContext FrameContext::begin_pass(const BeginPassInfo *info)
 
 	RenderContext ctx = {
 		.renderer = renderer,
-		.rt = table,
+		.rt = rt,
 		.target = info->target,
 		.frame_ubo = ubo
 	};
@@ -172,7 +167,7 @@ void FrameContext::end_pass(const RenderContext* ctx)
 	glBindFramebuffer(GL_FRAMEBUFFER,0);
 };
 
-void GLRenderer::present(RenderTargetID id, uint32_t w, uint32_t h) const
+void Renderer::present(RenderTargetID id, uint32_t w, uint32_t h) const
 {
 	const GLRenderTarget* target = impl->table->get<GLRenderTarget>(id);
 
@@ -204,17 +199,18 @@ void RenderContext::bind_material(MaterialID id) const
 		return;
 	}
 
+	const RendererDefaults *defaults = &renderer->impl->defaults;
+
 	for (const auto& pair : material->tex_bindings) {
 		uint32_t binding = pair.first;
 		GLTextureBinding tex_bind = pair.second;
 
-		TextureID texID = tex_bind.id;
+		ImageID texID = tex_bind.id;
 		const GLImage *tex = rt->get<GLImage>(texID);
 
 		GLint filter = GL_LINEAR;
 
 		if (!tex) {
-			const RendererDefaults * defaults = renderer->get_defaults();
 			tex = rt->get<GLImage>(defaults->textures.missing);
 			filter = GL_NEAREST;
 

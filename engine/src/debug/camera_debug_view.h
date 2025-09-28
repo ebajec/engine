@@ -1,4 +1,4 @@
-#include "renderer/gl_renderer.h"
+#include "renderer/renderer.h"
 
 #include <resource/resource_table.h>
 #include <resource/buffer.h>
@@ -34,7 +34,7 @@ public:
 		if (result)
 			return;
 
-		frust_material = load_material_file(m_rt, "material/frustum.yaml");
+		frust_material = material_load_file(m_rt, "material/frustum.yaml");
 
 		if (!frust_material)
 			return;

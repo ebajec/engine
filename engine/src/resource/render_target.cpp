@@ -7,7 +7,7 @@
 static LoadResult gl_render_target_create(ResourceTable *table, void** res, void *usr);
 static void gl_render_target_destroy(ResourceTable *table, void *res);
 
-ResourceAllocFns g_target_alloc_fns = {
+ResourceAllocFns gl_render_target_alloc_fns = {
 	.create = gl_render_target_create,
 	.destroy = gl_render_target_destroy,
 	.load_file = nullptr

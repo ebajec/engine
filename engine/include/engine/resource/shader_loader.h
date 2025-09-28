@@ -6,6 +6,8 @@
 #include <memory>
 #include <unordered_map>
 
+extern ResourceAllocFns gl_shader_alloc_fns;
+
 struct GLShaderBindings
 {
 	std::unordered_map<std::string, uint32_t> ids;
@@ -19,7 +21,6 @@ struct GLShaderModule
 	std::unique_ptr<GLShaderBindings> bindings;
 };
 
-extern ResourceAllocFns g_shader_alloc_fns;
 extern const GLShaderModule *get_shader(ResourceTable *loader, ResourceHandle h);
 
 typedef ResourceHandle ShaderID;
@@ -33,6 +34,6 @@ struct ShaderCreateInfo
 	}
 };
 
-extern ResourceHandle load_shader_file(ResourceTable *loader, std::string_view path);
+extern ResourceHandle shader_load_file(ResourceTable *loader, std::string_view path);
 
 #endif // SHADER_LOADER_H

@@ -1,9 +1,11 @@
-#include "renderer/opengl.h"
+#include "engine/renderer/opengl.h"
 
-#include "resource/resource_table.h"
-#include "resource/material_loader.h"
-#include "resource/shader_loader.h"
-#include "resource/texture_loader.h"
+#include "engine/resource/resource_table.h"
+#include "engine/resource/material_loader.h"
+#include "engine/resource/shader_loader.h"
+#include "engine/resource/texture_loader.h"
+
+#include "resource/gl_utils.h"
 
 #include <vector>
 #include <string_view>
@@ -35,11 +37,13 @@ static void gl_material_destroy(ResourceTable *loader, void *res);
 
 static LoadResult gl_material_load_file(ResourceTable *loader, ResourceHandle h, const char *path);
 
-ResourceAllocFns g_material_alloc_fns = {
+ResourceAllocFns gl_material_alloc_fns = {
 	.create = &gl_material_create,
 	.destroy = &gl_material_destroy,
 	.load_file = &gl_material_load_file 
 };
+
+
 
 static LoadResult parse_material_file(PreMaterialInfo *info, std::string_view path)
 {
@@ -103,34 +107,17 @@ static LoadResult parse_material_file(PreMaterialInfo *info, std::string_view pa
 	return RESULT_SUCCESS;
 }
 
-static bool check_program(GLuint handle, const char* desc)
-{
-    GLint status = 0, log_length = 0;
-    glGetProgramiv(handle, GL_LINK_STATUS, &status);
-    glGetProgramiv(handle, GL_INFO_LOG_LENGTH, &log_length);
-    if ((GLboolean)status == GL_FALSE)
-        log_error("failed to link %s!\n", desc);
-    if (log_length > 1)
-    {
-		std::vector<char> buf;
-        buf.resize((size_t)(log_length + 1));
-        glGetProgramInfoLog(handle, log_length, nullptr, (GLchar*)buf.data());
-        fprintf(stderr, "%s\n", buf.data());
-    }
-    return (GLboolean)status == GL_TRUE;
-}
-
 static LoadResult gl_material_load(ResourceTable *loader, GLMaterial *mat, const PreMaterialInfo *info) 
 {
 	LoadResult res = RESULT_SUCCESS;
 
-	ShaderID vertID = load_shader_file(loader, info->pipeline.vert);
+	ShaderID vertID = shader_load_file(loader, info->pipeline.vert);
 	if (!vertID) {
 		res = RESULT_ERROR;
 		return res;
 	}
 
-	ShaderID fragID = load_shader_file(loader, info->pipeline.frag);
+	ShaderID fragID = shader_load_file(loader, info->pipeline.frag);
 	if (!fragID) {
 		res = RESULT_ERROR;
 		return res;
@@ -144,7 +131,7 @@ static LoadResult gl_material_load(ResourceTable *loader, GLMaterial *mat, const
 	glAttachShader(program, frag->id);
 	glLinkProgram(program);
 
-	if (!check_program(program,info->name.c_str())) {
+	if (!gl_check_program(program,info->name.c_str())) {
 		glDeleteProgram(program);
 		return RESULT_ERROR;
 	}
@@ -155,7 +142,7 @@ static LoadResult gl_material_load(ResourceTable *loader, GLMaterial *mat, const
 
 	typedef std::unordered_map<std::string,uint32_t> bind_map_t; 
 
-	 bind_map_t merged_ids;
+	bind_map_t merged_ids;
 
 	if (vert->bindings) {
 		bind_map_t map = vert->bindings->ids;
@@ -169,14 +156,14 @@ static LoadResult gl_material_load(ResourceTable *loader, GLMaterial *mat, const
 	size_t bind_count = info->bindings.size();
 	if (bind_count) {
 
-		std::vector<TextureID> textures (bind_count,RESOURCE_HANDLE_NULL);
+		std::vector<ImageID> textures (bind_count,RESOURCE_HANDLE_NULL);
 
 		const char* material_name = "material";
 
 		for (size_t i = 0; i < info->bindings.size(); ++i) {
 			const Binding *bind = &info->bindings[i];
 
-			TextureID texID = load_image_file(loader,bind->path);
+			ImageID texID = image_load_file(loader,bind->path);
 
 			if (texID == RESOURCE_HANDLE_NULL) {
 				log_error(
@@ -191,7 +178,7 @@ static LoadResult gl_material_load(ResourceTable *loader, GLMaterial *mat, const
 		std::unordered_map<uint32_t, GLTextureBinding> tex_bindings;
 
 		for (size_t i = 0; i < bind_count; ++i) {
-			TextureID texID = textures[i];
+			ImageID texID = textures[i];
 			
 			const Binding *bind = &info->bindings[i];
 
@@ -268,7 +255,7 @@ static void update_material_dependencies(ResourceTable *loader, ResourceHandle h
 	frag_ent->reload_info->add_subscriber(h);
 
 	for (auto &pair : material->tex_bindings) {
-		TextureID img = pair.second.id;
+		ImageID img = pair.second.id;
 
 		const ResourceEntry *img_ent = loader->get(img);
 
@@ -295,7 +282,7 @@ static LoadResult gl_material_load_file(ResourceTable *loader, ResourceHandle h,
 	return result;
 }
 
-ResourceHandle load_material_file(ResourceTable *loader, std::string_view path)
+ResourceHandle material_load_file(ResourceTable *loader, std::string_view path)
 {
 	if (ResourceHandle h = loader->find(path)) 
 		return h;

@@ -12,7 +12,7 @@ static LoadResult gl_image_create_from_disk(ResourceTable *loader, ResourceHandl
 
 static LoadResult gl_image_upload_mem(ResourceTable *loader, void *res, void *info);
 
-ResourceAllocFns g_image_alloc_fns = {
+ResourceAllocFns gl_image_alloc_fns = {
 	.create = gl_image_create,
 	.destroy = gl_image_destroy,
 	.load_file = gl_image_create_from_disk
@@ -92,7 +92,7 @@ static LoadResult gl_image_create_from_disk(ResourceTable *loader, ResourceHandl
 	ImageCreateInfo img_info = {
 		.w = (uint32_t)width,
 		.h = (uint32_t)height,
-		.fmt = TEX_FORMAT_RGBA8
+		.fmt = IMG_FORMAT_RGBA8
 	};
 
 	LoadResult result = loader->allocate(h, &img_info);
@@ -112,7 +112,7 @@ cleanup:
 	return result;
 }
 
-ResourceHandle create_image_2d(ResourceTable *loader, uint32_t width, uint32_t height, TexFormat fmt)
+ResourceHandle image_create_2d(ResourceTable *loader, uint32_t width, uint32_t height, ImgFormat fmt)
 {
 	ImageCreateInfo info = {
 		.w = width,
@@ -131,7 +131,7 @@ ResourceHandle create_image_2d(ResourceTable *loader, uint32_t width, uint32_t h
 	return h;
 }
 
-ResourceHandle load_image_file(ResourceTable *loader, std::string_view path)
+ResourceHandle image_load_file(ResourceTable *loader, std::string_view path)
 {
 	if (ResourceHandle h = loader->find(path)) {
 		return h;

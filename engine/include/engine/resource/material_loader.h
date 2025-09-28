@@ -5,10 +5,11 @@
 #include "engine/resource/shader_loader.h"
 #include "engine/resource/resource_table.h"
 
+extern ResourceAllocFns gl_material_alloc_fns;
 
 struct GLTextureBinding
 {
-	TextureID id;
+	ImageID id;
 };
 
 struct GLMaterial
@@ -24,7 +25,6 @@ struct GLMaterial
 	std::unordered_map<uint32_t, GLTextureBinding> tex_bindings;
 };
 
-extern ResourceAllocFns g_material_alloc_fns;
 const GLMaterial *get_material(ResourceTable *loader, ResourceHandle h);
 
 typedef ResourceHandle MaterialID;
@@ -33,6 +33,6 @@ struct MaterialCreateInfo
 {
 	std::string path;
 };
-ResourceHandle load_material_file(ResourceTable *loader, std::string_view path);
+ResourceHandle material_load_file(ResourceTable *loader, std::string_view path);
 
 #endif // MATERIAL_LOADER_H

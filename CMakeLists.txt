@@ -25,6 +25,7 @@ find_package(OpenGL REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(glfw3 REQUIRED)
+find_package(PROJ REQUIRED)
 
 add_compile_options(-g)
 

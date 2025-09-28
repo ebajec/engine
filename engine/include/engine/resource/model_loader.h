@@ -4,9 +4,9 @@
 #include "engine/resource/resource_table.h"
 #include "engine/renderer/opengl.h"
 
+extern ResourceAllocFns gl_model_alloc_fns;
 struct GLModel
 {
-	int init();
 	ModelType type;
 
 	GLuint vao;
@@ -20,8 +20,6 @@ struct GLModel
 
 	size_t isize;
 };
-
-extern ResourceAllocFns g_model_alloc_fns;
 
 const GLModel *get_model(ResourceTable *loader, ResourceHandle h);
 
@@ -52,8 +50,8 @@ class ModelLoader
 public:
 	static void registration(ResourceTable *loader);
 
-	static ResourceHandle load_2d(ResourceTable *loader, Mesh2DCreateInfo *ci);
-	static ResourceHandle load_3d(ResourceTable *loader, Mesh3DCreateInfo *ci);
+	static ResourceHandle model_load_2d(ResourceTable *loader, Mesh2DCreateInfo *ci);
+	static ResourceHandle model_load_3d(ResourceTable *loader, Mesh3DCreateInfo *ci);
 };
 
 extern ResourceHandle model_create(ResourceTable *loader);

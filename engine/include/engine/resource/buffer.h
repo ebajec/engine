@@ -4,16 +4,15 @@
 #include <engine/renderer/opengl.h>
 #include <engine/resource/resource_table.h>
 
+extern ResourceAllocFns gl_buffer_alloc_fns;
 struct GLBuffer
 {
 	size_t size;
-	uint32_t id;
+	GLuint id;
 };
 
+
 typedef ResourceHandle BufferID;
-
-extern ResourceAllocFns g_buffer_alloc_fns;
-
 struct BufferCreateInfo
 {
 	size_t size;

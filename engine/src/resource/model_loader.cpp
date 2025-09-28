@@ -7,25 +7,25 @@
 static LoadResult gl_model_create(ResourceTable *table, void **res, void *info);
 static void gl_model_destroy(ResourceTable *table, void *model);
 
-ResourceAllocFns g_model_alloc_fns = {
+ResourceAllocFns gl_model_alloc_fns = {
 	.create = gl_model_create,
 	.destroy = gl_model_destroy,
 	.load_file = nullptr
 };
 
-static LoadResult model_load_2d(ResourceTable *table, void *res, void *info);
-static LoadResult model_load_3d(ResourceTable *table, void *res, void *info);
+static LoadResult gl_model_load_2d(ResourceTable *table, void *res, void *info);
+static LoadResult gl_model_load_3d(ResourceTable *table, void *res, void *info);
 
 ResourceLoaderFns g_model_2d_load_fns {
-	.loader_fn = model_load_2d,
+	.loader_fn = gl_model_load_2d,
 	.post_load_fn = nullptr
 };
 ResourceLoaderFns g_model_3d_load_fns {
-	.loader_fn = model_load_3d,
+	.loader_fn = gl_model_load_3d,
 	.post_load_fn = nullptr
 };
 
-LoadResult model_load_2d(ResourceTable *table, void *res, void *info)
+LoadResult gl_model_load_2d(ResourceTable *table, void *res, void *info)
 {
 	GLModel *model = static_cast<GLModel*>(res);
 	Mesh2DCreateInfo *ci = static_cast<Mesh2DCreateInfo*>(info);
@@ -60,7 +60,7 @@ LoadResult model_load_2d(ResourceTable *table, void *res, void *info)
 	return RESULT_SUCCESS;
 }
 
-LoadResult model_load_3d(ResourceTable *table, void *res, void *info)
+LoadResult gl_model_load_3d(ResourceTable *table, void *res, void *info)
 {
 	GLModel *model = static_cast<GLModel*>(res);
 	Mesh3DCreateInfo *ci = static_cast<Mesh3DCreateInfo*>(info);
@@ -142,7 +142,7 @@ void ModelLoader::registration(ResourceTable *table)
 	table->register_loader("model3d", g_model_3d_load_fns);
 }
 
-ResourceHandle ModelLoader::load_2d(ResourceTable *table, Mesh2DCreateInfo *ci)
+ResourceHandle ModelLoader::model_load_2d(ResourceTable *table, Mesh2DCreateInfo *ci)
 {
 	ResourceHandle h = table->create_handle(RESOURCE_TYPE_MODEL);
 
@@ -163,7 +163,7 @@ load_failed:
 	return RESOURCE_HANDLE_NULL;
 }
 
-ResourceHandle ModelLoader::load_3d(ResourceTable *table, Mesh3DCreateInfo *ci)
+ResourceHandle ModelLoader::model_load_3d(ResourceTable *table, Mesh3DCreateInfo *ci)
 {
 	ResourceHandle h = table->create_handle(RESOURCE_TYPE_MODEL);
 

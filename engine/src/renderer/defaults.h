@@ -14,7 +14,7 @@ struct RendererDefaults
 	} materials;
 
 	struct {
-		TextureID missing;
+		ImageID missing;
 	} textures;
 
 	struct {	

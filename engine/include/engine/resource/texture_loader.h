@@ -5,6 +5,8 @@
 #include "engine/renderer/opengl.h"
 #include "engine/resource/resource_table.h"
 
+extern ResourceAllocFns gl_image_alloc_fns;
+
 struct GLImage 
 {
 	GLuint id;
@@ -13,20 +15,19 @@ struct GLImage
 	uint32_t h;
 	uint32_t d;
 
-	TexFormat fmt;
+	ImgFormat fmt;
 };
-
-extern ResourceAllocFns g_image_alloc_fns;
 
 struct ImageCreateInfo
 {
 	uint32_t w;
 	uint32_t h;
-	TexFormat fmt;
+	ImgFormat fmt;
 };
 
+const GLImage *get_image(ResourceTable *table, ResourceHandle h);
 
-typedef ResourceHandle TextureID;
+typedef ResourceHandle ImageID;
 
 class ImageLoader
 {
@@ -35,10 +36,8 @@ public:
 	static void registration(ResourceTable *table);
 };
 
-ResourceHandle create_image_2d(ResourceTable *table, uint32_t w, uint32_t h, 
-							   TexFormat fmt = TEX_FORMAT_RGBA8);
-ResourceHandle load_image_file(ResourceTable *table, std::string_view path);
-
-const GLImage *get_image(ResourceTable *table, ResourceHandle h);
+ResourceHandle image_create_2d(ResourceTable *table, uint32_t w, uint32_t h, 
+							   ImgFormat fmt = IMG_FORMAT_RGBA8);
+ResourceHandle image_load_file(ResourceTable *table, std::string_view path);
 
 #endif //IMAGE_LOADER_H

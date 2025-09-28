@@ -1,0 +1,3 @@
+shaders:
+  vert: spheres_instanced.vert
+  frag: blinnphong.frag

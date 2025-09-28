@@ -6,7 +6,7 @@
 #include "engine/utils/geometry.h"
 #include "engine/utils/log.h"
 
-#include "engine/renderer/gl_renderer.h"
+#include "engine/renderer/renderer.h"
 
 #include "engine/resource/resource_table.h"
 #include "engine/resource/material_loader.h"
@@ -254,7 +254,7 @@ glm::vec2 vec2_from_complex(std::complex<float> c)
 
 struct RandomLine : AppComponent 
 {
-	GLRenderer *renderer;
+	Renderer *renderer;
 	ResourceTable *table;
 
 	std::shared_ptr<BaseViewComponent> view;
@@ -286,7 +286,7 @@ struct RandomLine : AppComponent
 		0,1,2, 2,1,3
 	};
 
-	RandomLine(GLRenderer *renderer, ResourceTable *table, uint32_t count) : 
+	RandomLine(Renderer *renderer, ResourceTable *table, uint32_t count) : 
 		AppComponent(), renderer(renderer), table(table) 
 	{
 		//----------------------------------------------------------------------------
@@ -352,7 +352,7 @@ struct RandomLine : AppComponent
 			offset += points.size();
 		}
 
-		material = load_material_file(table, "material/line.yaml");
+		material = material_load_file(table, "material/line.yaml");
 
 		//----------------------------------------------------------------------------
 		// Buffers
@@ -536,11 +536,11 @@ int main(int argc, char* argv[])
 	//-------------------------------------------------------------------------------------------------
 	// Renderer
 
-	GLRendererCreateInfo renderer_info = {
+	RendererCreateInfo renderer_info = {
 		.resource_table = table.get()
 	};
 
-	std::shared_ptr<GLRenderer> renderer = GLRenderer::create(&renderer_info);
+	std::shared_ptr<Renderer> renderer = Renderer::create(&renderer_info);
 
 	if (!renderer) {
 		log_error("Failed to create renderer!");
@@ -558,15 +558,15 @@ int main(int argc, char* argv[])
 	//-------------------------------------------------------------------------------------------------
 	// test shader 
 	
-	MaterialID default_meshID = load_material_file(table.get(), "material/default_mesh3d.yaml");
+	MaterialID default_meshID = material_load_file(table.get(), "material/default_mesh3d.yaml");
 	if (!default_meshID)
 		return EXIT_FAILURE;
 
-	MaterialID globe_tileID = load_material_file(table.get(), "material/globe_tile.yaml");
+	MaterialID globe_tileID = material_load_file(table.get(), "material/globe_tile.yaml");
 	if (!globe_tileID)
 		return EXIT_FAILURE;
 
-	MaterialID box_material = load_material_file(table.get(), "material/box_debug.yaml");
+	MaterialID box_material = material_load_file(table.get(), "material/box_debug.yaml");
 	if (!box_material)
 		return EXIT_FAILURE;
 	
@@ -582,7 +582,7 @@ int main(int argc, char* argv[])
 			.data = verts.data(), .vcount = verts.size(),
 			.indices = indices.data(), .icount = indices.size(),
 		};
-		cubeID = ModelLoader::load_3d(table.get(),&load_info);;
+		cubeID = ModelLoader::model_load_3d(table.get(),&load_info);;
 
 		if (!cubeID) {
 			return EXIT_FAILURE;
@@ -601,7 +601,7 @@ int main(int argc, char* argv[])
 		.data = sphereVerts.data(), .vcount = sphereVerts.size(),
 		.indices = sphereIndices.data(), .icount = sphereIndices.size(),
 	};
-	ModelID sphereID = ModelLoader::load_3d(table.get(),&sphereLoadInfo);;
+	ModelID sphereID = ModelLoader::model_load_3d(table.get(),&sphereLoadInfo);;
 
 	if (!sphereID) {
 		return EXIT_FAILURE;

@@ -388,7 +388,7 @@ static LoadResult create_render_data(ResourceTable *rt, RenderData &data)
 	std::vector<uint32_t> tile_indices = create_tile_indices();
 
 	data.vao = globe_vao();
-	data.material = load_material_file(rt, "material/globe_tile.yaml");
+	data.material = material_load_file(rt, "material/globe_tile.yaml");
 
 	if (!data.material)
 		goto load_failed;

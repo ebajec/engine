@@ -7,7 +7,7 @@
 static LoadResult gl_buffer_create(ResourceTable *table, void **res, void *usr);
 static void gl_buffer_destroy(ResourceTable *table, void *res);
 
-ResourceAllocFns g_buffer_alloc_fns = {
+ResourceAllocFns gl_buffer_alloc_fns = {
 	.create = gl_buffer_create,
 	.destroy = gl_buffer_destroy,
 	.load_file = nullptr

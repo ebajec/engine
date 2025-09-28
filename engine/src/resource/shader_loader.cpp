@@ -23,7 +23,7 @@ static LoadResult gl_shader_module_create(ResourceTable *loader, void **res, voi
 static void gl_shader_module_destroy(ResourceTable *loader, void *res);
 static LoadResult gl_shader_load_file(ResourceTable *loader, ResourceHandle h, const char *path);
 
-ResourceAllocFns g_shader_alloc_fns = {
+ResourceAllocFns gl_shader_alloc_fns = {
 	.create = &gl_shader_module_create,
 	.destroy = &gl_shader_module_destroy,
 	.load_file = &gl_shader_load_file 
@@ -262,7 +262,7 @@ static LoadResult gl_shader_load_file(ResourceTable *loader, ResourceHandle h, c
 	return result;
 }
 
-ResourceHandle load_shader_file(ResourceTable *loader, std::string_view path)
+ResourceHandle shader_load_file(ResourceTable *loader, std::string_view path)
 {
 	if (ResourceHandle h = loader->find(path)) 
 		return h;

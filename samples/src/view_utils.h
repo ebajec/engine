@@ -1,7 +1,7 @@
 #ifndef APP_VIEW_H
 #define APP_VIEW_H
 
-#include "engine/renderer/gl_renderer.h"
+#include "engine/renderer/renderer.h"
 #include "engine/utils/camera.h"
 #include "app.h"
 

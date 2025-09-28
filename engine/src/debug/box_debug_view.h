@@ -64,7 +64,7 @@ struct BoxDebugView
 
 	BoxDebugView(ResourceTable *table) : table(table) {
 		model = model_create(table);
-		material = load_material_file(table, "material/box_debug.yaml");
+		material = material_load_file(table, "material/box_debug.yaml");
 	
 	}
 

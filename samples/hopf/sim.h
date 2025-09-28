@@ -3,12 +3,12 @@
 
 #include "engine/resource/resource_table.h"
 #include "engine/resource/material_loader.h"
-#include "engine/resource/shader_loader.h"
+#include "engine/resource/compute_pipeline.h"
 #include "engine/resource/model_loader.h"
 #include "engine/resource/buffer.h"
 
 #include "engine/renderer/types.h"
-#include "engine/renderer/gl_renderer.h"
+#include "engine/renderer/renderer.h"
 
 struct HopfSimPointData 
 {
@@ -48,19 +48,22 @@ struct HopfSim
 	ResourceTable *rt;
 
 	ModelID ball_model;
-	ModelID ring_model;
 
 	BufferID ubo;
 
-	// HopfSimPointData[]
-	BufferID sphere_points;
 
-	// HopfSimVertex[] | HopfSimLineData[] | HopfSimTangentFrame[] | HopfSimInstanceLine[]
-	BufferID ring_data;
+	BufferID sphere_points; // HopfSimPointData[]
 
-	ShaderID update_points;
-	ShaderID compute_fibers;
-	ShaderID compute_polylines[3];
+	BufferID ring_data; // HopfSimPointData[]
+    BufferID ring_instances; // HopfSimInstanceLine[]
+    BufferID ring_tangents; // HopfSimTangentFrame[]
+	
+	BufferID ring_mesh_verts; // HopfSimVertex[]
+	BufferID ring_mesh_indices; // HopfSimVertex[]
+
+	ComputePipelineID update_points;
+	ComputePipelineID compute_fibers;
+	ComputePipelineID compute_polylines[3];
 
 	MaterialID ball_material;
 	MaterialID ring_material;

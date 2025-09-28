@@ -1,5 +1,6 @@
 #include "resource/resource_table.h"
 #include "resource/material_loader.h"
+#include "resource/compute_pipeline.h"
 #include "resource/shader_loader.h"
 #include "resource/texture_loader.h"
 #include "resource/model_loader.h"
@@ -146,12 +147,13 @@ std::unique_ptr<ResourceTable> ResourceTable::create(const ResourceTableCreateIn
 	// TODO : Think of a nice way to not initialize these here.
 	
 	loader->alloc_fns[RESOURCE_TYPE_NONE] =	{};
-	loader->alloc_fns[RESOURCE_TYPE_MATERIAL] = g_material_alloc_fns;
-	loader->alloc_fns[RESOURCE_TYPE_SHADER] = g_shader_alloc_fns; 	
-	loader->alloc_fns[RESOURCE_TYPE_IMAGE] = g_image_alloc_fns; 
-	loader->alloc_fns[RESOURCE_TYPE_BUFFER] = g_buffer_alloc_fns; 
-	loader->alloc_fns[RESOURCE_TYPE_MODEL] = g_model_alloc_fns;	
-	loader->alloc_fns[RESOURCE_TYPE_RENDER_TARGET] = g_target_alloc_fns;	
+	loader->alloc_fns[RESOURCE_TYPE_MATERIAL] = gl_material_alloc_fns;
+	loader->alloc_fns[RESOURCE_TYPE_COMPUTE_PIPELINE] = gl_compute_pipeline_alloc_fns;
+	loader->alloc_fns[RESOURCE_TYPE_SHADER] = gl_shader_alloc_fns; 	
+	loader->alloc_fns[RESOURCE_TYPE_IMAGE] = gl_image_alloc_fns; 
+	loader->alloc_fns[RESOURCE_TYPE_BUFFER] = gl_buffer_alloc_fns; 
+	loader->alloc_fns[RESOURCE_TYPE_MODEL] = gl_model_alloc_fns;	
+	loader->alloc_fns[RESOURCE_TYPE_RENDER_TARGET] = gl_render_target_alloc_fns;	
 
 	return loader;
 }

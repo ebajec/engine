@@ -13,6 +13,7 @@ deps/stb/stb
 
 resource/shader/*.spv
 samples/boxes/
+samples/hopf/
 
 perf.*
 

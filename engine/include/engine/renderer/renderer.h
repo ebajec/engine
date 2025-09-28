@@ -2,8 +2,6 @@
 #define GL_RENDERER_H
 
 #include <engine/renderer/types.h>
-#include <engine/renderer/opengl.h>
-#include <engine/renderer/defaults.h>
 
 #include <engine/resource/resource_table.h>
 #include <engine/resource/model_loader.h>
@@ -16,7 +14,7 @@
 
 #include <memory>
 
-class GLRenderer;
+class Renderer;
 struct FrameContext;
 
 struct BeginPassInfo
@@ -26,7 +24,7 @@ struct BeginPassInfo
 
 struct RenderContext
 {
-	const GLRenderer *renderer;
+	const Renderer *renderer;
 	ResourceTable *rt;
 	RenderTargetID target;
 	BufferID frame_ubo;
@@ -43,8 +41,8 @@ struct FrameBeginInfo
 
 struct FrameContext
 {
-	const GLRenderer *renderer;
-	ResourceTable *table;
+	const Renderer *renderer;
+	ResourceTable *rt;
 	Framedata data;
 	BufferID ubo;
 
@@ -52,32 +50,27 @@ struct FrameContext
     void end_pass(const RenderContext* ctx);
 };
 
-
-//--------------------------------------------------------------------------------------------------
-// OpenGL renderer
-
-
-
-struct GLRendererCreateInfo
+struct RendererCreateInfo
 {
 	ResourceTable *resource_table;
 };
 
-typedef struct gl_renderer_impl gl_renderer_impl;
-class GLRenderer 
-{
-	gl_renderer_impl* impl;
-public:
-    GLRenderer(){}
-	~GLRenderer();
+struct renderer_impl;
 
-	static std::unique_ptr<GLRenderer> create(const GLRendererCreateInfo* info);
+class Renderer 
+{
+public:
+	struct renderer_impl* impl;
+
+    Renderer(){}
+	~Renderer();
+
+	static std::unique_ptr<Renderer> create(const RendererCreateInfo* info);
 
 	FrameContext begin_frame(FrameBeginInfo const *info);
 	void end_frame(FrameContext* ctx);
-	void present(RenderTargetID id, uint32_t w, uint32_t h) const;
 
-	const RendererDefaults *get_defaults() const;
+	void present(RenderTargetID id, uint32_t w, uint32_t h) const;
 };
 
 #endif

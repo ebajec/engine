@@ -24,9 +24,9 @@ struct Camera
 	glm::mat4 view;
 };
 
-enum TexFormat
+enum ImgFormat
 {
-	TEX_FORMAT_RGBA8
+	IMG_FORMAT_RGBA8
 };
 
 enum ModelType

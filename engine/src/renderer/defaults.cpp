@@ -9,7 +9,7 @@
 LoadResult renderer_defaults_init(ResourceTable *table, RendererDefaults *defaults) 
 {
 	LoadResult result = RESULT_SUCCESS;
-	defaults->materials.screen_quad = load_material_file(table,"material/screen_quad.yaml");
+	defaults->materials.screen_quad = material_load_file(table,"material/screen_quad.yaml");
 
 	if (!defaults->materials.screen_quad) 
 		return RESULT_ERROR;
@@ -24,7 +24,7 @@ LoadResult renderer_defaults_init(ResourceTable *table, RendererDefaults *defaul
 		.icount = sizeof(g_default_tex_quad_indices)/sizeof(uint32_t),
 	};
 	
-	defaults->models.screen_quad = ModelLoader::load_2d(table, &mesh_info);
+	defaults->models.screen_quad = ModelLoader::model_load_2d(table, &mesh_info);
 
 	if (!defaults->models.screen_quad) 
 		return RESULT_ERROR;
@@ -34,7 +34,7 @@ LoadResult renderer_defaults_init(ResourceTable *table, RendererDefaults *defaul
 	
 	uint32_t w = 16, h = 16;
 
-	defaults->textures.missing = create_image_2d(table, w, h, TEX_FORMAT_RGBA8);
+	defaults->textures.missing = image_create_2d(table, w, h, IMG_FORMAT_RGBA8);
 
 	uint32_t c[2] = {0xFF000000, 0xFFFF00FF};
 

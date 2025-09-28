@@ -1,0 +1,147 @@
+#version 430 core
+
+uniform uint numLines;
+uniform uint lineDetail;
+uniform float time;
+
+layout (local_size_x = 32, local_size_y = 16, local_size_z = 1) in;
+
+struct VertexData
+{
+    vec4 position;
+    vec4 color;
+    vec4 normal;
+};
+
+
+struct DrawArraysIndirectCommand
+{
+    uint  count;
+    uint  instanceCount;
+    uint  first;
+    uint  baseInstance;
+};
+
+struct InstanceData
+{
+    DrawArraysIndirectCommand cmd;
+    float width;
+    float avgLength;
+};
+
+struct FrameData
+{
+    vec4 T;  // Tangent 
+    vec4 N;  // Normal    
+    vec4 B;  // Binormal
+};
+
+struct Vertex 
+{
+    vec4 position;
+    vec4 color;
+    vec4 normal;
+};
+
+// Input data for each polyline. Indexed by x invocation id.
+layout (std430, binding = 0) buffer InputData
+{
+    VertexData lineInput[];
+};
+
+// Data for each polyline instance, required to correctly access input
+// and calculate mesh points. Indexed by the z invocation id.
+layout (std430, binding = 1) buffer instanceData
+{
+    InstanceData instance[];
+};
+
+// Tangent frames for each point on each polyline. Indexed by x invocation id.
+layout (std430, binding = 2) buffer frameData
+{   
+    FrameData frames[];
+};
+
+// Output for mesh data. Indexed by x and y invocation ids.
+layout (std430, binding = 3) buffer outputMesh
+{
+    Vertex vertices[];
+};
+
+layout (std430, binding = 4) buffer outputIndices
+{
+    uint indices[];
+};
+
+// Function to calculate the intersection point of a line and a plane
+vec3 linePlaneIntersect(vec3 linePoint, vec3 lineDir, vec3 planePoint, vec3 planeNormal) {
+    float denom = dot(planeNormal, lineDir);
+
+    // Check if the line is parallel to the plane
+    if (abs(denom) < 1e-6)
+        return vec3(0, 0, 0);
+    
+    // Calculate the distance along the line direction to the intersection point
+    float t = dot(planePoint - linePoint, planeNormal) / denom;
+    
+    return linePoint + t * lineDir;
+}
+
+uvec2 getSegIndices(uint idx, uint size, uint offset) {
+    uint x = (idx == size - 1) ? size - 2 : idx;
+    uint y = (idx == size - 1) ? size - 1 : idx + 1;
+
+    return uvec2(offset + x, offset + y);
+}
+
+const float PI = 3.141592654;
+
+void main() {
+    uvec3 id = gl_GlobalInvocationID;
+
+    if (id.z >= numLines)
+        return;
+
+    uint lineSize  = instance[id.z].cmd.count;
+    uint offset    = instance[id.z].cmd.first;
+    float width    = instance[id.z].width;
+
+    uint lineIndex = offset + id.x;
+
+    if (id.x >= lineSize)
+        return;
+
+    if (id.y >= lineDetail)
+        return;
+
+    // Compute mesh vertices for each line
+    float t = 2.0*PI*float(id.y) / float(lineDetail);
+
+    vec3 pos = lineInput[lineIndex].position.xyz;
+    vec3 offsetVec = cos(t) * frames[lineIndex].N.xyz + sin(t) * frames[lineIndex].B.xyz;
+
+    uint curIndex = lineDetail*lineIndex + id.y;
+
+    vec3 normal = offsetVec;
+
+    vertices[curIndex].normal = vec4(normalize(normal), 0.0);
+    vertices[curIndex].position = vec4(pos + width*normal, 1.0);
+    vertices[curIndex].color = lineInput[lineIndex].color;
+
+    // offset for position in index buffer
+    curIndex = 6*curIndex;
+
+    uvec2 idNext = uvec2(mod(id.x + 1,lineSize),mod(id.y + 1,lineDetail));
+
+    vec4 diff = lineInput[id.x].position - lineInput[idNext.x].position;
+
+    // If points are too far apart, don't draw anything
+    //if (dot(diff, diff) > 0.01) return;
+
+    indices[curIndex++] = (offset + id.x     )* lineDetail + id.y;
+    indices[curIndex++] = (offset + id.x     )* lineDetail + idNext.y;
+    indices[curIndex++] = (offset + idNext.x )* lineDetail + idNext.y;
+    indices[curIndex++] = (offset + id.x     )* lineDetail + id.y;
+    indices[curIndex++] = (offset + idNext.x )* lineDetail + idNext.y;
+    indices[curIndex++] = (offset + idNext.x )* lineDetail + id.y;
+}

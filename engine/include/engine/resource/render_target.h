@@ -6,8 +6,7 @@
 
 #include <cstdint>
 
-
-typedef ResourceHandle RenderTargetID;
+extern ResourceAllocFns gl_render_target_alloc_fns;
 
 struct GLRenderTarget
 {
@@ -19,6 +18,8 @@ struct GLRenderTarget
 	GLuint depth;
 	GLuint ubo;
 };
+
+typedef ResourceHandle RenderTargetID;
 
 enum RenderTargetCreateFlagBits
 {
@@ -33,8 +34,6 @@ struct RenderTargetCreateInfo
 	uint32_t h;
 	RenderTargetCreateFlags flags;
 };
-
-extern ResourceAllocFns g_target_alloc_fns;
 
 extern ResourceHandle render_target_create(ResourceTable *table, const RenderTargetCreateInfo *info);
 extern LoadResult render_target_resize(ResourceTable *table, ResourceHandle h, const RenderTargetCreateInfo *info);

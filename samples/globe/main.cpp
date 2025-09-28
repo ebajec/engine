@@ -173,11 +173,11 @@ int main(int argc, char* argv[])
 	//-------------------------------------------------------------------------------------------------
 	// Renderer
 
-	GLRendererCreateInfo renderer_info = {
+	RendererCreateInfo renderer_info = {
 		.resource_table = rt.get()
 	};
 
-	std::unique_ptr<GLRenderer> renderer = GLRenderer::create(&renderer_info);
+	std::unique_ptr<Renderer> renderer = Renderer::create(&renderer_info);
 
 	if (!renderer) {
 		log_error("Failed to create renderer!");
@@ -196,7 +196,7 @@ int main(int argc, char* argv[])
 
 	//-------------------------------------------------------------------------------------------------
 	// test shader 
-	MaterialID default_meshID = load_material_file(rt.get(), "material/default_mesh3d.yaml");
+	MaterialID default_meshID = material_load_file(rt.get(), "material/default_mesh3d.yaml");
 	if (!default_meshID)
 		return EXIT_FAILURE;
 

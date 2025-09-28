@@ -1,7 +1,7 @@
 #ifndef GLOBE_H
 #define GLOBE_H
 
-#include "engine/renderer/gl_renderer.h"
+#include "engine/renderer/renderer.h"
 #include "engine/resource/resource_table.h"
 #include "engine/globe/tiling.h"
 #include "engine/globe/gpu_cache.h"

@@ -1,0 +1,222 @@
+#version 430 core
+
+uniform uint numFibers;
+uniform float tOffset;
+
+layout (local_size_x = 16,local_size_y = 32,local_size_z = 1) in;
+
+
+struct SpherePointData
+{
+    vec4 position;
+    vec4 color;
+};
+
+struct DrawArraysIndirectCommand
+{
+    uint  count;
+    uint  instanceCount;
+    uint  first;
+    uint  baseInstance;
+};
+
+struct InstanceData
+{
+    DrawArraysIndirectCommand command;
+    float width;
+    uint padding;
+};
+
+struct VertexData 
+{
+    vec4 position; 
+    vec4 color;  
+    vec4 normal;
+};
+
+// Input buffer containing points on a sphere
+layout (std430, binding = 0) buffer InputData
+{
+    SpherePointData inputData[];
+};
+
+// Data for each polyline instance, required to correctly access input
+// and calculate mesh points.
+layout (std430, binding = 1) buffer instanceData
+{
+    InstanceData instance[];
+};
+
+// Output data for each polyline. 
+layout (std430, binding = 2) buffer outputData
+{
+    VertexData outputPoints[];
+};
+
+// Output data for each polyline. 
+layout (std430, binding = 3) buffer outputIndices
+{
+    uint indices[];
+};
+
+layout (std430, binding = 4) buffer outputNormals
+{
+    vec4 normals[];
+};
+
+const float PI = 3.141592654;
+
+vec4 hopf_inverse(vec4 s) {
+    float denom = sqrt(2*(1+s.x));
+    float t = 2*PI*s.w;
+
+    float cos_t = cos(t);
+    float sin_t = sin(t);
+
+    return denom < 0.001 ? vec4(0) : vec4(
+        -sin_t*(1+s.x),
+        cos_t*(1+s.x),
+        cos_t*s.y - sin_t*s.z,
+        cos_t*s.z + sin_t*s.y
+    )/denom;
+}
+
+vec2 cmult(vec2 a, vec2 b)
+{
+    return vec2(a.x*b.x - a.y*b.y,a.x*b.y + b.x*a.y);
+}
+
+vec2 conj(vec2 a)
+{
+    return vec2(a.x,-a.y);
+}
+
+vec2 expi(float t)
+{
+    return vec2(cos(t),sin(t));
+}
+
+vec3 sproj(vec4 v) {
+    return vec3(v.x / (1 - v.w), v.y / (1 - v.w), v.z / (1 - v.w));
+}
+
+vec3 orthonormalize(vec3 a, vec3 b)
+{
+    vec3 norm = normalize(a);
+
+    return normalize(b - dot(b,norm)*norm);
+}
+
+vec3 circumcenter(vec3 a, vec3 b, vec3 c)
+{
+    vec3 A = a - b;
+    vec3 C = c - b;
+    vec3 u1 = normalize(A);
+    vec3 u2 = normalize(C - dot(C,u1)*u1);
+
+    mat3 T = transpose(mat3(u1,u2,vec3(0)));
+
+    A = T*A;
+    C = T*C;
+
+    float d = 2*(A.x*C.y - A.y*C.x);
+
+    mat2 M = (1/d)*mat2(-A.y,A.x,C.y,-C.x);
+
+    vec2 u = M*vec2(dot(C,C),dot(A,A));
+
+    return b + u.x*u1 + u.y*u2;
+
+}
+
+vec3 sproj2(vec4 v)
+{
+    float r = acos(v.w)/PI;
+    float proj = r/sqrt(1-v.w*v.w);
+
+    return proj*vec3(v);
+}
+
+vec4 compute_fiber(vec3 p, float t)
+{
+    float a = p.x;
+    float b = p.y;
+    float c = p.z;
+    
+    float r1 = sqrt((1+a)/2);
+    float r2 = sqrt((1-a)/2);
+    float theta1 = 0;
+    float theta2 = atan(-c,b) - 0;
+
+    vec2 z = r1*expi(theta1);
+    vec2 w = r2*expi(theta2);
+
+    vec2 u = expi(t);
+
+    vec2 zp = cmult(u,z);
+    vec2 wp = cmult(conj(u),w);
+
+    return vec4(zp,wp);
+}
+
+vec4 hopf_inverse2(vec4 p,float s)
+{
+    float t = 2*PI*p.w;
+
+    float a = p.z;
+    float b = p.y;
+    float c = p.x;
+    
+    //vec4 fiber_point = compute_fiber(vec3(a,b,c),t);
+
+    float epsilon = clamp(0.01,0.001,0.1);
+
+    vec3 p1 = sproj(compute_fiber(vec3(a,b,c),-epsilon));
+    vec3 p2 = sproj(compute_fiber(vec3(a,b,c),0.0));
+    vec3 p3 = sproj(compute_fiber(vec3(a,b,c), epsilon));
+
+    vec3 middle = circumcenter(p1,p2,p3);
+    vec3 v = p2 - middle;
+    vec3 axis = normalize(cross(v, p3 - middle));
+    vec3 orth = cross(v,axis);
+
+    return vec4(middle + cos(t)*v + sin(t)*orth,1.0);
+}
+
+void main() {   
+    uvec3 id = gl_GlobalInvocationID;
+
+    if (id.x >= numFibers)
+        return;
+
+    uint size = instance[id.x].command.count;    
+    uint offset = instance[id.x].command.first;
+
+    vec4 s2_point = inputData[id.x].position;
+
+    if (id.y >= size)
+        return;
+        
+    float s = float(id.x) / float(numFibers);
+    float t = float(id.y) / float(size);
+
+    vec4 result = hopf_inverse2(vec4(s2_point.xyz,t),s);
+
+    outputPoints[offset + id.y].position = result;
+    outputPoints[offset + id.y].color = inputData[id.x].color;
+
+    uint meshIndex = 6*(offset + id.y);
+
+    float denom = sqrt(2*(1+s2_point.x));
+
+    uvec2 idNext = uvec2(mod(id.x + 1,numFibers),mod(id.y + 1,size));
+
+    indices[meshIndex++] = instance[id.x    ].command.first + id.y;
+    indices[meshIndex++] = instance[id.x    ].command.first + idNext.y;
+    indices[meshIndex++] = instance[idNext.x].command.first + idNext.y;
+
+    indices[meshIndex++] = instance[id.x    ].command.first + id.y;
+    indices[meshIndex++] = instance[idNext.x].command.first + id.y;
+    indices[meshIndex++] = instance[idNext.x].command.first + idNext.y;
+
+}
