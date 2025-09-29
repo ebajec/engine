@@ -288,8 +288,8 @@ static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_v
 		for (uint32_t j = 0; j < TILE_VERT_WIDTH; ++j) {
 			uv.y = (double)j*factor;
 
-			glm::dvec2 face_uv = glm::mix(rect.min,rect.max,uv);
-			glm::dvec2 tex_uv = glm::mix(rect_tex.min,rect_tex.max,uv);
+			glm::dvec2 face_uv = glm::mix(rect.ll(),rect.ur(),uv);
+			glm::dvec2 tex_uv = glm::mix(rect_tex.ll(),rect_tex.ur(),uv);
 			glm::dvec3 p = cube_to_globe(f, face_uv);
 
 			GlobeVertex vert = {

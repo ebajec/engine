@@ -115,7 +115,7 @@ void test_loader_fn(TileCode code, void *dst, void *usr,
 			return;
 
 		for (size_t j = 0; j < TILE_WIDTH; ++j) {
-			glm::vec2 f = glm::mix(rect.min,rect.max,uv);
+			glm::vec2 f = glm::mix(rect.ll(),rect.ur(),uv);
 
 			double g = test_elev_fn2(f, code.face, code.zoom);
 			data[idx++] = static_cast<float>(g);

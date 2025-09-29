@@ -28,14 +28,7 @@ struct plane_t
 
 struct aabb2_t
 {
-	union {
-		struct {
-			double x0,y0,x1,y1;
-		};	
-		struct {
-			glm::dvec2 min, max;
-		};
-	};
+	double x0,y0,x1,y1;
 
 	constexpr inline glm::dvec2 ll() const {return {x0,y0};}
 	constexpr inline glm::dvec2 ur() const {return {x1,y1};}
@@ -165,7 +158,7 @@ static inline double aabb3_dist_sq(const aabb3_t& box, glm::dvec3 v)
 }
 
 
-static constexpr bool cull_plane(plane_t p, glm::dvec3 v)
+static inline bool cull_plane(plane_t p, glm::dvec3 v)
 {
 	return glm::dot(v,p.n) < p.d;
 }
@@ -261,10 +254,7 @@ static inline constexpr uint64_t morton_u64(double x, double y, uint8_t level)
 
 static constexpr aabb2_t morton_u64_to_rect_f64(uint64_t index, uint8_t level)
 {
-    aabb2_t extent = {
-		.min = glm::dvec2(0),
-		.max = glm::dvec2(0)
-	};
+    aabb2_t extent = {};
 
 	double h = 1.0/(double)(1 << level);
 

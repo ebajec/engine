@@ -151,7 +151,7 @@ static inline glm::dmat3 tile_frame(TileCode code)
 {
 	aabb2_t rect = morton_u64_to_rect_f64(code.idx, code.zoom);
 	
-	glm::dvec2 mid = 0.5*(rect.min + rect.max);
+	glm::dvec2 mid = 0.5*(rect.ll() + rect.ur());
 
 	return orthonormal_globe_frame(mid, code.face);
 }
@@ -173,7 +173,7 @@ static inline glm::dvec4 cell_transform(TileCode cell)
 		return glm::dvec4(0,0,0,1);
 
 	aabb2_t rect = morton_u64_to_rect_f64(cell.idx, cell.zoom);
-	glm::dvec3 c = cube_to_globe(cell.face, 0.5*(rect.min + rect.max));
+	glm::dvec3 c = cube_to_globe(cell.face, 0.5*(rect.ll() + rect.ur()));
 	return glm::dvec4(c,(double)(1 << cell.zoom));
 }
 
