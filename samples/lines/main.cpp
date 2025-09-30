@@ -231,7 +231,7 @@ static float urandf()
 
 struct line_uniforms_t
 {
-	uint count;
+	uint32_t count;
 	float thickness;
 	float join_thres;
 };

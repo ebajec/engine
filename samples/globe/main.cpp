@@ -36,14 +36,6 @@
 
 static GLFWwindow *g_window = NULL;
 
-void handle_sigint(int sig)
-{
-	(void)sig;
-
-	if (g_window)
-		glfwSetWindowShouldClose(g_window,GLFW_TRUE);
-}
-
 void plot_frame_times(float delta)
 {
 	delta *= 1000.f;
@@ -75,11 +67,22 @@ void plot_frame_times(float delta)
 	}
 }
 
+#ifdef __linux__
+void handle_sigint(int sig)
+{
+	(void)sig;
+
+	if (g_window)
+		glfwSetWindowShouldClose(g_window,GLFW_TRUE);
+}
+#endif
+
 int main(int argc, char* argv[])
 {
 	stbi_set_flip_vertically_on_load(true);
 	log_set_flags(LOG_ERROR_BIT | LOG_INFO_BIT);
 
+#ifdef __linux__
 	struct sigaction sa{};
 	sa.sa_handler = handle_sigint;
 	sa.sa_flags = SA_RESTART;
@@ -88,6 +91,7 @@ int main(int argc, char* argv[])
 		perror("sigaction");
 		return EXIT_FAILURE;
 	}
+#endif
 
 	if (!glfwInit())
 		return EXIT_FAILURE;

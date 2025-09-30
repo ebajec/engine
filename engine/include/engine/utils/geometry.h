@@ -224,7 +224,7 @@ static inline bool cull_plane(const plane_t &p, const glm::dvec3 &v)
 
 static inline bool within_frustum(glm::dvec3 v, const frustum_t &frust)
 {
-	for (uint i = 0; i < 6; ++i) {
+	for (uint32_t i = 0; i < 6; ++i) {
 		if (!cull_plane(frust.planes[i],v))
 			return false;
 	}
