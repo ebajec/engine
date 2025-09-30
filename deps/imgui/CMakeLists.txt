@@ -13,4 +13,5 @@ file(GLOB SOURCES
 
 add_library(imgui STATIC ${SOURCES})
 
+target_link_libraries(imgui PUBLIC glfw)
 target_include_directories(imgui PUBLIC imgui implot)
