@@ -17,61 +17,76 @@ static constexpr uint32_t CUBE_FACES = 6;
 static constexpr uint32_t TILE_WIDTH = 256;
 static constexpr uint32_t TILE_SIZE = TILE_WIDTH*TILE_WIDTH;
 
-// TODO: Remove the union for portability
-union TileCode
+
+//------------------------------------------------------------------------------
+// TILE INDEXING
+
+static constexpr uint64_t 	TILE_CODE_FACE_MASK = 0x7;
+static constexpr uint8_t  	TILE_CODE_FACE_SHIFT = 0;
+static constexpr uint64_t 	TILE_CODE_ZOOM_MASK = 0x1F;
+static constexpr uint8_t  	TILE_CODE_ZOOM_SHIFT = 3;
+static constexpr uint64_t 	TILE_CODE_IDX_MASK = UINT64_MAX;
+static constexpr uint8_t 	TILE_CODE_IDX_SHIFT = 8;
+
+struct TileCode
 {
-	struct {
-		uint8_t face : 3;
-		uint8_t zoom : 5;
-		uint64_t idx : 56;
-	};
-	uint64_t u64;
-
-
+	uint8_t face : 3;
+	uint8_t zoom : 5;
+	uint64_t idx : 56;
 
 	constexpr bool operator == (const TileCode& other) const {
-		return u64 == other.u64;
+		return face == other.face && zoom == other.zoom && idx == other.idx;
 	}
 };
 
-struct TileCode2
+/// upper <- lower
+/// | idx (56 bits) | zoom (5 bits) | face (3 bits) |
+static inline constexpr TileCode tile_code_unpack(uint64_t u64)
 {
-	uint64_t u64;
+	TileCode code;
+	code.face = (uint8_t)((u64 >> TILE_CODE_FACE_SHIFT) & TILE_CODE_FACE_MASK);
+	code.zoom = (uint8_t)((u64 >> TILE_CODE_ZOOM_SHIFT) & TILE_CODE_ZOOM_MASK);
+	code.idx  = (u64 >> TILE_CODE_IDX_SHIFT) & TILE_CODE_IDX_MASK;
 
-	static constexpr uint64_t FACE_MASK = 0x7;
-	static constexpr uint8_t FACE_SHIFT = 0;
-	static constexpr uint64_t ZOOM_MASK = 0x1F;
-	static constexpr uint8_t ZOOM_SHIFT = 3;
-	static constexpr uint64_t IDX_MASK = 0;
-	static constexpr uint8_t IDX_SHIFT = 8;
+	return code;
+}
 
-	uint8_t face() {
-		return (u64 & FACE_MASK) >> FACE_SHIFT;
-	}
-	uint8_t zoom() {
-		return (u64 & ZOOM_MASK) >> ZOOM_SHIFT;
-	}
-	uint64_t idx() {
-		return (u64 & IDX_MASK) >> IDX_SHIFT;
-	}
+/// upper <- lower
+/// | idx (56 bits) | zoom (5 bits) | face (3 bits) |
+static inline constexpr uint64_t tile_code_pack(TileCode code) {
+	uint64_t u64 = 0;
+	u64 |= ((uint64_t)code.face << TILE_CODE_FACE_SHIFT); 
+	u64 |= ((uint64_t)code.zoom << TILE_CODE_ZOOM_SHIFT); 
+	u64 |= (code.idx << TILE_CODE_IDX_SHIFT); 
 
-	TileCode2(uint8_t face, uint8_t zoom, uint64_t idx) {
-		u64 |= (idx << IDX_SHIFT); 
-	}
+	return u64;
+}
 
-	constexpr bool operator == (const TileCode& other) const {
-		return u64 == other.u64;
-	}
-};
+/// upper <- lower
+/// | idx (56 bits) | zoom (5 bits) | face (3 bits) |
+static inline uint64_t tile_code_pack2(uint8_t face, uint8_t zoom, uint64_t idx) {
+	uint64_t u64 = 0;
+	u64 |= ((uint64_t)face << TILE_CODE_FACE_SHIFT); 
+	u64 |= ((uint64_t)zoom << TILE_CODE_ZOOM_SHIFT); 
+	u64 |= (idx << TILE_CODE_IDX_SHIFT); 
+	return u64;
+}
 
-static constexpr TileCode TILE_CODE_NONE = {.u64 = 0xFFFFFFFFFFFFFFFF};
+static constexpr TileCode TILE_CODE_NONE = tile_code_unpack(0x8493724890123809);
+
+static_assert(tile_code_pack(tile_code_unpack(0x8493724890123809)) == 0x8493724890123809); 
+static_assert(tile_code_pack(tile_code_unpack(0x020)) == 0x020); 
+
 
 struct TileCodeHash
 {
 	size_t operator()(const TileCode& code) const {
-		return std::hash<uint64_t>{}(code.u64);
+		return std::hash<uint64_t>{}(tile_code_pack(code));
 	}
 };
+
+//------------------------------------------------------------------------------
+// TRANSFORMS
 
 static inline uint8_t cube_face(glm::dvec3 v)
 {

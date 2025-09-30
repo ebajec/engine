@@ -17,13 +17,10 @@ namespace globe
 		glm::vec2 uv;
 		glm::vec3 normal;
 		glm::vec2 big_uv;
-		union {
-			struct {
-				uint32_t left; 
-				uint32_t right;
-			};
-			TileCode code;
-		};
+		struct {
+			uint32_t left; 
+			uint32_t right;
+		} code;
 	};
 
 	struct RenderData

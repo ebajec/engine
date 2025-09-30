@@ -191,17 +191,18 @@ TileGPUIndex TileGPUCache::evict_one()
 	//log_info("Evicted tile %d from GPU cache",ent.first);
 
 	m_lru.pop_back();
-	m_map.erase(ent.first.u64);
+	m_map.erase(tile_code_pack(ent.first));
 
 	return ent.second;
 }
 
 void TileGPUCache::insert(TileCode code, TileGPUIndex idx)
 {
-	assert(m_map.find(code.u64) == m_map.end());
+	uint64_t packed = tile_code_pack(code);
+	assert(m_map.find(packed) == m_map.end());
 
 	m_lru.push_front({code,idx});
-	m_map[code.u64] = m_lru.begin();
+	m_map[packed] = m_lru.begin();
 }
 
 size_t TileGPUCache::update(
@@ -225,7 +226,7 @@ size_t TileGPUCache::update(
 			continue;
 		}
 
-		auto it = m_map.find(code.u64);
+		auto it = m_map.find(tile_code_pack(code));
 
 		const bool found = it != m_map.end();
 

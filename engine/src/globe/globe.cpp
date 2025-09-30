@@ -283,6 +283,8 @@ static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_v
 
 	glm::dvec2 uv;
 
+	uint64_t packed_parent = tile_code_pack(parent);
+
 	size_t idx = 0;
 	for (uint32_t i = 0; i < TILE_VERT_WIDTH; ++i) {
 		uv.x = (double)i*factor;
@@ -298,7 +300,10 @@ static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_v
 				.uv = glm::vec2(tex_uv),
 				.normal = glm::vec3(p),
 				.big_uv = face_uv,
-				.code = parent
+				.code = {
+					.left = (uint32_t)(packed_parent & 0xFFFFFFFF),
+					.right = (uint32_t)((packed_parent >> 32)), 
+				}
 			};
 
 			out_verts[idx++] = vert;
@@ -361,8 +366,8 @@ static GLuint globe_vao()
 	glVertexAttribFormat(1,2,GL_FLOAT,0,offsetof(GlobeVertex,uv));
 	glVertexAttribFormat(2,3,GL_FLOAT,0,offsetof(GlobeVertex,normal));
 	glVertexAttribFormat(3,2,GL_FLOAT,0,offsetof(GlobeVertex,big_uv));
-	glVertexAttribIFormat(4,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,left));
-	glVertexAttribIFormat(5,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,right));
+	glVertexAttribIFormat(4,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,code.left));
+	glVertexAttribIFormat(5,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,code.right));
 
 	glVertexAttribBinding(0,0);
 	glVertexAttribBinding(1,0);

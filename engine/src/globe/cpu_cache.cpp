@@ -68,7 +68,7 @@ static pct_entry * pct_entry_get(pct_table *ct, pct_index idx)
 TileCode TileCPUCache::find_best(TileCode code)
 {
 	auto end = m_ct->map.end();
-	auto it = m_ct->map.find(code.u64);
+	auto it = m_ct->map.find(tile_code_pack(code));
 
 	pct_status status = PCT_STATUS_EMPTY;
 
@@ -76,7 +76,7 @@ TileCode TileCPUCache::find_best(TileCode code)
 		code.idx >>= 2;
 		--code.zoom;
 
-		it = m_ct->map.find(code.u64);
+		it = m_ct->map.find(tile_code_pack(code));
 
 		if (it != end) {
 			pct_index idx = *it->second;
@@ -88,7 +88,7 @@ TileCode TileCPUCache::find_best(TileCode code)
 	if (status == PCT_STATUS_READY) {
 		pct_lru_list::iterator l_it = it->second;
 		m_ct->lru.splice(m_ct->lru.begin(), m_ct->lru, l_it);
-		return TileCode{.u64 = it->first};
+		return tile_code_unpack(it->first);
 	}
 
 	//log_info("No loaded parent found for tile %d",in);
@@ -108,11 +108,11 @@ uint8_t *TileCPUCache::get_block(pct_index idx) const
 const uint8_t *TileCPUCache::acquire_block(TileCode code, size_t *size,
 									   std::atomic_uint64_t **p_state) const
 {
-	auto it = m_ct->map.find(code.u64);
+	auto it = m_ct->map.find(tile_code_pack(code));
 
 	if (it == m_ct->map.end()) {
 		log_error("TileDataCache::get_block : Failed to find tile with id %ld",
-			code.u64);
+			tile_code_pack(code));
 		return nullptr;
 	}
 
@@ -127,11 +127,11 @@ const uint8_t *TileCPUCache::acquire_block(TileCode code, size_t *size,
 
 std::optional<TileDataRef> TileCPUCache::acquire_block(TileCode code) const
 {
-	auto it = m_ct->map.find(code.u64);
+	auto it = m_ct->map.find(tile_code_pack(code));
 
 	if (it == m_ct->map.end()) {
 		log_error("acquire_block: Failed to find tile with code %ld (face=%d,zoom=%d,idx=%d)",
-			code.u64, code.face,code.zoom,code.idx);
+			tile_code_pack(code), code.face,code.zoom,code.idx);
 		return std::nullopt;
 	}
 
@@ -243,7 +243,7 @@ std::vector<TileCode> TileCPUCache::update(
 
 	for (size_t i = 0; i < count; ++i) {
 		TileCode ideal = available[i];
-		pct_load_result res = pct_table_load(m_ct.get(),ideal.u64);
+		pct_load_result res = pct_table_load(m_ct.get(),tile_code_pack(ideal));
 
 		if (res.needs_load)
 			loads.push_back({res.idx,res.p_ent});
@@ -269,7 +269,7 @@ std::vector<TileCode> TileCPUCache::update(
 				++g_tiles_in_flight;
 				load_thread_fn(
 					&source, 
-					TileCode{.u64 = ent->key}, 
+					tile_code_unpack(ent->key) /*TileCode{.u64 = ent->key}*/, 
 					&ent->state, 
 					dst
 				);
