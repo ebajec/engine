@@ -140,8 +140,6 @@ int main(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 
-	log_info("Window created");
-
 	g_window = window;
 
 	glfwGetFramebufferSize(window, &params.win.width, &params.win.height);

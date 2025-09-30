@@ -442,6 +442,9 @@ void TileGPUCache::bind_texture_arrays(uint32_t base) const
 	assert(m_pages.size() <= MAX_TILE_PAGES);
 
 	for (size_t i = 0; i < m_pages.size(); ++i) {
+		if (!m_pages[i]->tex_array) {
+			log_error("Globe texture array %d has id 0!", i);
+		}
 		glActiveTexture(GL_TEXTURE0 + (GLenum)(base + i));
 		glBindTexture(GL_TEXTURE_2D_ARRAY, m_pages[i]->tex_array);	
 	}

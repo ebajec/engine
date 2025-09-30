@@ -385,6 +385,7 @@ struct alignas(16) TileMetadata
 {
 	glm::vec4 coord;
 	TileGPUIndex tex_idx;
+	
 };
 
 static LoadResult create_render_data(ResourceTable *rt, RenderData &data)
