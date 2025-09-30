@@ -147,13 +147,13 @@ static aabb3_t tile_box(const TileDataSource *source, TileCode code)
 		(1.0 + (double)samples[4])*cube_to_globe(code.face, mid_uv),
 	};
 
-	aabb3_t box = aabb_bounding(p, sizeof(p)/sizeof(p[0]));
+	aabb3_t box = aabb3_bounding(p, sizeof(p)/sizeof(p[0]));
 
 	if (code.zoom == 0) {
-		box = aabb_add(box, cube_to_globe(code.face, 0.5*(rect.ll() + rect.lr())));
-		box = aabb_add(box, cube_to_globe(code.face, 0.5*(rect.ll() + rect.ul())));
-		box = aabb_add(box, cube_to_globe(code.face, 0.5*(rect.ur() + rect.ul())));
-		box = aabb_add(box, cube_to_globe(code.face, 0.5*(rect.ur() + rect.lr())));
+		box = aabb3_add(box, cube_to_globe(code.face, 0.5*(rect.ll() + rect.lr())));
+		box = aabb3_add(box, cube_to_globe(code.face, 0.5*(rect.ll() + rect.ul())));
+		box = aabb3_add(box, cube_to_globe(code.face, 0.5*(rect.ur() + rect.ul())));
+		box = aabb3_add(box, cube_to_globe(code.face, 0.5*(rect.ur() + rect.lr())));
 	}
 
 	return box;
@@ -251,7 +251,7 @@ static void select_tiles(
 static aabb2_t sub_rect(TileCode parent, TileCode child)
 {
 	if (parent.zoom >= child.zoom)
-		return aabb2_t{.x0 = 0,.y0 = 0, .x1 = 1, .y1 = 1};
+		return aabb2_t{.min = glm::dvec2(0), .max = glm::dvec2(1)};
 
 	int diff = child.zoom - parent.zoom;	
 	child.idx &= (1 << (2*diff)) - 1;
@@ -276,7 +276,8 @@ static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_v
 
 	aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
 	aabb2_t rect_tex = parent == TILE_CODE_NONE ? 
-		aabb2_t{.x0 = 0, .y0 = 0, .x1 = 1, .y1 = 1} : sub_rect(parent, code);
+		aabb2_t{.min = glm::dvec2(0), .max = glm::dvec2(1)} : 
+		sub_rect(parent, code);
 
 	double factor = 1.0/(double)(TILE_VERT_WIDTH-1);
 
@@ -666,8 +667,8 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 		double r_horizon = sqrt(std::max(dot(pos,pos) - r_min*r_min,0.));
 		double r_horizon_max  = sqrt(std::max(r_max * r_max - r_min*r_min,0.));
 
-		glm::dvec3 n_far = frust.far.n;
-		frust.far.d = dot(pos,n_far) + r_horizon + r_horizon_max;
+		glm::dvec3 n_far = frust.p.far.n;
+		frust.p.far.d = dot(pos,n_far) + r_horizon + r_horizon_max;
 	}
 
 	//-----------------------------------------------------------------------------
@@ -676,7 +677,7 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	select_tiles_params params = {
 		.source = globe->source.get(),
 		.frust = frust,
-		.frust_box = frust_cull_box(frust),
+		.frust_box = frustum_aabb(frust),
 		.origin = pos,
 		.res = resolution,
 	};

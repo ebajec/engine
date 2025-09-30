@@ -102,7 +102,7 @@ struct pct_index
 
 struct pct_index_hash
 {
-	constexpr size_t operator()(const pct_index& idx) const {
+	size_t operator()(const pct_index& idx) const {
 		uint64_t u64 = ((uint64_t)idx.page << 32) | (uint64_t)(idx.ent);
 		return std::hash<uint64_t>()(u64);
 	}

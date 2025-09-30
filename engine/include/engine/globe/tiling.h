@@ -31,17 +31,16 @@ union TileCode
 		return u64 == other.u64;
 	}
 };
+static constexpr TileCode TILE_CODE_NONE = {.u64 = 0xFFFFFFFFFFFFFFFF};
 
 struct TileCodeHash
 {
-	constexpr size_t operator()(const TileCode& code) const {
+	size_t operator()(const TileCode& code) const {
 		return std::hash<uint64_t>{}(code.u64);
 	}
 };
 
-static constexpr TileCode TILE_CODE_NONE = {.u64 = 0xFFFFFFFFFFFFFFFF};
-
-static inline constexpr uint8_t cube_face(glm::dvec3 v)
+static inline uint8_t cube_face(glm::dvec3 v)
 {
 	double c[6] = {v.x, v.y, v.z, -v.x, -v.y, -v.z};
 
@@ -161,12 +160,13 @@ static inline TileCode tile_cell_index(TileCode code)
 	uint8_t cell_zoom = code.zoom/8;
 	uint32_t shift = 16*cell_zoom;
 	return TileCode {
-		.zoom = static_cast<uint8_t>(8*cell_zoom),
 		.face = code.face,
+		.zoom = static_cast<uint8_t>(8*cell_zoom),
 		.idx = code.idx >> shift
 	};
 }
 
+/* Would use something like this for local coordinates
 static inline glm::dvec4 cell_transform(TileCode cell)
 {
 	//if (cell.zoom == 0)
@@ -176,8 +176,9 @@ static inline glm::dvec4 cell_transform(TileCode cell)
 	glm::dvec3 c = cube_to_globe(cell.face, 0.5*(rect.ll() + rect.ur()));
 	return glm::dvec4(c,(double)(1 << cell.zoom));
 }
+*/
 
-static inline constexpr TileCode tile_encode(uint8_t zoom, glm::dvec3 p)
+static inline TileCode tile_encode(uint8_t zoom, glm::dvec3 p)
 {
 	assert(zoom < 24);
 	uint8_t f;

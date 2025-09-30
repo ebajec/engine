@@ -25,7 +25,6 @@ find_package(OpenGL REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(glfw3 REQUIRED)
-find_package(PROJ REQUIRED)
 
 add_compile_options(-g)
 
@@ -60,7 +59,6 @@ set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -mavx2")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
 
 add_subdirectory(deps)
-#add_subdirectory(src)
 add_subdirectory(engine)
 add_subdirectory(samples)
 
