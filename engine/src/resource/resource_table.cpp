@@ -135,8 +135,8 @@ std::string ResourceTable::make_path_abs(std::string_view str)
 {
 	fs::path res_path (resource_path);
 	fs::path child_path (str);
-
-	return res_path / child_path;
+	fs::path path = res_path / child_path; 
+	return path.string();
 }
 
 //------------------------------------------------------------------------------
