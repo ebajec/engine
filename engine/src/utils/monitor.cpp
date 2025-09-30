@@ -180,7 +180,7 @@ void monitor::watch()
             if (attributes & FILE_ATTRIBUTE_DIRECTORY)
                 flags |= MONITOR_FLAGS_ISDIR;
 
-            monitor_event monitorEvent = {path,flags};
+            monitor_event_t monitorEvent = {path,flags};
             
 
             if (m_callback) m_callback(m_usr,monitorEvent);
