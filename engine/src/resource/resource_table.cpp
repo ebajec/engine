@@ -50,14 +50,15 @@ static void monitor_callback(void *usr, utils::monitor_event_t event)
 		return;
 	}
 
-	ResourceType resource_type = resource_type_from_path(event_path.c_str());
+	std::string event_path_str = event_path.string();
+	ResourceType resource_type = resource_type_from_path(event_path_str.c_str());
 
 	if (resource_type == RESOURCE_TYPE_NONE)
 		return;
 
 	ResourceUpdateInfo update_info = {
 		.type = resource_type,
-		.path = std::move(event_path)
+		.path = std::move(event_path_str)
 	};
 
 	std::unique_lock<std::mutex> lock(watcher->mut);
@@ -130,8 +131,12 @@ LoadResult ResourceHotReloader::process_updates()
 	return RESULT_SUCCESS;
 }
 
-std::string ResourceTable::make_path_abs(std::string_view str) {
-	return fs::path(resource_path) / fs::path(str);
+std::string ResourceTable::make_path_abs(std::string_view str)
+{
+	fs::path res_path (resource_path);
+	fs::path child_path (str);
+
+	return res_path / child_path;
 }
 
 //------------------------------------------------------------------------------

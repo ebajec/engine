@@ -11,11 +11,11 @@ typedef uint32_t ResourceHandle;
 
 struct DrawCommand 
 {
-    uint  count;
-    uint  instanceCount;
-    uint  firstIndex;
+    unsigned int  count;
+    unsigned int  instanceCount;
+    unsigned int  firstIndex;
     int  baseVertex;
-    uint  baseInstance;
+    unsigned int  baseInstance;
 };
 
 struct Camera

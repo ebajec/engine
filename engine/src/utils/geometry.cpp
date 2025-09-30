@@ -2,6 +2,8 @@
 
 #include <complex>
 
+#include <cstdint>
+
 void geometry::mesh_s2(uint32_t ntht, uint32_t nphi, 
 					   std::vector<vertex3d>& verts, 
 					   std::vector<uint32_t>& indices

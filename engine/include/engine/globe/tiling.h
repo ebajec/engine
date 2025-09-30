@@ -44,10 +44,10 @@ static inline uint8_t cube_face(glm::dvec3 v)
 {
 	double c[6] = {v.x, v.y, v.z, -v.x, -v.y, -v.z};
 
-	uint argmax = 0;
+	uint32_t argmax = 0;
 	double max = -DBL_MAX;
 
-	for (uint i = 0; i < 6; ++i) {
+	for (uint32_t i = 0; i < 6; ++i) {
 		if (c[i] >= max) {
 			argmax = i;
 			max = c[i];
