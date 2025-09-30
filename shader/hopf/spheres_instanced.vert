@@ -1,4 +1,5 @@
 #version 430 core
+#extension GL_GOOGLE_include_directive : require
 
 layout (std140,binding = 0) uniform Camera 
 {
@@ -11,7 +12,6 @@ layout (std140,binding = 0) uniform Camera
 	float far;
 };
 
-
 struct SpherePointData
 {
     vec4 position;
@@ -23,16 +23,19 @@ layout (std430,binding = 0) buffer PointData
 	SpherePointData data[];
 };
 
-uniform mat4 model;
-uniform float scale;
+layout (std140,binding = 1) uniform Uniforms 
+{
+	mat4 model;
+	float scale;
+};
 
 layout (location = 0) in vec4 v_pos;
 layout (location = 1) in vec4 v_color;
 layout (location = 2) in vec4 v_normal;
 
-out vec4 fcolor;
-out vec3 fpos;
-out vec3 fnormal;
+layout (location = 0) out vec4 fcolor;
+layout (location = 1) out vec3 fpos;
+layout (location = 2) out vec3 fnormal;
 
 void main() {
 

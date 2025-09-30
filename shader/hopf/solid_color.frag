@@ -1,9 +1,10 @@
 #version 430 core
+#extension GL_GOOGLE_include_directive : require
 
-in vec4 fcolor;
-in vec3 fpos;
-in vec3 fnormal;
-out vec4 FragColor;
+layout (location = 0) in vec4 fcolor;
+layout (location = 1) in vec3 fpos;
+layout (location = 2) in vec3 fnormal;
+layout (location = 0) out vec4 FragColor;
 
 void main()
 {   
