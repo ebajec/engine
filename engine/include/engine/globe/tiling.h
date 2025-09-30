@@ -107,7 +107,7 @@ static inline uint8_t cube_face(glm::dvec3 v)
 
 template<typename T>
 static inline glm::vec<3, T, glm::defaultp> 
-world_to_face(glm::vec<3, T, glm::defaultp> v, uint face)
+world_to_face(glm::vec<3, T, glm::defaultp> v, unsigned int face)
 {
 	using _ty = glm::vec<3, T, glm::defaultp>;
 
@@ -123,7 +123,7 @@ world_to_face(glm::vec<3, T, glm::defaultp> v, uint face)
 }
 template<typename T>
 static inline glm::vec<3, T, glm::defaultp> 
-face_to_world(glm::vec<3, T, glm::defaultp> v, uint face)
+face_to_world(glm::vec<3, T, glm::defaultp> v, unsigned int face)
 {
 	using _ty = glm::vec<3, T, glm::defaultp>;
 
