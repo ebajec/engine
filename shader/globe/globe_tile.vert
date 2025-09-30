@@ -22,15 +22,6 @@ layout (location = 2) out vec3 out_normal;
 layout (location = 3) out vec4 out_color;
 layout (location = 7) flat out tex_idx_t out_tex_idx;
 
-uint TILE_CODE_FACE_BITS_MASK = 0x70000000;
-uint TILE_CODE_FACE_BITS_SHIFT = 0;
-
-uint TILE_CODE_ZOOM_BITS_MASK = 0x8F000000;
-uint TILE_CODE_ZOOM_BITS_SHIFT = 3;
-
-uint TILE_CODE_IDX_BITS_MASK = 
-	~(TILE_CODE_FACE_BITS_MASK | TILE_CODE_ZOOM_BITS_MASK);
-
 const float GLOBE_SCALE = 0.00138f;
 
 aabb2_t morton_u32_to_rect_f32(uint index, uint level)

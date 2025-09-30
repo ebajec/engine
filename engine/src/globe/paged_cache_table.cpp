@@ -168,6 +168,7 @@ int pct_table_create(pct_table **p_pct, pct_table_create_info const *ci)
 	pct_table *pct = new pct_table {};
 
 	pct->page_create = ci->page_create;
+	pct->page_destroy = ci->page_destroy;
 	pct->page_size = ci->page_size;
 	pct->capacity = ci->capacity;
 	pct->usr = ci->usr;
@@ -179,6 +180,10 @@ int pct_table_create(pct_table **p_pct, pct_table_create_info const *ci)
 
 void pct_table_destroy(pct_table *pct)
 {
+	for (pct_page &page : pct->pages) {
+		pct->page_destroy(pct->usr,page.handle);
+		free(page.entries);
+	}
 	delete pct;
 }
 

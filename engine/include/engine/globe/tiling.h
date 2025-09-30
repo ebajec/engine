@@ -27,10 +27,43 @@ union TileCode
 	};
 	uint64_t u64;
 
+
+
 	constexpr bool operator == (const TileCode& other) const {
 		return u64 == other.u64;
 	}
 };
+
+struct TileCode2
+{
+	uint64_t u64;
+
+	static constexpr uint64_t FACE_MASK = 0x7;
+	static constexpr uint8_t FACE_SHIFT = 0;
+	static constexpr uint64_t ZOOM_MASK = 0x1F;
+	static constexpr uint8_t ZOOM_SHIFT = 3;
+	static constexpr uint64_t IDX_MASK = 0;
+	static constexpr uint8_t IDX_SHIFT = 8;
+
+	uint8_t face() {
+		return (u64 & FACE_MASK) >> FACE_SHIFT;
+	}
+	uint8_t zoom() {
+		return (u64 & ZOOM_MASK) >> ZOOM_SHIFT;
+	}
+	uint64_t idx() {
+		return (u64 & IDX_MASK) >> IDX_SHIFT;
+	}
+
+	TileCode2(uint8_t face, uint8_t zoom, uint64_t idx) {
+		u64 |= (idx << IDX_SHIFT); 
+	}
+
+	constexpr bool operator == (const TileCode& other) const {
+		return u64 == other.u64;
+	}
+};
+
 static constexpr TileCode TILE_CODE_NONE = {.u64 = 0xFFFFFFFFFFFFFFFF};
 
 struct TileCodeHash

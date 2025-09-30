@@ -112,7 +112,10 @@ static const pct_index PCT_INDEX_NONE = {UINT32_MAX, UINT32_MAX};
 
 typedef uint64_t pct_page_handle_t;
 typedef std::atomic_uint64_t pct_atomic_state;
-typedef int(*pct_page_func)(void*, pct_page_handle_t*);
+
+typedef int(*pct_page_create)(void*, pct_page_handle_t*);
+typedef int(*pct_page_destroy)(void*, pct_page_handle_t);
+
 typedef std::list<pct_index> pct_lru_list;
 
 struct pct_entry 
@@ -149,7 +152,8 @@ struct pct_table
 	size_t capacity;
 
 	void *usr;
-	pct_page_func page_create;
+	pct_page_create page_create;
+	pct_page_destroy page_destroy;
 };
 
 struct pct_load_result
@@ -166,7 +170,8 @@ struct pct_table_create_info
 	size_t page_size;
 
 	void *usr;
-	pct_page_func page_create;
+	pct_page_create page_create;
+	pct_page_destroy page_destroy;
 };
 
 extern int pct_table_create(pct_table **p_pct, pct_table_create_info const *ci);

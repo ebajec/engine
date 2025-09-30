@@ -24,6 +24,15 @@ static int create_cpu_tile_page(void *usr, pct_page_handle_t *p_handle)
 	return 0;
 }
 
+static int destroy_cpu_tile_page(void *usr, pct_page_handle_t handle)
+{
+	//const TileCPUCache *cache = static_cast<TileCPUCache*>(usr);
+	uint8_t *mem = reinterpret_cast<uint8_t*>(handle); 
+	delete[] mem;
+
+	return 0;
+}
+
 TileCPUCache 
 *TileCPUCache::create(size_t tile_size, size_t capacity)
 {
@@ -37,6 +46,7 @@ TileCPUCache
 		.page_size = TILE_CPU_PAGE_SIZE,
 		.usr = cache,
 		.page_create = &create_cpu_tile_page,
+		.page_destroy = &destroy_cpu_tile_page
 	};
 
 	if (pct_table_create(&ct, &ci) < 0)
