@@ -93,8 +93,10 @@ int main(int argc, char* argv[])
 	}
 #endif
 
-	if (!glfwInit())
+	if (!glfwInit()) {
+		log_error("Failed to initialize GLFW!");
 		return EXIT_FAILURE;
+	}
 	
 	struct {
 		struct{
@@ -137,6 +139,8 @@ int main(int argc, char* argv[])
 	    glfwTerminate();
 		return EXIT_FAILURE;
 	}
+
+	log_info("Window created");
 
 	g_window = window;
 
