@@ -1,7 +1,7 @@
 #include "globe/data_source.h"
 
 static void test_loader_fn(TileCode code, void *dst, void *usr,
-						   const pct_atomic_state *p_state);
+						   const alc_atomic_state *p_state);
 static float test_elev_fn(glm::dvec2 uv, uint8_t f);
 
 
@@ -100,7 +100,7 @@ float test_elev_fn(glm::dvec2 uv, uint8_t f)
 }
 
 void test_loader_fn(TileCode code, void *dst, void *usr, 
-					const pct_atomic_state *p_state)
+					const alc_atomic_state *p_state)
 {
 	float *data = static_cast<float*>(dst);
 
@@ -111,7 +111,7 @@ void test_loader_fn(TileCode code, void *dst, void *usr,
 	glm::vec2 uv = glm::vec2(0);
 	size_t idx = 0;
 	for (size_t i = 0; i < TILE_WIDTH; ++i) {
-		if (pct_state_status(p_state->load()) == PCT_STATUS_CANCELLED)
+		if (alc_state_status(p_state->load()) == ALC_STATUS_CANCELLED)
 			return;
 
 		for (size_t j = 0; j < TILE_WIDTH; ++j) {

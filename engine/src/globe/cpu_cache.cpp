@@ -12,11 +12,11 @@
 static int MAX_TILES_IN_FLIGHT = std::thread::hardware_concurrency()/2;
 static std::atomic_int g_tiles_in_flight = 0;
 
-static int create_cpu_tile_page(void *usr, pct_page_handle_t *p_handle)
+static int create_cpu_tile_page(void *usr, alc_page_handle_t *p_handle)
 {
 	const TileCPUCache *cache = static_cast<TileCPUCache*>(usr);
 
-	uint8_t * mem = new uint8_t[cache->m_tile_size*cache->m_ct->page_size];
+	uint8_t * mem = new uint8_t[cache->m_tile_size*cache->m_alc->page_size];
 	uintptr_t ptr = reinterpret_cast<uintptr_t>(mem);
 
 	*p_handle = static_cast<uint64_t>(ptr);
@@ -24,7 +24,7 @@ static int create_cpu_tile_page(void *usr, pct_page_handle_t *p_handle)
 	return 0;
 }
 
-static int destroy_cpu_tile_page(void *usr, pct_page_handle_t handle)
+static int destroy_cpu_tile_page(void *usr, alc_page_handle_t handle)
 {
 	//const TileCPUCache *cache = static_cast<TileCPUCache*>(usr);
 	uint8_t *mem = reinterpret_cast<uint8_t*>(handle); 
@@ -40,8 +40,8 @@ TileCPUCache
 	cache->m_tile_size = tile_size;
 	cache->m_tile_cap = (std::max(capacity,(size_t)1) - 1)/tile_size + 1;
 
-	pct_table *ct = nullptr;
-	pct_table_create_info ci = {
+	alc_table *ct = nullptr;
+	alc_create_info ci = {
 		.capacity = cache->m_tile_cap,
 		.page_size = TILE_CPU_PAGE_SIZE,
 		.usr = cache,
@@ -49,10 +49,10 @@ TileCPUCache
 		.page_destroy = &destroy_cpu_tile_page
 	};
 
-	if (pct_table_create(&ct, &ci) < 0)
+	if (alc_create(&ct, &ci) < 0)
 		goto cleanup;
 
-	cache->m_ct.reset(ct);
+	cache->m_alc.reset(ct);
 
 	return cache;
 cleanup:
@@ -60,34 +60,34 @@ cleanup:
 	return nullptr;
 }
 
-static pct_entry * pct_entry_get(pct_table *ct, pct_index idx)
+static alc_entry * alc_entry_get(alc_table *ct, alc_index idx)
 {
 	return &ct->pages[idx.page].entries[idx.ent];
 }
 
 TileCode TileCPUCache::find_best(TileCode code)
 {
-	auto end = m_ct->map.end();
-	auto it = m_ct->map.find(tile_code_pack(code));
+	auto end = m_alc->map.end();
+	auto it = m_alc->map.find(tile_code_pack(code));
 
-	pct_status status = PCT_STATUS_EMPTY;
+	alc_status status = ALC_STATUS_EMPTY;
 
-	while (code.zoom > 0 && status != PCT_STATUS_READY) {
+	while (code.zoom > 0 && status != ALC_STATUS_READY) {
 		code.idx >>= 2;
 		--code.zoom;
 
-		it = m_ct->map.find(tile_code_pack(code));
+		it = m_alc->map.find(tile_code_pack(code));
 
 		if (it != end) {
-			pct_index idx = *it->second;
-			pct_entry *ent = pct_entry_get(m_ct.get(), idx);
-			status = pct_state_status(ent->state.load());
+			alc_index idx = *it->second;
+			alc_entry *ent = alc_entry_get(m_alc.get(), idx);
+			status = alc_state_status(ent->state.load());
 		}
 	} 
 
-	if (status == PCT_STATUS_READY) {
-		pct_lru_list::iterator l_it = it->second;
-		m_ct->lru.splice(m_ct->lru.begin(), m_ct->lru, l_it);
+	if (status == ALC_STATUS_READY) {
+		alc_lru_list::iterator l_it = it->second;
+		m_alc->lru.splice(m_alc->lru.begin(), m_alc->lru, l_it);
 		return tile_code_unpack(it->first);
 	}
 
@@ -96,9 +96,9 @@ TileCode TileCPUCache::find_best(TileCode code)
 	return TILE_CODE_NONE;
 }
 
-uint8_t *TileCPUCache::get_block(pct_index idx) const
+uint8_t *TileCPUCache::get_block(alc_index idx) const
 {
-	pct_page_handle_t pg_handle = m_ct->pages[idx.page].handle; 
+	alc_page_handle_t pg_handle = m_alc->pages[idx.page].handle; 
 
 	uint8_t *mem = reinterpret_cast<uint8_t*>(pg_handle);
 
@@ -108,16 +108,16 @@ uint8_t *TileCPUCache::get_block(pct_index idx) const
 const uint8_t *TileCPUCache::acquire_block(TileCode code, size_t *size,
 									   std::atomic_uint64_t **p_state) const
 {
-	auto it = m_ct->map.find(tile_code_pack(code));
+	auto it = m_alc->map.find(tile_code_pack(code));
 
-	if (it == m_ct->map.end()) {
+	if (it == m_alc->map.end()) {
 		log_error("TileDataCache::get_block : Failed to find tile with id %ld",
 			tile_code_pack(code));
 		return nullptr;
 	}
 
-	pct_index idx = *(it->second);
-	pct_entry *ent = pct_entry_get(m_ct.get(),idx);
+	alc_index idx = *(it->second);
+	alc_entry *ent = alc_entry_get(m_alc.get(),idx);
 
 	if (p_state) *p_state = &ent->state;
 	if (size) *size = m_tile_size;
@@ -127,27 +127,27 @@ const uint8_t *TileCPUCache::acquire_block(TileCode code, size_t *size,
 
 std::optional<TileDataRef> TileCPUCache::acquire_block(TileCode code) const
 {
-	auto it = m_ct->map.find(tile_code_pack(code));
+	auto it = m_alc->map.find(tile_code_pack(code));
 
-	if (it == m_ct->map.end()) {
+	if (it == m_alc->map.end()) {
 		log_error("acquire_block: Failed to find tile with code %ld (face=%d,zoom=%d,idx=%d)",
 			tile_code_pack(code), code.face,code.zoom,code.idx);
 		return std::nullopt;
 	}
 
-	pct_index idx = *it->second;
-	pct_entry *ent = pct_entry_get(m_ct.get(),idx);
+	alc_index idx = *it->second;
+	alc_entry *ent = alc_entry_get(m_alc.get(),idx);
 
 	uint64_t state = ent->state.load(std::memory_order_relaxed);
-	pct_state desired;
+	alc_state desired;
 	do {
-		if (pct_state_status(state) != PCT_STATUS_READY)
+		if (alc_state_status(state) != ALC_STATUS_READY)
 			return std::nullopt;
 
-		desired = pct_state_unpack(state); 
-		desired.status = PCT_STATUS_READY;
+		desired = alc_state_unpack(state); 
+		desired.status = ALC_STATUS_READY;
 		++desired.refs;
-	} while (!ent->state.compare_exchange_weak(state, pct_state_pack(desired),
+	} while (!ent->state.compare_exchange_weak(state, alc_state_pack(desired),
 											std::memory_order_acq_rel, std::memory_order_relaxed));
 
 	//log_info("Acquired tile %d from CPU cache");
@@ -165,11 +165,11 @@ void TileCPUCache::release_block(TileDataRef ref) const
 	uint64_t state = ref.p_state->load();
 	uint64_t desired;
 	do {
-		desired = pct_state_pack({
-			.status = PCT_STATUS_READY, 
+		desired = alc_state_pack({
+			.status = ALC_STATUS_READY, 
 			.flags = 0,
 			.gen = 0,
-			.refs = pct_state_refs(state) - 1
+			.refs = alc_state_refs(state) - 1
 		});
 	} while (!ref.p_state->compare_exchange_weak(state, desired));
 
@@ -179,42 +179,42 @@ void TileCPUCache::release_block(TileDataRef ref) const
 static void load_thread_fn(
 	const TileDataSource *source, 
 	TileCode code,
-	pct_atomic_state *p_state, 
+	alc_atomic_state *p_state, 
 	uint8_t* dst)
 {
 	uint64_t state_pkd = p_state->load(std::memory_order_relaxed);
-	pct_state desired;
+	alc_state desired;
 	do {
-		pct_state state = pct_state_unpack(state_pkd);
+		alc_state state = alc_state_unpack(state_pkd);
 		desired = state;
 		// If it was cancelled then we are the one stuff is waiting on to 
 		// se the status back to empty
-		if (state.status == PCT_STATUS_CANCELLED) {
-			desired.status = PCT_STATUS_EMPTY;
-			p_state->store(pct_state_pack(desired), std::memory_order_relaxed);
+		if (state.status == ALC_STATUS_CANCELLED) {
+			desired.status = ALC_STATUS_EMPTY;
+			p_state->store(alc_state_pack(desired), std::memory_order_relaxed);
 			log_info("load cancelled successfully (tile %d)",code);
 
 			return;
 		} else {
-			desired.status = PCT_STATUS_LOADING;
+			desired.status = ALC_STATUS_LOADING;
 		}
-	} while (!p_state->compare_exchange_weak(state_pkd, pct_state_pack(desired), 
+	} while (!p_state->compare_exchange_weak(state_pkd, alc_state_pack(desired), 
 										std::memory_order_acq_rel,std::memory_order_relaxed));
 
 	source->m_loader(code,dst,source->m_usr,p_state);
 
 	state_pkd = p_state->load(std::memory_order_relaxed);
 	do {
-		pct_state state = pct_state_unpack(state_pkd);
+		alc_state state = alc_state_unpack(state_pkd);
 		desired = state;
-		if (state.status == PCT_STATUS_CANCELLED)
-			desired.status = PCT_STATUS_EMPTY;
+		if (state.status == ALC_STATUS_CANCELLED)
+			desired.status = ALC_STATUS_EMPTY;
 		else 
-			desired.status = PCT_STATUS_READY;
-	} while(!p_state->compare_exchange_weak(state_pkd, pct_state_pack(desired),
+			desired.status = ALC_STATUS_READY;
+	} while(!p_state->compare_exchange_weak(state_pkd, alc_state_pack(desired),
 										 std::memory_order_acq_rel, std::memory_order_relaxed));
 
-	if (desired.status == PCT_STATUS_EMPTY) 
+	if (desired.status == ALC_STATUS_EMPTY) 
 		log_info("load cancelled successfully (tile %d)",code);
 
 	//log_info("Tile %d ready",ent->code);
@@ -233,7 +233,7 @@ std::vector<TileCode> TileCPUCache::update(
 	std::vector<TileCode> loaded (tiles.size(),TILE_CODE_NONE);
 
 	// TODO : We can have duplicate loads right now - fix this
-	std::vector<std::pair<pct_index,pct_entry*>> loads;
+	std::vector<std::pair<alc_index,alc_entry*>> loads;
 
 	size_t count = std::min(available.size(),m_tile_cap);
 
@@ -243,7 +243,7 @@ std::vector<TileCode> TileCPUCache::update(
 
 	for (size_t i = 0; i < count; ++i) {
 		TileCode ideal = available[i];
-		pct_load_result res = pct_table_load(m_ct.get(),tile_code_pack(ideal));
+		alc_result res = alc_get(m_alc.get(),tile_code_pack(ideal));
 
 		if (res.needs_load)
 			loads.push_back({res.idx,res.p_ent});
@@ -259,8 +259,8 @@ std::vector<TileCode> TileCPUCache::update(
 		if (g_tiles_in_flight < MAX_TILES_IN_FLIGHT) {
 			//log_info("Loading tile %d",ent->code);
 
-			ent->state.store(pct_state_pack({
-				.status = PCT_STATUS_QUEUED,
+			ent->state.store(alc_state_pack({
+				.status = ALC_STATUS_QUEUED,
 				.flags = 0,
 				.gen = 0,
 				.refs = 0

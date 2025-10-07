@@ -382,8 +382,8 @@ void TileGPUCache::asynchronous_upload(const TileCPUCache *cpu_cache,
 			TILE_WIDTH,
 			TILE_WIDTH,
 			1,
-			m_img_format,
-			m_data_type,
+			m_gl_img_format,
+			m_gl_data_type,
 			(void*)(data.offset)
 		);
 		data.p_state->store(TILE_GPU_STATE_READY);
@@ -443,8 +443,8 @@ void TileGPUCache::synchronous_upload(
 			TILE_WIDTH,
 			TILE_WIDTH,
 			1,
-			m_img_format,
-			m_data_type,
+			m_gl_img_format,
+			m_gl_data_type,
 			(void*)offset
 		);
 	}

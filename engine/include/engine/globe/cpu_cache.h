@@ -2,7 +2,7 @@
 #define CPU_CACHE_H
 
 #include "engine/globe/tiling.h"
-#include "engine/globe/paged_cache_table.h"
+#include "engine/globe/async_lru_cache.h"
 #include "engine/globe/data_source.h"
 
 #include <memory>
@@ -15,20 +15,20 @@ struct TileDataRef
 {
 	uint8_t *data;
 	size_t size;
-	pct_atomic_state *p_state;
+	alc_atomic_state *p_state;
 };
 
 struct TileCPUCache
 {
-	std::unique_ptr<pct_table,decltype(&pct_table_destroy)> m_ct{
-		nullptr, &pct_table_destroy};
+	std::unique_ptr<alc_table,decltype(&alc_destroy)> m_alc{
+		nullptr, &alc_destroy};
 
 	size_t m_tile_size;
 	size_t m_tile_cap = 1 << 14;
 private:
 
 	TileCode find_best(TileCode code);
-	uint8_t *get_block(pct_index idx) const;
+	uint8_t *get_block(alc_index idx) const;
 public:
 	static TileCPUCache *create(size_t tile_size, size_t capacity);
 
@@ -39,7 +39,7 @@ public:
 	void release_block(TileDataRef ref) const;
 
 	const uint8_t *acquire_block(TileCode code, size_t *size, 
-						  pct_atomic_state **p_state) const;
+						  alc_atomic_state **p_state) const;
 };
 
 #endif // CPU_CACHE_H

@@ -2,7 +2,7 @@
 #define DATA_SOURCE_H
 
 #include "engine/globe/tiling.h"
-#include "engine/globe/paged_cache_table.h"
+#include "engine/globe/async_lru_cache.h"
 
 static constexpr double DATA_SOURCE_TEST_AMP = 0.1;
 static constexpr double DATA_SOURCE_TEST_FREQ = 12;
@@ -10,7 +10,7 @@ static constexpr double DATA_SOURCE_TEST_FREQ = 12;
 //------------------------------------------------------------------------------
 // Data source
 
-typedef void(*TileLoaderFunc)(TileCode code, void* dst, void* usr, const pct_atomic_state* p_state);
+typedef void(*TileLoaderFunc)(TileCode code, void* dst, void* usr, const alc_atomic_state* p_state);
 
 struct TileDataSource
 {

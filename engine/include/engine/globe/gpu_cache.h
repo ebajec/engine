@@ -86,8 +86,8 @@ struct TileGPUCache
 	std::vector<std::unique_ptr<TileGPUPage>> m_pages;
 
 	GLuint m_gl_tex_format = GL_R32F;
-	GLuint m_img_format = GL_RED;
-	GLuint m_data_type = GL_FLOAT;
+	GLuint m_gl_img_format = GL_RED;
+	GLuint m_gl_data_type = GL_FLOAT;
 	GLuint m_data_size = sizeof(float);
 	GLuint m_tile_size_bytes = sizeof(float)*TILE_SIZE;
 
