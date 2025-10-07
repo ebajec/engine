@@ -2,6 +2,7 @@
 #define GL_RENDERER_H
 
 #include <engine/renderer/types.h>
+#include <engine/renderer/defaults.h>
 
 #include <engine/resource/resource_table.h>
 #include <engine/resource/model_loader.h>
@@ -44,7 +45,7 @@ struct FrameContext
 	const Renderer *renderer;
 	ResourceTable *rt;
 	Framedata data;
-	BufferID ubo;
+	BufferID frame_ubo;
 
 	RenderContext begin_pass(const BeginPassInfo *info);
     void end_pass(const RenderContext* ctx);
@@ -66,6 +67,8 @@ public:
 	~Renderer();
 
 	static std::unique_ptr<Renderer> create(const RendererCreateInfo* info);
+
+	RendererDefaults const *get_defaults() const;
 
 	FrameContext begin_frame(FrameBeginInfo const *info);
 	void end_frame(FrameContext* ctx);

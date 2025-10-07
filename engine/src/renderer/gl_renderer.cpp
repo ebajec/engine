@@ -98,6 +98,11 @@ Renderer::~Renderer()
 	delete impl;
 }
 
+RendererDefaults const *Renderer::get_defaults() const
+{
+	return &impl->defaults;
+}
+
 FrameContext Renderer::begin_frame(FrameBeginInfo const *info)
 {
 	const GLBuffer *ubo = impl->table->get<GLBuffer>(impl->frame_ubo);
@@ -106,7 +111,7 @@ FrameContext Renderer::begin_frame(FrameBeginInfo const *info)
 	ctx.rt = impl->table;
 	ctx.renderer = this;
 	ctx.data = framedata_create(info->camera);
-	ctx.ubo = impl->frame_ubo;
+	ctx.frame_ubo = impl->frame_ubo;
 
 	glNamedBufferSubData(ubo->id,0,sizeof(Framedata),&ctx.data);
 
@@ -139,7 +144,7 @@ RenderContext FrameContext::begin_pass(const BeginPassInfo *info)
 		.renderer = renderer,
 		.rt = rt,
 		.target = info->target,
-		.frame_ubo = ubo
+		.frame_ubo = frame_ubo
 	};
 
 	// bindings
