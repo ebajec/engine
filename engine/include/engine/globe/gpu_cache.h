@@ -2,11 +2,13 @@
 #define TILE_CACHE_H
 
 #include "engine/renderer/opengl.h"
+#include "engine/renderer/renderer.h"
 
 #include "engine/globe/tiling.h"
 #include "engine/globe/cpu_cache.h"
 
 // STL
+#include <memory>
 #include <unordered_map>
 #include <queue>
 #include <list>
@@ -83,11 +85,13 @@ struct TileGPUCache
 
 	std::vector<std::unique_ptr<TileGPUPage>> m_pages;
 
-	GLuint m_data_format = GL_R32F;
+	GLuint m_gl_tex_format = GL_R32F;
 	GLuint m_img_format = GL_RED;
 	GLuint m_data_type = GL_FLOAT;
 	GLuint m_data_size = sizeof(float);
 	GLuint m_tile_size_bytes = sizeof(float)*TILE_SIZE;
+
+	GLuint m_default_tex_array;
 
 	~TileGPUCache();
 private:
@@ -101,16 +105,18 @@ private:
 		std::span<TileGPUUploadData> upload_data);
 
 public:
+	static TileGPUCache *create();
+
 	size_t update(
 		const TileCPUCache *cpu_cache,
 		const std::span<TileCode> tiles, 
 		std::vector<TileGPUIndex>& textures
 	);
 
-	void bind_texture_arrays(uint32_t base) const;
-
 	void synchronous_upload(const TileCPUCache *data_cache,
 		std::span<TileTexUpload> uploads);
+
+	void bind_textures(const RenderContext &ctx, uint32_t base) const;
 };
 
 #endif //TILE_CACHE_H

@@ -610,7 +610,7 @@ LoadResult globe_create(Globe *globe, ResourceTable *rt)
 	LoadResult result = create_render_data(rt, globe->render_data);
 
 	if (result != RESULT_SUCCESS)
-		goto load_failed;
+		return result;
 
 	globe::init_debug(rt);
 
@@ -624,8 +624,6 @@ LoadResult globe_create(Globe *globe, ResourceTable *rt)
 		new TileGPUCache{}
 	);
 
-	return result;
-load_failed:
 	return result;
 }
 
@@ -726,7 +724,7 @@ void globe_draw(const RenderContext& ctx, const Globe *globe)
 
 	ctx.bind_material(data.material);
 
-	globe->gpu_cache->bind_texture_arrays(1);
+	globe->gpu_cache->bind_textures(ctx, 1);
 
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo->id); 
 	

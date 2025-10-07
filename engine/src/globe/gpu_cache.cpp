@@ -100,8 +100,26 @@ static void destroy_page(TileGPUPage &page)
 	glDeleteTextures(1,&page.tex_array);
 }
 
+TileGPUCache *TileGPUCache::create()
+{
+	TileGPUCache * cache = new TileGPUCache{};
+
+	GLuint tex;
+	glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &tex);
+	glTextureStorage3D(tex, 1, cache->m_gl_tex_format,1 ,1, 1);
+	glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTextureParameteri(tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTextureParameteri(tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTextureParameteri(tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	cache->m_default_tex_array = tex;
+
+	return cache;
+}
+
 TileGPUCache::~TileGPUCache()
 {
+	glDeleteTextures(1, &m_default_tex_array);
 	for (auto &page : m_pages) {
 		destroy_page(*page);
 	}
@@ -133,7 +151,7 @@ void TileGPUCache::reserve(uint32_t count)
 	m_pages.reserve(req);
 
 	for (size_t i = 0; i < diff; ++i) {
-		m_pages.emplace_back(create_page(m_data_format));
+		m_pages.emplace_back(create_page(m_gl_tex_format));
 		m_open_pages.push(static_cast<uint16_t>(m_pages.size() - 1));
 	}
 }
@@ -141,7 +159,7 @@ void TileGPUCache::reserve(uint32_t count)
 TileGPUIndex TileGPUCache::allocate()
 {
 	if (m_open_pages.empty()) {
-		m_pages.emplace_back(create_page(m_data_format));
+		m_pages.emplace_back(create_page(m_gl_tex_format));
 		m_open_pages.push(static_cast<uint16_t>(m_pages.size() - 1));
 	}
 
@@ -437,7 +455,7 @@ void TileGPUCache::synchronous_upload(
 	glDeleteBuffers(1,&pbo);
 }
 
-void TileGPUCache::bind_texture_arrays(uint32_t base) const 
+void TileGPUCache::bind_textures(const RenderContext &ctx, uint32_t base) const 
 {
 	assert(m_pages.size() <= MAX_TILE_PAGES);
 
@@ -447,6 +465,12 @@ void TileGPUCache::bind_texture_arrays(uint32_t base) const
 		}
 		glActiveTexture(GL_TEXTURE0 + (GLenum)(base + i));
 		glBindTexture(GL_TEXTURE_2D_ARRAY, m_pages[i]->tex_array);	
+	}
+
+	// Bind remaining spots with dummy values
+	for (size_t i = m_pages.size(); i < MAX_TILE_PAGES; ++i) {
+		glActiveTexture(GL_TEXTURE0 + (GLenum)(base + i));
+		glBindTexture(GL_TEXTURE_2D_ARRAY, m_default_tex_array);	
 	}
 }
 
