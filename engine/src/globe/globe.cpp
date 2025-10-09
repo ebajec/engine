@@ -621,7 +621,7 @@ LoadResult globe_create(Globe *globe, ResourceTable *rt)
 		TileDataSource::create()
 	);
 	globe->gpu_cache.reset(
-		new TileGPUCache{}
+		TileGPUCache::create()
 	);
 
 	return result;
