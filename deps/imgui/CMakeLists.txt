@@ -13,7 +13,7 @@ file(GLOB SOURCES
 
 add_library(imgui STATIC ${SOURCES})
 
-if(WIN32)
+if(WIN32 OR APPLE)
     target_link_libraries(imgui PUBLIC glfw)
 endif()
 
