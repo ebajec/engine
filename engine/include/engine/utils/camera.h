@@ -9,6 +9,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <cfloat>
+#include <algorithm>
 
 #ifndef HALFPIf
 #define HALFPIf 1.57079632679f
