@@ -16,6 +16,7 @@
 #include <shared_mutex>
 #include <unordered_map>
 #include <string_view>
+#include <mutex>
 
 #define RESOURCE_ENABLE_HOT_RELOAD 1
 

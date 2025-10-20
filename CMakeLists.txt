@@ -61,7 +61,6 @@ endif()
 
 find_package(OpenGL REQUIRED)
 
-
 add_compile_options(-g)
 
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
@@ -90,9 +89,10 @@ if(ENABLE_TSAN AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU"))
   )
 endif()
 
-
-set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -mavx2")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
+if(NOT APPLE)
+  set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -mavx2")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
+endif()
 
 add_subdirectory(deps)
 add_subdirectory(engine)
