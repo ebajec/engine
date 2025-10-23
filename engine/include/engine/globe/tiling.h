@@ -29,7 +29,7 @@ static constexpr uint8_t 	TILE_CODE_IDX_SHIFT = 8;
 
 // NOTE: layout is not portable.  This is only to be used 
 // for convenience.
-struct TileCode
+struct alignas(8) TileCode
 {
 	uint8_t face : 3;
 	uint8_t zoom : 5;
@@ -214,18 +214,6 @@ static inline TileCode tile_cell_index(TileCode code)
 		.idx = code.idx >> shift
 	};
 }
-
-/* Would use something like this for local coordinates
-static inline glm::dvec4 cell_transform(TileCode cell)
-{
-	//if (cell.zoom == 0)
-		return glm::dvec4(0,0,0,1);
-
-	aabb2_t rect = morton_u64_to_rect_f64(cell.idx, cell.zoom);
-	glm::dvec3 c = cube_to_globe(cell.face, 0.5*(rect.ll() + rect.ur()));
-	return glm::dvec4(c,(double)(1 << cell.zoom));
-}
-*/
 
 static inline TileCode tile_encode(uint8_t zoom, glm::dvec3 p)
 {

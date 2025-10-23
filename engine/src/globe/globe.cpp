@@ -98,7 +98,6 @@ struct Globe
 	RenderData render_data;
 
 	std::unique_ptr<TileGPUCache> gpu_cache;
-	//std::unique_ptr<TileCacheSegment> cpu_cache;
 	std::unique_ptr<TileDataSource> source;
 };
 
@@ -146,48 +145,39 @@ static constexpr TileCode tile_code_refine(TileCode code, quadrant_t quadrant)
 	return code;
 }
 
-/*
-static glm::dvec3 tile_diff(glm::dvec3 p, glm::dvec2 p_uv, aabb2_t tile, uint8_t face)
-{
-	p_uv = glm::clamp(p_uv,tile.min,tile.max);
-
-	glm::dvec3 diff = p - cube_to_globe(face, p_uv);
-
-	return diff;
-}
-*/
-
 static aabb3_t tile_box(const TileDataSource *source, TileCode code) 
 {
+	uint64_t u64 = tile_code_pack(code);
+	uint8_t face = code.face;
+
 	aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
 	glm::dvec2 mid_uv = 0.5*(rect.ur() + rect.ll());
 
-	// TODO: Don't sample here if it can be avoided (i.e., compute min/max in 
-	// a quadtree for tiles)
-	
-	float samples[5] = {
-         source->sample_elevation_at(rect.ll(),code.face),
-         source->sample_elevation_at(rect.lr(),code.face),
-         source->sample_elevation_at(rect.ul(),code.face),
-         source->sample_elevation_at(rect.ur(),code.face),
-         source->sample_elevation_at(mid_uv,code.face)   
-	};
+	double s_max = 1.0 + source->tile_max(code);
+	double s_min = 1.0 + source->tile_min(code);
 
-	glm::dvec3 p[5] = {
-		(1.0 + (double)samples[0])*cube_to_globe(code.face, rect.ll()),
-		(1.0 + (double)samples[1])*cube_to_globe(code.face, rect.lr()),
-		(1.0 + (double)samples[2])*cube_to_globe(code.face, rect.ul()),
-		(1.0 + (double)samples[3])*cube_to_globe(code.face, rect.ur()),
-		(1.0 + (double)samples[4])*cube_to_globe(code.face, mid_uv),
+	glm::dvec3 c[4] = {
+		cube_to_globe(face, rect.ll()),
+		cube_to_globe(face, rect.lr()),
+		cube_to_globe(face, rect.ul()),
+		cube_to_globe(face, rect.ur()),
 	};
+	glm::dvec3 mid = cube_to_globe(face, mid_uv);
+	glm::dvec3 m[2] = {
+		mid*s_max, mid*s_min
+	};
+	aabb3_t box = aabb3_bounding(m, 2);
 
-	aabb3_t box = aabb3_bounding(p, sizeof(p)/sizeof(p[0]));
+	for (size_t i = 0; i < sizeof(c)/sizeof(c[0]); ++i) {
+		aabb3_add(box, s_max*c[i]);
+		aabb3_add(box, s_min*c[i]);
+	}
 
 	if (code.zoom == 0) {
-		box = aabb3_add(box, cube_to_globe(code.face, 0.5*(rect.ll() + rect.lr())));
-		box = aabb3_add(box, cube_to_globe(code.face, 0.5*(rect.ll() + rect.ul())));
-		box = aabb3_add(box, cube_to_globe(code.face, 0.5*(rect.ur() + rect.ul())));
-		box = aabb3_add(box, cube_to_globe(code.face, 0.5*(rect.ur() + rect.lr())));
+		aabb3_add(box, cube_to_globe(face, 0.5*(rect.ll() + rect.lr())));
+		aabb3_add(box, cube_to_globe(face, 0.5*(rect.ll() + rect.ul())));
+		aabb3_add(box, cube_to_globe(face, 0.5*(rect.ur() + rect.ul())));
+		aabb3_add(box, cube_to_globe(face, 0.5*(rect.ur() + rect.lr())));
 	}
 
 	return box;
@@ -539,6 +529,7 @@ static LoadResult update_render_data(
 
 	std::atomic_uint32_t ctr = count;
 
+	// TODO : Batch this
 	for (uint32_t i = 0; i < count; ++i) {
 		offset = i * TILE_VERT_COUNT;	
 

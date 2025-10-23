@@ -63,8 +63,12 @@ struct TileDataSource
 
 	float sample_elevation_at(glm::dvec2 uv, uint8_t f) const;
 	float sample_elevation_at(glm::dvec3 p) const;
-	float max() const;
+
+	float tile_min(TileCode tile) const;
+	float tile_max(TileCode tile) const;
+
 	float min() const;
+	float max() const;
 };
 
 #endif

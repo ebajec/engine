@@ -1,6 +1,6 @@
 #include "globe/tile_cache.h"
+#include "globe/tile_cache_segment.h"
 #include "globe/async_lru_cache.h"
-#include "globe/cpu_cache.h"
 
 #include "utils/log.h"
 
@@ -16,7 +16,7 @@
 static int MAX_TILES_IN_FLIGHT = std::thread::hardware_concurrency()/2;
 static std::atomic_int g_tiles_in_flight = 0;
 size_t g_tile_cap = 2048;
-size_t g_tile_size= 256;
+size_t g_tile_size = 256;
 
 //------------------------------------------------------------------------------
 // implementation

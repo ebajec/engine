@@ -255,8 +255,6 @@ size_t TileGPUCache::update(
 			m_lru.splice(m_lru.begin(), m_lru, ent);
 			idx = ent->second;
 		} else {
-			//std::optional<TileDataRef> ref = cpu_cache->acquire_block(code); 
-			
 			tc_ref ref;
 
 			if (tc_acquire(source, code, &ref) != TC_OK) {
@@ -286,7 +284,6 @@ size_t TileGPUCache::update(
 				offset += m_tile_size_bytes;
 			} else {
 				tc_release(ref);
-				//cpu_cache->release_block(*ref);
 			}
 		}
 
@@ -325,7 +322,6 @@ static void tile_upload_fn(
 	memcpy(dst,ref.data,ref.size);
 
 cleanup:
-	//cpu_cache->release_block(ref);
 	tc_release(ref);
 	--ctx->refs;
 	return;

@@ -1,5 +1,5 @@
-#ifndef CT_TABLE_H
-#define CT_TABLE_H
+#ifndef ALC_TABLE_H
+#define ALC_TABLE_H
 
 #include <atomic>
 #include <vector>
@@ -188,4 +188,4 @@ struct alc_table
 	alc_page_destroy page_destroy;
 };
 
-#endif //CT_TABLE_H
+#endif //ALC_TABLE_H

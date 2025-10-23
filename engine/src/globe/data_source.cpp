@@ -2,6 +2,7 @@
 
 #include <type_traits>
 #include <atomic>
+#include <algorithm>
 
 static float test_elev_fn(glm::dvec2 uv, uint8_t f);
 
@@ -50,6 +51,36 @@ float TileDataSource::sample_elevation_at(glm::dvec3 p) const
 	globe_to_cube(p, &uv, &f);
 
 	return test_elev_fn(uv,f);
+}
+
+float TileDataSource::tile_min(TileCode code) const
+{
+	// Terrible - this is only temporary
+	aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
+	glm::dvec2 mid_uv = 0.5*(rect.ur() + rect.ll());
+
+	return std::max({
+         sample_elevation_at(rect.ll(),code.face),
+         sample_elevation_at(rect.lr(),code.face),
+         sample_elevation_at(rect.ul(),code.face),
+         sample_elevation_at(rect.ur(),code.face),
+         sample_elevation_at(mid_uv,code.face)   
+	});
+}
+float TileDataSource::tile_max(TileCode code) const
+{
+	// Terrible - this is only temporary
+	aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
+	glm::dvec2 mid_uv = 0.5*(rect.ur() + rect.ll());
+
+	return std::min({
+         sample_elevation_at(rect.ll(),code.face),
+         sample_elevation_at(rect.lr(),code.face),
+         sample_elevation_at(rect.ul(),code.face),
+         sample_elevation_at(rect.ur(),code.face),
+         sample_elevation_at(mid_uv,code.face)   
+	});
+
 }
 
 float TileDataSource::max() const

@@ -11,6 +11,7 @@
 
 // STL
 #include <vector>
+#include <initializer_list>
 
 // libc
 #include <cstdint>
@@ -141,11 +142,10 @@ static inline bool intersects(const aabb3_t& b1, const aabb3_t& b2)
 	);
 }
 
-static inline aabb3_t aabb3_add(aabb3_t box, glm::dvec3 p)
+static inline void aabb3_add(aabb3_t &box, const glm::dvec3 &p)
 {
 	box.max = glm::max(p,box.max);
 	box.min = glm::min(p,box.min);
-	return box;
 }
 
 static inline aabb3_t aabb3_bounding(const glm::dvec3 *pts, size_t count)
@@ -222,7 +222,7 @@ static inline bool cull_plane(const plane_t &p, const glm::dvec3 &v)
 	return glm::dot(v,p.n) < p.d;
 }
 
-static inline bool within_frustum(glm::dvec3 v, const frustum_t &frust)
+static inline bool within_frustum(const glm::dvec3& v, const frustum_t &frust)
 {
 	for (uint32_t i = 0; i < 6; ++i) {
 		if (!cull_plane(frust.planes[i],v))

@@ -2,7 +2,7 @@
 #include "utils/log.h"
 
 #include "globe/tiling.h"
-#include "globe/cpu_cache.h"
+#include "globe/tile_cache_segment.h"
 
 #include <imgui.h>
 
@@ -178,7 +178,7 @@ void TileCacheSegment::release_block(tc_ref ref) const
 			.gen = 0,
 			.refs = alc_state_refs(state) - 1
 		});
-	} while (!ref.p_state->compare_exchange_weak(state, desired));
+	} while (!ref.p_state->compare_exchange_weak(state, desired, std::memory_order_acq_rel, std::memory_order_relaxed));
 
 	//log_info("Released tile %d from CPU cache");
 }
