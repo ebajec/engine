@@ -1,23 +1,26 @@
 #include "globe/data_source.h"
 
-static void test_loader_fn(TileCode code, void *dst, void *usr,
-						   const alc_atomic_state *p_state);
+#include <type_traits>
+#include <atomic>
+
 static float test_elev_fn(glm::dvec2 uv, uint8_t f);
 
+static int test_loader_fn2(void *usr, uint64_t id, 
+					struct ds_buf *buf, struct ds_token *token);
+static_assert(std::is_same<decltype(&test_loader_fn2), ds_load_fn>::value);
 
 TileDataSource 
-*TileDataSource::create(TileLoaderFunc loader, void* usr)
+*TileDataSource::create(ds_load_fn loader, void* usr)
 {
+	static std::atomic_uint64_t id_ctr = 0;
+
 	TileDataSource *source = new TileDataSource;
 
-	source->m_loader = loader ? loader : test_loader_fn;
+	source->m_loader = loader ? loader : test_loader_fn2;
 	source->m_usr = usr;
+	source->m_id = ++id_ctr;
 
 	return source;
-}
-
-void TileDataSource::load(TileCode code, void* dst) const
-{
 }
 
 TileCode TileDataSource::find(TileCode code) const
@@ -47,6 +50,15 @@ float TileDataSource::sample_elevation_at(glm::dvec3 p) const
 	globe_to_cube(p, &uv, &f);
 
 	return test_elev_fn(uv,f);
+}
+
+float TileDataSource::max() const
+{
+	return TileDataSource::TEST_AMP;
+}
+float TileDataSource::min() const
+{
+	return -TileDataSource::TEST_AMP;
 }
 
 //------------------------------------------------------------------------------
@@ -84,12 +96,12 @@ static double test_elev_fn2(glm::dvec2 uv, uint8_t f, uint8_t zoom)
 	double g = 0;
 	for (size_t i = 0; i < coeff_count; ++i) {
 		double idx = (double)i + 1;
-		double c = DATA_SOURCE_TEST_FREQ*(idx);
-		glm::dvec3 h = 0.5*DATA_SOURCE_TEST_FREQ*phases[i]*TWOPI;
+		double c = TileDataSource::TEST_FREQ*(idx);
+		glm::dvec3 h = 0.5*TileDataSource::TEST_FREQ*phases[i]*TWOPI;
 		g += (coeffs[i]/(double)idx)*(sin(c*p.x - h.x)*sin(c*p.y - h.y)*sin(c*p.z - h.z));
 	}
 
-	g *= DATA_SOURCE_TEST_AMP;
+	g *= TileDataSource::TEST_AMP;
 
 	return g;
 }
@@ -99,10 +111,12 @@ float test_elev_fn(glm::dvec2 uv, uint8_t f)
 	return (float)test_elev_fn2(uv, f,coeff_count);
 }
 
-void test_loader_fn(TileCode code, void *dst, void *usr, 
-					const alc_atomic_state *p_state)
+int test_loader_fn2(
+	void *usr, uint64_t id, struct ds_buf *buf, struct ds_token *token)
 {
-	float *data = static_cast<float*>(dst);
+	float *data = static_cast<float*>(buf->dst);
+
+	TileCode code = tile_code_unpack(id);
 
 	aabb2_t rect = morton_u64_to_rect_f64(code.idx, code.zoom);
 
@@ -110,9 +124,11 @@ void test_loader_fn(TileCode code, void *dst, void *usr,
 
 	glm::vec2 uv = glm::vec2(0);
 	size_t idx = 0;
+
+	const struct ds_token_vtbl *vtbl = token->vtbl;
 	for (size_t i = 0; i < TILE_WIDTH; ++i) {
-		if (alc_state_status(p_state->load()) == ALC_STATUS_CANCELLED)
-			return;
+		if (vtbl->is_cancelled(token))
+			return 0;
 
 		for (size_t j = 0; j < TILE_WIDTH; ++j) {
 			glm::vec2 f = glm::mix(rect.ll(),rect.ur(),uv);
@@ -125,7 +141,5 @@ void test_loader_fn(TileCode code, void *dst, void *usr,
 		uv.y += d;
 	}
 
-	return;
+	return 0;
 }
-
-

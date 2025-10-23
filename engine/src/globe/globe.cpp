@@ -1,3 +1,6 @@
+#include "engine/globe/globe.h"
+#include "engine/globe/tiling.h"
+
 #include "renderer/opengl.h"
 #include "renderer/gl_debug.h"
 
@@ -8,9 +11,8 @@
 #include "utils/thread_pool.h"
 #include "utils/geometry.h"
 
-#include "globe/globe.h"
-#include "globe/cpu_cache.h"
 #include "globe/gpu_cache.h"
+#include "globe/tile_cache.h"
 
 #include <debug/box_debug_view.h>
 #include <debug/camera_debug_view.h>
@@ -21,6 +23,8 @@
 #include <glm/vec3.hpp>
 #include <glm/mat3x3.hpp>
 #include <glm/mat3x2.hpp>
+
+#include <vector>
 
 #include <vector>
 #include <cstdint>
@@ -35,34 +39,73 @@
 #ifndef QUATPI 
 #define QUATPI 0.785398163397
 #endif
+//static bool g_enable_boxes;
+//static std::unique_ptr<BoxDebugView> g_disp;
+//static std::unique_ptr<CameraDebugView> g_camera_debug;
 
-#ifndef KILOBYTE
-#define KILOBYTE ((size_t)1024)
-#endif
-
-#ifndef MEGABYTE
-#define MEGABYTE (KILOBYTE*KILOBYTE)
-#endif
-
-#ifndef GIGABYTE
-#define GIGABYTE (MEGABYTE*KILOBYTE)
-#endif
-
-static bool g_enable_boxes;
-static std::unique_ptr<BoxDebugView> g_disp;
-static std::unique_ptr<CameraDebugView> g_camera_debug;
-
-namespace globe
-{
 static constexpr uint32_t TILE_VERT_WIDTH = 32;
 static constexpr uint32_t TILE_VERT_COUNT = 
 	TILE_VERT_WIDTH*TILE_VERT_WIDTH;
 
 static constexpr double tile_scale_factor = 32;
 
+struct DebugInfo
+{
+	std::unique_ptr<CameraDebugView> camera;
+	std::unique_ptr<BoxDebugView> boxes;
+	bool enable_boxes;
+	bool fix_camera;
+	int zoom;
+};
+
+struct GlobeVertex
+{
+	glm::vec3 pos;
+	glm::vec2 uv;
+	glm::vec3 normal;
+	glm::vec2 big_uv;
+	struct {
+		uint32_t left; 
+		uint32_t right;
+	} code;
+};
+
+struct RenderData
+{
+	BufferID vbo;
+	BufferID indirect;
+	BufferID ibo;
+
+	// texture array indices
+	BufferID ssbo;
+
+	MaterialID material;
+	GLuint vao;
+
+	std::vector<DrawCommand> cmds;
+};
+
+struct Globe
+{
+	ResourceTable *rt;
+
+	GlobeStats stats;
+	DebugInfo dbg;
+
+	size_t loaded_count;
+	std::vector<TileCode> tiles;
+
+	RenderData render_data;
+
+	std::unique_ptr<TileGPUCache> gpu_cache;
+	//std::unique_ptr<TileCacheSegment> cpu_cache;
+	std::unique_ptr<TileDataSource> source;
+};
+
 struct select_tiles_params
 {
 	const TileDataSource * source;
+	const DebugInfo *debug;
 
 	frustum_t frust;
 	aabb3_t frust_box;
@@ -70,33 +113,29 @@ struct select_tiles_params
 	double res;
 };
 
-enum quadrant_t
+typedef enum
 {
 	LOWER_LEFT = 0x0,
 	LOWER_RIGHT = 0x1,
 	UPPER_LEFT = 0x2,
 	UPPER_RIGHT = 0x3
-};
+} quadrant_t;
 
-static void init_debug(ResourceTable *table) {
-	g_disp.reset(new BoxDebugView(table));
-	g_camera_debug.reset(new CameraDebugView(table));
-	g_enable_boxes = false;
+static void globe_init_debug(Globe *globe) {
+	globe->dbg.boxes.reset(new BoxDebugView(globe->rt));
+	globe->dbg.camera.reset(new CameraDebugView(globe->rt));
+	globe->dbg.enable_boxes = false;
 }
 
-static void draw_boxes(RenderContext const & ctx)
+static void globe_draw_debug(Globe const *globe, RenderContext const & ctx)
 {
-	ctx.bind_material(g_disp->material);
-	if (g_enable_boxes)
-		ctx.draw_cmd_mesh_outline(g_disp->model);
+	if (globe->dbg.enable_boxes) {
+		ctx.bind_material(globe->dbg.boxes->material);
+		ctx.draw_cmd_mesh_outline(globe->dbg.boxes->model);
+	}
 
-	g_camera_debug->render(ctx);
-}
-
-static void update_boxes() 
-{
-	if (g_enable_boxes)
-		g_disp->update();
+	if (globe->dbg.fix_camera)
+		globe->dbg.camera->render(ctx);
 }
 
 static constexpr TileCode tile_code_refine(TileCode code, quadrant_t quadrant)
@@ -117,11 +156,6 @@ static glm::dvec3 tile_diff(glm::dvec3 p, glm::dvec2 p_uv, aabb2_t tile, uint8_t
 	return diff;
 }
 */
-
-struct select_tiles_rec_params : select_tiles_params
-{
-	glm::dvec2 origin_uv;
-};
 
 static aabb3_t tile_box(const TileDataSource *source, TileCode code) 
 {
@@ -170,7 +204,8 @@ static inline int select_tiles_rec(
 	const select_tiles_params *params,
 	TileCode code)
 {
-	const bool enable_boxes = g_enable_boxes;
+	BoxDebugView * boxes = params->debug->enable_boxes ? 
+		params->debug->boxes.get() : nullptr;
 
 	if (code.zoom > 23)
 		return 0;
@@ -193,7 +228,7 @@ static inline int select_tiles_rec(
 
 	if (area/d_min_sq < params->res) {
 		out.push_back({code,d_min_sq});
-		if(enable_boxes) g_disp->add(box);
+		if(boxes) boxes->add(box);
 		return 1;
 	}
 
@@ -212,7 +247,7 @@ static inline int select_tiles_rec(
 	// If status is zero than no tiles were added, so add this tile
 	if (!status) {
 		out.push_back({code,d_min_sq});
-		if (enable_boxes) g_disp->add(box);
+		if (boxes) boxes->add(box);
 		return 1;
 	}
 
@@ -390,7 +425,7 @@ struct alignas(16) TileMetadata
 
 static LoadResult create_render_data(ResourceTable *rt, RenderData &data)
 {
-	LoadResult result = RESULT_SUCCESS;
+	LoadResult result = RT_OK;
 
 	std::vector<uint32_t> tile_indices = create_tile_indices();
 
@@ -407,7 +442,7 @@ static LoadResult create_render_data(ResourceTable *rt, RenderData &data)
 
 	data.indirect = create_buffer(rt, MAX_TILES*sizeof(DrawCommand),
 						  GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
-	if (!data.vbo)
+	if (!data.indirect)
 		goto load_failed;
 
 	data.ssbo = create_buffer(rt, MAX_TILES*sizeof(TileMetadata),
@@ -429,17 +464,20 @@ static LoadResult create_render_data(ResourceTable *rt, RenderData &data)
 load_failed:
 	if (data.vbo) rt->destroy_handle(data.vbo);
 	if (data.ibo) rt->destroy_handle(data.ibo);
-	return RESULT_ERROR;
+	if (data.ssbo) rt->destroy_handle(data.ssbo);
+	if (data.indirect) rt->destroy_handle(data.indirect);
+	return result;
 }
 
 static LoadResult update_render_data(
-	ResourceTable *rt,
 	Globe *globe,
 	glm::dvec3 origin,
 	const std::vector<TileCode>& parents, 
 	const std::vector<TileGPUIndex> &textures
 )
 {
+	ResourceTable *rt = globe->rt;
+
 	const std::vector<TileCode>& tiles = globe->tiles;
 
 	uint32_t count = std::min((uint32_t)tiles.size(),(uint32_t)MAX_TILES);
@@ -547,7 +585,7 @@ static LoadResult update_render_data(
 	draw_cmds(static_cast<DrawCommand*>(ptr), count);
 	glUnmapNamedBuffer(indirect->id);
 
-	return RESULT_SUCCESS;
+	return RT_OK;
 };
 
 static double dtime()
@@ -605,65 +643,90 @@ static void plot_tile_counts(size_t total, size_t new_tiles)
 //------------------------------------------------------------------------------
 // Interface
 
-LoadResult globe_create(Globe *globe, ResourceTable *rt)
+Globe *globe_create(ResourceTable *rt)
 {
+	std::unique_ptr<Globe> globe(new Globe{});
+	globe->rt = rt;
+
 	LoadResult result = create_render_data(rt, globe->render_data);
 
-	if (result != RESULT_SUCCESS)
-		return result;
+	if (result != RT_OK)
+		return nullptr;
 
-	globe::init_debug(rt);
-
-	globe->cpu_cache.reset(
-		TileCPUCache::create(TILE_SIZE*sizeof(float),(size_t)1*GIGABYTE)
-	);
 	globe->source.reset(
 		TileDataSource::create()
 	);
 	globe->gpu_cache.reset(
 		TileGPUCache::create()
 	);
+	globe_init_debug(globe.get());
 
-	return result;
+	return globe.release();
 }
 
-LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
+void globe_destroy(Globe *globe)
 {
-	const Camera * p_camera = g_camera_debug->get_camera(); 
-	static int zoom = 5;
+	delete globe;
+}
 
+void globe_imgui(Globe *globe)
+{
 	ImGui::Begin("Globe debug");	
 
-	ImGui::SliderInt("res", &zoom, 0, 8, "%d");
+	ImGui::SliderInt("res", &globe->dbg.zoom, 0, 8, "%d");
 	ImGui::SliderInt("Max zoom", const_cast<int*>(&globe->source->m_debug_zoom), 0, 24);
 
-	if (ImGui::Button(g_enable_boxes ? 
+	if (ImGui::Button(globe->dbg.enable_boxes ? 
 		"Disable globe tile boxes##globe tile boxes" : 
 		"Enable globe tile boxes##globe tile boxes")) 
-		g_enable_boxes = !g_enable_boxes;
+		globe->dbg.enable_boxes = !globe->dbg.enable_boxes;
 
-	if (ImGui::Button(p_camera ? 
+	if (ImGui::Button(globe->dbg.fix_camera ? 
 			"Unfix globe camera##globe tile camera" : 
 			"Fix globe camera##globe tile camera")
 	) {
-		g_camera_debug->set_camera(p_camera ? nullptr : info->camera);
-		p_camera = info->camera;
+		globe->dbg.fix_camera = !globe->dbg.fix_camera;
 	}
-	if (!p_camera) p_camera = info->camera;
+	plot_tile_counts(globe->stats.loaded, globe->stats.new_loads);
+	ImGui::End();
+
+}
+
+int globe_add_source(Globe *globe, TileDataSource *source)
+{
+	return 0;
+}
+
+LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
+{
+	const Camera * p_camera = info->camera; 
+
+	ResourceTable *rt = globe->rt;
+	TileDataSource *source = globe->source.get();
+
+	if (globe->dbg.fix_camera)
+		p_camera = globe->dbg.camera->get_camera();
+	else {
+		globe->dbg.camera->set_camera(info->camera);
+	}
 
 	globe->tiles.clear();
 
 	//----------------------------------------------------------------------------
 	// Adjust the test frustum to only go to the horizon
 	
+	double resolution = tile_factor((uint8_t)globe->dbg.zoom);
+
 	glm::mat4 pv = p_camera->proj*p_camera->view;
-	frustum_t frust = camera_frustum(pv);
-	double resolution = tile_factor((uint8_t)zoom);
 	glm::dvec3 pos = camera_get_pos(p_camera->view);
 
+	frustum_t frust = camera_frustum(pv);
+
+	// Adjust culling frustum to only extend enough so that worst-case
+	// terrain is visible
 	if (true) {
-		static double h_max = DATA_SOURCE_TEST_AMP;
-		static double h_min = -h_max;
+		double h_max = (double)source->max();
+		double h_min = (double)source->min();
 
 		double r_min = 1.0 + h_min;
 		double r_max = 1.0 + h_max;
@@ -679,41 +742,51 @@ LoadResult globe_update(Globe *globe, ResourceTable *rt, GlobeUpdateInfo *info)
 	// Process visible tiles
 	
 	select_tiles_params params = {
-		.source = globe->source.get(),
+		.source = source,
+		.debug = &globe->dbg,
 		.frust = frust,
 		.frust_box = frustum_aabb(frust),
 		.origin = pos,
 		.res = resolution,
 	};
 
-	g_disp->add(params.frust_box);
+	//if(globe->dbg.enable_boxes)
+	//	globe->dbg.boxes->add(params.frust_box);
 
-	globe::select_tiles(params, globe->tiles);
+	select_tiles(params, globe->tiles);
 
 	size_t count = std::min(globe->tiles.size(),(size_t)MAX_TILES);
 
 	globe->tiles.resize(count);
-	std::vector<TileCode> data_tiles = globe->cpu_cache->update(
-		*globe->source, globe->tiles);
+
+	std::vector<TileCode> loaded_tiles (count, TILE_CODE_NONE);
+	tc_error err = tc_load(source, count, globe->tiles.data(), loaded_tiles.data());
+
+	if (err != TC_OK) {
+		// Do something...
+		//
+		// This should only cause missing data to appear though
+	}
 
 	std::vector<TileGPUIndex> tile_textures;
 
-	size_t new_count = globe->gpu_cache->update(globe->cpu_cache.get(),
-											 data_tiles,tile_textures);
+	size_t new_count = globe->gpu_cache->update(
+		source, loaded_tiles, tile_textures);
 
-	LoadResult result = update_render_data(rt,globe,
-		pos,data_tiles,tile_textures);
+	LoadResult result = update_render_data(globe,
+		pos, loaded_tiles, tile_textures);
 	
-	globe::update_boxes();
-	plot_tile_counts(count, new_count);
-	ImGui::End();
-
+	globe->stats.new_loads = new_count;
+	globe->stats.loaded = count;
 	globe->loaded_count = count;
+
+	if (globe->dbg.enable_boxes)
+		globe->dbg.boxes->update();
 
 	return result;
 }
 
-void globe_draw(const RenderContext& ctx, const Globe *globe)
+void globe_draw(const Globe *globe, const RenderContext& ctx)
 {
 	const RenderData &data = globe->render_data;
 
@@ -750,7 +823,5 @@ void globe_draw(const RenderContext& ctx, const Globe *globe)
 
 	glBindVertexArray(0);
 
-	globe::draw_boxes(ctx);
+	globe_draw_debug(globe, ctx);
 }
-
-}; // namespace globe

@@ -2,6 +2,8 @@
 
 #include "globe/async_lru_cache.h"
 
+#include <thread>
+
 #include <cassert>
 #include <cstdlib>
 
@@ -169,6 +171,11 @@ alc_result alc_get(alc_table *alc, uint64_t key)
 	return res;
 }
 
+static alc_entry * alc_entry_get(alc_table *ct, alc_index idx)
+{
+	return &ct->pages[idx.page].entries[idx.ent];
+}
+
 int alc_create(alc_table **p_alc, alc_create_info const *ci)
 {
 	alc_table *alc = new alc_table {};
@@ -186,6 +193,20 @@ int alc_create(alc_table **p_alc, alc_create_info const *ci)
 
 void alc_destroy(alc_table *alc)
 {
+	for (auto [key, val] : alc->map) {
+		alc_index idx = *val;
+		alc_entry *ent = alc_entry_get(alc, idx);
+
+		alc_state state;
+		do {
+			state = alc_state_unpack(
+				ent->state.load(std::memory_order_relaxed)
+			);
+
+			std::this_thread::yield();
+		} while (state.refs > 0);
+	}
+
 	for (alc_page &page : alc->pages) {
 		alc->page_destroy(alc->usr,page.handle);
 		free(page.entries);
@@ -193,14 +214,59 @@ void alc_destroy(alc_table *alc)
 	delete alc;
 }
 
+alc_entry *alc_acquire(alc_table *alc, uint64_t key)
+{
+	auto it = alc->map.find(key);
+	if (it == alc->map.end()) {
+		return nullptr;
+	}
+
+	alc_index idx = *it->second;
+	alc_entry *ent = alc_entry_get(alc,idx);
+
+	uint64_t state = ent->state.load(std::memory_order_relaxed);
+	alc_state desired;
+	do {
+		if (alc_state_status(state) != ALC_STATUS_READY)
+			return nullptr;
+
+		desired = alc_state_unpack(state); 
+		desired.status = ALC_STATUS_READY;
+		++desired.refs;
+	} while (!ent->state.compare_exchange_weak(state, alc_state_pack(desired),
+											std::memory_order_acq_rel, std::memory_order_relaxed));
+	return ent;
+}
+void alc_release(alc_entry *ent)
+{
+	uint64_t state = ent->state.load(std::memory_order_relaxed);
+	uint64_t desired;
+	do {
+		uint32_t refs = alc_state_refs(state); 
+
+		if (!refs) {
+			log_error("alc_release : refcount is zero");
+			refs = 1;
+		}
+
+		desired = alc_state_pack({
+			.status = ALC_STATUS_READY, 
+			.flags = 0,
+			.gen = 0,
+			.refs = refs - 1
+		});
+	} while (!ent->state.compare_exchange_weak(state, desired, std::memory_order_relaxed));
+
+}
+
 //------------------------------------------------------------------------------
 // Compile time tests
 
 static constexpr alc_state alc_state_test_val = {7,13,17,19};
 
-static_assert(alc_state_unpack(alc_state_pack(alc_state_test_val)).status == 7);
-static_assert(alc_state_unpack(alc_state_pack(alc_state_test_val)).flags == 13);
-static_assert(alc_state_unpack(alc_state_pack(alc_state_test_val)).gen == 17);
-static_assert(alc_state_unpack(alc_state_pack(alc_state_test_val)).refs == 19);
+static_assert(alc_state_unpack(alc_state_pack(alc_state_test_val)).status == alc_state_test_val.status);
+static_assert(alc_state_unpack(alc_state_pack(alc_state_test_val)).flags == alc_state_test_val.flags);
+static_assert(alc_state_unpack(alc_state_pack(alc_state_test_val)).gen == alc_state_test_val.gen);
+static_assert(alc_state_unpack(alc_state_pack(alc_state_test_val)).refs == alc_state_test_val.refs);
 static_assert(alc_state_pack(alc_state_unpack(0xDEADBEEF)) == 0xDEADBEEF);
 

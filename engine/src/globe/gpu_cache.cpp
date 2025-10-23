@@ -224,12 +224,12 @@ void TileGPUCache::insert(TileCode code, TileGPUIndex idx)
 }
 
 size_t TileGPUCache::update(
-	const TileCPUCache *cpu_cache,
-	const std::span<TileCode> tiles, 
+	TileDataSource const *source,
+	const std::span<TileCode> loaded_tiles, 
 	std::vector<TileGPUIndex>& textures
 )
 {
-	size_t tile_count = std::min(tiles.size(),(size_t)MAX_TILES);
+	size_t tile_count = std::min(loaded_tiles.size(),(size_t)MAX_TILES);
 
 	reserve(static_cast<uint32_t>(tile_count));
 
@@ -237,7 +237,7 @@ size_t TileGPUCache::update(
 	size_t offset = 0;
 
 	for (size_t i = 0; i < tile_count; ++i) {
-		TileCode code = tiles[i];
+		TileCode code = loaded_tiles[i];
 
 		if (code == TILE_CODE_NONE) {
 			textures.push_back(TILE_GPU_INDEX_NONE);
@@ -255,8 +255,11 @@ size_t TileGPUCache::update(
 			m_lru.splice(m_lru.begin(), m_lru, ent);
 			idx = ent->second;
 		} else {
-			std::optional<TileDataRef> ref = cpu_cache->acquire_block(code); 
-			if (!ref) {
+			//std::optional<TileDataRef> ref = cpu_cache->acquire_block(code); 
+			
+			tc_ref ref;
+
+			if (tc_acquire(source, code, &ref) != TC_OK) {
 				log_warn("Failed to queue upload for incomplete tile %d", code);
 				textures.push_back(idx);
 				continue;
@@ -270,7 +273,7 @@ size_t TileGPUCache::update(
 
 				std::atomic<TileGPULoadState> * p_state = &m_pages[idx.page]->states[idx.tex]; 
 				TileGPUUploadData data = {
-					.data_ref = *ref,
+					.data_ref = ref,
 					.p_state = p_state,
 					.offset = offset,
 					.code = code,
@@ -282,25 +285,25 @@ size_t TileGPUCache::update(
 
 				offset += m_tile_size_bytes;
 			} else {
-				cpu_cache->release_block(*ref);
+				tc_release(ref);
+				//cpu_cache->release_block(*ref);
 			}
 		}
 
 		textures.push_back(idx);
 	}
 
-	asynchronous_upload(cpu_cache, upload_data);
+	asynchronous_upload(upload_data);
 
 	return upload_data.size();
 }
 
 static void tile_upload_fn(
-	const TileCPUCache *cpu_cache,
 	GPUUploadContext *ctx,
 	TileGPUUploadData data
 )
 {
-	TileDataRef ref = data.data_ref;
+	tc_ref ref = data.data_ref;
 	// Should always be valid if it got this far.
 	assert(ref.data && ref.p_state);
 
@@ -322,7 +325,8 @@ static void tile_upload_fn(
 	memcpy(dst,ref.data,ref.size);
 
 cleanup:
-	cpu_cache->release_block(ref);
+	//cpu_cache->release_block(ref);
+	tc_release(ref);
 	--ctx->refs;
 	return;
 }
@@ -330,8 +334,7 @@ cleanup:
 //------------------------------------------------------------------------------
 // Loading
 
-void TileGPUCache::asynchronous_upload(const TileCPUCache *cpu_cache,
-	std::span<TileGPUUploadData> upload_data)
+void TileGPUCache::asynchronous_upload(std::span<TileGPUUploadData> upload_data)
 {
 	if (!upload_data.size())
 		return;
@@ -348,7 +351,7 @@ void TileGPUCache::asynchronous_upload(const TileCPUCache *cpu_cache,
 		++ctx->refs;
 
 		g_schedule_task([=](){
-			tile_upload_fn(cpu_cache,p_ctx, data);
+			tile_upload_fn(p_ctx, data);
 		});
 
 	}
@@ -390,8 +393,9 @@ void TileGPUCache::asynchronous_upload(const TileCPUCache *cpu_cache,
 	}
 }
 
+/*
 void TileGPUCache::synchronous_upload(
-	const TileCPUCache *data_cache,
+	const TileCacheSegment *data_cache,
 	std::span<TileTexUpload> uploads 
 )
 {
@@ -454,6 +458,7 @@ void TileGPUCache::synchronous_upload(
 
 	glDeleteBuffers(1,&pbo);
 }
+*/
 
 void TileGPUCache::bind_textures(const RenderContext &ctx, uint32_t base) const 
 {

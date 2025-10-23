@@ -57,7 +57,7 @@ LoadResult gl_model_load_2d(ResourceTable *table, void *res, void *info)
 
 	gl_check_err();
 
-	return RESULT_SUCCESS;
+	return RT_OK;
 }
 
 LoadResult gl_model_load_3d(ResourceTable *table, void *res, void *info)
@@ -102,9 +102,9 @@ LoadResult gl_model_load_3d(ResourceTable *table, void *res, void *info)
 	if (gl_check_err())
 		goto failure;
 
-	return RESULT_SUCCESS;
+	return RT_OK;
 failure:
-	return RESULT_ERROR;
+	return RT_EUNKNOWN;
 }
 LoadResult gl_model_create(ResourceTable *table, void **res, void *info)
 {
@@ -115,11 +115,11 @@ LoadResult gl_model_create(ResourceTable *table, void **res, void *info)
 	glGenBuffers(1,&model->ibo);
 
 	if (gl_check_err()) {
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 	}
 
 	*res = model.release();
-	return RESULT_SUCCESS;
+	return RT_OK;
 }
 
 void gl_model_destroy(ResourceTable *table, void *res)
@@ -148,12 +148,12 @@ ResourceHandle ModelLoader::model_load_2d(ResourceTable *table, Mesh2DCreateInfo
 
 	LoadResult result = table->allocate(h, ci);
 
-	if (result != RESULT_SUCCESS) 
+	if (result != RT_OK) 
 		goto load_failed;
 
 	result = table->upload(h, "model2d", ci);
 
-	if (result != RESULT_SUCCESS) 
+	if (result != RT_OK) 
 		goto load_failed;
 
 	return h;
@@ -169,12 +169,12 @@ ResourceHandle ModelLoader::model_load_3d(ResourceTable *table, Mesh3DCreateInfo
 
 	LoadResult result = table->allocate(h, ci);
 
-	if (result != RESULT_SUCCESS) 
+	if (result != RT_OK) 
 		goto load_failed;
 
 	result = table->upload(h, "model3d", ci);
 
-	if (result != RESULT_SUCCESS) 
+	if (result != RT_OK) 
 		goto load_failed;
 
 	return h;
@@ -189,7 +189,7 @@ extern ResourceHandle model_create(ResourceTable *table)
 	ResourceHandle h = table->create_handle(RESOURCE_TYPE_MODEL);
 	LoadResult result = table->allocate(h, nullptr);
 
-	if (result != RESULT_SUCCESS) 
+	if (result != RT_OK) 
 		goto load_failed;
 
 	return h;

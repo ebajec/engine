@@ -3,9 +3,9 @@
 
 #include "engine/renderer/opengl.h"
 #include "engine/renderer/renderer.h"
-
 #include "engine/globe/tiling.h"
-#include "engine/globe/cpu_cache.h"
+
+#include "globe/tile_cache.h"
 
 // STL
 #include <memory>
@@ -46,7 +46,7 @@ enum TileGPULoadState
 
 struct TileGPUUploadData
 {
-	TileDataRef data_ref;
+	tc_ref data_ref;
 	std::atomic<TileGPULoadState> *p_state;
 	size_t offset;
 	TileCode code;
@@ -101,22 +101,22 @@ private:
 	void deallocate(TileGPUIndex idx);
 	void reserve(uint32_t count);
 	void insert(TileCode, TileGPUIndex);
-	void asynchronous_upload(const TileCPUCache *cpu_cache,
-		std::span<TileGPUUploadData> upload_data);
+	void asynchronous_upload(std::span<TileGPUUploadData> upload_data);
 
 public:
 	static TileGPUCache *create();
 
 	size_t update(
-		const TileCPUCache *cpu_cache,
+		TileDataSource const *source,
 		const std::span<TileCode> tiles, 
 		std::vector<TileGPUIndex>& textures
 	);
-
-	void synchronous_upload(const TileCPUCache *data_cache,
-		std::span<TileTexUpload> uploads);
-
 	void bind_textures(const RenderContext &ctx, uint32_t base) const;
+
+	/*
+	void synchronous_upload(const TileCacheSegment *data_cache,
+		std::span<TileTexUpload> uploads);
+	*/
 };
 
 #endif //TILE_CACHE_H

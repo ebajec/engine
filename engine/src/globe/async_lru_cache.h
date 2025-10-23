@@ -160,6 +160,9 @@ extern void alc_destroy(alc_table *alc);
 /// @note This function is not thread safe. 
 extern alc_result alc_get(alc_table *alc, uint64_t key);
 
+extern alc_entry *alc_acquire(alc_table *alc, uint64_t key);
+extern void alc_release(alc_entry *ent);
+
 struct alc_table
 {
 	alc_lru_list lru;

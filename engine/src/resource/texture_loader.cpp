@@ -39,7 +39,7 @@ LoadResult gl_image_create(ResourceTable *loader, void **res, void *info)
 
 	*res = img.release();
 
-	return RESULT_SUCCESS;
+	return RT_OK;
 
 }
 
@@ -59,7 +59,7 @@ static LoadResult gl_image_upload_mem(ResourceTable *loader, void *res, void *in
 	char *data = static_cast<char*>(info);
 
 	if (!img || !data || !img->id) {
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 	}
 
 	glBindTexture(GL_TEXTURE_2D,img->id);
@@ -68,10 +68,10 @@ static LoadResult gl_image_upload_mem(ResourceTable *loader, void *res, void *in
 	glBindTexture(GL_TEXTURE_2D,0);
 	
 	if (gl_check_err()) {
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 	}
 
-	return RESULT_SUCCESS;
+	return RT_OK;
 }
 
 void ImageLoader::registration(ResourceTable *loader)
@@ -86,7 +86,7 @@ static LoadResult gl_image_create_from_disk(ResourceTable *loader, ResourceHandl
 
 	if (!stbi_res) {
 		log_error("Failed to load image_file : %s",path);
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 	}
 
 	ImageCreateInfo img_info = {
@@ -97,14 +97,14 @@ static LoadResult gl_image_create_from_disk(ResourceTable *loader, ResourceHandl
 
 	LoadResult result = loader->allocate(h, &img_info);
 
-	if (result != RESULT_SUCCESS) {
-		return RESULT_ERROR;
+	if (result != RT_OK) {
+		return RT_EUNKNOWN;
 	}
 
 	uint8_t* rgba = stbi_load(path,&width,&height,&channels,STBI_rgb_alpha);
 	result = loader->upload(h,"image" ,rgba); 
 
-	if (result != RESULT_SUCCESS) {
+	if (result != RT_OK) {
 		goto cleanup;
 	}
 cleanup:
@@ -123,7 +123,7 @@ ResourceHandle image_create_2d(ResourceTable *loader, uint32_t width, uint32_t h
 	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_IMAGE);
 	LoadResult result = loader->allocate(h, &info); 
 
-	if (result != RESULT_SUCCESS) {
+	if (result != RT_OK) {
 		loader->destroy_handle(h);
 		return RESOURCE_HANDLE_NULL;
 	}
@@ -141,7 +141,7 @@ ResourceHandle image_load_file(ResourceTable *loader, std::string_view path)
 
 	LoadResult result = loader->load_file(h,path.data());
 
-	if (result != RESULT_SUCCESS) {
+	if (result != RT_OK) {
 		log_error("Failed to load image file : %s",path.data());
 		goto load_failed;
 	}

@@ -53,12 +53,12 @@ static LoadResult parse_material_file(PreMaterialInfo *info, std::string_view pa
 
 	if (!shaders_node) {
 		log_error("Material %s does not specify any shaders!",path);
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 	}
 
 	if (!shaders_node.IsMap()) {
 		log_error("'shaders' field is not a map!");
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 	}
 
 	ShaderPipeline pipeline;	
@@ -68,12 +68,12 @@ static LoadResult parse_material_file(PreMaterialInfo *info, std::string_view pa
 
 	if (!frag) {
 		log_error("Material %s does not contain a fragment shader",path);
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 	}
 
 	if (!vert) {
 		log_error("Material %s does not contain a vertex shader", path);
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 	}
 
 	pipeline.frag = frag.as<std::string>();
@@ -83,7 +83,7 @@ static LoadResult parse_material_file(PreMaterialInfo *info, std::string_view pa
 
 	if (bindings_node && !bindings_node.IsSequence()) {
 		log_error("'bindings' node is not a sequence!");
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 	}
 
 	std::vector<Binding> bindings;
@@ -104,22 +104,22 @@ static LoadResult parse_material_file(PreMaterialInfo *info, std::string_view pa
 		.bindings = std::move(bindings)
 	};
 
-	return RESULT_SUCCESS;
+	return RT_OK;
 }
 
 static LoadResult gl_material_load(ResourceTable *loader, GLMaterial *mat, const PreMaterialInfo *info) 
 {
-	LoadResult res = RESULT_SUCCESS;
+	LoadResult res = RT_OK;
 
 	ShaderID vertID = shader_load_file(loader, info->pipeline.vert);
 	if (!vertID) {
-		res = RESULT_ERROR;
+		res = RT_EUNKNOWN;
 		return res;
 	}
 
 	ShaderID fragID = shader_load_file(loader, info->pipeline.frag);
 	if (!fragID) {
-		res = RESULT_ERROR;
+		res = RT_EUNKNOWN;
 		return res;
 	}
 
@@ -133,7 +133,7 @@ static LoadResult gl_material_load(ResourceTable *loader, GLMaterial *mat, const
 
 	if (!gl_check_program(program,info->name.c_str())) {
 		glDeleteProgram(program);
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 	}
 
 	mat->program = program;
@@ -186,7 +186,7 @@ static LoadResult gl_material_load(ResourceTable *loader, GLMaterial *mat, const
 			if (it == merged_ids.end()) {
 				log_error("While loading material %s : failed to find binding '%s'\n",
 							material_name, bind->name.c_str());
-				return RESULT_ERROR;
+				return RT_EUNKNOWN;
 			}
 
 			uint32_t id = it->second;
@@ -211,7 +211,7 @@ LoadResult gl_material_create(ResourceTable *loader, void **res, void *info)
 
 	const char *path = ci->path.c_str();
 
-	LoadResult result = RESULT_SUCCESS;
+	LoadResult result = RT_OK;
 
 	PreMaterialInfo pre_info;
 	try {
@@ -273,7 +273,7 @@ static LoadResult gl_material_load_file(ResourceTable *loader, ResourceHandle h,
 	};
 	LoadResult result = loader->allocate(h,&ci);
 
-	if (result != RESULT_SUCCESS) {
+	if (result != RT_OK) {
 		return result;
 	}
 
@@ -291,7 +291,7 @@ ResourceHandle material_load_file(ResourceTable *loader, std::string_view path)
 
 	LoadResult result = loader->load_file(h,path.data());
 
-	if (result != RESULT_SUCCESS)
+	if (result != RT_OK)
 		goto error_cleanup;
 
 	loader->set_handle_key(h,path);

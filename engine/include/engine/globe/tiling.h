@@ -1,5 +1,5 @@
-#ifndef TILING_H
-#define TILING_H
+#ifndef GLOBE_TILING_H
+#define GLOBE_TILING_H
 
 // local
 #include "engine/utils/geometry.h"
@@ -17,7 +17,6 @@ static constexpr uint32_t CUBE_FACES = 6;
 static constexpr uint32_t TILE_WIDTH = 256;
 static constexpr uint32_t TILE_SIZE = TILE_WIDTH*TILE_WIDTH;
 
-
 //------------------------------------------------------------------------------
 // TILE INDEXING
 
@@ -28,6 +27,8 @@ static constexpr uint8_t  	TILE_CODE_ZOOM_SHIFT = 3;
 static constexpr uint64_t 	TILE_CODE_IDX_MASK = UINT64_MAX;
 static constexpr uint8_t 	TILE_CODE_IDX_SHIFT = 8;
 
+// NOTE: layout is not portable.  This is only to be used 
+// for convenience.
 struct TileCode
 {
 	uint8_t face : 3;
@@ -72,7 +73,7 @@ static inline uint64_t tile_code_pack2(uint8_t face, uint8_t zoom, uint64_t idx)
 	return u64;
 }
 
-static constexpr TileCode TILE_CODE_NONE = tile_code_unpack(0x8493724890123809);
+static constexpr TileCode TILE_CODE_NONE = tile_code_unpack(UINT64_MAX);
 
 static_assert(tile_code_pack(tile_code_unpack(0x8493724890123809)) == 0x8493724890123809); 
 static_assert(tile_code_pack(tile_code_unpack(0x020)) == 0x020); 
@@ -254,5 +255,5 @@ static inline constexpr double tile_factor(uint8_t lvl)
 	return (4.0 * PI / 6.0)/(double)(1LU << 2*lvl);
 }
 
-#endif
+#endif // GLOBE_TILING_H
 

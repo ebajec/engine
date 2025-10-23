@@ -82,14 +82,14 @@ std::unique_ptr<ResourceHotReloader> ResourceHotReloader::create(ResourceTable* 
 static LoadResult reload_file_resource(ResourceTable *loader, ResourceHandle h) 
 {
 	if (h == RESOURCE_HANDLE_NULL)
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 
 	ResourceEntry *ent = loader->get_internal(h);
 
 	if (!ent || !ent->reload_info)
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 
-	LoadResult result = RESULT_SUCCESS;
+	LoadResult result = RT_OK;
 
 	loader->load_file(h,ent->reload_info->path.c_str());
 
@@ -128,7 +128,7 @@ LoadResult ResourceHotReloader::process_updates()
 		}
 	}
 
-	return RESULT_SUCCESS;
+	return RT_OK;
 }
 
 std::string ResourceTable::make_path_abs(std::string_view str)
@@ -302,7 +302,7 @@ LoadResult ResourceTable::allocate(ResourceHandle h, void* alloc_info)
 	void* data = nullptr;
 	LoadResult result = alloc_fn(this, &data, alloc_info);
 
-	if (result != RESULT_SUCCESS) {
+	if (result != RT_OK) {
 		goto error_cleanup;
 	}
 
@@ -329,15 +329,15 @@ LoadResult ResourceTable::upload(ResourceHandle h, std::string_view key, void* u
 	ResourceEntry *ent = get_internal(h);
 
 	if (!ent->data || ent->status == RESOURCE_STATUS_EMPTY) {
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 	}
 
-	LoadResult result = RESULT_SUCCESS;
+	LoadResult result = RT_OK;
 
 	auto it_loader = loader_fns.find(key.data());
 	if (it_loader == loader_fns.end()) {
 		log_error("No loader registered with name %s", key.data());
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 	}
 
 	OnResourceLoad load_fn = it_loader->second.loader_fn; 
@@ -345,7 +345,7 @@ LoadResult ResourceTable::upload(ResourceHandle h, std::string_view key, void* u
 
 	result = load_fn(this, ent->data, upload_info);
 
-	if (result != RESULT_SUCCESS) {
+	if (result != RT_OK) {
 		ent->status = RESOURCE_STATUS_INVALID;
 		return result;
 	}

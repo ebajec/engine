@@ -74,7 +74,7 @@ std::unique_ptr<Renderer> Renderer::create(const RendererCreateInfo* info)
 
 	LoadResult result = renderer_defaults_init(impl->table, &impl->defaults);
 
-	if (result != RESULT_SUCCESS) {
+	if (result != RT_OK) {
 		return nullptr;
 	}
 
@@ -85,7 +85,7 @@ std::unique_ptr<Renderer> Renderer::create(const RendererCreateInfo* info)
 	};
 	result = impl->table->allocate(impl->frame_ubo,&buffer_info);
 
-	if (result != RESULT_SUCCESS) {
+	if (result != RT_OK) {
 		impl->table->destroy_handle(impl->frame_ubo);
 		return nullptr;
 	}

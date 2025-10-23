@@ -13,6 +13,34 @@ file(GLOB SOURCES "src/*.cpp" "src/*.c" "src/*/*.cpp" "src/*/*.c")
 
 add_library(${TARGET} STATIC ${SOURCES})
 
+option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
+if(ENABLE_ASAN AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU"))
+message(STATUS "AddressSanitizer Enabled")
+	target_compile_options(${TARGET} PUBLIC
+		-fsanitize=address
+		-fno-omit-frame-pointer    
+		-g                          
+	)
+	target_link_options(${TARGET} PUBLIC
+    -fsanitize=address
+  )
+endif()
+
+option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+if(ENABLE_TSAN AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU"))
+	message(STATUS "ThreadSanitizer Enabled")
+	target_compile_options(${TARGET} PUBLIC
+		-fsanitize=thread
+		-fno-omit-frame-pointer    
+		-g                          
+  	)
+	target_link_options(${TARGET} PUBLIC
+    	-fsanitize=thread
+  	)
+endif()
+
+
+
 target_include_directories(${TARGET} PUBLIC include)
 target_include_directories(${TARGET} PRIVATE src include/engine)
 

@@ -60,7 +60,7 @@ void main()
 
 	float val = valid ? texture(u_tex_arrays[in_tex_idx.page], uvw).r : 0;
 
-	float s = 1.0 + 2000*val; 
+	float s = 1.0 + 10*val; 
 	vec4 color = 
 	mix(
 		mix(

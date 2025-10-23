@@ -12,13 +12,13 @@ static LoadResult gl_compute_pipeline_create(ResourceTable *rt, void **res, void
 	ShaderID shaderID = shader_load_file(rt, path);
 
 	if (!shaderID)
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 
 
 	const GLShaderModule *comp = get_shader(rt, shaderID);
 
 	if (comp->stage != GL_COMPUTE_SHADER) {
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 	}
 
 	GLuint program = glCreateProgram();
@@ -27,7 +27,7 @@ static LoadResult gl_compute_pipeline_create(ResourceTable *rt, void **res, void
 
 	if (!gl_check_program(program, path)) {
 		glDeleteProgram(program);
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 	}
 
 	GLComputePipeline *pipeline = new GLComputePipeline{};
@@ -35,7 +35,7 @@ static LoadResult gl_compute_pipeline_create(ResourceTable *rt, void **res, void
 	pipeline->program = program;
 	*res = pipeline;
 
-	return RESULT_SUCCESS;
+	return RT_OK;
 }
 
 static void gl_compute_pipeline_destroy(ResourceTable *rt, void *res)
@@ -50,7 +50,7 @@ static LoadResult gl_compute_pipeline_load_file(ResourceTable *rt, ResourceHandl
 {
 	LoadResult result = rt->allocate(h,(void*)path);
 
-	if (result != RESULT_SUCCESS) {
+	if (result != RT_OK) {
 		return result;
 	}
 
@@ -73,7 +73,7 @@ ComputePipelineID compute_pipeline_load(ResourceTable *rt, std::string_view path
 
 	LoadResult result = rt->load_file(h,path.data());
 
-	if (result != RESULT_SUCCESS)
+	if (result != RT_OK)
 		goto error_cleanup;
 
 	rt->set_handle_key(h,path);

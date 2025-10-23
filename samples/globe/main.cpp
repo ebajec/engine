@@ -209,8 +209,16 @@ int main(int argc, char* argv[])
 	//-----------------------------------------------------------------------------
 	// Globe
 	
-	std::unique_ptr<globe::Globe> globe (new globe::Globe);
-	if(globe::globe_create(globe.get(), rt.get()) != RESULT_SUCCESS) {
+	std::unique_ptr<TileDataSource> source (TileDataSource::create());
+	
+	std::unique_ptr<Globe,decltype(&globe_destroy)> globe (
+		globe_create(rt.get()), 
+		globe_destroy
+	);
+
+	globe_add_source(globe.get(),source.get());
+
+	if(!globe) {
 		return EXIT_FAILURE;
 	}
 
@@ -227,6 +235,7 @@ int main(int argc, char* argv[])
 		ImGui::NewFrame();
 
 		plot_frame_times(t1 - t0);
+		globe_imgui(globe.get());
 
 		t0 = t1;
 		t1 = glfwGetTime();
@@ -236,7 +245,7 @@ int main(int argc, char* argv[])
 		app->onFrameUpdateCallback(window);
 
 		glm::dvec3 p = sphere_camera->control.get_pos();
-		double elev = globe->source->sample_elevation_at(p);
+		double elev = source->sample_elevation_at(p);
 
 		sphere_camera->control.set_min_height(
 			2*view_component->near + elev);
@@ -246,10 +255,10 @@ int main(int argc, char* argv[])
 			.view = sphere_camera->control.get_view()
 		};
 
-		globe::GlobeUpdateInfo globeInfo = { 
+		GlobeUpdateInfo globeUpdateInfo = { 
 			.camera = &camera 
 		};
-		globe::globe_update(globe.get(),rt.get(), &globeInfo);
+		globe_update(globe.get(), &globeUpdateInfo);
 
 		FrameBeginInfo frameInfo = {.camera = &camera};
 		FrameContext frame = renderer->begin_frame(&frameInfo);
@@ -257,7 +266,7 @@ int main(int argc, char* argv[])
 		BeginPassInfo passInfo = {.target = view_component->target};
 		RenderContext ctx = frame.begin_pass(&passInfo);
 		
-		globe::globe_draw(ctx,globe.get());
+		globe_draw(globe.get(),ctx);
 
 		frame.end_pass(&ctx);
 		renderer->end_frame(&frame);

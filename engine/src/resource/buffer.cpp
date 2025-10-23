@@ -32,11 +32,11 @@ LoadResult gl_buffer_create(ResourceTable *table, void **res, void *usr)
 
 	*res = buf;
 
-	return RESULT_SUCCESS;
+	return RT_OK;
 failure:
 	if (buf && buf->id) glDeleteBuffers(1,&buf->id);
 	if (buf) delete buf;
-	return RESULT_ERROR;
+	return RT_EUNKNOWN;
 }
 
 void gl_buffer_destroy(ResourceTable *table, void *res)
@@ -70,5 +70,5 @@ LoadResult upload_buffer(ResourceTable *table, BufferID id, void* data, size_t s
 		log_error("No buffer resource with id %d",id);
 	}
 	glNamedBufferSubData(buf->id,0,(GLsizei)size, data);
-	return RESULT_SUCCESS;
+	return RT_OK;
 }

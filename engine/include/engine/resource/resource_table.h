@@ -62,9 +62,9 @@ struct ResourceTable;
 // 'setResult'??
 enum LoadResult : int32_t
 {
-	ERROR_INVALID_HANDLE = -2,
-	RESULT_ERROR = -1,
-	RESULT_SUCCESS = 0
+	RT_EINVALID_HANDLE = -2,
+	RT_EUNKNOWN = -1,
+	RT_OK = 0
 };
 
 enum ResourceStatus : int8_t

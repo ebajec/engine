@@ -8,11 +8,11 @@
 
 LoadResult renderer_defaults_init(ResourceTable *table, RendererDefaults *defaults) 
 {
-	LoadResult result = RESULT_SUCCESS;
+	LoadResult result = RT_OK;
 	defaults->materials.screen_quad = material_load_file(table,"material/screen_quad.yaml");
 
 	if (!defaults->materials.screen_quad) 
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 
 	//-----------------------------------------------------------------------------
 	// screen quad
@@ -27,7 +27,7 @@ LoadResult renderer_defaults_init(ResourceTable *table, RendererDefaults *defaul
 	defaults->models.screen_quad = ModelLoader::model_load_2d(table, &mesh_info);
 
 	if (!defaults->models.screen_quad) 
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 
 	//-----------------------------------------------------------------------------
 	// missing texture
@@ -50,7 +50,7 @@ LoadResult renderer_defaults_init(ResourceTable *table, RendererDefaults *defaul
 	table->upload(defaults->textures.missing,ImageLoader::name,data.data());
 
 	if (!defaults->textures.missing) 
-		return RESULT_ERROR;
+		return RT_EUNKNOWN;
 
 	return result;
 }

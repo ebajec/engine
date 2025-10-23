@@ -86,7 +86,7 @@ LoadResult gl_render_target_create(ResourceTable *table, void** res, void *usr)
 	}
 
 	*res = target;
-	return RESULT_SUCCESS;
+	return RT_OK;
 
 GL_RENDER_TARGET_CREATE_CLEANUP:
 	glBindBuffer(GL_UNIFORM_BUFFER,0);
@@ -94,7 +94,7 @@ GL_RENDER_TARGET_CREATE_CLEANUP:
 	glBindFramebuffer(GL_FRAMEBUFFER,0);
 	glBindRenderbuffer(GL_RENDERBUFFER,0);
 	delete target;
-	return RESULT_ERROR;
+	return RT_EUNKNOWN;
 }
 
 void gl_render_target_destroy(ResourceTable *table, void *res)
@@ -115,7 +115,7 @@ ResourceHandle render_target_create(ResourceTable *table, const RenderTargetCrea
 
 	LoadResult result = table->allocate(h, (void*)info);
 
-	if (result != RESULT_SUCCESS) {
+	if (result != RT_OK) {
 		table->destroy_handle(h);
 		return RESOURCE_HANDLE_NULL;
 	}
