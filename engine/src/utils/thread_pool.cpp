@@ -11,6 +11,7 @@
 class ThreadPool
 {
 	bool m_terminate = false;
+	uint32_t m_num_active = 0;
 
 	std::vector<std::thread> m_threads;
 
@@ -25,6 +26,7 @@ class ThreadPool
 
 		for (;;) {
 			std::unique_lock<std::mutex> lock(m_sync);
+			--m_num_active;
 			m_cv.wait(lock, [&](){
 				return m_terminate || !m_queue.empty();
 			});
@@ -33,6 +35,7 @@ class ThreadPool
 
 			task = std::move(m_queue.front());
 			m_queue.pop();
+			++m_num_active;
 			lock.unlock();
 
 			task();

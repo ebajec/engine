@@ -11,7 +11,6 @@
 
 // STL
 #include <vector>
-#include <initializer_list>
 
 // libc
 #include <cstdint>

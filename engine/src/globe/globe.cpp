@@ -525,25 +525,35 @@ static LoadResult update_render_data(
 	glBindBuffer(GL_ARRAY_BUFFER, buf->id);
 	void *ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
 
-	uint32_t offset = 0;
+	static const uint32_t BATCH_SIZE = 64;
 
-	std::atomic_uint32_t ctr = count;
+	uint32_t batch_count = count ? 1 + (count - 1)/BATCH_SIZE : 0;
+
+	std::atomic_uint32_t ctr = batch_count;
 
 	// TODO : Batch this
-	for (uint32_t i = 0; i < count; ++i) {
-		offset = i * TILE_VERT_COUNT;	
-
-		TileCode code = tiles[i];
-		GlobeVertex * dst = (GlobeVertex*)ptr + offset;
-		TileCode parent = parents[i];
+	for (uint32_t b = 0; b < batch_count; ++b) {
+		size_t b_start = b * BATCH_SIZE;	
 
 		g_schedule_task([=,&ctr](){
-			create_tile_verts(code, parent, dst);
-			--ctr;	
+			GlobeVertex * dst = (GlobeVertex*)ptr + b_start * TILE_VERT_COUNT;
+			uint32_t b_size = b_start + BATCH_SIZE > count ? 
+				count % BATCH_SIZE : BATCH_SIZE;
+
+			for (uint32_t j = b_start; j < b_start + b_size; ++j) {
+
+				TileCode code = tiles[j];
+				TileCode parent = parents[j];
+
+				create_tile_verts(code, parent, dst);
+
+				dst += TILE_VERT_COUNT;
+			}
+			ctr.fetch_sub(1, std::memory_order_release);	
 		});
 	}
 
-	while (ctr > 0)
+	while (ctr)
 		std::this_thread::yield();
 
 	glUnmapBuffer(GL_ARRAY_BUFFER);

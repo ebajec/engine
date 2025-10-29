@@ -95,7 +95,7 @@ float TileDataSource::min() const
 //------------------------------------------------------------------------------
 // Test loader functions
 
-static constexpr size_t coeff_count = 5;
+static constexpr size_t coeff_count = 4;
 static double coeffs[coeff_count] = {};
 static glm::dvec3 phases[coeff_count] = {};
 
