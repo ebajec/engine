@@ -8,7 +8,7 @@
 #include <queue>
 //#include <atomic>
 
-class ThreadPool
+struct ThreadPool
 {
 	bool m_terminate = false;
 	uint32_t m_num_active = 0;

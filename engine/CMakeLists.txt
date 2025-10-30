@@ -39,7 +39,7 @@ if(ENABLE_TSAN AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU"))
   	)
 endif()
 
-
+target_compile_options(${TARGET} PUBLIC -g)
 
 target_include_directories(${TARGET} PUBLIC include)
 target_include_directories(${TARGET} PRIVATE src include/engine)

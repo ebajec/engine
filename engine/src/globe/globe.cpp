@@ -12,7 +12,8 @@
 #include "utils/geometry.h"
 
 #include "globe/gpu_cache.h"
-#include "globe/tile_cache.h"
+
+#include "terrain.h"
 
 #include <debug/box_debug_view.h>
 #include <debug/camera_debug_view.h>
@@ -39,9 +40,6 @@
 #ifndef QUATPI 
 #define QUATPI 0.785398163397
 #endif
-//static bool g_enable_boxes;
-//static std::unique_ptr<BoxDebugView> g_disp;
-//static std::unique_ptr<CameraDebugView> g_camera_debug;
 
 static constexpr uint32_t TILE_VERT_WIDTH = 32;
 static constexpr uint32_t TILE_VERT_COUNT = 
@@ -97,13 +95,13 @@ struct Globe
 
 	RenderData render_data;
 
-	std::unique_ptr<TileGPUCache> gpu_cache;
-	std::unique_ptr<TileDataSource> source;
+	std::unique_ptr<GPUTileCache> gpu_cache;
+	std::unique_ptr<CPUTileCache> terrain;
 };
 
 struct select_tiles_params
 {
-	const TileDataSource * source;
+	const CPUTileCache * source;
 	const DebugInfo *debug;
 
 	frustum_t frust;
@@ -111,14 +109,6 @@ struct select_tiles_params
 	glm::dvec3 origin;
 	double res;
 };
-
-typedef enum
-{
-	LOWER_LEFT = 0x0,
-	LOWER_RIGHT = 0x1,
-	UPPER_LEFT = 0x2,
-	UPPER_RIGHT = 0x3
-} quadrant_t;
 
 static void globe_init_debug(Globe *globe) {
 	globe->dbg.boxes.reset(new BoxDebugView(globe->rt));
@@ -137,15 +127,7 @@ static void globe_draw_debug(Globe const *globe, RenderContext const & ctx)
 		globe->dbg.camera->render(ctx);
 }
 
-static constexpr TileCode tile_code_refine(TileCode code, quadrant_t quadrant)
-{
-	++code.zoom;
-	code.idx <<= 2;
-	code.idx |= quadrant;
-	return code;
-}
-
-static aabb3_t tile_box(const TileDataSource *source, TileCode code) 
+static aabb3_t tile_box(const CPUTileCache *source, TileCode code) 
 {
 	uint64_t u64 = tile_code_pack(code);
 	uint8_t face = code.face;
@@ -223,10 +205,10 @@ static inline int select_tiles_rec(
 	}
 
 	TileCode children[4] = {
-		tile_code_refine(code,LOWER_LEFT),
-		tile_code_refine(code,LOWER_RIGHT),
-		tile_code_refine(code,UPPER_LEFT),
-		tile_code_refine(code,UPPER_RIGHT)
+		tile_code_refine(code,TILE_LOWER_LEFT),
+		tile_code_refine(code,TILE_LOWER_RIGHT),
+		tile_code_refine(code,TILE_UPPER_LEFT),
+		tile_code_refine(code,TILE_UPPER_RIGHT)
 	};
 
 	int status = 0;
@@ -654,11 +636,11 @@ Globe *globe_create(ResourceTable *rt)
 	if (result != RT_OK)
 		return nullptr;
 
-	globe->source.reset(
-		TileDataSource::create()
+	globe->terrain.reset(
+		CPUTileCache::create()
 	);
 	globe->gpu_cache.reset(
-		TileGPUCache::create()
+		GPUTileCache::create()
 	);
 	globe_init_debug(globe.get());
 
@@ -675,7 +657,7 @@ void globe_imgui(Globe *globe)
 	ImGui::Begin("Globe debug");	
 
 	ImGui::SliderInt("res", &globe->dbg.zoom, 0, 8, "%d");
-	ImGui::SliderInt("Max zoom", const_cast<int*>(&globe->source->m_debug_zoom), 0, 24);
+	ImGui::SliderInt("Max zoom", const_cast<int*>(&globe->terrain->m_debug_zoom), 0, 24);
 
 	if (ImGui::Button(globe->dbg.enable_boxes ? 
 		"Disable globe tile boxes##globe tile boxes" : 
@@ -693,9 +675,14 @@ void globe_imgui(Globe *globe)
 
 }
 
-int globe_add_source(Globe *globe, TileDataSource *source)
+int globe_add_source(Globe *globe, CPUTileCache *source)
 {
 	return 0;
+}
+
+float globe_sample_elevation(const Globe *globe, const glm::dvec3& p)
+{
+	return globe->terrain->sample_elevation_at(p);
 }
 
 LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
@@ -703,7 +690,7 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 	const Camera * p_camera = info->camera; 
 
 	ResourceTable *rt = globe->rt;
-	TileDataSource *source = globe->source.get();
+	CPUTileCache *source = globe->terrain.get();
 
 	if (globe->dbg.fix_camera)
 		p_camera = globe->dbg.camera->get_camera();
@@ -761,7 +748,13 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 	globe->tiles.resize(count);
 
 	std::vector<TileCode> loaded_tiles (count, TILE_CODE_NONE);
-	tc_error err = tc_load(source, count, globe->tiles.data(), loaded_tiles.data());
+	tc_error err = tc_load(
+		source->tc, 
+		source->ds,
+		count, 
+		globe->tiles.data(), 
+		loaded_tiles.data()
+	);
 
 	if (err != TC_OK) {
 		// Do something...

@@ -25,50 +25,41 @@ struct ds_buf
 	size_t cap;
 };
 
+struct ds_context;
+
 typedef int (*ds_load_fn)(
 	void *usr, 
 	uint64_t id,
 	struct ds_buf *buf,
 	struct ds_token *token
 );
+typedef uint64_t (*ds_find_fn)(
+	void *usr, 
+	uint64_t val
+);
 
-//------------------------------------------------------------------------------
-// Data source
+typedef void (*ds_destroy_fn)(
+	struct ds_context *ctx
+);
 
-struct TileDataSource
+struct ds_vtbl
 {
-	std::unordered_map<
-		TileCode, 
-		uint32_t, 
-		TileCodeHash
-	> m_data;
+	ds_destroy_fn 	destroy;
 
+	ds_load_fn 		loader;
+	ds_find_fn		find;
 
-	ds_load_fn m_loader;
-	void* m_usr;
-	int m_debug_zoom = 8;
-
-	uint64_t m_id;
-
-	static constexpr double TEST_AMP = 0.1;
-	static constexpr double TEST_FREQ = 12;
-
-	uint64_t id() const {
-		return m_id;
-	}
-
-	static TileDataSource *create(ds_load_fn loader = nullptr, void* usr = nullptr);
-
-	TileCode find(TileCode code) const;
-
-	float sample_elevation_at(glm::dvec2 uv, uint8_t f) const;
-	float sample_elevation_at(glm::dvec3 p) const;
-
-	float tile_min(TileCode tile) const;
-	float tile_max(TileCode tile) const;
-
-	float min() const;
-	float max() const;
+	float (*sample)(void *usr, float u, float v, uint8_t f);
+	float (*max)(void *usr);
+	float (*min)(void *usr);
 };
+
+struct ds_context
+{
+	void 		*usr;
+	ds_vtbl 	vtbl;
+};
+
+void ds_context_destroy(ds_context *ctx);
 
 #endif

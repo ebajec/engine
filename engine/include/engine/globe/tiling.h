@@ -24,8 +24,16 @@ static constexpr uint64_t 	TILE_CODE_FACE_MASK = 0x7;
 static constexpr uint8_t  	TILE_CODE_FACE_SHIFT = 0;
 static constexpr uint64_t 	TILE_CODE_ZOOM_MASK = 0x1F;
 static constexpr uint8_t  	TILE_CODE_ZOOM_SHIFT = 3;
-static constexpr uint64_t 	TILE_CODE_IDX_MASK = UINT64_MAX;
+static constexpr uint64_t 	TILE_CODE_IDX_MASK = 0x00FFFFFFFFFFFFFF;
 static constexpr uint8_t 	TILE_CODE_IDX_SHIFT = 8;
+
+typedef enum
+{
+	TILE_LOWER_LEFT = 0x0,
+	TILE_LOWER_RIGHT = 0x1,
+	TILE_UPPER_LEFT = 0x2,
+	TILE_UPPER_RIGHT = 0x3
+} tile_quadrant_t;
 
 // NOTE: layout is not portable.  This is only to be used 
 // for convenience.
@@ -39,6 +47,65 @@ struct alignas(8) TileCode
 		return face == other.face && zoom == other.zoom && idx == other.idx;
 	}
 };
+
+static inline constexpr uint64_t tile_code_coarsen(uint64_t u64)
+{
+	uint8_t zoom = (uint8_t)((u64 >> TILE_CODE_ZOOM_SHIFT) & TILE_CODE_ZOOM_MASK);
+	uint64_t idx  = (u64 >> TILE_CODE_IDX_SHIFT) & TILE_CODE_IDX_MASK;
+
+	--zoom;
+	idx >>= 2;
+
+	// clear the old zoom and idx fields
+	u64 &= ~(
+		(TILE_CODE_IDX_MASK << TILE_CODE_IDX_SHIFT) | 
+		(TILE_CODE_ZOOM_MASK << TILE_CODE_ZOOM_SHIFT)
+	);
+
+	u64 |= ((uint64_t)zoom << TILE_CODE_ZOOM_SHIFT); 
+	u64 |= (idx << TILE_CODE_IDX_SHIFT); 
+
+	return u64;
+}
+
+static constexpr uint64_t tile_code_refine(uint64_t u64, tile_quadrant_t quadrant)
+{
+	uint8_t zoom = (uint8_t)((u64 >> TILE_CODE_ZOOM_SHIFT) & TILE_CODE_ZOOM_MASK);
+	uint64_t idx  = (u64 >> TILE_CODE_IDX_SHIFT) & TILE_CODE_IDX_MASK;
+
+	++zoom;
+	idx <<= 2;
+	idx |= quadrant;
+
+	// clear the old zoom and idx fields
+	u64 &= ~(
+		(TILE_CODE_IDX_MASK << TILE_CODE_IDX_SHIFT) | 
+		(TILE_CODE_ZOOM_MASK << TILE_CODE_ZOOM_SHIFT)
+	);
+
+	u64 |= ((uint64_t)zoom << TILE_CODE_ZOOM_SHIFT); 
+	u64 |= (idx << TILE_CODE_IDX_SHIFT); 
+
+	return u64;
+}
+
+static constexpr TileCode tile_code_refine(TileCode code, tile_quadrant_t quadrant)
+{
+	++code.zoom;
+	code.idx <<= 2;
+	code.idx |= quadrant;
+	return code;
+}
+
+static inline constexpr uint8_t tile_code_zoom(uint64_t u64)
+{
+	return (uint8_t)((u64 >> TILE_CODE_ZOOM_SHIFT) & TILE_CODE_ZOOM_MASK);
+}
+
+static inline constexpr uint64_t tile_code_idx(uint64_t u64)
+{
+	return (uint8_t)((u64 >> TILE_CODE_ZOOM_SHIFT) & TILE_CODE_ZOOM_MASK);
+}
 
 /// upper <- lower
 /// | idx (56 bits) | zoom (5 bits) | face (3 bits) |

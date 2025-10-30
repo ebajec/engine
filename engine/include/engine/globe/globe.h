@@ -23,7 +23,8 @@ void globe_destroy(Globe *globe);
 
 void globe_imgui(Globe *globe);
 
-int globe_add_source(Globe *globe, TileDataSource *source);
+float globe_sample_elevation(const Globe *globe, const glm::dvec3& p);
+
 LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info);
 void globe_draw(const Globe *globe, const RenderContext& ctx);
 

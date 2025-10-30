@@ -209,14 +209,10 @@ int main(int argc, char* argv[])
 	//-----------------------------------------------------------------------------
 	// Globe
 	
-	std::unique_ptr<TileDataSource> source (TileDataSource::create());
-	
 	std::unique_ptr<Globe,decltype(&globe_destroy)> globe (
 		globe_create(rt.get()), 
 		globe_destroy
 	);
-
-	globe_add_source(globe.get(),source.get());
 
 	if(!globe) {
 		return EXIT_FAILURE;
@@ -245,7 +241,7 @@ int main(int argc, char* argv[])
 		app->onFrameUpdateCallback(window);
 
 		glm::dvec3 p = sphere_camera->control.get_pos();
-		double elev = source->sample_elevation_at(p);
+		double elev = globe_sample_elevation(globe.get(), p);
 
 		sphere_camera->control.set_min_height(
 			2*view_component->near + elev);

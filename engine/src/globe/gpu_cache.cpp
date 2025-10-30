@@ -100,9 +100,9 @@ static void destroy_page(TileGPUPage &page)
 	glDeleteTextures(1,&page.tex_array);
 }
 
-TileGPUCache *TileGPUCache::create()
+GPUTileCache *GPUTileCache::create()
 {
-	TileGPUCache * cache = new TileGPUCache{};
+	GPUTileCache * cache = new GPUTileCache{};
 
 	GLuint tex;
 	glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &tex);
@@ -117,7 +117,7 @@ TileGPUCache *TileGPUCache::create()
 	return cache;
 }
 
-TileGPUCache::~TileGPUCache()
+GPUTileCache::~GPUTileCache()
 {
 	glDeleteTextures(1, &m_default_tex_array);
 	for (auto &page : m_pages) {
@@ -125,7 +125,7 @@ TileGPUCache::~TileGPUCache()
 	}
 }
 
-void TileGPUCache::deallocate(TileGPUIndex idx)
+void GPUTileCache::deallocate(TileGPUIndex idx)
 {
 	TileGPUPage *page = m_pages[idx.page].get();
 
@@ -136,7 +136,7 @@ void TileGPUCache::deallocate(TileGPUIndex idx)
 	page->free_list.push_back(idx.tex);
 }
 
-void TileGPUCache::reserve(uint32_t count)
+void GPUTileCache::reserve(uint32_t count)
 {
 	assert(count <= MAX_TILES);
 
@@ -156,7 +156,7 @@ void TileGPUCache::reserve(uint32_t count)
 	}
 }
 
-TileGPUIndex TileGPUCache::allocate()
+TileGPUIndex GPUTileCache::allocate()
 {
 	if (m_open_pages.empty()) {
 		m_pages.emplace_back(create_page(m_gl_tex_format));
@@ -185,7 +185,7 @@ TileGPUIndex TileGPUCache::allocate()
 	};
 }
 
-TileGPUIndex TileGPUCache::evict_one()
+TileGPUIndex GPUTileCache::evict_one()
 {
 	assert(!m_lru.empty());
 	
@@ -214,7 +214,7 @@ TileGPUIndex TileGPUCache::evict_one()
 	return ent.second;
 }
 
-void TileGPUCache::insert(TileCode code, TileGPUIndex idx)
+void GPUTileCache::insert(TileCode code, TileGPUIndex idx)
 {
 	uint64_t packed = tile_code_pack(code);
 	assert(m_map.find(packed) == m_map.end());
@@ -223,8 +223,8 @@ void TileGPUCache::insert(TileCode code, TileGPUIndex idx)
 	m_map[packed] = m_lru.begin();
 }
 
-size_t TileGPUCache::update(
-	TileDataSource const *source,
+size_t GPUTileCache::update(
+	CPUTileCache const *source,
 	const std::span<TileCode> loaded_tiles, 
 	std::vector<TileGPUIndex>& textures
 )
@@ -257,7 +257,7 @@ size_t TileGPUCache::update(
 		} else {
 			tc_ref ref;
 
-			if (tc_acquire(source, code, &ref) != TC_OK) {
+			if (tc_acquire(source->tc, code, &ref) != TC_OK) {
 				log_warn("Failed to queue upload for incomplete tile %d", code);
 				textures.push_back(idx);
 				continue;
@@ -330,7 +330,7 @@ cleanup:
 //------------------------------------------------------------------------------
 // Loading
 
-void TileGPUCache::asynchronous_upload(std::span<TileGPUUploadData> upload_data)
+void GPUTileCache::asynchronous_upload(std::span<TileGPUUploadData> upload_data)
 {
 	if (!upload_data.size())
 		return;
@@ -456,7 +456,7 @@ void TileGPUCache::synchronous_upload(
 }
 */
 
-void TileGPUCache::bind_textures(const RenderContext &ctx, uint32_t base) const 
+void GPUTileCache::bind_textures(const RenderContext &ctx, uint32_t base) const 
 {
 	assert(m_pages.size() <= MAX_TILE_PAGES);
 

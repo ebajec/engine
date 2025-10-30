@@ -5,7 +5,7 @@
 #include "engine/renderer/renderer.h"
 #include "engine/globe/tiling.h"
 
-#include "globe/tile_cache.h"
+#include "terrain.h"
 
 // STL
 #include <memory>
@@ -66,7 +66,7 @@ struct TileGPUPage
 	GLuint tex_array;
 };
 
-struct TileGPUCache
+struct GPUTileCache
 {
 	typedef std::list<std::pair<TileCode,TileGPUIndex>> lru_list_t;
 
@@ -93,7 +93,7 @@ struct TileGPUCache
 
 	GLuint m_default_tex_array;
 
-	~TileGPUCache();
+	~GPUTileCache();
 private:
 	TileGPUIndex evict_one();
 	TileGPUIndex allocate();
@@ -104,10 +104,10 @@ private:
 	void asynchronous_upload(std::span<TileGPUUploadData> upload_data);
 
 public:
-	static TileGPUCache *create();
+	static GPUTileCache *create();
 
 	size_t update(
-		TileDataSource const *source,
+		CPUTileCache const *source,
 		const std::span<TileCode> tiles, 
 		std::vector<TileGPUIndex>& textures
 	);

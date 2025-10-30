@@ -1,9 +1,15 @@
-#ifndef GLOBE_CACHE_H
-#define GLOBE_CACHE_H
+#ifndef CPU_CACHE_H
+#define CPU_CACHE_H
 
 #include "engine/globe/tiling.h"
 #include "engine/globe/data_source.h"
+
 #include "globe/async_lru_cache.h"
+
+#include <memory>
+#include <optional>
+
+static constexpr size_t TILE_CPU_PAGE_SIZE = 32;
 
 #ifndef KILOBYTE
 #define KILOBYTE ((size_t)1024)
@@ -16,7 +22,6 @@
 #ifndef GIGABYTE
 #define GIGABYTE (MEGABYTE*KILOBYTE)
 #endif
-
 
 struct tc_ref
 {
@@ -32,13 +37,13 @@ enum tc_error : int
 	TC_ENULL = -2,
 };
 
-extern tc_error tc_initialize();
-extern void tc_terminate();
+struct tc_cache;
 
-extern tc_error tc_load(TileDataSource const *source, size_t count,
-						 TileCode const * tiles, TileCode *out);  
-extern tc_error tc_acquire(TileDataSource const *source, TileCode id,
-						   tc_ref *ref);
-extern void tc_release(tc_ref ref);
+tc_error tc_create(tc_cache **seg, size_t tile_size, size_t capacity);
+void tc_destroy(tc_cache *seg);
+tc_error tc_load(tc_cache *seg, ds_context const *ds, size_t count, 
+				 TileCode const *tiles, TileCode *out);
+tc_error tc_acquire(const tc_cache *tc, TileCode code, tc_ref *p_ref);
+void tc_release(tc_ref ref);
 
-#endif
+#endif // CPU_CACHE_H
