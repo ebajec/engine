@@ -10,6 +10,11 @@ typedef struct mmt_value_s
 	float min, max;
 } mmt_value_t;
 
+typedef struct {
+	float min, max;
+	int dist;
+} mmt_result_t;
+
 typedef struct mmt_tree_s
 {
 	// TODO: Use a better data structure
@@ -17,11 +22,16 @@ typedef struct mmt_tree_s
 	mmt_value_t defval;		
 } mmt_tree;
 
-extern mmt_tree *mmt_create(mmt_value_t defval);
+extern int mmt_create(mmt_tree **mmt, mmt_value_t defval);
 extern void mmt_destroy(mmt_tree *mmt);
 
 extern void mmt_insert(mmt_tree *mmt, uint64_t key, float min, float max);
+
+/// @brief Inserts an element into the tree, but does not overwrite if
+/// it already exists
+/// @return 1 if insert was successful, 0 otherwise 
+extern int mmt_insert_monotonic(mmt_tree *mmt, uint64_t key, float min, float max);
 extern void mmt_remove(mmt_tree *mmt, uint64_t key);
-extern mmt_value_t mmt_minmax(mmt_tree const *mmt, uint64_t key);
+extern mmt_result_t mmt_minmax(mmt_tree const *mmt, uint64_t key);
 
 #endif // MINMAX_TREE_H

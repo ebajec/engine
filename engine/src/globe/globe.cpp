@@ -41,7 +41,7 @@
 #define QUATPI 0.785398163397
 #endif
 
-static constexpr uint32_t TILE_VERT_WIDTH = 32;
+static constexpr uint32_t TILE_VERT_WIDTH = 64;
 static constexpr uint32_t TILE_VERT_COUNT = 
 	TILE_VERT_WIDTH*TILE_VERT_WIDTH;
 
@@ -127,16 +127,16 @@ static void globe_draw_debug(Globe const *globe, RenderContext const & ctx)
 		globe->dbg.camera->render(ctx);
 }
 
-static aabb3_t tile_box(const CPUTileCache *source, TileCode code) 
+static aabb3_t tile_box(const CPUTileCache *source, TileCode code, 
+						float min, float max) 
 {
-	uint64_t u64 = tile_code_pack(code);
 	uint8_t face = code.face;
 
 	aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
 	glm::dvec2 mid_uv = 0.5*(rect.ur() + rect.ll());
 
-	double s_max = 1.0 + source->tile_max(code);
-	double s_min = 1.0 + source->tile_min(code);
+	double s_min = 1.0 + min;
+	double s_max = 1.0 + max;
 
 	glm::dvec3 c[4] = {
 		cube_to_globe(face, rect.ll()),
@@ -182,7 +182,10 @@ static inline int select_tiles_rec(
 	if (code.zoom > 23)
 		return 0;
 
-	aabb3_t box = tile_box(params->source,code);
+	uint64_t u64 = tile_code_pack(code);
+	mmt_result_t mmt_res = mmt_minmax(params->source->mmt, u64);
+
+	aabb3_t box = tile_box(params->source,code, mmt_res.min, mmt_res.max);
 
 	if (!intersects(box, params->frust_box))
 		return 0;
@@ -198,11 +201,15 @@ static inline int select_tiles_rec(
 
 	double area = tile_factor(code.zoom);
 
-	if (area/d_min_sq < params->res) {
+	if (area/d_min_sq < params->res 
+		|| mmt_res.dist >= TILE_WIDTH/TILE_VERT_WIDTH
+	) {
+
 		out.push_back({code,d_min_sq});
 		if(boxes) boxes->add(box);
 		return 1;
 	}
+
 
 	TileCode children[4] = {
 		tile_code_refine(code,TILE_LOWER_LEFT),
@@ -507,7 +514,7 @@ static LoadResult update_render_data(
 	glBindBuffer(GL_ARRAY_BUFFER, buf->id);
 	void *ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
 
-	static const uint32_t BATCH_SIZE = 64;
+	static const uint32_t BATCH_SIZE = 1024/TILE_VERT_WIDTH;
 
 	uint32_t batch_count = count ? 1 + (count - 1)/BATCH_SIZE : 0;
 
@@ -748,19 +755,23 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 	globe->tiles.resize(count);
 
 	std::vector<TileCode> loaded_tiles (count, TILE_CODE_NONE);
-	tc_error err = tc_load(
-		source->tc, 
-		source->ds,
-		count, 
-		globe->tiles.data(), 
-		loaded_tiles.data()
-	);
 
-	if (err != TC_OK) {
-		// Do something...
-		//
-		// This should only cause missing data to appear though
-	}
+	source->load_tiles(count, globe->tiles.data(), loaded_tiles.data());
+
+	//tc_error err = tc_load(
+	//	source->tc, 
+	//	source->ds,
+	//	nullptr, nullptr,
+	//	count, 
+	//	globe->tiles.data(), 
+	//	loaded_tiles.data()
+	//);
+
+	//if (err != TC_OK) {
+	//	// Do something...
+	//	//
+	//	// This should only cause missing data to appear though
+	//}
 
 	std::vector<TileGPUIndex> tile_textures;
 

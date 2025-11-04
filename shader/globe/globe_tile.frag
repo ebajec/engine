@@ -60,6 +60,8 @@ void main()
 
 	float val = valid ? texture(u_tex_arrays[in_tex_idx.page], uvw).r : 0;
 
+	val -= 0.1*fract(u_frame.t*0.001);
+
 	float s = 1.0 + 10*val; 
 	vec4 color = 
 	mix(
@@ -72,7 +74,9 @@ void main()
 		clamp(2*s - 1,0,1)
 	);
 
-	//color = in_color;
+	color = 
+		//vec4(hsv2rgb(vec3(1000*val + 0.4,1-0.2*(val + 1),1-0.2*(val + 1))),1);
+		in_color;
 
 	float t = TWOPI*fract(u_frame.t*0.001);
 
@@ -116,12 +120,13 @@ void main()
 		spec = min(spec,0.1);
 
 		vec4 ambient = mix(color,vec4(0,0,0.05,0),0.5); 
+
 		color = clamp(mix(diffuse,ambient,0.1),
 				vec4(0),color) 
 				+ spec*vec4(1);
 	}
 
-	FragColor = mix(color,vec4(0,in_uv,1),0.00);
+	FragColor = mix(color,vec4(0,in_uv,1),0.0);
 	//FragColor = vec4(in_normal,1);
 	//FragColor = mix(FragColor,FACE_COLORS[cube_face(in_pos)],0.0);
 

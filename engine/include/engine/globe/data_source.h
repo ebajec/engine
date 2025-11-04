@@ -7,24 +7,6 @@
 // Loader interface
 
 struct ds_token;
-
-struct ds_token_vtbl
-{
-	int (*is_cancelled)(struct ds_token *token);
-};
-
-struct ds_token
-{
-	void *usr;
-	const struct ds_token_vtbl *vtbl;
-};
-
-struct ds_buf
-{
-	void *dst;
-	size_t cap;
-};
-
 struct ds_context;
 
 typedef int (*ds_load_fn)(
@@ -33,6 +15,7 @@ typedef int (*ds_load_fn)(
 	struct ds_buf *buf,
 	struct ds_token *token
 );
+
 typedef uint64_t (*ds_find_fn)(
 	void *usr, 
 	uint64_t val
@@ -52,6 +35,23 @@ struct ds_vtbl
 	float (*sample)(void *usr, float u, float v, uint8_t f);
 	float (*max)(void *usr);
 	float (*min)(void *usr);
+};
+
+struct ds_token_vtbl
+{
+	int (*is_cancelled)(struct ds_token *token);
+};
+
+struct ds_token
+{
+	void *usr;
+	const struct ds_token_vtbl *vtbl;
+};
+
+struct ds_buf
+{
+	void *dst;
+	size_t size; // size in bytes of dst
 };
 
 struct ds_context

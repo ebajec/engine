@@ -17,6 +17,11 @@ struct tc_cache
 	size_t tile_cap;
 };
 
+enum {
+	LOAD_SUCCESS,
+	LOAD_FAILED
+};
+
 
 static int MAX_TILES_IN_FLIGHT = std::thread::hardware_concurrency()/2;
 static std::atomic_int g_tiles_in_flight = 0;
@@ -96,11 +101,12 @@ int my_cancel(struct ds_token *tok)
 	return alc_state_status(state) == ALC_STATUS_CANCELLED;
 }
 
-static void load_thread_fn(
+static int load_thread_fn(
 	ds_context const *ds, 
-	TileCode code,
+	uint64_t id,
 	alc_atomic_state *p_state, 
-	uint8_t* dst)
+	ds_buf *buf
+)
 {
 	uint64_t state_pkd = p_state->load(std::memory_order_relaxed);
 	alc_state desired;
@@ -112,9 +118,9 @@ static void load_thread_fn(
 		if (state.status == ALC_STATUS_CANCELLED) {
 			desired.status = ALC_STATUS_EMPTY;
 			p_state->store(alc_state_pack(desired), std::memory_order_relaxed);
-			log_info("load cancelled successfully (tile %d)",code);
+			log_info("load cancelled successfully (tile %d)",id);
 
-			return;
+			return LOAD_FAILED;
 		} else {
 			desired.status = ALC_STATUS_LOADING;
 		}
@@ -130,14 +136,7 @@ static void load_thread_fn(
 		.vtbl = &vtbl
 	};
 
-	struct ds_buf buf = {
-		.dst = dst,
-		.cap = TILE_SIZE
-	};
-
-	uint64_t code_u64 = tile_code_pack(code);
-
-	ds->vtbl.loader(ds->usr, code_u64, &buf, &tok);
+	ds->vtbl.loader(ds->usr, id, buf, &tok);
 
 	state_pkd = p_state->load(std::memory_order_relaxed);
 	do {
@@ -150,10 +149,12 @@ static void load_thread_fn(
 	} while(!p_state->compare_exchange_weak(state_pkd, alc_state_pack(desired),
 										 std::memory_order_acq_rel, std::memory_order_relaxed));
 
-	if (desired.status == ALC_STATUS_EMPTY) 
-		log_info("load cancelled successfully (tile %d)",code);
+	if (desired.status == ALC_STATUS_EMPTY) { 
+		log_info("load cancelled successfully (tile %d)",id);
+		return LOAD_FAILED;
+	}
 
-	//log_info("Tile %d ready",ent->code);
+	return LOAD_SUCCESS;
 }
 
 tc_error tc_create(tc_cache **p_tc, size_t tile_size, size_t capacity)
@@ -191,8 +192,17 @@ void tc_destroy(tc_cache *tc)
 	delete tc;
 }
 
-tc_error tc_load(tc_cache *tc, ds_context const *ds, size_t count, 
-				 TileCode const *tiles, TileCode *out)
+tc_error tc_load(
+	tc_cache *tc,
+	ds_context const *ds,
+
+	void *usr, 
+	tc_post_load_fn post_load,
+
+	size_t count, 
+	TileCode const *tiles,
+	TileCode *out
+)
 {
 	std::vector<TileCode> available (count);
 
@@ -232,6 +242,8 @@ tc_error tc_load(tc_cache *tc, ds_context const *ds, size_t count,
 		out[i] = code;
 	}
 
+	const bool has_post_load = post_load;
+
 	for (size_t i = 0; i < loads.size(); ++i) {
 		load_token_t tok = loads[i];
 		uint8_t *dst = get_block(tc, tok.idx);
@@ -245,15 +257,27 @@ tc_error tc_load(tc_cache *tc, ds_context const *ds, size_t count,
 				.gen = 0,
 				.refs = 0
 			}));
+
 			g_schedule_background([=](){
 				++g_tiles_in_flight;
-				load_thread_fn(
+
+				struct ds_buf buf = {
+					.dst = dst,
+					.size = TILE_SIZE*sizeof(float)
+				};
+
+				uint64_t id = tok.ent->key; 
+
+				int status = load_thread_fn(
 					ds, 
-					tile_code_unpack(tok.ent->key), 
+					id, 
 					&(tok.ent->state), 
-					dst
+					&buf
 				);
 				--g_tiles_in_flight;
+
+				if (has_post_load && status == LOAD_SUCCESS) 
+					post_load(usr, id, &buf);
 			});
 		}
 	}

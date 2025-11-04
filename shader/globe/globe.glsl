@@ -26,7 +26,7 @@ struct metadata_t
 };
 
 const uint MAX_TILE_PAGES = 16;
-const uint TILE_VERT_WIDTH = 32;
+const uint TILE_VERT_WIDTH = 64;
 const uint TILE_VERT_COUNT = TILE_VERT_WIDTH*TILE_VERT_WIDTH;
 
 layout (binding = 0) uniform sampler2D u_tex;

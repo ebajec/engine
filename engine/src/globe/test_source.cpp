@@ -34,9 +34,8 @@ int test_data_source_init(struct ds_context **p_ctx)
 	return 0;
 }
 
-static constexpr double TEST_AMP = 0.1;
-static constexpr double TEST_FREQ = 12;
-
+static constexpr double TEST_AMP = 0.001;
+static constexpr double TEST_FREQ = 1200;
 //------------------------------------------------------------------------------
 // Test loader functions
 void destroy(struct ds_context *ctx)
@@ -47,7 +46,7 @@ void destroy(struct ds_context *ctx)
 uint64_t test_loader_find(void *usr, uint64_t id)
 {
 	TileCode code = tile_code_unpack(id);
-	while (code.zoom > 8) {
+	while (code.zoom > 16) {
 		code.idx >>= 2;
 		--code.zoom;
 	} 
@@ -65,7 +64,7 @@ float max_val(void *usr)
 	return TEST_FREQ;
 }
 
-static constexpr size_t coeff_count = 4;
+static constexpr size_t coeff_count = 25;
 static double coeffs[coeff_count] = {};
 static glm::dvec3 phases[coeff_count] = {};
 
@@ -136,15 +135,18 @@ int test_loader_fn2(
 		if (vtbl->is_cancelled(token))
 			return 0;
 
+		uv.y = (float)i*d;
+
 		for (size_t j = 0; j < TILE_WIDTH; ++j) {
+			uv.x = (float)j*d;
 			glm::vec2 f = glm::mix(rect.ll(),rect.ur(),uv);
 
 			double g = test_elev_fn2(f, code.face, code.zoom);
 			data[idx++] = static_cast<float>(g);
-			uv.x += d;
+			//uv.x += d;
 		}
 		uv.x = 0;
-		uv.y += d;
+		//uv.y += d;
 	}
 
 	return 0;

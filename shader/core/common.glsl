@@ -8,6 +8,13 @@ struct quat {
 	float w,x,y,z;
 };
 
+vec3 hsv2rgb(vec3 c)
+{
+    // c.x = H in [0,1], c.y = S in [0,1], c.z = V in [0,1]
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.x + K.xyz) * 6.0 - K.www);
+    return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+}
 mat3 qmat3(quat q) 
 {
     float w=q.w, x=q.x, y=q.y, z=q.z;

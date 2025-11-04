@@ -80,9 +80,11 @@ static std::unique_ptr<TileGPUPage> create_page(GLuint format)
 		TILE_WIDTH, 
 		TILE_PAGE_SIZE
 	);
+	
+	GLuint filter = GL_LINEAR;
 
-	glTextureParameteri(page->tex_array, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTextureParameteri(page->tex_array, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTextureParameteri(page->tex_array, GL_TEXTURE_MIN_FILTER, filter);
+	glTextureParameteri(page->tex_array, GL_TEXTURE_MAG_FILTER, filter);
 	glTextureParameteri(page->tex_array, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTextureParameteri(page->tex_array, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 

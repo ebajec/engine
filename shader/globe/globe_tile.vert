@@ -85,9 +85,37 @@ vec3 face_to_world(vec3 v, uint face)
 	return vec3(0);
 }
 
+vec3 cube_to_globe(uint face, vec2 uv) 
+{
+	vec3 c = vec3((2.0*uv - vec2(1.0)),1);
+	return normalize(face_to_world(c, face));
+}
+
 float sample_elevation(tex_idx_t idx, vec2 uv)
 {
-	return texture(u_tex_arrays[idx.page], vec3(uv, idx.tex)).r;
+	float h = texture(u_tex_arrays[idx.page], vec3(uv, idx.tex)).r; 
+
+//	tile_code_t code = from_input(code_left, code_right);
+//	aabb2_t rect = morton_u32_to_rect_f32(code.idx, code.zoom);
+//
+//	vec3 p = cube_to_globe(code.face, mix(rect.min, rect.max, uv));
+//
+//
+//	float t = TWOPI*fract(u_frame.t);
+//	float h1 = 1;
+//	float h2 = 1;
+//
+//	float f1 = 3;
+//	float f2 = 40;
+//
+//	float p2 = 1;
+//
+//	float r = sin(f1*p.x - h1*t)*cos(sqrt(2)*f1*p.y - h1*t)*sin(3*f1*p.z - h1*t);
+//
+//	r += 0.1*sin(f2*p.x - h2*t - p2)*cos(sqrt(2)*f2*p.y - h2*t - p2)*sin(3*f2*p.z - h2*t - p2);
+//
+	//h += 0.1*r;
+	return h;
 }
 
 vec2 tex_grad(tex_idx_t idx, vec2 uv, uint zoom)
@@ -98,16 +126,16 @@ vec2 tex_grad(tex_idx_t idx, vec2 uv, uint zoom)
 	float h = 1.0/512.0;
 	float s = 1 << zoom;
 
-	float u1 = clamp(uv.x - h,h,1 - h);
-	float u2 = clamp(uv.x + h,h,1 - h);
+	float u1 = max(uv.x - h,h);
+	float u2 = min(uv.x + h,1.0 - h);
 
 	float fu1 = sample_elevation(idx, vec2(u1,uv.y));
 	float fu2 = sample_elevation(idx, vec2(u2,uv.y));
 
 	float dfdu = (fu2 - fu1)/(u2 - u1);
 
-	float v1 = clamp(uv.y - h,h,1 - h);
-	float v2 = clamp(uv.y + h,h,1 - h);
+	float v1 = max(uv.y - h,h);
+	float v2 = min(uv.y + h,1.0 - h);
 
 	float fv1 = sample_elevation(idx, vec2(uv.x, v1));
 	float fv2 = sample_elevation(idx, vec2(uv.x, v2));
@@ -132,9 +160,13 @@ vec3 globe_normal(vec3 n, float f, vec2 df, vec2 uv, uint face, uint zoom)
 	return normalize(cross(Mu,Mv));
 }
 
+vec4 palette(float v)
+{
+	return vec4(hsv2rgb(vec3(v + 0.57,1-0.2*(v + 1),1-0.2*(v + 1))),1);
+}
+
 void main()
 {
-	float t = u_frame.t;
 	mat4 pv = u_frame.pv;
 
 	vec4 wpos = vec4(pos, 1);
@@ -153,8 +185,9 @@ void main()
 	vec4 val = vec4(0);
 	vec2 df = vec2(0);
 
+	float f = 0;
 	if (is_valid(tex_idx)) {
-		float f = sample_elevation(tex_idx, uv);
+		f = sample_elevation(tex_idx, uv);
 		df = tex_grad(tex_idx, uv, code.zoom);
 
 		N = globe_normal(n,f,df,2.0*face_uv - vec2(1.0),code.face,code.zoom);
@@ -162,10 +195,12 @@ void main()
 		wpos += vec4(n*f,0);
 	}
 
+	float d = 100*f;
+
 	out_pos = wpos.xyz;
 	out_uv = uv;
 	out_normal = N;
-	out_color = vec4(0.2*df,0,1);
+	out_color = palette(d); 
 	out_tex_idx = tex_idx;
 
 	gl_Position = (pv*wpos);

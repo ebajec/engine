@@ -145,6 +145,38 @@ static constexpr TileCode TILE_CODE_NONE = tile_code_unpack(UINT64_MAX);
 static_assert(tile_code_pack(tile_code_unpack(0x8493724890123809)) == 0x8493724890123809); 
 static_assert(tile_code_pack(tile_code_unpack(0x020)) == 0x020); 
 
+static_assert(
+	tile_code_coarsen(tile_code_pack(
+		TileCode {
+			.face = 5,
+			.zoom = 20,
+			.idx = 124771
+		}
+	)) == tile_code_pack(
+		TileCode {
+			.face = 5,
+			.zoom = 19,
+			.idx = (124771 >> 2)
+		}
+	)
+);
+
+static_assert(
+	tile_code_refine(tile_code_pack(
+		TileCode {
+			.face = 5,
+			.zoom = 19,
+			.idx = (124771 >> 2)
+		}), TILE_UPPER_RIGHT) 
+		== 
+		tile_code_pack(
+		TileCode {
+			.face = 5,
+			.zoom = 20,
+			.idx = ((124771 >> 2) << 2) | TILE_UPPER_RIGHT
+		}
+	)
+);
 
 struct TileCodeHash
 {
@@ -224,7 +256,7 @@ static inline void globe_to_cube(glm::dvec3 p, glm::dvec2 *p_uv, uint8_t *p_f)
 
 static inline glm::dvec3 cube_to_globe(uint8_t face, glm::dvec2 uv) 
 {
-	glm::dvec3 c = glm::vec3((2.0*uv - glm::dvec2(1.0)),1);
+	glm::dvec3 c = glm::dvec3((2.0*uv - glm::dvec2(1.0)),1);
 	return glm::normalize(face_to_world(c, face));
 }
 

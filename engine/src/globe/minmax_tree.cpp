@@ -21,8 +21,10 @@ void modify_update(mmt_tree *mmt, uint64_t key, mmt_value_t new_val)
 
 		mmt_value_t p_val = {
 			.min = FLT_MAX,
-			.max = FLT_MIN
+			.max = -FLT_MAX
 		};
+
+		bool found_child = false;
 
 		for (uint64_t i = 0; i < 4; ++i) {
 			uint64_t c = children[i];
@@ -31,6 +33,7 @@ void modify_update(mmt_tree *mmt, uint64_t key, mmt_value_t new_val)
 
 			if (c == key) {
 				c_val = new_val;
+				found_child = true;
 			} else {
 				auto it = mmt->map.find(c);
 
@@ -44,6 +47,8 @@ void modify_update(mmt_tree *mmt, uint64_t key, mmt_value_t new_val)
 			p_val.min = std::min(c_val.min,p_val.min);
 			p_val.max = std::min(c_val.max,p_val.max);
 		}
+
+		assert(found_child);
 
 		auto p_it = mmt->map.find(parent);
 
@@ -100,34 +105,70 @@ void mmt_insert(mmt_tree *mmt, uint64_t key, float min, float max)
 		modify_update(mmt, key, new_val);
 	}
 }
+
+int mmt_insert_monotonic(mmt_tree *mmt, uint64_t key, float min, float max)
+{
+	auto end = mmt->map.end();
+	auto it = mmt->map.find(key);
+
+	mmt_value_t new_val = mmt_value_t{
+		.min = min,
+		.max = max
+	};
+
+	if (it == end) {
+		mmt->map[key] = new_val;
+		insert_update(mmt, key, new_val);
+		return 1;
+	}
+	return 0;
+}
+
 void mmt_remove(mmt_tree *mmt, uint64_t key)
 {
 
 }
 
-mmt_tree *mmt_create(mmt_value_t defval)
+int mmt_create(mmt_tree **p_mmt, mmt_value_t defval)
 {
 	mmt_tree *mmt = new mmt_tree{};
 	mmt->defval = defval;
-	return mmt;
+	*p_mmt = mmt;
+
+	return 0;
 }
 
 void mmt_destroy(mmt_tree *mmt)
 {
+	if (!mmt)
+		return;
 	delete mmt;
 }
 
-mmt_value_t mmt_minmax(mmt_tree *mmt, uint64_t key)
+mmt_result_t mmt_minmax(const mmt_tree *mmt, uint64_t key)
 {
 	auto end = mmt->map.end();
 	auto it = end;
 
+	mmt_result_t res{};
+
 	do {
 		it = mmt->map.find(key);
 		key = tile_code_coarsen(key);
-	} while (it == end && (tile_code_zoom(key) != 0));
+		++res.dist;
+	} while (it == end && tile_code_zoom(key) != 0);
 
-	if (it == end)
-		return mmt->defval;
-	return it->second;
+	--res.dist;
+
+	if (it == end) {
+		log_info("Failed to find parent key for entry %lld",key);
+		res.min = mmt->defval.min;
+		res.max = mmt->defval.max;
+	} else {
+		mmt_value_t val = it->second; 
+		res.min = val.min;
+		res.max = val.max;
+	}
+
+	return res;
 }
