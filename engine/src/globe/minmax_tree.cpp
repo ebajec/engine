@@ -161,7 +161,7 @@ mmt_result_t mmt_minmax(const mmt_tree *mmt, uint64_t key)
 	--res.dist;
 
 	if (it == end) {
-		log_info("Failed to find parent key for entry %lld",key);
+		//log_info("Failed to find parent key for entry %lld",key);
 		res.min = mmt->defval.min;
 		res.max = mmt->defval.max;
 	} else {

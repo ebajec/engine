@@ -18,7 +18,19 @@ static inline void aabb3_corners(aabb3_t box, glm::dvec3 p[])
 	p[7] = glm::dvec3(box.max.x, box.max.y, box.max.z);
 }
 
-static inline void aabb3_edges( uint32_t offset, edge_t e[])
+static inline void obb_corners(const obb_t &box, glm::dvec3 p[])
+{
+	p[0] = box.O + box.T*glm::dvec3(box.S.x,box.S.y,box.S.z);
+	p[1] = box.O + box.T*glm::dvec3(box.S.x,box.S.y,-box.S.z);
+	p[2] = box.O + box.T*glm::dvec3(box.S.x,-box.S.y,box.S.z);
+	p[3] = box.O + box.T*glm::dvec3(box.S.x,-box.S.y,-box.S.z);
+	p[4] = box.O + box.T*glm::dvec3(-box.S.x,box.S.y,box.S.z);
+	p[5] = box.O + box.T*glm::dvec3(-box.S.x,box.S.y,-box.S.z);
+	p[6] = box.O + box.T*glm::dvec3(-box.S.x,-box.S.y,box.S.z);
+	p[7] = box.O + box.T*glm::dvec3(-box.S.x,-box.S.y,-box.S.z);
+}
+
+static inline void box_edges( uint32_t offset, edge_t e[])
 {
 	e[0] = {0,1};
 	e[1] = {0,2};
@@ -47,8 +59,10 @@ void BoxDebugView::update()
 	std::vector<vertex3d> verts; 
 	std::vector<uint32_t> indices;
 
-	verts.reserve(boxes.size()*8);
-	indices.resize(boxes.size()*12*2);
+	size_t count = boxes.size() + oboxes.size();
+
+	verts.reserve(count*8);
+	indices.resize(count*12*2);
 
 	size_t idxv = 0;
 	size_t idxi = 0;
@@ -65,7 +79,25 @@ void BoxDebugView::update()
 			});
 		}
 
-		aabb3_edges((uint32_t)idxv,(edge_t*)(indices.data() + idxi));
+		box_edges((uint32_t)idxv,(edge_t*)(indices.data() + idxi));
+		idxi += 24;
+		idxv = verts.size();
+	}
+
+	for (obb_t box : oboxes) {
+		glm::dvec3 pts[8];
+
+		obb_corners(box, pts);
+
+		for (glm::dvec3 &p : pts) {
+			verts.push_back(vertex3d{ 
+				.position = p,
+				.uv = glm::vec2(0),
+				.normal = glm::vec3(0)
+			});
+		}
+
+		box_edges((uint32_t)idxv,(edge_t*)(indices.data() + idxi));
 		idxi += 24;
 		idxv = verts.size();
 	}
@@ -80,4 +112,5 @@ void BoxDebugView::update()
 	table->upload(model, "model3d", &ci);
 
 	boxes.clear();
+	oboxes.clear();
 }

@@ -262,7 +262,7 @@ static inline glm::dvec3 cube_to_globe(uint8_t face, glm::dvec2 uv)
 
 static inline glm::dmat3 orthonormal_globe_frame(glm::dvec2 _uv, uint8_t face)
 {
-	_uv = 2.0*_uv - glm::dvec2(2.0);
+	_uv = 2.0*_uv - glm::dvec2(1.0);
 
 	double u = _uv.x;
 	double v = _uv.y;

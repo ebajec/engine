@@ -1,8 +1,11 @@
 #include "engine/utils/geometry.h"
 
+#include <glm/gtc/type_ptr.hpp>
+
 #include <complex>
 
 #include <cstdint>
+#include <cfloat>
 
 void geometry::mesh_s2(uint32_t ntht, uint32_t nphi, 
 					   std::vector<vertex3d>& verts, 
@@ -57,10 +60,74 @@ void geometry::mesh_s2(uint32_t ntht, uint32_t nphi,
 	}
 }
 
+static inline int obb_aabb_intersects_origin(
+	const glm::dvec3 &sA, const glm::dmat3 &T, 
+	const glm::dvec3 &sB, const glm::dvec3 &O)
+{
+	glm::dmat3 T_abs = T;
+
+	double * T_data = glm::value_ptr(T_abs);
+	for (size_t i = 0; i < 9; ++i)
+		T_data[i] = fabs(T_data[i]);
+
+	for (size_t i = 0; i < 3; ++i) {
+		double value = sA[i];
+		for (size_t j = 0; j < 3; ++j)
+			value += sB[j] * T_abs[i][j];
+
+		if (fabs(O[i]) > value)
+			return false;
+	}
+
+	glm::dvec3 O_A = O*T;
+
+	for (size_t i = 0; i < 3; ++i) {
+		double value = sB[i];
+		for (size_t j = 0; j < 3; ++j)
+			value += sA[j] * T_abs[j][i];
+
+		if (fabs(O_A[i]) > value)
+			return false;
+	}
+
+	for (size_t i = 0; i < 3; ++i) {
+		for (size_t j = 0; j < 3; ++j) {
+			size_t k = (i + 1)%3;
+			size_t l = (i + 2)%3;
+
+			double c = fabs(O[k]*T_abs[l][j] + O[l]*T_abs[k][j]);
+			double rA = sA[l] *T_abs[k][j] + sA[k] * T_abs[l][j];
+			double rB = sB[l] *T_abs[i][l] + sB[k] * T_abs[i][k];
+
+			if (rA + rB > c)
+				return false;
+		}
+	}
+
+	return true;
+}
+
+int intersects(const obb_t &A, const obb_t &B)
+{
+	glm::dvec3 O = glm::transpose(A.T) * (B.O - A.O);
+	glm::dmat3 T = glm::transpose(A.T) * B.T;
+
+	return obb_aabb_intersects_origin(A.S, T, B.S, O);
+}
+
+extern bool intersects(const obb_t &A, const aabb3_t &B)
+{
+	glm::dvec3 O_B = 0.5*(B.min + B.max);
+	glm::dvec3 O = A.O - O_B;
+
+	glm::dvec3 sB = 0.5*(B.max - B.min);
+
+	return obb_aabb_intersects_origin(sB, A.T, A.S, O);
+}
+
 void geometry::mesh_torus(float R1, float R2, uint32_t ntht1, uint32_t ntht2,  
 						  std::vector<vertex3d>& verts, 
-						  std::vector<uint32_t>& indices
-						  )
+						  std::vector<uint32_t>& indices)
 {
 	using namespace std::complex_literals;
 

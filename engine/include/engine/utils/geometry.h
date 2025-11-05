@@ -55,13 +55,6 @@ struct circle_t
 	double r;
 };
 
-struct obb_t
-{
-	glm::dmat3 T; // transform
-	glm::dvec3 c; // center
-	glm::dvec3 limits;
-};
-
 enum frustum_planes_t
 {
 	FRUSTUM_PLANE_LEFT,
@@ -80,11 +73,55 @@ union frustum_t
 	plane_t planes[6];
 };
 
+struct alignas(64) obb_t
+{
+	glm::dmat3 T; // transform
+	glm::dvec3 O; // center
+	glm::dvec3 S;
+};
+
+extern int intersects(const obb_t &A, const obb_t &B);
+extern bool intersects(const obb_t &B, const aabb3_t &A);
+
+static int classify(const aabb3_t& box, const plane_t& pl);
+
+static int classify(const obb_t& box, const plane_t& pl);
+
+static inline void obb_add(obb_t &box, size_t count, const glm::dvec3 *v)
+{
+	glm::dvec3 min = -box.S;
+	glm::dvec3 max = box.S;
+	for (size_t i = 0; i < count; ++i) {
+		glm::dvec3 w = (v[i] - box.O)*box.T;
+
+		min = glm::min(w,min);
+		max = glm::max(w,max);
+	}
+
+	box.S = 0.5*(max - min);
+	box.O += box.T*(0.5*(max + min));
+}
+
+inline int classify(const obb_t& box, const plane_t &pl)
+{
+	plane_t pl2 = plane_t{
+		.n = pl.n*box.T,
+		.d = pl.d - dot(pl.n, box.O)
+	};
+
+	aabb3_t box2 ={
+		.min = -box.S,
+		.max = box.S
+	};
+
+	return classify(box2, pl2);
+}
+
 //------------------------------------------------------------------------------
 // AABB
 
 /// @return 1 if box is entirely in front, -1 if entirely behind, 0 otherwise
-static inline int classify(const aabb3_t& box, const plane_t& pl)
+inline int classify(const aabb3_t& box, const plane_t& pl)
 { 
 	glm::dvec3 c = (box.min + box.max) * 0.5;
 	glm::dvec3 e = (box.max - box.min) * 0.5;
@@ -103,7 +140,7 @@ static constexpr bool aabb2_contains(const aabb2_t &box, glm::dvec2 v)
 	return box.min.x <= v.x || v.x <= box.max.x || box.min.y <= v.y || v.y <= box.max.y;
 }
 
-static inline double aabb3_dist_sq(const aabb3_t& box, glm::dvec3 v)
+static inline double aabb3_dist_sq(const aabb3_t &box, glm::dvec3 v)
 {
 	glm::dvec3 d = glm::dvec3(0);
 
@@ -123,6 +160,24 @@ static inline double aabb3_dist_sq(const aabb3_t& box, glm::dvec3 v)
 		d.z = v.z - box.max.z;
 
 	return dot(d,d);
+}
+
+static inline double obb_dist_sq(const obb_t &obb, glm::dvec3 v)
+{
+	v = (v - obb.O) * obb.T;
+
+	double d = 0;
+
+	for (size_t i = 0; i < 3; ++i) { 
+		double l = fabs(v[i]);  
+		double s = fabs(obb.S[i]);
+		if (l > s) {
+			l -= s;
+			d += l * l; 
+		}
+	}
+
+	return d;
 }
 
 static inline bool intersects(const aabb2_t& box, const circle_t &circ)

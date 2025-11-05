@@ -15,6 +15,8 @@
 struct BoxDebugView
 {
 	std::vector<aabb3_t> boxes;
+	std::vector<obb_t> oboxes;
+
 	ModelID model;
 	MaterialID material;
 
@@ -26,8 +28,8 @@ struct BoxDebugView
 	
 	}
 
-	void clear() {boxes.clear();}
-	void add(aabb3_t box){boxes.push_back(box);}
+	void add(const aabb3_t &box){boxes.push_back(box);}
+	void add(const obb_t &box){oboxes.push_back(box);}
 	void update();
 };
 

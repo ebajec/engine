@@ -53,8 +53,8 @@ struct BaseViewComponent : AppComponent
 	uint32_t h;
 
 	float fov = PIf/2.0f;
-	float far = 10;
-	float near = 0.01f;
+	float far = 5;
+	float near = 0.00001f;
 
 	glm::dvec2 mouse_pos;
 	glm::dvec2 dmouse_pos;

@@ -34,8 +34,8 @@ int test_data_source_init(struct ds_context **p_ctx)
 	return 0;
 }
 
-static constexpr double TEST_AMP = 0.001;
-static constexpr double TEST_FREQ = 1200;
+static constexpr double TEST_AMP = 0.01;
+static constexpr double TEST_FREQ = 120;
 //------------------------------------------------------------------------------
 // Test loader functions
 void destroy(struct ds_context *ctx)
@@ -46,7 +46,7 @@ void destroy(struct ds_context *ctx)
 uint64_t test_loader_find(void *usr, uint64_t id)
 {
 	TileCode code = tile_code_unpack(id);
-	while (code.zoom > 16) {
+	while (code.zoom > 10) {
 		code.idx >>= 2;
 		--code.zoom;
 	} 

@@ -91,7 +91,7 @@ vec3 cube_to_globe(uint face, vec2 uv)
 	return normalize(face_to_world(c, face));
 }
 
-float sample_elevation(tex_idx_t idx, vec2 uv)
+float sample_tex(tex_idx_t idx, vec2 uv)
 {
 	float h = texture(u_tex_arrays[idx.page], vec3(uv, idx.tex)).r; 
 
@@ -129,16 +129,16 @@ vec2 tex_grad(tex_idx_t idx, vec2 uv, uint zoom)
 	float u1 = max(uv.x - h,h);
 	float u2 = min(uv.x + h,1.0 - h);
 
-	float fu1 = sample_elevation(idx, vec2(u1,uv.y));
-	float fu2 = sample_elevation(idx, vec2(u2,uv.y));
+	float fu1 = sample_tex(idx, vec2(u1,uv.y));
+	float fu2 = sample_tex(idx, vec2(u2,uv.y));
 
 	float dfdu = (fu2 - fu1)/(u2 - u1);
 
 	float v1 = max(uv.y - h,h);
 	float v2 = min(uv.y + h,1.0 - h);
 
-	float fv1 = sample_elevation(idx, vec2(uv.x, v1));
-	float fv2 = sample_elevation(idx, vec2(uv.x, v2));
+	float fv1 = sample_tex(idx, vec2(uv.x, v1));
+	float fv2 = sample_tex(idx, vec2(uv.x, v2));
 
 	float dfdv = (fv2 - fv1)/(v2 - v1);
 
@@ -187,7 +187,7 @@ void main()
 
 	float f = 0;
 	if (is_valid(tex_idx)) {
-		f = sample_elevation(tex_idx, uv);
+		f = sample_tex(tex_idx, uv);
 		df = tex_grad(tex_idx, uv, code.zoom);
 
 		N = globe_normal(n,f,df,2.0*face_uv - vec2(1.0),code.face,code.zoom);

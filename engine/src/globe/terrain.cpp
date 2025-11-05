@@ -93,8 +93,8 @@ void CPUTileCache::load_tiles(size_t count, const TileCode *tiles, TileCode *out
 		inserted += mmt_insert_monotonic(mmt, u.id, u.min, u.max);
 	}
 
-	if (inserted)
-		log_info("Updated min/max tree with %lld values",working.size());
+	//if (inserted)
+	//	log_info("Updated min/max tree with %lld values",working.size());
 
 	working.clear();
 }

@@ -41,7 +41,7 @@
 #define QUATPI 0.785398163397
 #endif
 
-static constexpr uint32_t TILE_VERT_WIDTH = 64;
+static constexpr uint32_t TILE_VERT_WIDTH = 32;
 static constexpr uint32_t TILE_VERT_COUNT = 
 	TILE_VERT_WIDTH*TILE_VERT_WIDTH;
 
@@ -165,6 +165,46 @@ static aabb3_t tile_box(const CPUTileCache *source, TileCode code,
 	return box;
 }
 
+static obb_t tile_box2(const CPUTileCache *source, TileCode code, 
+						float min, float max) 
+{
+	uint8_t face = code.face;
+
+	aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
+	glm::dvec2 mid_uv = 0.5*(rect.ur() + rect.ll());
+
+	double h = max - min;
+
+	glm::dvec3 mid = cube_to_globe(face, mid_uv);
+	mid *= (1.0 + 0.5*(min + max));
+
+	double s_min = 1.0 + min;
+	double s_max = 1.0 + max;
+
+	obb_t box;
+	box.T = orthonormal_globe_frame(mid_uv, face);
+	box.O = mid;
+	box.S = glm::dvec3(0,0,0.5*h);
+
+	// TODO : It should be possible to determine the minimum 
+	// dimensions of the box with less operations.
+	glm::dvec3 c[8] = {
+		cube_to_globe(face, rect.ll()),
+		cube_to_globe(face, rect.lr()),
+		cube_to_globe(face, rect.ul()),
+		cube_to_globe(face, rect.ur()),
+	};
+
+	for (size_t i = 0; i < 4; ++i) {
+		c[4 + i] = c[i] * s_max;
+		c[i] *= s_min;
+	}
+
+	obb_add(box, sizeof(c)/sizeof(c[0]),c);
+
+	return box;
+}
+
 struct selection_entry_t
 {
 	TileCode code;
@@ -185,10 +225,7 @@ static inline int select_tiles_rec(
 	uint64_t u64 = tile_code_pack(code);
 	mmt_result_t mmt_res = mmt_minmax(params->source->mmt, u64);
 
-	aabb3_t box = tile_box(params->source,code, mmt_res.min, mmt_res.max);
-
-	if (!intersects(box, params->frust_box))
-		return 0;
+	obb_t box = tile_box2(params->source, code, mmt_res.min, mmt_res.max);
 
 	for (uint8_t i = 0; i < 6; ++i) {
 		if (classify(box, params->frust.planes[i]) > 0) { 
@@ -196,20 +233,20 @@ static inline int select_tiles_rec(
 		}
 	}
 
-	double d_min_sq = aabb3_dist_sq(box, params->origin);
+	double d_min_sq = obb_dist_sq(box, params->origin);
+
 	d_min_sq = std::max(tile_scale_factor * d_min_sq,1e-6);
 
 	double area = tile_factor(code.zoom);
 
 	if (area/d_min_sq < params->res 
-		|| mmt_res.dist >= TILE_WIDTH/TILE_VERT_WIDTH
+		|| mmt_res.dist >= TILE_WIDTH/(2*TILE_VERT_WIDTH)
 	) {
 
 		out.push_back({code,d_min_sq});
 		if(boxes) boxes->add(box);
 		return 1;
 	}
-
 
 	TileCode children[4] = {
 		tile_code_refine(code,TILE_LOWER_LEFT),
