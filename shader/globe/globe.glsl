@@ -22,7 +22,13 @@ struct tex_idx_t
 struct metadata_t
 {
 	vec4 coord;
+
+	vec2 tex_uv[2];
+	vec2 globe_uv[2];
+
 	uint tex_idx;
+	uint code_lower;
+	uint code_upper;
 };
 
 const uint MAX_TILE_PAGES = 16;

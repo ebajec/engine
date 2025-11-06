@@ -56,16 +56,24 @@ struct DebugInfo
 	int zoom;
 };
 
-struct GlobeVertex
+struct alignas(8) GlobeVertex
 {
 	glm::vec3 pos;
 	glm::vec2 uv;
 	glm::vec3 normal;
-	glm::vec2 big_uv;
-	struct {
-		uint32_t left; 
-		uint32_t right;
-	} code;
+	//glm::vec2 big_uv;
+};
+
+struct alignas(16) TileMetadata
+{
+	glm::vec4 coord;
+
+	alignas(8) glm::vec2 tex_uv[2];
+	alignas(8) glm::vec2 globe_uv[2];
+
+	TileGPUIndex tex_idx;
+	uint32_t code_lower;
+	uint32_t code_upper;
 };
 
 struct RenderData
@@ -314,17 +322,6 @@ static aabb2_t sub_rect(TileCode parent, TileCode child)
 	return morton_u64_to_rect_f64(child.idx, (uint8_t)diff);
 }
 
-/*
- * Partial derivatives
-static glm::vec3 globe_tangent(glm::dvec2 uv)
-{
-	double u = uv.x;
-	double v = uv.y;
-	double frac = pow(1 + u*u + v*v,-3.0/2.0);
-	return glm::dvec3(1 + v*v, -u*v, -u)*frac;
-}
-*/
-
 static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_verts)
 {
 	uint8_t f = code.face;
@@ -338,8 +335,6 @@ static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_v
 
 	glm::dvec2 uv;
 
-	uint64_t packed_parent = tile_code_pack(parent);
-
 	size_t idx = 0;
 	for (uint32_t i = 0; i < TILE_VERT_WIDTH; ++i) {
 		uv.x = (double)i*factor;
@@ -347,18 +342,12 @@ static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_v
 			uv.y = (double)j*factor;
 
 			glm::dvec2 face_uv = glm::mix(rect.ll(),rect.ur(),uv);
-			glm::dvec2 tex_uv = glm::mix(rect_tex.ll(),rect_tex.ur(),uv);
 			glm::dvec3 p = cube_to_globe(f, face_uv);
 
 			GlobeVertex vert = {
 				.pos = glm::vec3(p),
-				.uv = glm::vec2(tex_uv),
+				.uv = glm::vec2(uv),
 				.normal = glm::vec3(p),
-				.big_uv = face_uv,
-				.code = {
-					.left = (uint32_t)(packed_parent & 0xFFFFFFFF),
-					.right = (uint32_t)((packed_parent >> 32)), 
-				}
 			};
 
 			out_verts[idx++] = vert;
@@ -413,35 +402,19 @@ static GLuint globe_vao()
 	glEnableVertexArrayAttrib(vao,0);
 	glEnableVertexArrayAttrib(vao,1);
 	glEnableVertexArrayAttrib(vao,2);
-	glEnableVertexArrayAttrib(vao,3);
-	glEnableVertexArrayAttrib(vao,4);
-	glEnableVertexArrayAttrib(vao,5);
 
 	glVertexAttribFormat(0,3,GL_FLOAT,0,offsetof(GlobeVertex,pos));
 	glVertexAttribFormat(1,2,GL_FLOAT,0,offsetof(GlobeVertex,uv));
 	glVertexAttribFormat(2,3,GL_FLOAT,0,offsetof(GlobeVertex,normal));
-	glVertexAttribFormat(3,2,GL_FLOAT,0,offsetof(GlobeVertex,big_uv));
-	glVertexAttribIFormat(4,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,code.left));
-	glVertexAttribIFormat(5,1,GL_UNSIGNED_INT,offsetof(GlobeVertex,code.right));
 
 	glVertexAttribBinding(0,0);
 	glVertexAttribBinding(1,0);
 	glVertexAttribBinding(2,0);
-	glVertexAttribBinding(3,0);
-	glVertexAttribBinding(4,0);
-	glVertexAttribBinding(5,0);
 
 	glBindVertexArray(0);
 
 	return vao;
 }
-
-struct alignas(16) TileMetadata
-{
-	glm::vec4 coord;
-	TileGPUIndex tex_idx;
-	
-};
 
 static LoadResult create_render_data(ResourceTable *rt, RenderData &data)
 {
@@ -514,13 +487,12 @@ static LoadResult update_render_data(
 	glBindBuffer(GL_ARRAY_BUFFER, buf->id);
 	void *ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
 
-	static const uint32_t BATCH_SIZE = 1024/TILE_VERT_WIDTH;
+	static constexpr uint32_t BATCH_SIZE = 1024/TILE_VERT_WIDTH;
 
 	uint32_t batch_count = count ? 1 + (count - 1)/BATCH_SIZE : 0;
 
 	std::atomic_uint32_t ctr = batch_count;
 
-	// TODO : Batch this
 	for (uint32_t b = 0; b < batch_count; ++b) {
 		size_t b_start = b * BATCH_SIZE;	
 
@@ -558,13 +530,24 @@ static LoadResult update_render_data(
 	TileMetadata *metadata = static_cast<TileMetadata*>(ptr);
 
 	for (uint32_t i = 0; i < count; ++i) {
-		// TODO : Triple indirection...
-
+		uint64_t code = tile_code_pack(parents[i]);
 		TileGPUIndex idx = textures[i];
+
+		TileCode tile = tiles[i];
+		TileCode parent = parents[i];
+
+		aabb2_t rect = morton_u64_to_rect_f64(tile.idx,tile.zoom);
+		aabb2_t rect_tex = parent == TILE_CODE_NONE ? 
+			aabb2_t{.min = glm::dvec2(0), .max = glm::dvec2(1)} : 
+			sub_rect(parent, tile);
 
 		metadata[i] = {
 			.coord = glm::vec4(0),
+			.tex_uv = {rect_tex.min, rect_tex.max},
+			.globe_uv = {rect.min, rect.max},
 			.tex_idx = idx,
+			.code_lower = (uint32_t)(code & 0xFFFFFFFF),
+			.code_upper = (uint32_t)(code >> 32),
 		};
 	}
 

@@ -12,9 +12,6 @@
 layout (location = 0) in vec3 pos;
 layout (location = 1) in vec2 in_uv;
 layout (location = 2) in vec3 normal;
-layout (location = 3) in vec2 face_uv;
-layout (location = 4) in uint code_left;
-layout (location = 5) in uint code_right;
 
 layout (location = 0) out vec3 out_pos;
 layout (location = 1) out vec2 out_uv;
@@ -176,9 +173,12 @@ void main()
 	metadata_t mdata = metadata[tile_idx];
 
 	tex_idx_t tex_idx = decode_tex_idx(mdata.tex_idx);
-	tile_code_t code = from_input(code_left,code_right);
+	tile_code_t code = from_input(mdata.code_lower,mdata.code_upper);
 
-	vec2 uv = adjust_uv_for_clamp(in_uv); 
+	vec2 tex_uv = mix(mdata.tex_uv[0], mdata.tex_uv[1], in_uv);
+	vec2 face_uv = mix(mdata.globe_uv[0], mdata.globe_uv[1], in_uv);
+
+	vec2 uv = adjust_uv_for_clamp(tex_uv); 
 	vec3 n = normal;
 
 	vec3 N = vec3(0);
