@@ -130,6 +130,6 @@ float CPUTileCache::min() const
 {
 	if (!ds->vtbl.min)
 		return -1;
-	return -ds->vtbl.min(ds->usr);
+	return ds->vtbl.min(ds->usr);
 }
 

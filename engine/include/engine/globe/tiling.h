@@ -339,7 +339,7 @@ static inline constexpr double tile_factor(uint8_t lvl)
 	// a series to an acceptable order).
 	//
 	// This is fully incorrect
-	return (4.0 * PI / 6.0)/(double)(1LU << 2*lvl);
+	return 1.0/(double)(1LU << 2*lvl);
 }
 
 #endif // GLOBE_TILING_H

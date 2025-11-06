@@ -61,7 +61,6 @@ endif()
 
 find_package(OpenGL REQUIRED)
 
-
 add_compile_options(-g)
 
 set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -mavx2")

@@ -34,6 +34,13 @@ struct plane_t
 	double d;
 };
 
+struct cylinder_t
+{
+	glm::dvec3 p;
+	glm::dvec3 z;
+	double r;
+};
+
 struct aabb2_t
 {
 	glm::dvec2 min, max;
@@ -100,6 +107,12 @@ static inline void obb_add(obb_t &box, size_t count, const glm::dvec3 *v)
 
 	box.S = 0.5*(max - min);
 	box.O += box.T*(0.5*(max + min));
+}
+
+static inline bool intersects(const cylinder_t &cyl, const obb_t &box)
+{
+
+	return false;
 }
 
 inline int classify(const obb_t& box, const plane_t &pl)

@@ -60,9 +60,10 @@ void main()
 
 	float val = valid ? texture(u_tex_arrays[in_tex_idx.page], uvw).r : 0;
 
-	val -= 0.1*fract(u_frame.t*0.001);
-
 	float s = 1.0 + 10*val; 
+
+	val *= 5;
+
 	vec4 color = 
 	mix(
 		mix(
@@ -74,9 +75,12 @@ void main()
 		clamp(2*s - 1,0,1)
 	);
 
-	color = 
-		//vec4(hsv2rgb(vec3(1000*val + 0.4,1-0.2*(val + 1),1-0.2*(val + 1))),1);
-		in_color;
+	color = vec4(hsv2rgb(vec3(
+		0.22+ 1.5*val + 0.4, // hue
+		clamp(1-6*abs(val),0,1), // sat
+		1-0.2*(val + 1))
+	),1);
+	//in_color;
 
 	float t = TWOPI*fract(u_frame.t*0.001);
 
@@ -114,17 +118,22 @@ void main()
 			
 			vec3 R = reflect(L,n);
 
-			spec += pow(max(dot(V,R),0),32);
+			spec += pow(max(dot(V,R),0),64);
 		}
 
-		spec = min(spec,0.1);
+			spec = min(spec,max(0,0.9/(1.0 + 100*val)));
 
-		vec4 ambient = mix(color,vec4(0,0,0.05,0),0.5); 
+		vec4 ambient = mix(color,vec4(0,0,0.05,0),0.0); 
 
-		color = clamp(mix(diffuse,ambient,0.1),
+		color = clamp(mix(diffuse,ambient,0.4),
 				vec4(0),color) 
-				+ spec*vec4(1);
+				+ spec*vec4(1)
+		;
 	}
+
+	//const uint levels = 64;
+	//ivec3 quant = ivec3(float(levels)*color.rgb);
+	//color = vec4(vec3(quant/float(levels)),color.a);
 
 	FragColor = mix(color,vec4(0,in_uv,1),0.0);
 	//FragColor = vec4(in_normal,1);

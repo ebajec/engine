@@ -41,11 +41,11 @@
 #define QUATPI 0.785398163397
 #endif
 
-static constexpr uint32_t TILE_VERT_WIDTH = 32;
+static constexpr uint32_t TILE_VERT_WIDTH = 64;
 static constexpr uint32_t TILE_VERT_COUNT = 
 	TILE_VERT_WIDTH*TILE_VERT_WIDTH;
 
-static constexpr double tile_scale_factor = 32;
+static constexpr double tile_scale_factor = 16;
 
 struct DebugInfo
 {
@@ -104,6 +104,7 @@ struct select_tiles_params
 	const CPUTileCache * source;
 	const DebugInfo *debug;
 
+	double cull_radius;
 	frustum_t frust;
 	aabb3_t frust_box;
 	glm::dvec3 origin;
@@ -223,9 +224,12 @@ static inline int select_tiles_rec(
 		return 0;
 
 	uint64_t u64 = tile_code_pack(code);
-	mmt_result_t mmt_res = mmt_minmax(params->source->mmt, u64);
 
+	mmt_result_t mmt_res = mmt_minmax(params->source->mmt, u64);
 	obb_t box = tile_box2(params->source, code, mmt_res.min, mmt_res.max);
+
+	if (code.zoom > 1 && dot(box.T[2],params->origin) < 0)
+		return 0;
 
 	for (uint8_t i = 0; i < 6; ++i) {
 		if (classify(box, params->frust.planes[i]) > 0) { 
@@ -235,12 +239,12 @@ static inline int select_tiles_rec(
 
 	double d_min_sq = obb_dist_sq(box, params->origin);
 
-	d_min_sq = std::max(tile_scale_factor * d_min_sq,1e-6);
+	d_min_sq = std::max(tile_scale_factor*sqrt(d_min_sq),1e-6);
 
 	double area = tile_factor(code.zoom);
 
 	if (area/d_min_sq < params->res 
-		|| mmt_res.dist >= TILE_WIDTH/(2*TILE_VERT_WIDTH)
+		|| mmt_res.dist >= TILE_WIDTH/(TILE_VERT_WIDTH)
 	) {
 
 		out.push_back({code,d_min_sq});
@@ -502,47 +506,6 @@ static LoadResult update_render_data(
 			tiles.size(), MAX_TILES);
 	}
 
-	//uint32_t cell_count = 0;
-	//std::unordered_map<TileCode, uint32_t, TileCodeHash> map;
-
-	//for (uint32_t i = 0; i < count; ++i) {
-	//	TileCode code = tiles[i];
-	//	TileCode cell = tile_cell_index(code);
-	//	auto it = map.find(cell);
-	//	if (it == map.end()) {
-	//		map[cell] = ++cell_count;
-	//	}
-	//}
-
-	//double dmin = DBL_MAX;
-	//uint32_t argmin = 0;
-
-	//std::vector<glm::dvec4> coords;
-	//coords.reserve(cell_count);
-
-	//for (auto [cell, idx] : map) {
-	//	//glm::dmat3 frame = tile_frame(cell);
-	//	glm::dvec4 T = cell_transform(cell);
-	//	coords.push_back(T);
-
-	//	double d = glm::length(origin - glm::dvec3(T)); 
-
-	//	if (d < dmin) {
-	//		dmin = d;
-	//		argmin = static_cast<uint32_t>(coords.size() - 1);
-	//	}
-	//}
-
-	//glm::dvec4 origin_coords = glm::dvec4(origin,coords[argmin].w);
-
-	//for (glm::dvec4& coord : coords) {
-	//	glm::dvec3 r = glm::dvec3(coord) - origin;
-	//	double s = origin_coords.w/coord.w;
-	//	coord = glm::dvec4(r,s);
-	//}
-
-	//uint32_t total = TILE_VERT_COUNT*count;
-
 	//-----------------------------------------------------------------------------
 	// vbo
 	
@@ -596,9 +559,12 @@ static LoadResult update_render_data(
 
 	for (uint32_t i = 0; i < count; ++i) {
 		// TODO : Triple indirection...
+
+		TileGPUIndex idx = textures[i];
+
 		metadata[i] = {
 			.coord = glm::vec4(0),
-			.tex_idx = textures[i],
+			.tex_idx = idx,
 		};
 	}
 
@@ -754,6 +720,8 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 
 	frustum_t frust = camera_frustum(pv);
 
+	double r_cull;
+
 	// Adjust culling frustum to only extend enough so that worst-case
 	// terrain is visible
 	if (true) {
@@ -767,7 +735,8 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 		double r_horizon_max  = sqrt(std::max(r_max * r_max - r_min*r_min,0.));
 
 		glm::dvec3 n_far = frust.p.far.n;
-		frust.p.far.d = dot(pos,n_far) + r_horizon + r_horizon_max;
+		r_cull = r_horizon + r_horizon_max;
+		frust.p.far.d = dot(pos,n_far) + r_cull;
 	}
 
 	//-----------------------------------------------------------------------------
@@ -776,14 +745,12 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 	select_tiles_params params = {
 		.source = source,
 		.debug = &globe->dbg,
+		.cull_radius = r_cull,
 		.frust = frust,
 		.frust_box = frustum_aabb(frust),
 		.origin = pos,
 		.res = resolution,
 	};
-
-	//if(globe->dbg.enable_boxes)
-	//	globe->dbg.boxes->add(params.frust_box);
 
 	select_tiles(params, globe->tiles);
 
@@ -794,21 +761,6 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 	std::vector<TileCode> loaded_tiles (count, TILE_CODE_NONE);
 
 	source->load_tiles(count, globe->tiles.data(), loaded_tiles.data());
-
-	//tc_error err = tc_load(
-	//	source->tc, 
-	//	source->ds,
-	//	nullptr, nullptr,
-	//	count, 
-	//	globe->tiles.data(), 
-	//	loaded_tiles.data()
-	//);
-
-	//if (err != TC_OK) {
-	//	// Do something...
-	//	//
-	//	// This should only cause missing data to appear though
-	//}
 
 	std::vector<TileGPUIndex> tile_textures;
 
