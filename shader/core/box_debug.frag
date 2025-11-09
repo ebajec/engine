@@ -38,7 +38,7 @@ uint cube_face(vec3 v)
 
 void main()
 {
-	vec4 color = vec4(1,0.5,1,1);
+	vec4 color = vec4(1,0.4,0.4,1);
 
 	FragColor = color; 
 }

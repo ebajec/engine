@@ -104,11 +104,11 @@ static inline double W(double x)
 static double test_elev_fn1(glm::dvec2 uv, uint8_t f, uint8_t zoom)
 {
 	static constexpr double 
-	L = 0.5, 
-	D = 2.2,
-	G = 1.1, 
-	gamma =	2.5;
-	static constexpr size_t M = 12, N = 8;
+	L = 1.0, 
+	D = 2.1,
+	G = 4, 
+	gamma =	2.4;
+	static constexpr size_t M = 20, N = 8;
 
 	double A = L*pow(G/D,D-2.0)*sqrt(log(gamma)/(double)M); 
 

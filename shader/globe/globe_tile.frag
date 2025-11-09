@@ -76,9 +76,9 @@ void main()
 	);
 
 	color = vec4(hsv2rgb(vec3(
-		0.22+ 1.5*val + 0.4, // hue
-		clamp(1-6*abs(val),0,1), // sat
-		1-0.2*(val + 1))
+		0.25 - 0.2*val + 0.4, // hue
+		clamp(1-0.5*abs(val),0,1), // sat
+		1)
 	),1);
 	//in_color;
 
@@ -125,13 +125,13 @@ void main()
 
 		vec4 ambient = mix(color,vec4(0,0,0.05,0),0.0); 
 
-		color = clamp(mix(diffuse,ambient,0.4),
+		color = clamp(mix(diffuse,ambient,0.2),
 				vec4(0),color) 
 				+ spec*vec4(1)
 		;
 	}
 
-	//const uint levels = 64;
+	//const uint levels = 16;
 	//ivec3 quant = ivec3(float(levels)*color.rgb);
 	//color = vec4(vec3(quant/float(levels)),color.a);
 

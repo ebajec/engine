@@ -200,6 +200,7 @@ void main()
 	out_pos = wpos.xyz;
 	out_uv = uv;
 	out_normal = N;
+
 	out_color = palette(d); 
 	out_tex_idx = tex_idx;
 

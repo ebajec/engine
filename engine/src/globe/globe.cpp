@@ -743,7 +743,16 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 
 	std::vector<TileCode> loaded_tiles (count, TILE_CODE_NONE);
 
-	source->load_tiles(count, globe->tiles.data(), loaded_tiles.data());
+	std::vector<TileCode> tmp_tiles = globe->tiles;
+
+	for (size_t i = 0; i < tmp_tiles.size(); ++i) {
+		if (tmp_tiles[i].zoom > 2) {
+			tmp_tiles[i].idx >>= 4;
+			tmp_tiles[i].zoom -= 2;
+		}
+	}
+
+	source->load_tiles(count, tmp_tiles.data(), loaded_tiles.data());
 
 	std::vector<TileGPUIndex> tile_textures;
 

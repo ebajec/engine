@@ -31,7 +31,7 @@ struct metadata_t
 	uint code_upper;
 };
 
-const uint MAX_TILE_PAGES = 16;
+const uint MAX_TILE_PAGES = 8;
 const uint TILE_VERT_WIDTH = 64;
 const uint TILE_VERT_COUNT = TILE_VERT_WIDTH*TILE_VERT_WIDTH;
 
