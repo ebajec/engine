@@ -9,7 +9,6 @@
 
 #include "engine/globe/globe.h"
 
-
 #include "engine/utils/log.h"
 
 #include "view_utils.h"
@@ -195,28 +194,38 @@ int main(int argc, char* argv[])
 	);
 	app->addComponent(view_component);
 
-	auto sphere_camera = std::shared_ptr<SphereCameraComponent>(
-		new SphereCameraComponent(view_component)
+	//auto sphere_camera = std::shared_ptr<SphereCameraComponent>(
+	//	new SphereCameraComponent(view_component)
+	//);
+	//app->addComponent(sphere_camera);
+	
+	auto panning_camera = std::shared_ptr<PanningCameraComponent>(
+		new PanningCameraComponent(view_component)
 	);
-	app->addComponent(sphere_camera);
+	app->addComponent(panning_camera);
 
-	//-------------------------------------------------------------------------------------------------
+	//-----------------------------------------------------------------------------
 	// test shader 
 	MaterialID default_meshID = material_load_file(rt.get(), "material/default_mesh3d.yaml");
 	if (!default_meshID)
 		return EXIT_FAILURE;
 
-	//-----------------------------------------------------------------------------
-	// Globe
-	
-	std::unique_ptr<Globe,decltype(&globe_destroy)> globe (
-		globe_create(rt.get()), 
-		globe_destroy
-	);
+	const RendererDefaults *defaults = renderer->get_defaults();
 
-	if(!globe) {
-		return EXIT_FAILURE;
-	}
+	MaterialID diffusionID = material_load_file(rt.get(), "material/diffusion.yaml");
+	ModelID screenQuad = defaults->models.screen_quad;
+
+	struct UBO {
+		float t;
+
+		void imgui() {
+			ImGui::Begin("UBO");
+			ImGui::SliderFloat("t", &t, 0, 1);
+			ImGui::End();
+		}
+	} my_ubo;
+
+	BufferID uboID = buffer_create(rt.get(), sizeof(UBO));
 
 	//-----------------------------------------------------------------------------
 	// main loop
@@ -228,39 +237,41 @@ int main(int argc, char* argv[])
 
 		app->onFrameBeginCallback(window);
 
+		my_ubo.imgui();
+		buffer_upload(rt.get(), uboID, &my_ubo, sizeof(my_ubo));
+
 		plot_frame_times(t1 - t0);
-		globe_imgui(globe.get());
 
 		t0 = t1;
 		t1 = glfwGetTime();
 
 		glfwPollEvents();
 
-		glm::dvec3 p = sphere_camera->control.get_pos();
-		double elev = globe_sample_elevation(globe.get(), p);
-
-		sphere_camera->control.set_min_height(
-			2*view_component->near + elev);
-
 		Camera camera = {
-			.proj = view_component->get_proj_3d(),
-			.view = sphere_camera->control.get_view()
+			.proj = view_component->get_proj_2d(),
+			.view = panning_camera->get_view()
 		};
 
-		GlobeUpdateInfo globeUpdateInfo = { 
-			.camera = &camera 
-		};
-		globe_update(globe.get(), &globeUpdateInfo);
+		const GLBuffer *my_ubo_buf = rt->get<GLBuffer>(uboID);
 
+		// Begin frame
 		FrameBeginInfo frameInfo = {.camera = &camera};
 		FrameContext frame = renderer->begin_frame(&frameInfo);
 
+		// begin pass 
 		BeginPassInfo passInfo = {.target = view_component->target};
 		RenderContext ctx = frame.begin_pass(&passInfo);
-		
-		globe_draw(globe.get(),ctx);
 
+		ctx.bind_material(diffusionID);
+
+		glBindBufferBase(GL_UNIFORM_BUFFER, 1, my_ubo_buf->id);
+
+		ctx.draw_cmd_basic_mesh3d(screenQuad, glm::mat4(1));
+
+		// end pass
 		frame.end_pass(&ctx);
+
+		// end frame
 		renderer->end_frame(&frame);
 
 		renderer->present(ctx.target, app->width,app->height);

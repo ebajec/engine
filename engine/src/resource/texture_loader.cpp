@@ -153,7 +153,7 @@ ResourceHandle image_load_file(ResourceTable *loader, std::string_view path)
 
 load_failed:
 	loader->destroy_handle(h);
-	return h;
+	return RESOURCE_HANDLE_NULL;
 }
 
 const GLImage *get_image(ResourceTable *loader, ResourceHandle h)

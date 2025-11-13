@@ -21,7 +21,7 @@ struct BufferCreateInfo
 	uint32_t flags;
 };
 
-BufferID create_buffer(ResourceTable *table, size_t size, uint32_t flags = GL_DYNAMIC_STORAGE_BIT);
-LoadResult upload_buffer(ResourceTable *table, BufferID buf, void* data, size_t size);
+BufferID buffer_create(ResourceTable *table, size_t size, uint32_t flags = GL_DYNAMIC_STORAGE_BIT);
+LoadResult buffer_upload(ResourceTable *table, BufferID buf, void* data, size_t size);
 
 #endif // BUFFER_RESOURCE_H

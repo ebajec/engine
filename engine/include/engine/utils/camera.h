@@ -1,5 +1,5 @@
-#ifndef CAMERA_CONTROLLER_H
-#define CAMERA_CONTROLLER_H
+#ifndef CAMERA_H
+#define CAMERA_H
 
 #include <glm/vec3.hpp>
 #include <glm/matrix.hpp>
@@ -253,5 +253,5 @@ struct MotionCamera
 };
 
 
-#endif //CAMERA_CONTROLLER_H
+#endif //CAMERA_H
 

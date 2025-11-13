@@ -170,10 +170,7 @@ struct ResourceTable
 	template<typename T> 
 	const T *get(ResourceHandle h)
 	{
-		assert(h != RESOURCE_HANDLE_NULL);
-		
 		if (!h) {
-			log_error("Null handle passed",h);
 			return nullptr;
 		}
 

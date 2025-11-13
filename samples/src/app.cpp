@@ -32,6 +32,20 @@ void MyApp::keyCallback(GLFWwindow* window, int key, int scancode, int action, i
 void MyApp::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
 	ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
+
+	if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS) {
+		g_.left_mouse_pressed = true;
+	}
+	if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_RELEASE) {
+		g_.left_mouse_pressed = false;
+	}
+	if (button == GLFW_MOUSE_BUTTON_2 && action == GLFW_PRESS) {
+		g_.right_mouse_pressed = true;
+	}
+	if (button == GLFW_MOUSE_BUTTON_2 && action == GLFW_RELEASE) {
+		g_.right_mouse_pressed = false;
+	}
+
 	MyApp *app = static_cast<MyApp*>(glfwGetWindowUserPointer(window));
 	for (auto &ptr : app->components) {
 		if (auto shared = ptr.lock(); shared) 
@@ -50,6 +64,7 @@ void MyApp::scrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 void MyApp::cursorPosCallback(GLFWwindow* window, double xpos, double ypos)
 {
 	ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
+
 	MyApp *app = static_cast<MyApp*>(glfwGetWindowUserPointer(window));
 	for (auto &ptr : app->components) {
 		if (auto shared = ptr.lock(); shared) 
@@ -70,24 +85,33 @@ void MyApp::framebufferSizeCallback(GLFWwindow* window, int width, int height)
 	}
 }
 
-void MyApp::onFrameUpdateCallback(GLFWwindow *window) 
+void MyApp::onFrameBeginCallback(GLFWwindow *window) 
 {
 	glfwGetFramebufferSize(window,&width,&height);
 
-	static double t0 = -1; 
+	g_.t0 = g_.t1;
+	g_.t1 = glfwGetTime();
 
-	if (t0 < 0) {
-		g_.dt = 1.0/60.0;
-	} else {
-		g_.dt = glfwGetTime() - t0;
-	}
+	g_.dt = std::max(g_.t1 - g_.t0,1.0/1024);
 
-	t0 = glfwGetTime();
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+
+	ImGuiIO& io = ImGui::GetIO();
+	g_.mouse_in_gui = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) || io.WantCaptureMouse;
 
 	for (auto &ptr : components) {
 		if (auto shared = ptr.lock(); shared) 
-			shared->onFrameUpdateCallback();
+			shared->onFrameBeginCallback();
 	}
+}
+
+void MyApp::onFrameEndCallback(GLFWwindow* window)
+{
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());	
+	ImGui::EndFrame();
 }
 
 void MyApp::renderComponents(const RenderContext *ctx)
@@ -133,7 +157,7 @@ MyApp::~MyApp()
 {
 }
 
-int glfw_init_gl_basic(GLFWwindow *window)
+int init_gl_basic(GLFWwindow *window)
 {
 	glfwMakeContextCurrent(window);
 

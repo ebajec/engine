@@ -111,7 +111,7 @@ struct BaseViewComponent : AppComponent
 		dmouse_pos = glm::dvec2(dx,dy);
 	}
 
-	glm::mat4 get_proj()
+	glm::mat4 get_proj_3d()
 	{
 		ImGui::Begin("Demo Window");
 		ImGui::SliderFloat("FOV", &fov, 0.0f, PI, "%.3f");
@@ -121,6 +121,52 @@ struct BaseViewComponent : AppComponent
 
 		float aspect = (float)h/(float)w;
 		return camera_proj_3d(fov, aspect, far, near);
+	}
+
+	glm::dmat4 get_proj_2d() const 
+	{
+		float aspect = (float)h/(float)w;
+		return camera_proj_2d(aspect,1.0f);
+	}
+
+	float aspect() const
+	{
+		return (float)h/(float)w;
+	}
+};
+
+struct PanningCameraComponent : AppComponent
+{
+	std::shared_ptr<const BaseViewComponent> view_component;
+
+	double zoom = 1;
+	glm::dvec2 center = glm::dvec2(0);
+
+	PanningCameraComponent(std::shared_ptr<const BaseViewComponent> view) : 
+		view_component(view) {
+	}
+
+	virtual void cursorPosCallback(double xpos, double ypos) override 
+	{
+		double dx = -view_component->dmouse_pos.x/view_component->aspect();
+		double dy = -view_component->dmouse_pos.y;
+
+		if (!g_.mouse_in_gui && g_.left_mouse_pressed)
+			center += glm::dvec2(dx,dy)/zoom;
+	}
+	virtual void scrollCallback(double xoffset, double yoffset) override 
+	{
+		if (!g_.mouse_in_gui)
+			zoom *= pow(2,yoffset);
+	}
+
+	glm::mat4 get_view()
+	{
+		glm::dmat4 view (1.0);
+		view[0][0] = zoom;
+		view[1][1] = zoom;
+		view[3] = glm::dvec4(-center*zoom, 0, 1.0);
+		return view;
 	}
 };
 
@@ -150,7 +196,7 @@ struct SphereCameraComponent : AppComponent
 		}
 	}
 
-	virtual void onFrameUpdateCallback() override
+	virtual void onFrameBeginCallback() override
 	{
 		static float speed = 1;
 		
@@ -160,6 +206,8 @@ struct SphereCameraComponent : AppComponent
 
 		control.move((double)g_.dt*speed*keydir);
 	}
+
+	glm::mat4 get_view() {return control.get_view();}
 };
 
 struct MotionCameraComponent : AppComponent
@@ -183,7 +231,7 @@ struct MotionCameraComponent : AppComponent
 		}
 	}
 
-	virtual void onFrameUpdateCallback() override
+	virtual void onFrameBeginCallback() override
 	{
 		static float speed = 1;
 		

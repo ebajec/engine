@@ -46,7 +46,7 @@ void gl_buffer_destroy(ResourceTable *table, void *res)
 	delete buf;
 }
 
-BufferID create_buffer(ResourceTable *table, size_t size, uint32_t flags)
+BufferID buffer_create(ResourceTable *table, size_t size, uint32_t flags)
 {
 	ResourceHandle h = table->create_handle(RESOURCE_TYPE_BUFFER);
 	BufferCreateInfo buf_info = {
@@ -63,7 +63,7 @@ BufferID create_buffer(ResourceTable *table, size_t size, uint32_t flags)
 	return h;
 }
 
-LoadResult upload_buffer(ResourceTable *table, BufferID id, void* data, size_t size)
+LoadResult buffer_upload(ResourceTable *table, BufferID id, void* data, size_t size)
 {
 	const GLBuffer *buf = table->get<GLBuffer>(id);
 	if (!buf) {

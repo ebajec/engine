@@ -108,7 +108,7 @@ struct MotionCameraComponent2 : BaseViewComponent2
 		}
 	}
 
-	virtual void onFrameUpdateCallback() override
+	virtual void onFrameBeginCallback() override
 	{
 		static float speed = 100;
 		
@@ -508,7 +508,7 @@ int main(int argc, char* argv[])
 		params.win.y
 	);
 
-	if (int code = glfw_init_gl_basic(window); code == EXIT_FAILURE) {
+	if (int code = init_gl_basic(window); code == EXIT_FAILURE) {
 		fprintf(stderr, "ERROR: Failed to load OpenGL\n");
 		return code; 
 	}
@@ -638,7 +638,7 @@ int main(int argc, char* argv[])
 
 		renderer->present(ctx.target, app->width, app->height);
 
-		app->onFrameUpdateCallback(window);
+		app->onFrameBeginCallback(window);
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());	
 

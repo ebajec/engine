@@ -18,6 +18,20 @@ struct GLImage
 	ImgFormat fmt;
 };
 
+static inline void img_format_to_gl(ImgFormat fmt, GLenum *format, GLenum *type)
+{
+	switch (fmt) {
+		case IMG_FORMAT_RGBA8:
+			*format = GL_RGBA;
+			*type = GL_UNSIGNED_BYTE;
+		break;
+		case IMG_FORMAT_32F:
+			*format = GL_RED;
+			*type = GL_FLOAT;
+		break;
+	}
+}
+
 struct ImageCreateInfo
 {
 	uint32_t w;

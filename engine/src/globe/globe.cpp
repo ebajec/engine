@@ -45,7 +45,7 @@ static constexpr uint32_t TILE_VERT_WIDTH = 64;
 static constexpr uint32_t TILE_VERT_COUNT = 
 	TILE_VERT_WIDTH*TILE_VERT_WIDTH;
 
-static constexpr double tile_scale_factor = 16;
+static constexpr double tile_scale_factor = 12;
 
 struct DebugInfo
 {
@@ -428,26 +428,26 @@ static LoadResult create_render_data(ResourceTable *rt, RenderData &data)
 	if (!data.material)
 		goto load_failed;
 
-	data.vbo = create_buffer(rt, MAX_TILES*TILE_VERT_COUNT*sizeof(GlobeVertex),
+	data.vbo = buffer_create(rt, MAX_TILES*TILE_VERT_COUNT*sizeof(GlobeVertex),
 						  GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
 	if (!data.vbo)
 		goto load_failed;
 
-	data.indirect = create_buffer(rt, MAX_TILES*sizeof(DrawCommand),
+	data.indirect = buffer_create(rt, MAX_TILES*sizeof(DrawCommand),
 						  GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
 	if (!data.indirect)
 		goto load_failed;
 
-	data.ssbo = create_buffer(rt, MAX_TILES*sizeof(TileMetadata),
+	data.ssbo = buffer_create(rt, MAX_TILES*sizeof(TileMetadata),
 						  GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
 	if (!data.ssbo)
 		goto load_failed;
 
-	data.ibo = create_buffer(rt, sizeof(uint32_t)*6*TILE_VERT_COUNT);
+	data.ibo = buffer_create(rt, sizeof(uint32_t)*6*TILE_VERT_COUNT);
 	if (!data.ibo)
 		goto load_failed;
 
-	result = upload_buffer(rt, data.ibo, tile_indices.data(), 
+	result = buffer_upload(rt, data.ibo, tile_indices.data(), 
 			   tile_indices.size()*sizeof(uint32_t));
 
 	if (result)

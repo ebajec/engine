@@ -1,5 +1,7 @@
 #include "engine/globe/test_source.h"
 
+#include <atomic>
+
 static float test_elev_fn(glm::dvec2 uv, uint8_t f);
 
 static int test_loader_fn2(void *usr, uint64_t id, 
@@ -112,7 +114,7 @@ static double test_elev_fn1(glm::dvec2 uv, uint8_t f, uint8_t zoom)
 
 	double A = L*pow(G/D,D-2.0)*sqrt(log(gamma)/(double)M); 
 
-	static int init = 0;
+	static std::atomic_int init = 0;
 
 	static double phi[M][N];
 	static double cos_phi[M][N];

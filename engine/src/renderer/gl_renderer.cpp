@@ -211,8 +211,8 @@ void RenderContext::bind_material(MaterialID id) const
 		GLTextureBinding tex_bind = pair.second;
 
 		ImageID texID = tex_bind.id;
-		const GLImage *tex = rt->get<GLImage>(texID);
 
+		const GLImage *tex = rt->get<GLImage>(texID);
 		GLint filter = GL_LINEAR;
 
 		if (!tex) {

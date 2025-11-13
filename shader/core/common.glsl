@@ -15,7 +15,7 @@ vec3 hsv2rgb(vec3 c)
     vec3 p = abs(fract(c.x + K.xyz) * 6.0 - K.www);
     return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
 }
-mat3 qmat3(quat q) 
+mat3 qmat3(vec4 q) 
 {
     float w=q.w, x=q.x, y=q.y, z=q.z;
     float xx=x*x, yy=y*y, zz=z*z;

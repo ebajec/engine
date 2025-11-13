@@ -5,6 +5,8 @@
 
 #include "globe/gpu_cache.h"
 
+#include "resource/upload.h"
+
 #include <thread>
 #include <cstring>
 
@@ -338,6 +340,8 @@ void GPUTileCache::asynchronous_upload(std::span<TileGPUUploadData> upload_data)
 		return;
 
 	size_t total_size = upload_data.size()*m_tile_size_bytes;
+
+	UploadSession uctx;
 
 	std::unique_ptr<GPUUploadContext,decltype(&upload_context_destroy)> ctx (
 		upload_context_create(total_size),upload_context_destroy);

@@ -33,6 +33,8 @@ struct MaterialCreateInfo
 {
 	std::string path;
 };
-ResourceHandle material_load_file(ResourceTable *loader, std::string_view path);
+
+extern ResourceHandle material_load_file(ResourceTable *rt, std::string_view path);
+extern void material_bind_texture(ResourceTable *rt, MaterialID mat, const char * name, ImageID img);
 
 #endif // MATERIAL_LOADER_H

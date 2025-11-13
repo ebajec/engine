@@ -90,8 +90,9 @@ static LoadResult parse_material_file(PreMaterialInfo *info, std::string_view pa
 
 	if (bindings_node) {
 		for (const auto& node : bindings_node) {
+			YAML::Node path = node["path"]; 
 			Binding b;
-			b.path = node["path"].as<std::string>();
+			b.path = path.IsDefined() ? path.as<std::string>() : "";
 			b.type = node["type"].as<std::string>();
 			b.name = node["name"].as<std::string>();
 			bindings.push_back(std::move(b));
@@ -163,9 +164,10 @@ static LoadResult gl_material_load(ResourceTable *loader, GLMaterial *mat, const
 		for (size_t i = 0; i < info->bindings.size(); ++i) {
 			const Binding *bind = &info->bindings[i];
 
-			ImageID texID = image_load_file(loader,bind->path);
+			ImageID texID = bind->path.empty() ? 
+				RESOURCE_HANDLE_NULL : image_load_file(loader,bind->path);
 
-			if (texID == RESOURCE_HANDLE_NULL) {
+			if (!bind->path.empty() && texID == RESOURCE_HANDLE_NULL) {
 				log_error(
 					"While loading material %s : failed to load texture %s for binding=%s\n",
 					info->name.c_str(),bind->path.c_str(),bind->name.c_str());
@@ -301,6 +303,12 @@ error_cleanup:
 	log_error("Failed to load material file at %s",path.data());
 	loader->destroy_handle(h);
 	return RESOURCE_HANDLE_NULL;
+}
+
+void material_bind_texture(ResourceTable *rt, MaterialID mat, const char * name, ImageID img)
+{
+	ResourceEntry *ent = rt->get_internal(mat);
+	GLMaterial *p_mat = static_cast<GLMaterial*>(ent->data);
 }
 
 const GLMaterial *get_material(ResourceTable *loader, ResourceHandle h)

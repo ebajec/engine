@@ -1,0 +1,7 @@
+shaders:
+  vert: shader/diffusion.vert
+  frag: shader/diffusion.frag
+bindings:
+  - name: u_tex
+    type: sampler2D
+    path: image/saro.jpg

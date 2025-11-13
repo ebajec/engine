@@ -24,9 +24,10 @@ struct Camera
 	glm::mat4 view;
 };
 
-enum ImgFormat
+enum ImgFormat : uint8_t
 {
-	IMG_FORMAT_RGBA8
+	IMG_FORMAT_RGBA8,
+	IMG_FORMAT_32F
 };
 
 enum ModelType
@@ -56,5 +57,14 @@ struct vertex3d
 	glm::vec2 uv;
 	glm::vec3 normal;
 };
+
+static inline size_t img_format_to_bytes(ImgFormat fmt)
+{
+	switch (fmt) {
+		case IMG_FORMAT_RGBA8:
+		case IMG_FORMAT_32F:
+			return 4;
+	}
+}
 
 #endif

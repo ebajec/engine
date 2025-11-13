@@ -32,7 +32,7 @@ LoadResult renderer_defaults_init(ResourceTable *table, RendererDefaults *defaul
 	//-----------------------------------------------------------------------------
 	// missing texture
 	
-	uint32_t w = 16, h = 16;
+	uint32_t w = 15, h = 15;
 
 	defaults->textures.missing = image_create_2d(table, w, h, IMG_FORMAT_RGBA8);
 
@@ -44,7 +44,6 @@ LoadResult renderer_defaults_init(ResourceTable *table, RendererDefaults *defaul
 	for (uint32_t i = 0; i < w*h; ++i) {
 		data[i] = c[k%2];
 		k++;
-		if (i%w == 0) k++;
 	}
 
 	table->upload(defaults->textures.missing,ImageLoader::name,data.data());

@@ -44,6 +44,12 @@ uint cube_face(vec3 v)
 	return argmax;
 }
 
+
+float norm2(vec3 v)
+{
+	return dot(v,v);
+}
+
 void main()
 {
 	vec2 uv = in_uv;
@@ -100,10 +106,10 @@ void main()
 		vec4(1,1,1,1),
 	};
 
-	if (true) {
-		vec3 n = in_normal;
+	vec3 V = view_dir();
+	vec3 n = in_normal;
 
-		vec3 V = view_dir();
+	if (true) {
 
 		vec4 diffuse = vec4(0);
 		float spec = 0;
@@ -131,12 +137,27 @@ void main()
 		;
 	}
 
-	//const uint levels = 16;
-	//ivec3 quant = ivec3(float(levels)*color.rgb);
-	//color = vec4(vec3(quant/float(levels)),color.a);
+	if (false) {
+		float phi = TWOPI*fract(u_frame.t*0.1);
+		float edge = pow(norm2(cross(V,n)),10);
+
+		float z = gl_FragCoord.z;
+
+		z = exp(1.0/(3*pow(z,60)-1.0) + 1);
+
+		if(z > 1)
+			z = 0;
+		color *= z;
+	}
+
+	if (false) {
+		const uint levels = 16;
+		ivec3 quant = ivec3(float(levels)*color.rgb);
+		color = vec4(vec3(quant/float(levels)),color.a);
+	}
 
 	FragColor = mix(color,vec4(0,in_uv,1),0.0);
-	//FragColor = vec4(in_normal,1);
+	//FragColor = vec4(v.xyz,1);
 	//FragColor = mix(FragColor,FACE_COLORS[cube_face(in_pos)],0.0);
 
 	//vec2 diff = 2.0*in_uv - vec2(1.0);
