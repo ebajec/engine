@@ -82,7 +82,7 @@ static int spv_load(const fs::path& path,std::vector<uint32_t> &data)
 	return 0;
 }
 
-static LoadResult spv_bindings_create(GLShaderBindings *shader_bindings, const void* code, size_t size)
+static LoadResult spv_bindings_create(ShaderLayout *shader_bindings, const void* code, size_t size)
 {
 	SpvReflectShaderModule module;
 
@@ -103,7 +103,12 @@ static LoadResult spv_bindings_create(GLShaderBindings *shader_bindings, const v
 		const char *name = binding->name;
 		uint32_t id = binding->binding;
 
-		shader_bindings->ids[name] = id;
+		ShaderBinding binding_internal = {
+			.id = id,
+		};
+
+		shader_bindings->slots[name] = shader_bindings->bindings.size();
+		shader_bindings->bindings.push_back(binding_internal);
 	}
 
 	spvReflectDestroyShaderModule(&module);
@@ -204,7 +209,7 @@ static LoadResult load_shader_file(fs::path file, GLShaderModule* out)
 	if (res) 
 		return res;
 
-	std::unique_ptr<GLShaderBindings> bindings (new GLShaderBindings);
+	std::unique_ptr<ShaderLayout> bindings (new ShaderLayout);
 
 	res = spv_bindings_create(bindings.get(), code.data(), code.size()*sizeof(uint32_t));
 

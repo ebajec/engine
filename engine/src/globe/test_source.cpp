@@ -1,6 +1,5 @@
 #include "engine/globe/test_source.h"
-
-#include <atomic>
+#include "engine/utils/functions.h"
 
 static float test_elev_fn(glm::dvec2 uv, uint8_t f);
 
@@ -70,11 +69,6 @@ static constexpr size_t coeff_count = 100;
 static double coeffs[coeff_count] = {};
 static glm::dvec3 phases[coeff_count] = {};
 
-static double urandf1()
-{
-	return (1.0 - (double)rand())/(double)RAND_MAX;
-}
-
 static void init_coeffs()
 {
 	for (size_t i = 0; i < coeff_count; ++i) {
@@ -87,75 +81,6 @@ static void init_coeffs()
 static float sample(void *usr, float u, float v, uint8_t f)
 {
 	return test_elev_fn(glm::dvec2(u,v), f);
-}
-
-/// @brief smooth function that is zero up to the first derivative at -1 and 1
-static inline double filter_band(double x)
-{
-	double a = 1 - x*x*x*x;
-	return 2*a*a/(1 + a*a);
-}
-
-static inline double W(double x)
-{
-	static constexpr double b = 6;
-
-	return -(1.0/(b*b))*log(1/(1.0 + exp((b*b)*x)));
-}
-
-static double test_elev_fn1(glm::dvec2 uv, uint8_t f, uint8_t zoom)
-{
-	static constexpr double 
-	L = 1.0, 
-	D = 2.1,
-	G = 4, 
-	gamma =	2.4;
-	static constexpr size_t M = 20, N = 8;
-
-	double A = L*pow(G/D,D-2.0)*sqrt(log(gamma)/(double)M); 
-
-	static std::atomic_int init = 0;
-
-	static double phi[M][N];
-	static double cos_phi[M][N];
-
-	static double gammaD3n[N];
-	static double gamman[N];
-
-	if (!init++) {
-		for (size_t m = 0; m < M; ++m) {
-			for (size_t n = 0; n < N; ++n) {
-				phi[m][n] = TWOPI*urandf1();
-				cos_phi[m][n] = cos(phi[m][n]);
-			}
-		}
-
-		for (size_t n = 0; n < N; ++n) {
-			gammaD3n[n] = pow(gamma, (D - 3.0)*n);
-			gamman[n] = pow(gamma, n);
-		}
-	}
-
-	double g = 0;
-
-	double x = 1.0 - 2.0*uv.x;
-	double y = 1.0 - 2.0*uv.y;
-
-	double r = hypot(x,y);
-	double tht = atan2(y,x);
-
-	for (size_t m = 0; m < M; ++m) {
-		for (size_t n = 0; n < N; ++n) {
-			double phi_mn = (double)f + phi[m][n];
-
-			g += gammaD3n[n] * (cos_phi[m][n] - cos(TWOPI*gamman[n]*r*cos(tht - PI*m/M)/L + phi_mn));
-		}
-	}
-
-	g *= A*TEST_AMP;
-
-	return W(g*filter_band(x)*filter_band(y));
-
 }
 
 static double test_elev_fn2(glm::dvec2 uv, uint8_t f, uint8_t zoom)
@@ -184,7 +109,15 @@ static double test_elev_fn2(glm::dvec2 uv, uint8_t f, uint8_t zoom)
 
 float test_elev_fn(glm::dvec2 uv, uint8_t f)
 {
-	return (float)test_elev_fn1(uv, f,coeff_count);
+	double x = 1.0 - 2.0*uv.x;
+	double y = 1.0 - 2.0*uv.y;
+
+	double g = weierstrass(x,y, TWOPI*(float)f);
+
+	g *= TEST_AMP;
+	g = smooth_max_zero(g*filter_band(x)*filter_band(y));
+
+	return (float)g;
 }
 
 int test_loader_fn2(
@@ -212,8 +145,7 @@ int test_loader_fn2(
 			uv.x = (float)j*d;
 			glm::vec2 f = glm::mix(rect.ll(),rect.ur(),uv);
 
-			double g = test_elev_fn1(f, code.face, code.zoom);
-			data[idx++] = static_cast<float>(g);
+			data[idx++] = test_elev_fn(f, code.face);
 			//uv.x += d;
 		}
 		uv.x = 0;

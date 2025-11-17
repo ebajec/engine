@@ -51,7 +51,6 @@ struct HopfSim
 
 	BufferID ubo;
 
-
 	BufferID sphere_points; // HopfSimPointData[]
 
 	BufferID ring_data; // HopfSimPointData[]

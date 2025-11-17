@@ -49,7 +49,7 @@ tgrad_t tex_grad2(vec2 uv)
 
 	vec2 h = 0.5/vec2(size);
 
-	uv = floor(vec2(size)*uv)/vec2(size);
+	//uv = floor(vec2(size)*uv)/vec2(size);
 
 	float u1 = max(uv.x - h.x,h.x);
 	float u2 = min(uv.x + h.x,1.0 - h.x);
@@ -92,10 +92,6 @@ void main()
 		texelFetch(u_tex,texel + ivec2(-1,0),0),
 		texelFetch(u_tex,texel + ivec2(0,1),0),
 		texelFetch(u_tex,texel + ivec2(0,-1),0)
-		//texture(u_tex,uv + vec2(h,0)),
-		//texture(u_tex,uv + vec2(-h,0)),
-		//texture(u_tex,uv + vec2(0,h)),
-		//texture(u_tex,uv + vec2(0,-h))
 	};
 
 	vec4 avg = 1.0/4.0 * (samp[0] + samp[1] + samp[2] + samp[3]);
@@ -112,9 +108,5 @@ void main()
 	);
 
 	float f = 0.01*length(diff);
-
-	//f = length(color.xyz)/sqrt(3);
-
 	FragColor = mix(color,f*vec4(1),u_s);
 }
-

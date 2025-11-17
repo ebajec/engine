@@ -28,14 +28,26 @@ LoadResult gl_image_create(ResourceTable *loader, void **res, void *info)
 	ImageCreateInfo *ci = static_cast<ImageCreateInfo*>(info);
 
 	std::unique_ptr<GLImage> img (new GLImage{});
-	img->w = ci->w;
-	img->h = ci->h;
-	img->fmt = ci->fmt;
-	img->d = 1;
 
-	glGenTextures(1,&img->id);
-	glBindTexture(GL_TEXTURE_2D,img->id);
-	glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, (int)ci->w, (int)ci->h);
+	uint32_t w = ci->w, h = ci->h, d = ci->d;
+
+	img->w = w;
+	img->h = h;
+	img->fmt = ci->fmt;
+	img->d = ci->d;
+
+	GLenum format, type;
+	img_format_to_gl(ci->fmt, &format, &type);
+
+	GLenum internal_format = img_format_to_gl_internal(ci->fmt);
+
+	if (!d) {
+		glCreateTextures(GL_TEXTURE_2D, 1, &img->id);
+		glTextureStorage2D(img->id, 1, internal_format, w, h);
+	} else {
+		glCreateTextures(GL_TEXTURE_3D, 1, &img->id);
+		glTextureStorage3D(img->id, 1, internal_format, w, h, d);
+	}
 
 	*res = img.release();
 
@@ -62,10 +74,8 @@ static LoadResult gl_image_upload_mem(ResourceTable *loader, void *res, void *in
 		return RT_EUNKNOWN;
 	}
 
-	glBindTexture(GL_TEXTURE_2D,img->id);
-	glTexSubImage2D(GL_TEXTURE_2D,0,0,0, 
+	glTextureSubImage2D(img->id,0,0,0, 
 				 (int)img->w, (int)img->h, GL_RGBA, GL_UNSIGNED_BYTE, data);
-	glBindTexture(GL_TEXTURE_2D,0);
 	
 	if (gl_check_err()) {
 		return RT_EUNKNOWN;

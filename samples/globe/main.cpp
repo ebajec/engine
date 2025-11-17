@@ -174,7 +174,7 @@ int main(int argc, char* argv[])
 	ImageLoader::registration(rt.get());
 	ModelLoader::registration(rt.get());
 
-	std::unique_ptr<ResourceHotReloader> reloader = ResourceHotReloader::create(rt.get());
+	std::unique_ptr<ResourceReloader> reloader = ResourceReloader::create(rt.get());
 
 	//-------------------------------------------------------------------------------------------------
 	// Renderer

@@ -51,9 +51,15 @@ struct BufferUploadRegion
 struct UploadSession
 {
 	ResourceEntry *ent;
+	void *data;
 
-	UploadSpan *spans;
-	uint32_t span_count;
+	union {
+		struct {
+			UploadSpan *spans;
+			uint32_t span_count;
+		};
+		UploadSpan span;
+	};
 
 	union {
 		const BufferUploadRegion *buf;
@@ -62,23 +68,22 @@ struct UploadSession
 
 	UploadMode mode;
 
-	void *data;
+	UploadResult status = UPLOAD_ENULL;
 };
 
 struct UploadContext;
+struct UploadContext * get_upload_context(ResourceTable *rt);
 
-extern int begin_buffer_upload(
-	UploadContext *ctx,
-	UploadSession *s,
+extern UploadSession begin_buffer_upload(
+	UploadContext *s,
 	ResourceHandle h, 
 	const UploadParams *params,
 	const BufferUploadRegion *regions = nullptr,
 	uint32_t count = 0
 );
 
-extern int begin_image_upload(
-	UploadContext *ctx,
-	UploadSession *s,
+extern UploadSession begin_image_upload(
+	UploadContext *s,
 	ResourceHandle h, 
 	const UploadParams *params,
 	const ImageUploadRegion *regions = nullptr,
@@ -93,7 +98,7 @@ extern void upload_write_span(
 	size_t size
 );
 
-extern void upload_end(UploadSession *ctx);
+extern void end_upload(UploadSession *ctx);
 
 #endif // RESOURCE_UPLOAD_H
 

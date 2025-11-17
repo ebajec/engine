@@ -65,6 +65,7 @@ static inline size_t img_format_to_bytes(ImgFormat fmt)
 		case IMG_FORMAT_32F:
 			return 4;
 	}
+	return 0;
 }
 
 #endif

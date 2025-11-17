@@ -38,7 +38,7 @@ static void monitor_callback(void *usr, utils::monitor_event_t event)
 	if (event.flags & MONITOR_FLAGS_ISDIR || !(event.flags & MONITOR_FLAGS_MODIFY))
 		return;
 
-	ResourceHotReloader *watcher = static_cast<ResourceHotReloader*>(usr);
+	ResourceReloader *watcher = static_cast<ResourceReloader*>(usr);
 
 	fs::path root = watcher->table->resource_path;
 
@@ -65,9 +65,9 @@ static void monitor_callback(void *usr, utils::monitor_event_t event)
 	watcher->updates.push_back(std::move(update_info));
 }
 
-std::unique_ptr<ResourceHotReloader> ResourceHotReloader::create(ResourceTable* table)
+std::unique_ptr<ResourceReloader> ResourceReloader::create(ResourceTable* table)
 {
-	std::unique_ptr<ResourceHotReloader> watcher (new ResourceHotReloader);
+	std::unique_ptr<ResourceReloader> watcher (new ResourceReloader);
 	watcher->table = table;
 
 	if (!fs::is_directory(watcher->table->resource_path))
@@ -100,7 +100,7 @@ static LoadResult reload_file_resource(ResourceTable *loader, ResourceHandle h)
 	return result;
 }
 
-LoadResult ResourceHotReloader::process_updates()
+LoadResult ResourceReloader::process_updates()
 {
 	std::unique_lock<std::mutex> lock (mut);
 	std::vector<ResourceUpdateInfo> queue = std::move(updates);
@@ -175,6 +175,39 @@ ResourceTable::~ResourceTable()
 		ResourceHandle h = (uint32_t)i + 1;
 		destroy_handle(h);
 	}
+}
+
+ResourceHandle ResourceTable::create(
+	void *data, 
+	const ResourceAllocFns *vtbl, 
+	uint32_t type, 
+	const char *key
+)
+{
+	ResourceHandle h = RESOURCE_HANDLE_NULL;
+	ResourceEntry *ent = nullptr;
+
+	std::unique_lock<std::shared_mutex> lock(mut);
+	if (!free_slots.empty()) {
+		h = free_slots.top();
+		free_slots.pop();
+
+		ent = entries[h - 1].get();
+	} else {
+	 	h = static_cast<ResourceHandle>(entries.size() + 1);
+	 	ent = new ResourceEntry{};
+		entries.push_back(std::unique_ptr<ResourceEntry>(ent));
+	}
+	lock.unlock();
+
+	ent->data = data;
+	ent->vtbl = vtbl;
+
+	map[key] = h;
+
+	assert(ent);
+
+	return h;
 }
 
 ResourceHandle ResourceTable::create_handle(ResourceType type)

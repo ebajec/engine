@@ -531,7 +531,7 @@ int main(int argc, char* argv[])
 	ModelLoader::registration(table.get());
 	ImageLoader::registration(table.get());
 
-	std::shared_ptr<ResourceHotReloader> reloader = ResourceHotReloader::create(table.get());
+	std::shared_ptr<ResourceReloader> reloader = ResourceReloader::create(table.get());
 
 	//-------------------------------------------------------------------------------------------------
 	// Renderer

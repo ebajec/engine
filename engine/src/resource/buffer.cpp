@@ -20,6 +20,8 @@ LoadResult gl_buffer_create(ResourceTable *table, void **res, void *usr)
 	GLBuffer *buf = new GLBuffer{};
 	glCreateBuffers(1,&buf->id);
 
+	buf->flags = ci->flags;
+
 	if (gl_check_err()) {
 		goto failure;
 	}

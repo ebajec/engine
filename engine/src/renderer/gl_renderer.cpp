@@ -222,12 +222,10 @@ void RenderContext::bind_material(MaterialID id) const
 			assert(tex);
 		}
 
-		glBindTexture(GL_TEXTURE_2D, tex->id);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);   
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);   
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
-		glBindTexture(GL_TEXTURE_2D,0);
+		glTextureParameteri(tex->id, GL_TEXTURE_WRAP_S, GL_REPEAT);   
+		glTextureParameteri(tex->id, GL_TEXTURE_WRAP_T, GL_REPEAT);   
+		glTextureParameteri(tex->id, GL_TEXTURE_MIN_FILTER, filter);
+		glTextureParameteri(tex->id, GL_TEXTURE_MAG_FILTER, filter);
 
 		glBindTextureUnit(binding,tex->id);
 	}

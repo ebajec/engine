@@ -11,10 +11,11 @@ struct GLComputePipeline
 {
 	ShaderID shader;
 	GLuint program;
+
 };
 
 typedef ResourceHandle ComputePipelineID;
 
-ComputePipelineID compute_pipeline_load(ResourceTable *rt, std::string_view path);
+ComputePipelineID load_compute_pipeline(ResourceTable *rt, std::string_view path);
 
 #endif // COMPUTE_PIPELINE_H

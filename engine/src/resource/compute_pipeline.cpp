@@ -64,7 +64,7 @@ ResourceAllocFns gl_compute_pipeline_alloc_fns = {
 	.load_file = gl_compute_pipeline_load_file
 };
 
-ComputePipelineID compute_pipeline_load(ResourceTable *rt, std::string_view path) 
+ComputePipelineID load_compute_pipeline(ResourceTable *rt, std::string_view path) 
 {
 	if (ResourceHandle h = rt->find(path)) 
 		return h;

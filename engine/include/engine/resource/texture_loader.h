@@ -30,12 +30,26 @@ static inline void img_format_to_gl(ImgFormat fmt, GLenum *format, GLenum *type)
 			*type = GL_FLOAT;
 		break;
 	}
+	return;
 }
 
+static inline GLenum img_format_to_gl_internal(ImgFormat fmt)
+{
+	switch (fmt) {
+		case IMG_FORMAT_RGBA8:
+			return GL_RGBA8;
+		break;
+		case IMG_FORMAT_32F:
+			return GL_R32F;
+		break;
+	}
+	return GL_RGBA8;
+}
 struct ImageCreateInfo
 {
 	uint32_t w;
 	uint32_t h;
+	uint32_t d;
 	ImgFormat fmt;
 };
 

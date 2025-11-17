@@ -9,6 +9,7 @@
 //------------------------------------------------------------------------------
 // Vert
 
+//
 layout (location = 0) in vec3 pos;
 layout (location = 1) in vec2 in_uv;
 layout (location = 2) in vec3 normal;
@@ -57,6 +58,13 @@ tile_code_t from_input(uint left, uint right)
 	return code;
 }
 
+tile_code_t get_code()
+{
+	uint tile_idx = gl_VertexID/TILE_VERT_COUNT;
+	metadata_t mdata = metadata[tile_idx];
+	return from_input(mdata.code_lower,mdata.code_upper);
+}
+
 vec2 adjust_uv_for_clamp(vec2 uv)
 {
 	return vec2(1.0/512.0) + uv*(1-1.0/256.0); 
@@ -92,26 +100,28 @@ float sample_tex(tex_idx_t idx, vec2 uv)
 {
 	float h = texture(u_tex_arrays[idx.page], vec3(uv, idx.tex)).r; 
 
-//	tile_code_t code = from_input(code_left, code_right);
-//	aabb2_t rect = morton_u32_to_rect_f32(code.idx, code.zoom);
-//
-//	vec3 p = cube_to_globe(code.face, mix(rect.min, rect.max, uv));
-//
-//
-//	float t = TWOPI*fract(u_frame.t);
-//	float h1 = 1;
-//	float h2 = 1;
-//
-//	float f1 = 3;
-//	float f2 = 40;
-//
-//	float p2 = 1;
-//
-//	float r = sin(f1*p.x - h1*t)*cos(sqrt(2)*f1*p.y - h1*t)*sin(3*f1*p.z - h1*t);
-//
-//	r += 0.1*sin(f2*p.x - h2*t - p2)*cos(sqrt(2)*f2*p.y - h2*t - p2)*sin(3*f2*p.z - h2*t - p2);
-//
-	//h += 0.1*r;
+	if (false) {
+		tile_code_t code = get_code();
+		aabb2_t rect = morton_u32_to_rect_f32(code.idx, code.zoom);
+
+		vec3 p = cube_to_globe(code.face, mix(rect.min, rect.max, uv));
+
+
+		float t = TWOPI*fract(0.3*u_frame.t);
+		float h1 = 1;
+		float h2 = 1;
+
+		float f1 = 100;
+		float f2 = 400;
+
+		float p2 = 1;
+
+		float r = sin(f1*p.x - h1*t)*cos(sqrt(2)*f1*p.y - h1*t)*sin(3*f1*p.z - h1*t);
+
+		r += sin(f2*p.x - h2*t - p2)*cos(sqrt(2)*f2*p.y - h2*t - p2)*sin(3*f2*p.z - h2*t - p2);
+
+		h += 0.001*r*exp(-100*h);
+	}
 	return h;
 }
 
@@ -171,7 +181,6 @@ void main()
 	uint tile_idx = gl_VertexID/TILE_VERT_COUNT;
 
 	metadata_t mdata = metadata[tile_idx];
-
 	tex_idx_t tex_idx = decode_tex_idx(mdata.tex_idx);
 	tile_code_t code = from_input(mdata.code_lower,mdata.code_upper);
 
@@ -195,7 +204,7 @@ void main()
 		wpos += vec4(n*f,0);
 	}
 
-	float d = 100*f;
+	float d = 1*f;
 
 	out_pos = wpos.xyz;
 	out_uv = uv;

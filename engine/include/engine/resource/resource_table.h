@@ -121,6 +121,7 @@ struct ResourceReloadInfo
 struct ResourceEntry 
 {
 	void *data;
+	const ResourceAllocFns *vtbl;
 
 	std::atomic_int refs;
 	std::atomic<ResourceStatus> status;
@@ -133,7 +134,6 @@ struct ResourceTableCreateInfo
 {
 	const char *resource_path;
 };
-
 struct ResourceTable
 {
 	std::shared_mutex mut;
@@ -157,6 +157,13 @@ struct ResourceTable
 
 	void register_loader(std::string_view key, ResourceLoaderFns fns);
 
+	ResourceHandle create(
+		void *data, 
+		const ResourceAllocFns *vtbl, 
+		uint32_t type, 
+		const char *key
+	);
+
 	ResourceHandle create_handle(ResourceType type);
 	void destroy_handle(ResourceHandle h);
 	ResourceHandle find(std::string_view key);
@@ -168,7 +175,7 @@ struct ResourceTable
 	LoadResult upload(ResourceHandle h, std::string_view key, void* upload_info);
 
 	template<typename T> 
-	const T *get(ResourceHandle h)
+	T *get(ResourceHandle h)
 	{
 		if (!h) {
 			return nullptr;
@@ -187,7 +194,7 @@ struct ResourceTable
 		if (ent->type == RESOURCE_TYPE_NONE)
 			return nullptr;
 
-		return static_cast<const T*>(ent->data);
+		return static_cast<T*>(ent->data);
 	}
 	const ResourceEntry *get(ResourceHandle h);
 	ResourceEntry *get_internal(ResourceHandle h);
@@ -201,7 +208,7 @@ struct ResourceUpdateInfo
 	std::string path;
 };
 
-struct ResourceHotReloader
+struct ResourceReloader
 {
 	ResourceTable *table;
 	std::unique_ptr<utils::monitor> monitor;
@@ -209,7 +216,7 @@ struct ResourceHotReloader
 	std::mutex mut;
 	std::vector<ResourceUpdateInfo> updates;
 
-	static std::unique_ptr<ResourceHotReloader> create(ResourceTable *table);
+	static std::unique_ptr<ResourceReloader> create(ResourceTable *table);
 	LoadResult process_updates();
 };
 

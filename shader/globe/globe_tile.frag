@@ -86,7 +86,7 @@ void main()
 		clamp(1-0.5*abs(val),0,1), // sat
 		1)
 	),1);
-	//in_color;
+	color = in_color;
 
 	float t = TWOPI*fract(u_frame.t*0.001);
 

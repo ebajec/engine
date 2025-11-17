@@ -14,13 +14,16 @@ struct UploadContext
 //------------------------------------------------------------------------------
 // OpenGL backend
 
-int get_gl_buffer_mapped_span(UploadSpan *span, GLBuffer *buf, const UploadParams *params)
+UploadResult 
+get_gl_buffer_mapped_span(UploadSpan *span, GLBuffer *buf, const UploadParams *params)
 {
 	GLint map_align = 0;
 	glGetIntegerv(GL_MIN_MAP_BUFFER_ALIGNMENT, &map_align);
 
-	void *ptr = glMapNamedBuffer(
+	void *ptr = glMapNamedBufferRange(
 			buf->id, 
+			0, 
+			buf->size,
 			GL_MAP_WRITE_BIT | 
 			GL_MAP_PERSISTENT_BIT | 
 			GL_MAP_COHERENT_BIT
@@ -39,7 +42,7 @@ int get_gl_buffer_mapped_span(UploadSpan *span, GLBuffer *buf, const UploadParam
 	return UPLOAD_OK;
 }
 
-GLuint get_gl_staging_pbo(size_t size)
+GLuint get_gl_staging_pbo(size_t size, void** p_map)
 {
 	GLuint pbo = 0;
 	glCreateBuffers(1,&pbo);
@@ -69,6 +72,8 @@ GLuint get_gl_staging_pbo(size_t size)
 
 	if (!mapped || gl_check_err())
 		goto failure;
+
+	*p_map = mapped;
 
 	return pbo;
 failure:
@@ -107,7 +112,7 @@ struct GLStagedImageUploader
 	GLuint pbo;
 };
 
-int init_staged_image_upload(
+UploadResult init_staged_image_upload(
 	UploadSession *s, 
 	const ImageUploadRegion *regions, 
 	GLImage *img
@@ -120,19 +125,25 @@ int init_staged_image_upload(
 	for (size_t i = 0; i < s->span_count; ++i) {
 		ImageUploadRegion reg = regions[i];
 		size_t size = pix_size*(size_t)reg.w*(size_t)reg.h*(size_t)reg.d; 
-		req += size;
 
 		s->spans[i] = UploadSpan {
 			.size = size,
 			.token = req
 		};
+
+		req += size;
 	}
 
+	void *mapped = nullptr;
 	// TODO: Use a persistently mapped ring buffer instead of creating new ones
-	GLuint pbo = get_gl_staging_pbo(req);
+	GLuint pbo = get_gl_staging_pbo(req, &mapped);
 
 	if (!pbo)
 		return UPLOAD_EUNKNOWN;
+
+	for (size_t i = 0; i < s->span_count; ++i) {
+		s->spans[i].ptr = (char*)mapped + s->spans[i].token; 
+	}
 
 	GLStagedImageUploader *uploader = new GLStagedImageUploader{};
 
@@ -215,80 +226,91 @@ void image_upload_end(
 //------------------------------------------------------------------------------
 // Interface
 
-extern int begin_buffer_upload(
+struct UploadContext * get_upload_context(ResourceTable *rt)
+{
+	static UploadContext ctx;
+
+	ctx.rt = rt;
+
+	return &ctx;
+}
+
+extern UploadSession begin_buffer_upload(
 	UploadContext *ctx,
-	UploadSession *s,
 	ResourceHandle h, 
 	const UploadParams *params,
 	const BufferUploadRegion *regions,
 	uint32_t count
 )
 {
+	UploadSession s;
+
 	ResourceEntry *ent = ctx->rt->get_internal(h);
 
 	if (!ent || ent->type != RESOURCE_TYPE_BUFFER)
-		return UPLOAD_ENULL;
+		return s;
 
 	GLBuffer *buf = static_cast<GLBuffer*>(ent->data);
 	UploadMode mode = params->mode;
 
-	int res = UPLOAD_OK;
-
-	*s = {
-		.ent = ent,
-		.regions = {.buf = regions},
-		.mode = params->mode,
-	};
+	s.ent = ent;
+	s.regions = {.buf = regions};
+	s.mode = params->mode;
 
 	switch (params->mode) {
 		case UPLOAD_MODE_MAPPED:
-			res = get_gl_buffer_mapped_span(&s->spans[0], buf, params);
+			s.status = get_gl_buffer_mapped_span(&s.span, buf, params);
 			break;
 		case UPLOAD_MODE_STAGING:
 			break;
 		default:
-			res = UPLOAD_EBADPARAM;
+			s.status = UPLOAD_EBADPARAM;
 	}
 
-	return res;
+	s.status = UPLOAD_OK;
+
+	return s;
 }
 
-int begin_image_upload(
+UploadSession begin_image_upload(
 	UploadContext *ctx,
-	UploadSession *s,
 	ResourceHandle h, 
 	const UploadParams *params,
 	const ImageUploadRegion *regions,
 	uint32_t count
 )
 {
+	UploadSession s;
+
 	ResourceEntry *ent = ctx->rt->get_internal(h);
 
 	if (!ent || ent->type != RESOURCE_TYPE_IMAGE)
-		return UPLOAD_ENULL;
+		return s;
 
 	UploadMode mode = params->mode;
 
 	int res = UPLOAD_OK;
 
-	*s = {
-		.ent = ent,
-		.spans = new UploadSpan[count]{},
-		.span_count = count,
-		.regions = {.img = regions},
-	};
+	s.ent = ent;
+	s.spans = new UploadSpan[count]{};
+	s.span_count = count;
+	s.regions = {.img = regions};
+	s.mode = mode;
 
 	GLImage *img = static_cast<GLImage*>(ent->data);
 
-	if (mode == UPLOAD_MODE_MAPPED)
-		return UPLOAD_EBADPARAM;
-
-
-	if (mode == UPLOAD_MODE_STAGING) { 
-		return init_staged_image_upload(s, regions, img);
+	if (mode == UPLOAD_MODE_MAPPED) {
+		s.status = UPLOAD_EBADPARAM;
+		return s;
 	}
 
-	return res;
+	if (mode == UPLOAD_MODE_STAGING) { 
+		s.status = init_staged_image_upload(&s, regions, img);
+	}
+
+	s.status = UPLOAD_OK;
+
+	return s;
 }
 
 void upload_write_span(
@@ -299,6 +321,10 @@ void upload_write_span(
 	size_t size
 ) 
 {
+	if (s->mode == UPLOAD_MODE_MAPPED) {
+		memcpy((char*)s->span.ptr + offset, data, size);
+		return;
+	}
 	UploadSpan span = s->spans[index];
 	if (span.ptr) {
 		memcpy((char*)span.ptr + offset, data, size);
@@ -306,7 +332,7 @@ void upload_write_span(
 	}
 }
 
-void upload_end(UploadSession *s)
+void end_upload(UploadSession *s)
 {
 	ResourceType type = s->ent->type;
 

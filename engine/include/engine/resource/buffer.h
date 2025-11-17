@@ -9,6 +9,7 @@ struct GLBuffer
 {
 	size_t size;
 	GLuint id;
+	uint32_t flags;
 };
 
 

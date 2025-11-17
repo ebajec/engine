@@ -141,16 +141,22 @@ static LoadResult gl_material_load(ResourceTable *loader, GLMaterial *mat, const
 	mat->vert = vertID;
 	mat->frag = fragID;
 
-	typedef std::unordered_map<std::string,uint32_t> bind_map_t; 
+	typedef std::unordered_map<std::string,ShaderBinding> bind_map_t; 
 
 	bind_map_t merged_ids;
 
 	if (vert->bindings) {
-		bind_map_t map = vert->bindings->ids;
+		bind_map_t map; 
+		for (auto [name, slot] : vert->bindings->slots) {
+			map[name] = vert->bindings->bindings[slot];
+		}
 		merged_ids.merge(map);
 	}
 	if (frag->bindings) {
-		bind_map_t map = frag->bindings->ids;
+		bind_map_t map;
+		for (auto [name, slot] : frag->bindings->slots) {
+			map[name] = vert->bindings->bindings[slot];
+		}
 		merged_ids.merge(map);
 	}
 
@@ -191,7 +197,7 @@ static LoadResult gl_material_load(ResourceTable *loader, GLMaterial *mat, const
 				return RT_EUNKNOWN;
 			}
 
-			uint32_t id = it->second;
+			uint32_t id = it->second.id;
 
 			GLTextureBinding texBinding = {
 				.id = texID
