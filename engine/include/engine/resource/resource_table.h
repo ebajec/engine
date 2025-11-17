@@ -123,9 +123,9 @@ struct ResourceEntry
 	void *data;
 	const ResourceAllocFns *vtbl;
 
-	std::atomic_int refs;
+	std::atomic_uint16_t refs;
 	std::atomic<ResourceStatus> status;
-	ResourceType type;
+	uint32_t type;
 
 	std::unique_ptr<ResourceReloadInfo> reload_info;
 };
@@ -145,26 +145,29 @@ struct ResourceTable
 	// TODO: synchronization on this
 	std::stack<ResourceHandle> free_slots;
 
+	std::vector<std::string> registered_types;
+
 	std::unordered_map<std::string, ResourceHandle> map;
 
 	std::unordered_map<std::string, ResourceLoaderFns> loader_fns;
-	std::array<ResourceAllocFns, RESOURCE_TYPE_MAX_ENUM> alloc_fns; 
 
 	//-----------------------------------------------------------------------------
 
 	static std::unique_ptr<ResourceTable> create(const ResourceTableCreateInfo *info); 
 	~ResourceTable();
 
+	uint32_t register_type(std::string_view name) {
+		registered_types.push_back(std::string(name));
+		return registered_types.size() - 1;
+	}
 	void register_loader(std::string_view key, ResourceLoaderFns fns);
 
 	ResourceHandle create(
-		void *data, 
 		const ResourceAllocFns *vtbl, 
 		uint32_t type, 
-		const char *key
+		const char *key = nullptr
 	);
 
-	ResourceHandle create_handle(ResourceType type);
 	void destroy_handle(ResourceHandle h);
 	ResourceHandle find(std::string_view key);
 	void set_handle_key(ResourceHandle h, std::string_view key);

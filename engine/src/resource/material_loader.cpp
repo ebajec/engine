@@ -295,8 +295,7 @@ ResourceHandle material_load_file(ResourceTable *loader, std::string_view path)
 	if (ResourceHandle h = loader->find(path)) 
 		return h;
 
-	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_MATERIAL);
-
+	ResourceHandle h = loader->create(&gl_material_alloc_fns, RESOURCE_TYPE_MATERIAL);
 	LoadResult result = loader->load_file(h,path.data());
 
 	if (result != RT_OK)

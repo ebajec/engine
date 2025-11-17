@@ -247,7 +247,7 @@ extern UploadSession begin_buffer_upload(
 
 	ResourceEntry *ent = ctx->rt->get_internal(h);
 
-	if (!ent || ent->type != RESOURCE_TYPE_BUFFER)
+	if (!ent || ent->type != (uint32_t)RESOURCE_TYPE_BUFFER)
 		return s;
 
 	GLBuffer *buf = static_cast<GLBuffer*>(ent->data);
@@ -284,7 +284,7 @@ UploadSession begin_image_upload(
 
 	ResourceEntry *ent = ctx->rt->get_internal(h);
 
-	if (!ent || ent->type != RESOURCE_TYPE_IMAGE)
+	if (!ent || ent->type != (uint32_t)RESOURCE_TYPE_IMAGE)
 		return s;
 
 	UploadMode mode = params->mode;
@@ -334,7 +334,7 @@ void upload_write_span(
 
 void end_upload(UploadSession *s)
 {
-	ResourceType type = s->ent->type;
+	ResourceType type = (ResourceType)s->ent->type;
 
 	if (type == RESOURCE_TYPE_BUFFER) {
 		buffer_upload_end(s);

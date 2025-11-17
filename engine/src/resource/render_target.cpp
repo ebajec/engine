@@ -111,8 +111,7 @@ void gl_render_target_destroy(ResourceTable *table, void *res)
 
 ResourceHandle render_target_create(ResourceTable *table, const RenderTargetCreateInfo *info)
 {
-	ResourceHandle h = table->create_handle(RESOURCE_TYPE_RENDER_TARGET);
-
+	ResourceHandle h = table->create(&gl_render_target_alloc_fns, RESOURCE_TYPE_RENDER_TARGET, nullptr);
 	LoadResult result = table->allocate(h, (void*)info);
 
 	if (result != RT_OK) {

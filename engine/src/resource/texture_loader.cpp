@@ -130,7 +130,7 @@ ResourceHandle image_create_2d(ResourceTable *loader, uint32_t width, uint32_t h
 		.fmt = fmt
 	};
 
-	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_IMAGE);
+	ResourceHandle h = loader->create(&gl_image_alloc_fns, RESOURCE_TYPE_IMAGE, nullptr);
 	LoadResult result = loader->allocate(h, &info); 
 
 	if (result != RT_OK) {
@@ -147,16 +147,13 @@ ResourceHandle image_load_file(ResourceTable *loader, std::string_view path)
 		return h;
 	}
 
-	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_IMAGE);
-
+	ResourceHandle h = loader->create(&gl_image_alloc_fns, RESOURCE_TYPE_IMAGE, path.data());
 	LoadResult result = loader->load_file(h,path.data());
 
 	if (result != RT_OK) {
 		log_error("Failed to load image file : %s",path.data());
 		goto load_failed;
 	}
-
-	loader->set_handle_key(h,path);
 
 	log_info("Loaded image file : %s",path.data());
 	return h;

@@ -144,7 +144,7 @@ void ModelLoader::registration(ResourceTable *table)
 
 ResourceHandle ModelLoader::model_load_2d(ResourceTable *table, Mesh2DCreateInfo *ci)
 {
-	ResourceHandle h = table->create_handle(RESOURCE_TYPE_MODEL);
+	ResourceHandle h = table->create(&gl_model_alloc_fns, RESOURCE_TYPE_MODEL);
 
 	LoadResult result = table->allocate(h, ci);
 
@@ -165,7 +165,7 @@ load_failed:
 
 ResourceHandle ModelLoader::model_load_3d(ResourceTable *table, Mesh3DCreateInfo *ci)
 {
-	ResourceHandle h = table->create_handle(RESOURCE_TYPE_MODEL);
+	ResourceHandle h = table->create(&gl_model_alloc_fns, RESOURCE_TYPE_MODEL);
 
 	LoadResult result = table->allocate(h, ci);
 
@@ -186,7 +186,7 @@ load_failed:
 
 extern ResourceHandle model_create(ResourceTable *table)
 {
-	ResourceHandle h = table->create_handle(RESOURCE_TYPE_MODEL);
+	ResourceHandle h = table->create(&gl_model_alloc_fns, RESOURCE_TYPE_MODEL);
 	LoadResult result = table->allocate(h, nullptr);
 
 	if (result != RT_OK) 

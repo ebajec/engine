@@ -148,18 +148,16 @@ std::unique_ptr<ResourceTable> ResourceTable::create(const ResourceTableCreateIn
 		std::unique_ptr<ResourceTable>(new ResourceTable());
 
 	loader->resource_path = info->resource_path;
-	
-	// TODO : Think of a nice way to not initialize these here.
-	
-	loader->alloc_fns[RESOURCE_TYPE_NONE] =	{};
-	loader->alloc_fns[RESOURCE_TYPE_MATERIAL] = gl_material_alloc_fns;
-	loader->alloc_fns[RESOURCE_TYPE_COMPUTE_PIPELINE] = gl_compute_pipeline_alloc_fns;
-	loader->alloc_fns[RESOURCE_TYPE_SHADER] = gl_shader_alloc_fns; 	
-	loader->alloc_fns[RESOURCE_TYPE_IMAGE] = gl_image_alloc_fns; 
-	loader->alloc_fns[RESOURCE_TYPE_BUFFER] = gl_buffer_alloc_fns; 
-	loader->alloc_fns[RESOURCE_TYPE_MODEL] = gl_model_alloc_fns;	
-	loader->alloc_fns[RESOURCE_TYPE_RENDER_TARGET] = gl_render_target_alloc_fns;	
 
+	loader->register_type(stringify(RESOURCE_TYPE_NONE));
+	loader->register_type(stringify(RESOURCE_TYPE_MATERIAL));
+	loader->register_type(stringify(RESOURCE_TYPE_COMPUTE_PIPELINE));
+	loader->register_type(stringify(RESOURCE_TYPE_MODEL));
+	loader->register_type(stringify(RESOURCE_TYPE_IMAGE));
+	loader->register_type(stringify(RESOURCE_TYPE_BUFFER));
+	loader->register_type(stringify(RESOURCE_TYPE_SHADER));
+	loader->register_type(stringify(RESOURCE_TYPE_RENDER_TARGET));
+	
 	return loader;
 }
 
@@ -178,7 +176,6 @@ ResourceTable::~ResourceTable()
 }
 
 ResourceHandle ResourceTable::create(
-	void *data, 
 	const ResourceAllocFns *vtbl, 
 	uint32_t type, 
 	const char *key
@@ -187,6 +184,14 @@ ResourceHandle ResourceTable::create(
 	ResourceHandle h = RESOURCE_HANDLE_NULL;
 	ResourceEntry *ent = nullptr;
 
+	if (!vtbl) {
+		const char * s = key ? key : "Unknown";
+		log_error(
+			"Attempting to create resource \"%s\" with empty virtual table", 
+			s);
+		return RESOURCE_HANDLE_NULL;
+	}
+
 	std::unique_lock<std::shared_mutex> lock(mut);
 	if (!free_slots.empty()) {
 		h = free_slots.top();
@@ -200,37 +205,13 @@ ResourceHandle ResourceTable::create(
 	}
 	lock.unlock();
 
-	ent->data = data;
 	ent->vtbl = vtbl;
-
-	map[key] = h;
-
-	assert(ent);
-
-	return h;
-}
-
-ResourceHandle ResourceTable::create_handle(ResourceType type)
-{
-	ResourceHandle h = RESOURCE_HANDLE_NULL;
-	ResourceEntry *ent = nullptr;
-
-	std::unique_lock<std::shared_mutex> lock(mut);
-	if (!free_slots.empty()) {
-		h = free_slots.top();
-		free_slots.pop();
-
-		ent = entries[h - 1].get();
-	} else {
-	 	h = static_cast<ResourceHandle>(entries.size() + 1);
-	 	ent = new ResourceEntry{};
-		entries.push_back(std::unique_ptr<ResourceEntry>(ent));
-	}
-	lock.unlock();
-
-	assert(ent);
-
 	ent->type = type;
+
+	if (key)
+		map[key] = h;
+
+	assert(ent);
 
 	return h;
 }
@@ -248,10 +229,8 @@ void ResourceTable::destroy_handle(ResourceHandle h)
 	// TODO : lol...
 	assert(!ent->refs.load());
 
-	ResourceType type = ent->type;
-
 	if (ent->data)
-		alloc_fns[type].destroy(this, ent->data);
+		ent->vtbl->destroy(this, ent->data);
 
 	ent->data = nullptr;
 	ent->status = RESOURCE_STATUS_EMPTY;
@@ -262,7 +241,7 @@ void ResourceTable::destroy_handle(ResourceHandle h)
 		ent->reload_info.reset(nullptr);
 	} else {
 		log_info("Deleted resource with id %d (%s)",h,
-		   resource_type_strings[type]);
+		   registered_types[ent->type].c_str());
 	}
 
 	std::unique_lock<std::shared_mutex> lock(mut);
@@ -312,7 +291,7 @@ LoadResult ResourceTable::load_file(ResourceHandle h, const char *path)
 
 	std::string realpath = make_path_abs(path);
 
-	OnResourceCreateFromDisk load_file_fn = alloc_fns[ent->type].load_file;
+	OnResourceCreateFromDisk load_file_fn = ent->vtbl->load_file;
 	LoadResult result = load_file_fn(this, h, realpath.c_str());
 
 	if (!ent->reload_info) {
@@ -329,7 +308,7 @@ LoadResult ResourceTable::allocate(ResourceHandle h, void* alloc_info)
 
 	assert(ent);
 
-	OnResourceCreate alloc_fn = alloc_fns[ent->type].create; 
+	OnResourceCreate alloc_fn = ent->vtbl->create; 
 	assert(alloc_fn);
 
 	void* data = nullptr;
@@ -341,7 +320,7 @@ LoadResult ResourceTable::allocate(ResourceHandle h, void* alloc_info)
 
 	// TODO : erase old data in a free list.
 	if (ent->data) {
-		OnResourceDestroy destroy_fn = alloc_fns[ent->type].destroy;
+		OnResourceDestroy destroy_fn = ent->vtbl->destroy;
 		assert(destroy_fn);
 
 		destroy_fn(this,ent->data);

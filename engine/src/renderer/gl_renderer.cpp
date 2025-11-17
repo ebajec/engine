@@ -78,15 +78,9 @@ std::unique_ptr<Renderer> Renderer::create(const RendererCreateInfo* info)
 		return nullptr;
 	}
 
-	impl->frame_ubo = impl->table->create_handle(RESOURCE_TYPE_BUFFER);
-	BufferCreateInfo buffer_info = {
-		.size = sizeof(Framedata),
-		.flags = GL_DYNAMIC_STORAGE_BIT
-	};
-	result = impl->table->allocate(impl->frame_ubo,&buffer_info);
+	impl->frame_ubo = buffer_create(impl->table, sizeof(Framedata));
 
-	if (result != RT_OK) {
-		impl->table->destroy_handle(impl->frame_ubo);
+	if (!impl->frame_ubo) {
 		return nullptr;
 	}
 

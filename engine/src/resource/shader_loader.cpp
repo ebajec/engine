@@ -272,8 +272,7 @@ ResourceHandle shader_load_file(ResourceTable *loader, std::string_view path)
 	if (ResourceHandle h = loader->find(path)) 
 		return h;
 
-	ResourceHandle h = loader->create_handle(RESOURCE_TYPE_SHADER);
-
+	ResourceHandle h = loader->create(&gl_shader_alloc_fns,RESOURCE_TYPE_SHADER,path.data());
 	LoadResult result = loader->load_file(h,path.data());
 
 	if (result != RT_OK)

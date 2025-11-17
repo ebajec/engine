@@ -69,7 +69,7 @@ ComputePipelineID load_compute_pipeline(ResourceTable *rt, std::string_view path
 	if (ResourceHandle h = rt->find(path)) 
 		return h;
 
-	ResourceHandle h = rt->create_handle(RESOURCE_TYPE_COMPUTE_PIPELINE);
+	ResourceHandle h = rt->create(&gl_compute_pipeline_alloc_fns, RESOURCE_TYPE_COMPUTE_PIPELINE);
 
 	LoadResult result = rt->load_file(h,path.data());
 

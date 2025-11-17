@@ -50,12 +50,11 @@ void gl_buffer_destroy(ResourceTable *table, void *res)
 
 BufferID buffer_create(ResourceTable *table, size_t size, uint32_t flags)
 {
-	ResourceHandle h = table->create_handle(RESOURCE_TYPE_BUFFER);
 	BufferCreateInfo buf_info = {
 		.size = size,
 		.flags = flags,
 	};
-
+	ResourceHandle h = table->create(&gl_buffer_alloc_fns, RESOURCE_TYPE_BUFFER);
 	LoadResult result = table->allocate(h, &buf_info);
 	if (result) {
 		table->destroy_handle(h);
