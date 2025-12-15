@@ -1,14 +1,19 @@
 #ifndef DEVICE_INTERNAL_H
 #define DEVICE_INTERNAL_H
 
-#include "engine/resource/resource_table.h"
+#include "asset_table.h"
+#include "pool.h"
+#include "resource_impl.h"
 
 namespace ev2 {
 
 struct Device
 {
-	std::unique_ptr<ResourceTable> rt;
-	std::unique_ptr<ResourceReloader> reloader;
+	std::unique_ptr<AssetTable> assets;
+
+	std::unique_ptr<ResourcePool<Buffer>> buffers;
+	std::unique_ptr<ResourcePool<Image>> images;
+	std::unique_ptr<ResourcePool<Texture>> textures;
 };
 
 };

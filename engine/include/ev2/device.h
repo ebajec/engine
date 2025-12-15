@@ -7,15 +7,15 @@ namespace ev2 {
 
 enum Result
 {
-	EV2_OK,
-	EV2_EUNKNOWN
+	SUCCESS,
+	ELOAD_FAILED,
+	EUNKNOWN
 };
 
 struct Device;
 
 Device *create_device(const char *path);
 void destroy_device(Device *dev);
-void device_heartbeat(Device *dev);
 
 };
 

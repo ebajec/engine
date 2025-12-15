@@ -1,0 +1,7 @@
+shaders:
+  vert: shader/screen_quad.vert.spv
+  frag: shader/screen_quad.frag.spv
+states:
+  cull: back
+  depth_test: less_equal
+  blend: opaque

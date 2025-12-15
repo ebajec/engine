@@ -1,30 +1,40 @@
 #ifndef EV2_PIPELINE_IMPL_H
 #define EV2_PIPELINE_IMPL_H
 
+#include <engine/renderer/opengl.h>
+
 #include "ev2/resource.h"
 #include "ev2/pipeline.h"
 
-#include <vector>
 #include <unordered_map>
 #include <string>
+#include <memory>
 
 #include <cstdint>
 
 namespace ev2 {
 
-enum DescriptorBindingType
+enum DescriptorType : uint32_t
 {
-	BINDING_TYPE_STORAGE_BUFFER,
-	BINDING_TYPE_UNIFORM_BUFFER,
-	BINDING_TYPE_STORAGE_IMAGE,
-	BINDING_TYPE_SAMPLER
+  	DESCRIPTOR_TYPE_SAMPLER                    =  0,        
+  	DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER     =  1,       
+  	DESCRIPTOR_TYPE_SAMPLED_IMAGE              =  2,      
+  	DESCRIPTOR_TYPE_STORAGE_IMAGE              =  3,     
+  	DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER       =  4,    
+  	DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER       =  5,   
+  	DESCRIPTOR_TYPE_UNIFORM_BUFFER             =  6,  
+  	DESCRIPTOR_TYPE_STORAGE_BUFFER             =  7, 
+  	DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC     =  8,
+  	DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC     =  9, 
+  	DESCRIPTOR_TYPE_INPUT_ATTACHMENT           = 10,
+  	DESCRIPTOR_TYPE_MAX_ENUM           = UINT32_MAX,
 };
 
 struct DescriptorBinding
 {
-	uint16_t set;
-	uint16_t id;
-	DescriptorBindingType type;
+	DescriptorType type;
+	uint32_t set;
+	uint32_t id;
 };
 
 struct DescriptorLayout
@@ -32,11 +42,18 @@ struct DescriptorLayout
 	std::unordered_map<std::string, DescriptorBinding> bindings;
 };
 
+struct Shader
+{
+	GLuint id;
+	ShaderStage stage;
+	std::unique_ptr<DescriptorLayout> layout;
+};
+
 struct GraphicsPipeline
 {
 	ev2::ShaderID vert;
 	ev2::ShaderID frag;
-	uint32_t program;
+	GLuint program;
 
 	DescriptorLayout layout;
 };
@@ -44,16 +61,16 @@ struct GraphicsPipeline
 struct ComputePipeline
 {
 	ev2::ShaderID comp;
-	uint32_t program;
+	GLuint program;
 
 	DescriptorLayout layout;
 };
 
 struct ResourceBinding
 {
-	DescriptorBindingType type;
+	DescriptorType type;
 	union {
-		ev2::BufferID buf = EV2_NULL_HANDLE
+		ev2::BufferID buf = EV2_NULL_HANDLE(Buffer);
 		ev2::TextureID tex;
 	};
 };

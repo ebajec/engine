@@ -9,6 +9,7 @@ namespace ev2 {
 MAKE_HANDLE(Buffer);
 MAKE_HANDLE(Image);
 MAKE_HANDLE(Texture);
+MAKE_HANDLE(TextureAsset);
 
 enum ImageFormat
 {
@@ -22,17 +23,23 @@ enum TextureFilter
 	FILTER_BILINEAR,
 };
 
+enum BufferFlagBits
+{
+	MAP_READ = 0x1,
+	MAP_WRITE = 0x2,
+};
+typedef uint32_t BufferFlags;
+
 //--------------------------------------------------------------------
 // Buffer
 
-BufferID create_buffer(Device *dev, size_t size, bool mapped = false);
+BufferID create_buffer(Device *dev, size_t size, BufferFlags flags = 0);
 void destroy_buffer(Device *dev, BufferID buf);
 
 //--------------------------------------------------------------------
 // Image
 
 ImageID create_image(Device *dev, uint32_t w, uint32_t h, uint32_t d, ImageFormat fmt);
-ImageID load_image(Device *dev, const char *path);
 void destroy_image(Device *dev, ImageID img);
 
 //--------------------------------------------------------------------
@@ -40,6 +47,13 @@ void destroy_image(Device *dev, ImageID img);
 
 TextureID create_texture(Device *dev, ImageID img, TextureFilter filter);
 void destroy_texture(Device *dev, TextureID tex);
+
+//------------------------------------------------------------------------------
+// Image assets
+
+TextureAssetID load_texture_asset(Device *dev, const char *path);
+void unload_texture_asset(Device *dev, const char *path);
+TextureID get_texture_resource(Device *dev, TextureAssetID id);
 
 };
 

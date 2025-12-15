@@ -122,7 +122,6 @@ struct ResourceEntry
 {
 	void *data;
 	const ResourceAllocFns *vtbl;
-
 	std::atomic_uint16_t refs;
 	std::atomic<ResourceStatus> status;
 	uint32_t type;
@@ -134,6 +133,7 @@ struct ResourceTableCreateInfo
 {
 	const char *resource_path;
 };
+
 struct ResourceTable
 {
 	std::shared_mutex mut;

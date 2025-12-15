@@ -11,34 +11,61 @@ MAKE_HANDLE(ComputePipeline);
 MAKE_HANDLE(DescriptorSet);
 MAKE_HANDLE(DescriptorLayout);
 MAKE_HANDLE(Shader);
+MAKE_HANDLE(Recorder);
+MAKE_HANDLE(Sync);
+
+enum ShaderStage
+{
+	STAGE_VERTEX,
+	STAGE_FRAGMENT,
+	STAGE_COMPUTE,
+	STAGE_MAX_ENUM,
+};
+
+enum Usage
+{
+    USAGE_UNDEFINED,
+    USAGE_TRANSFER_SRC,
+    USAGE_TRANSFER_DST,
+    USAGE_SAMPLED_GRAPHICS,
+    USAGE_COLOR_ATTACHMENT,
+    USAGE_DEPTH_ATTACHMENT,
+    USAGE_STORAGE_READ_COMPUTE,
+    USAGE_STORAGE_RW_COMPUTE,
+    USAGE_MAX_ENUM,
+};
 
 struct DescriptorSlot
 {
-	uint16_t set;
-	uint16_t id;
+	uint32_t set;
+	uint32_t id;
 };
 
 ShaderID load_shader(Device *dev, const char *path);
+void unload_shader(Device *dev, ShaderID id);
 
 GraphicsPipelineID load_graphics_pipeline(Device *dev, const char *path);
+void unload_graphics_pipeline(Device *dev, GraphicsPipelineID pipe);
+
 ComputePipelineID load_compute_pipeline(Device *dev, const char *path);
+void unload_compute_pipeline(Device *dev, ComputePipelineID pipe);
 
 DescriptorLayoutID get_graphics_pipeline_layout(
 	Device *Dev, GraphicsPipelineID pipe);
 DescriptorLayoutID get_compute_pipeline_layout(
 	Device *Dev, ComputePipelineID pipe);
 
-DescriptorSlot find_descriptor_slot(DescriptorLayoutID layout, const char *name);
+DescriptorSlot find_descriptor(DescriptorLayoutID layout, const char *name);
 
 DescriptorSetID create_descriptor_set(
 	Device *dev, 
 	DescriptorLayoutID layout,
-	uint16_t index
+	uint16_t index = 0
 );
 
 void destroy_descriptor_set(
 	Device *dev, 
-	DescriptorLayoutID layout 
+	DescriptorSetID set 
 );
 
 void descriptor_set_bind_buffer(
@@ -50,72 +77,49 @@ void descriptor_set_bind_buffer(
 	size_t size
 ); 
 
-void descriptor_set_bind_texture(
+void bind_set_texture(
 	Device *dev, 
 	DescriptorSetID set, 
 	DescriptorSlot slot, 
 	TextureID tex 
 ); 
 
-void bind_descriptor_set(Device *dev, DescriptorSetID set_id);
+// command recording
 
+enum CommandMode {
+	MODE_PRIMARY,
+	MODE_SECONDARY
 };
 
-static inline void bigtest()
-{
-	ev2::Device *dev = ev2::create_device("./");
+RecorderID begin_commands(Device * dev, CommandMode mode = MODE_PRIMARY);
+SyncID end_commands(RecorderID recorder);
 
-	ev2::GraphicsPipelineID gfx_pipe = ev2::load_graphics_pipeline(dev, "screen_quad");
+void finish(SyncID);
 
-	ev2::ImageID image = ev2::load_image(dev, "images/saro.jpg");
+void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id);
 
-	uint32_t w = 1024, h = 1024;
+void cmd_dispatch(
+	RecorderID rec,
+	ComputePipelineID pipe, 
+	uint32_t countx, 
+	uint32_t county, 
+	uint32_t countz
+);
 
-	ev2::ImageID swap_img[2] {
-		ev2::create_image(dev, w, h, 1, ev2::IMAGE_FORMAT_RGBA8),
-		ev2::create_image(dev, w, h, 1, ev2::IMAGE_FORMAT_RGBA8),
-	};
-	ev2::TextureID swap_tex[2] {
-		ev2::create_texture(dev, swap_img[0],ev2::FILTER_BILINEAR),
-		ev2::create_texture(dev, swap_img[1],ev2::FILTER_BILINEAR),
-	};
+void cmd_use_buffer(
+	RecorderID rec,
+	BufferID buf,
+	Usage usage
+);
 
-	ev2::TextureID tex = ev2::create_texture(dev, image, ev2::FILTER_BILINEAR);
+void cmd_use_texture(
+	RecorderID rec,
+	TextureID tex,
+	Usage usage
+);
 
-	ev2::DescriptorLayoutID gfx_layout = 
-		ev2::get_graphics_pipeline_layout(dev, gfx_pipe);
+void cmd_execute(RecorderID rec, SyncID sync);
 
-	ev2::DescriptorSetID gfx_set = ev2::create_descriptor_set(dev, gfx_layout, 2);
-
-	ev2::DescriptorSlot tex_slot = ev2::find_descriptor_slot(gfx_layout, "u_tex");
-	ev2::DescriptorSlot ubo_slot = ev2::find_descriptor_slot(gfx_layout, "ubo");
-
-	// Compute pipelines
-	
-	ev2::ComputePipelineID diffusion = ev2::load_compute_pipeline(dev, "diffusion");
-	ev2::DescriptorLayoutID diffusion_layout = 
-		ev2::get_compute_pipeline_layout(dev, diffusion);
-
-	ev2::DescriptorSlot img_in_slot = ev2::find_descriptor_slot(diffusion_layout, "img_in");
-	ev2::DescriptorSlot img_out_slot = ev2::find_descriptor_slot(diffusion_layout, "img_out");
-
-	ev2::DescriptorSetID diffusion_set = ev2::create_descriptor_set(dev, diffusion_layout, 0);
-
-	int ctr = 0;
-
-	while (1) {
-		int curr = ctr;
-		ctr = (ctr + 1) & 0x1;
-		int next = ctr;
-
-		ev2::descriptor_set_bind_texture(dev, diffusion_set, img_in_slot, swap_tex[curr]);
-		ev2::descriptor_set_bind_texture(dev, diffusion_set, img_in_slot, swap_tex[next]);
-
-		ev2::bind_descriptor_set(dev, diffusion_set);
-
-		ev2::descriptor_set_bind_texture(dev, gfx_set, tex_slot, swap_tex[curr]);
-		ev2::bind_descriptor_set(dev, gfx_set);
-	}
-}
+};
 
 #endif //EV2_PIPELINE_H
