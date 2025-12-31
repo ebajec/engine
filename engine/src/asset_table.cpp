@@ -201,7 +201,7 @@ ev2::Result AssetTable::reload(AssetID id)
 
 	std::string path = get_system_path(ent->path);
 
-	ev2::Result res = ent->vtbl->reload(dev, ent->usr, path.c_str());
+	ev2::Result res = ent->vtbl->reload(dev, &ent->usr, path.c_str());
 
 	if (res == ev2::SUCCESS) {
 		log_info("Reloaded asset %s", ent->path);

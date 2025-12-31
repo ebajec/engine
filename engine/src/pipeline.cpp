@@ -289,7 +289,7 @@ void gl_shader_destroy(ev2::Device *dev, void *usr)
 	delete shader;
 }
 
-ev2::Result gl_shader_reload(ev2::Device *dev, void *usr, const char *path)
+ev2::Result gl_shader_reload(ev2::Device *dev, void **usr, const char *path)
 {
 	ev2::Shader new_shader{};
 
@@ -298,7 +298,7 @@ ev2::Result gl_shader_reload(ev2::Device *dev, void *usr, const char *path)
 	if (res != ev2::SUCCESS)
 		return res;
 	
-	ev2::Shader *shader = static_cast<ev2::Shader*>(usr);
+	ev2::Shader *shader = static_cast<ev2::Shader*>(*usr);
 
 	if (shader->id)
 		glDeleteShader(shader->id);
@@ -456,7 +456,7 @@ static void gl_gfx_pipeline_destroy(ev2::Device *dev, void* usr)
 	delete pipeline;
 }
 
-static ev2::Result gl_gfx_pipeline_reload(ev2::Device *dev, void* usr, const char *path)
+static ev2::Result gl_gfx_pipeline_reload(ev2::Device *dev, void** usr, const char *path)
 {
 	ev2::GraphicsPipeline new_pipeline{};
 	ev2::Result res = gl_gfx_pipeline_create(dev, &new_pipeline, path);
@@ -464,7 +464,7 @@ static ev2::Result gl_gfx_pipeline_reload(ev2::Device *dev, void* usr, const cha
 	if (res != ev2::SUCCESS)
 		return res;
 
-	ev2::GraphicsPipeline *pipeline = static_cast<ev2::GraphicsPipeline*>(usr);
+	ev2::GraphicsPipeline *pipeline = static_cast<ev2::GraphicsPipeline*>(*usr);
 
 	if (pipeline->program)
 		glDeleteProgram(pipeline->program);
@@ -528,17 +528,16 @@ static void gl_compute_pipeline_destroy(ev2::Device *dev, void* usr)
 	delete pipeline;
 }
 
-static ev2::Result gl_compute_pipeline_reload(ev2::Device *dev, void* usr, const char *path)
+static ev2::Result gl_compute_pipeline_reload(ev2::Device *dev, void** usr, const char *path)
 {
 	ev2::ComputePipeline new_pipeline{};
-
-	ev2::ComputePipeline *pipeline = static_cast<ev2::ComputePipeline*>(usr);
 
 	ev2::Result res = gl_compute_pipeline_create(dev, &new_pipeline, path);
 
 	if (res != ev2::SUCCESS)
 		return res;
 	
+	ev2::ComputePipeline *pipeline = static_cast<ev2::ComputePipeline*>(*usr);
 	*pipeline = std::move(new_pipeline);
 	return res;
 }
@@ -803,7 +802,7 @@ SyncID end_commands(RecorderID recorder)
 	return EV2_NULL_HANDLE(Sync);
 }
 
-void finish(SyncID)
+void submit(SyncID)
 {
 }
 
@@ -947,7 +946,7 @@ static ev2::DescriptorSetID initialize_material(
 		for (size_t i = 0; i < info->bindings.size(); ++i) {
 			const Binding *bind = &info->bindings[i];
 
-			ev2::TextureAssetID texID = bind->path.empty() ? 
+			ev2::ImageAssetID texID = bind->path.empty() ? 
 				EV2_NULL_HANDLE : ev2::load_texture_asset(dev, bind->path.c_str());
 
 			if (!bind->path.empty() && texID == RESOURCE_HANDLE_NULL) {

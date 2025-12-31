@@ -9,7 +9,8 @@ namespace ev2 {
 MAKE_HANDLE(Buffer);
 MAKE_HANDLE(Image);
 MAKE_HANDLE(Texture);
-MAKE_HANDLE(TextureAsset);
+
+MAKE_HANDLE(ImageAsset);
 
 enum ImageFormat
 {
@@ -51,9 +52,9 @@ void destroy_texture(Device *dev, TextureID tex);
 //------------------------------------------------------------------------------
 // Image assets
 
-TextureAssetID load_texture_asset(Device *dev, const char *path);
+ImageAssetID load_image_asset(Device *dev, const char *path);
 void unload_texture_asset(Device *dev, const char *path);
-TextureID get_texture_resource(Device *dev, TextureAssetID id);
+ImageID get_image_resource(Device *dev, ImageAssetID id);
 
 };
 

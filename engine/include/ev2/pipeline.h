@@ -94,7 +94,7 @@ enum CommandMode {
 RecorderID begin_commands(Device * dev, CommandMode mode = MODE_PRIMARY);
 SyncID end_commands(RecorderID recorder);
 
-void finish(SyncID);
+void submit(SyncID);
 
 void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id);
 

@@ -1,5 +1,3 @@
-#include "app.h"
-
 #include <engine/utils/log.h>
 
 #include <ev2/device.h>
@@ -8,6 +6,9 @@
 #include <GLFW/glfw3.h>
 
 #include <cstdio>
+#include <cstdlib>
+
+extern int init_gl_basic(GLFWwindow *window);
 
 int main(int argc, char *argv[])
 {
@@ -31,7 +32,7 @@ int main(int argc, char *argv[])
 
 	ev2::GraphicsPipelineID screen_quad = ev2::load_graphics_pipeline(dev, "pipelines/screen_quad.yaml");
 
-	ev2::TextureAssetID saro_tex = ev2::load_texture_asset(dev, "images/saro.jpg");
+	ev2::ImageAssetID saro_tex = ev2::load_image_asset(dev, "image/saro.jpg");
 
 	uint32_t w = 1024, h = 1024;
 
@@ -53,7 +54,6 @@ int main(int argc, char *argv[])
 	ev2::DescriptorSlot ubo_slot = ev2::find_descriptor(screen_quad_layout, "ubo");
 
 	// Compute pipelines
-	
 	ev2::ComputePipelineID diffusion = ev2::load_compute_pipeline(dev, "shader/diffusion.comp.spv");
 
 	if (!diffusion.id) {
@@ -68,6 +68,11 @@ int main(int argc, char *argv[])
 	ev2::DescriptorSlot img_out_slot = ev2::find_descriptor(diffusion_layout, "img_out");
 
 	ev2::DescriptorSetID diffusion_set = ev2::create_descriptor_set(dev, diffusion_layout);
+
+	float view[4][4] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+	float proj[4][4] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+	ev2::ViewID camera = ev2::create_view(dev, view[0], proj[0]);
 
 	int ctr = 0;
 
@@ -84,58 +89,27 @@ int main(int argc, char *argv[])
 		ctr = (ctr + 1) & 0x1;
 		int next = ctr;
 
-		ev2::FrameID frame = ev2::begin_frame(dev);
+		ev2::begin_frame(dev);
 
 		ev2::bind_set_texture(dev, diffusion_set, img_in_slot, swap_tex[curr]);
 		ev2::bind_set_texture(dev, diffusion_set, img_out_slot, swap_tex[next]);
 
 		ev2::bind_set_texture(dev, screen_quad_set, tex_slot, swap_tex[curr]);
 
-#define OPTION 2
-
-#if OPTION != 3
-
-#if OPTION == 2
-		ev2::RecorderID rec = ev2::begin_commands(dev, ev2::MODE_SECONDARY);
-#else 
 		ev2::RecorderID rec = ev2::begin_commands(dev);
-#endif
-
 		ev2::cmd_bind_descriptor_set(rec, diffusion_set);
 		ev2::cmd_dispatch(rec, diffusion, groups_x, groups_y, 1);
 		ev2::cmd_use_texture(rec, swap_tex[curr], ev2::USAGE_SAMPLED_GRAPHICS);
-
 		ev2::SyncID cmd_sync = ev2::end_commands(rec);
-#endif
 
-		// Option 1 : Finish these commands here (Bad in this case)
-#if OPTION == 1
-		ev2::finish(cmd_sync);
-#endif
-
-		ev2::PassCtx pass = ev2::begin_pass(dev, frame);
-
-		// Option 2 : Execute compute as secondary commands
-#if OPTION == 2
-		ev2::cmd_execute(pass.rec, cmd_sync);
-#endif
-
-		// Option 3 : Record within pass
-#if OPTION == 3
-		ev2::cmd_bind_descriptor_set(pass.rec, diffusion_set);
-		ev2::cmd_dispatch(pass.rec, diffusion, groups_x, groups_y, 1);
-		ev2::cmd_barrier(pass.rec, swap_tex[curr], ev2::USAGE_SAMPLED_GRAPHICS, ev2::STAGE_FRAGMENT);
-#endif
-
+		ev2::PassCtx pass = ev2::begin_pass(dev, ev2::RenderTargetID{0}, camera);
 		ev2::cmd_bind_descriptor_set(pass.rec, screen_quad_set);
-
-		// Don't need array bound since it uses vertex id
 		ev2::cmd_draw(pass.rec, ev2::MODE_TRIANGLES, 6);
-
 		ev2::SyncID pass_sync = ev2::end_pass(dev, pass);
-		ev2::finish(pass_sync);
 
-		ev2::end_frame(dev, frame);
+		ev2::submit(pass_sync);
+
+		ev2::end_frame(dev);
 	}
 
 	ev2::destroy_descriptor_set(dev, diffusion_set);

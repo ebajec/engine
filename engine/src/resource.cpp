@@ -1,34 +1,6 @@
 #include "device_impl.h"
 #include "resource_impl.h"
 
-static inline void img_format_to_gl(ev2::ImageFormat fmt, GLenum *format, GLenum *type)
-{
-	switch (fmt) {
-		case ev2::IMAGE_FORMAT_RGBA8:
-			*format = GL_RGBA;
-			*type = GL_UNSIGNED_BYTE;
-		break;
-		case ev2::IMAGE_FORMAT_32F:
-			*format = GL_RED;
-			*type = GL_FLOAT;
-		break;
-	}
-	return;
-}
-
-static inline GLenum img_format_to_gl_internal(ev2::ImageFormat fmt)
-{
-	switch (fmt) {
-		case ev2::IMAGE_FORMAT_RGBA8:
-			return GL_RGBA8;
-		break;
-		case ev2::IMAGE_FORMAT_32F:
-			return GL_R32F;
-		break;
-	}
-	return GL_RGBA8;
-}
-
 namespace ev2 {
 
 BufferID create_buffer(Device *dev, size_t size, BufferFlags flags)
@@ -77,11 +49,11 @@ ImageID create_image(Device *dev, uint32_t w, uint32_t h, uint32_t d, ImageForma
 	img.fmt = fmt;
 
 	GLenum format, type;
-	img_format_to_gl(fmt, &format, &type);
+	image_format_to_gl(fmt, &format, &type);
 
-	GLenum internal_format = img_format_to_gl_internal(fmt);
+	GLenum internal_format = image_format_to_gl_internal(fmt);
 
-	if (!d) {
+	if (d <= 1) {
 		glCreateTextures(GL_TEXTURE_2D, 1, &img.id);
 		glTextureStorage2D(img.id, 1, internal_format, w, h);
 	} else {

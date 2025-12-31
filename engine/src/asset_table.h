@@ -29,7 +29,7 @@ enum AssetStatus
 
 struct AssetVTable
 {
-	ev2::Result (*reload)(ev2::Device *dev, void* usr, const char *path);
+	ev2::Result (*reload)(ev2::Device *dev, void** usr, const char *path);
 	void (*destroy)(ev2::Device *dev, void* usr);
 };
 
