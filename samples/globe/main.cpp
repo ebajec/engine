@@ -3,7 +3,6 @@
 
 #include "engine/resource/resource_table.h"
 #include "engine/resource/material_loader.h"
-#include "engine/resource/shader_loader.h"
 #include "engine/resource/texture_loader.h"
 #include "engine/resource/model_loader.h"
 
@@ -57,6 +56,8 @@ void plot_frame_times(float delta)
 
 	avg = 0.99*avg + 0.01*delta;
 
+	ImGui::Begin("Stats");
+
 	if (ImPlot::BeginPlot("Frame times (ms)",ImVec2(200,200))) {
 		ImPlot::SetupAxesLimits(times[scroll], 
 		   times[scroll  ? scroll - 1 : samples - 1], 
@@ -65,6 +66,7 @@ void plot_frame_times(float delta)
 			deltas.data(), samples, ImPlotCond_Always, scroll);
 		ImPlot::EndPlot();
 	}
+	ImGui::End();
 }
 
 #ifdef __linux__
@@ -228,8 +230,8 @@ int main(int argc, char* argv[])
 
 		app->onFrameBeginCallback(window);
 
-		plot_frame_times(t1 - t0);
 		globe_imgui(globe.get());
+		plot_frame_times(t1 - t0);
 
 		t0 = t1;
 		t1 = glfwGetTime();

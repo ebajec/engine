@@ -35,7 +35,7 @@ int test_data_source_init(struct ds_context **p_ctx)
 	return 0;
 }
 
-static constexpr double TEST_AMP = 0.1;
+static constexpr double TEST_AMP = 0.06;
 static constexpr double TEST_FREQ = 160;
 //------------------------------------------------------------------------------
 // Test loader functions

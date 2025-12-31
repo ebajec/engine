@@ -27,6 +27,7 @@
 
 #include <vector>
 
+#include <numeric>
 #include <vector>
 #include <cstdint>
 #include <algorithm>
@@ -76,6 +77,42 @@ struct alignas(16) TileMetadata
 	uint32_t code_upper;
 };
 
+struct PoolAllocator
+{
+	std::vector<size_t> free_list;
+	std::unordered_map<uint64_t, size_t> map;
+
+	static PoolAllocator *create(size_t cap)
+	{
+		PoolAllocator *alloc = new PoolAllocator{};
+
+		alloc->free_list.resize(cap);
+		std::iota(alloc->free_list.begin(), alloc->free_list.end(), 0);
+
+		return alloc;
+	}
+	
+	size_t alloc(uint64_t key)
+	{
+		if (free_list.empty())
+			return UINT64_MAX;
+
+		size_t val = free_list.back();
+		free_list.pop_back();
+
+		map[key] = val;
+
+		return val;
+	}
+
+	void free(uint64_t key)
+	{
+		auto it = map.find(key);
+		free_list.push_back(it->second);
+		map.erase(it);
+	}
+};
+
 struct RenderData
 {
 	BufferID vbo;
@@ -98,18 +135,20 @@ struct Globe
 	GlobeStats stats;
 	DebugInfo dbg;
 
-	size_t loaded_count;
-	std::vector<TileCode> tiles;
+	std::vector<TileCode> selected_tiles;
+	std::vector<TileCode> prev_selected;
+
+	std::unique_ptr<PoolAllocator> tile_allocator;
 
 	RenderData render_data;
 
 	std::unique_ptr<GPUTileCache> gpu_cache;
-	std::unique_ptr<CPUTileCache> terrain;
+	std::unique_ptr<CPUTileCache> cpu_cache;
 };
 
 struct select_tiles_params
 {
-	const CPUTileCache * source;
+	const CPUTileCache * cpu_cache;
 	const DebugInfo *debug;
 
 	double cull_radius;
@@ -136,7 +175,7 @@ static void globe_draw_debug(Globe const *globe, RenderContext const & ctx)
 		globe->dbg.camera->render(ctx);
 }
 
-static aabb3_t tile_box(const CPUTileCache *source, TileCode code, 
+static aabb3_t tile_aabb(const CPUTileCache *source, TileCode code, 
 						float min, float max) 
 {
 	uint8_t face = code.face;
@@ -174,7 +213,7 @@ static aabb3_t tile_box(const CPUTileCache *source, TileCode code,
 	return box;
 }
 
-static obb_t tile_box2(const CPUTileCache *source, TileCode code, 
+static obb_t tile_obb(const CPUTileCache *source, TileCode code, 
 						float min, float max) 
 {
 	uint8_t face = code.face;
@@ -233,8 +272,8 @@ static inline int select_tiles_rec(
 
 	uint64_t u64 = tile_code_pack(code);
 
-	mmt_result_t mmt_res = mmt_minmax(params->source->mmt, u64);
-	obb_t box = tile_box2(params->source, code, mmt_res.min, mmt_res.max);
+	mmt_result_t mmt_res = mmt_minmax(params->cpu_cache->mmt, u64);
+	obb_t box = tile_obb(params->cpu_cache, code, mmt_res.min, mmt_res.max);
 
 	if (code.zoom > 1 && dot(box.T[2],params->origin) < 0)
 		return 0;
@@ -282,6 +321,8 @@ static inline int select_tiles_rec(
 	return status;
 }
 
+// @brief Select tiles within camera frustum based on loaded terrain
+// @note The resulting tiles are sorted by distance from the camera.
 static void select_tiles(
 	select_tiles_params& params,
 	std::vector<TileCode>& tiles
@@ -322,76 +363,6 @@ static aabb2_t sub_rect(TileCode parent, TileCode child)
 	return morton_u64_to_rect_f64(child.idx, (uint8_t)diff);
 }
 
-static void create_tile_verts(TileCode code, TileCode parent, GlobeVertex* out_verts)
-{
-	uint8_t f = code.face;
-
-	aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
-	aabb2_t rect_tex = parent == TILE_CODE_NONE ? 
-		aabb2_t{.min = glm::dvec2(0), .max = glm::dvec2(1)} : 
-		sub_rect(parent, code);
-
-	double factor = 1.0/(double)(TILE_VERT_WIDTH-1);
-
-	glm::dvec2 uv;
-
-	size_t idx = 0;
-	for (uint32_t i = 0; i < TILE_VERT_WIDTH; ++i) {
-		uv.x = (double)i*factor;
-		for (uint32_t j = 0; j < TILE_VERT_WIDTH; ++j) {
-			uv.y = (double)j*factor;
-
-			glm::dvec2 face_uv = glm::mix(rect.ll(),rect.ur(),uv);
-			glm::dvec3 p = cube_to_globe(f, face_uv);
-
-			GlobeVertex vert = {
-				.pos = glm::vec3(p),
-				.uv = glm::vec2(uv),
-				.normal = glm::vec3(p),
-			};
-
-			out_verts[idx++] = vert;
-		}
-	}
-}
-
-static std::vector<uint32_t> create_tile_indices()
-{
-	static const uint32_t n = TILE_VERT_WIDTH;
-	std::vector<uint32_t> indices;
-	for (uint32_t i = 0; i < n; ++i) {
-		for (uint32_t j = 0; j < n; ++j) {
-			uint32_t in = std::min(i + 1,n - 1);
-			uint32_t jn = std::min(j + 1,n - 1);
-
-			indices.push_back((n) * i  + j); 
-			indices.push_back((n) * in + j); 
-			indices.push_back((n) * in + jn); 
-
-			indices.push_back((n) * i  + j);
-			indices.push_back((n) * in + jn);
-			indices.push_back((n) * i  + jn);
-		}
-	}
-
-	return indices;
-}
-
-static void draw_cmds(DrawCommand * cmds, size_t count) 
-{
-	for (size_t i = 0; i < count; ++i) {
-		DrawCommand cmd = {
-			.count = 6*TILE_VERT_COUNT,
-			.instanceCount = 1, 
-			.firstIndex = 0,
-			.baseVertex = static_cast<int>(i * TILE_VERT_COUNT),
-			.baseInstance = 0
-		};
-
-		cmds[i] = cmd;
-	}
-}
-
 static GLuint globe_vao()
 {
 	GLuint vao;
@@ -414,6 +385,29 @@ static GLuint globe_vao()
 	glBindVertexArray(0);
 
 	return vao;
+}
+
+
+static std::vector<uint32_t> create_tile_indices()
+{
+	static const uint32_t n = TILE_VERT_WIDTH;
+	std::vector<uint32_t> indices;
+	for (uint32_t i = 0; i < n; ++i) {
+		for (uint32_t j = 0; j < n; ++j) {
+			uint32_t in = std::min(i + 1,n - 1);
+			uint32_t jn = std::min(j + 1,n - 1);
+
+			indices.push_back((n) * i  + j); 
+			indices.push_back((n) * in + j); 
+			indices.push_back((n) * in + jn); 
+
+			indices.push_back((n) * i  + j);
+			indices.push_back((n) * in + jn);
+			indices.push_back((n) * i  + jn);
+		}
+	}
+
+	return indices;
 }
 
 static LoadResult create_render_data(ResourceTable *rt, RenderData &data)
@@ -462,6 +456,127 @@ load_failed:
 	return result;
 }
 
+static void create_tile_verts(TileCode code, GlobeVertex* out_verts)
+{
+	uint8_t f = code.face;
+
+	aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
+	double factor = 1.0/(double)(TILE_VERT_WIDTH-1);
+
+	glm::dvec2 uv;
+
+	size_t idx = 0;
+	for (uint32_t i = 0; i < TILE_VERT_WIDTH; ++i) {
+		uv.x = (double)i*factor;
+		for (uint32_t j = 0; j < TILE_VERT_WIDTH; ++j) {
+			uv.y = (double)j*factor;
+
+			glm::dvec2 face_uv = glm::mix(rect.ll(),rect.ur(),uv);
+			glm::dvec3 p = cube_to_globe(f, face_uv);
+
+			GlobeVertex vert = {
+				.pos = glm::vec3(p),
+				.uv = glm::vec2(uv),
+				.normal = glm::vec3(p),
+			};
+
+			out_verts[idx++] = vert;
+		}
+	}
+}
+
+static void update_draw_cmds(Globe *globe) 
+{
+	size_t count = globe->selected_tiles.size();
+
+	//-----------------------------------------------------------------------------
+	// Indirect Draw Buffer
+	const GLBuffer* indirect = globe->rt->get<GLBuffer>(globe->render_data.indirect);
+
+	DrawCommand *cmds = (DrawCommand *)glMapNamedBuffer(indirect->id, GL_WRITE_ONLY);
+
+	for (size_t i = 0; i < count; ++i) {
+		uint64_t code = tile_code_pack(globe->selected_tiles[i]);
+		size_t slot = globe->tile_allocator->map[code];
+
+		DrawCommand cmd = {
+			.count = 6*TILE_VERT_COUNT,
+			.instanceCount = 1, 
+			.firstIndex = 0,
+			.baseVertex = static_cast<int>(slot * TILE_VERT_COUNT),
+			.baseInstance = 0
+		};
+
+		cmds[i] = cmd;
+	}
+
+	glUnmapNamedBuffer(indirect->id);
+}
+
+static void update_vbo(Globe *globe)
+{
+	auto start = std::chrono::high_resolution_clock::now();
+
+	std::vector<uint64_t> curr (globe->selected_tiles.size());
+	for (size_t i = 0; i < curr.size(); ++i) {
+		curr[i] = tile_code_pack(globe->selected_tiles[i]);
+	}
+	std::vector<uint64_t> prev (globe->prev_selected.size());
+	for (size_t i = 0; i < prev.size(); ++i) {
+		prev[i] = tile_code_pack(globe->prev_selected[i]);
+	}
+
+	std::sort(curr.begin(), curr.end());
+	std::sort(prev.begin(), prev.end());
+
+	std::vector<uint64_t> diff (std::max(prev.size(), curr.size()));
+
+	// stale tiles (prev / current)
+	auto iter = set_difference(
+		prev.begin(), prev.end(), 
+		curr.begin(), curr.end(), 
+		diff.begin()
+	);
+
+	for (auto it = diff.begin(); it < iter; ++it) {
+		globe->tile_allocator->free(*it);
+	}
+
+	// newly added (current / prev)
+	iter = set_difference(
+		curr.begin(), curr.end(), 
+		prev.begin(), prev.end(), 
+		diff.begin()
+	);
+	
+	size_t new_count = iter - diff.begin();
+	std::vector<size_t> slots (new_count);
+
+	for (size_t i = 0; i < new_count; ++i) {
+		slots[i] = globe->tile_allocator->alloc(diff[i]);
+	}
+
+	auto end = std::chrono::high_resolution_clock::now();
+
+	printf("%ld new (%f ms)\n", iter - diff.begin(), (double)(end - start).count()/1e6);
+
+	const std::vector<TileCode>& tiles = globe->selected_tiles;
+	uint32_t count = (uint32_t)tiles.size();
+
+	const GLBuffer *buf = globe->rt->get<GLBuffer>(globe->render_data.vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, buf->id);
+
+	GlobeVertex *ptr = (GlobeVertex*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+
+	for (size_t i = 0; i < new_count; ++i) {
+		GlobeVertex *dst = ptr + slots[i] * TILE_VERT_COUNT;
+		TileCode code = tile_code_unpack(diff[i]);
+		create_tile_verts(code, dst);
+	}
+
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+}
+
 static LoadResult update_render_data(
 	Globe *globe,
 	glm::dvec3 origin,
@@ -471,53 +586,15 @@ static LoadResult update_render_data(
 {
 	ResourceTable *rt = globe->rt;
 
-	const std::vector<TileCode>& tiles = globe->tiles;
-
-	uint32_t count = std::min((uint32_t)tiles.size(),(uint32_t)MAX_TILES);
-	if (tiles.size() > MAX_TILES) {
-		log_warn("Selected tile count is large (%ld)! Limiting to %d", 
-			tiles.size(), MAX_TILES);
-	}
+	const std::vector<TileCode>& tiles = globe->selected_tiles;
+	uint32_t count = (uint32_t)tiles.size();
 
 	//-----------------------------------------------------------------------------
 	// vbo
 	
-	const GLBuffer *buf = rt->get<GLBuffer>(globe->render_data.vbo);
+	update_vbo(globe);
 
-	glBindBuffer(GL_ARRAY_BUFFER, buf->id);
-	void *ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-
-	static constexpr uint32_t BATCH_SIZE = 1024/TILE_VERT_WIDTH;
-
-	uint32_t batch_count = count ? 1 + (count - 1)/BATCH_SIZE : 0;
-
-	std::atomic_uint32_t ctr = batch_count;
-
-	for (uint32_t b = 0; b < batch_count; ++b) {
-		size_t b_start = b * BATCH_SIZE;	
-
-		g_schedule_task([=,&ctr](){
-			GlobeVertex * dst = (GlobeVertex*)ptr + b_start * TILE_VERT_COUNT;
-			uint32_t b_size = b_start + BATCH_SIZE > count ? 
-				count % BATCH_SIZE : BATCH_SIZE;
-
-			for (uint32_t j = b_start; j < b_start + b_size; ++j) {
-
-				TileCode code = tiles[j];
-				TileCode parent = parents[j];
-
-				create_tile_verts(code, parent, dst);
-
-				dst += TILE_VERT_COUNT;
-			}
-			ctr.fetch_sub(1, std::memory_order_release);	
-		});
-	}
-
-	while (ctr)
-		std::this_thread::yield();
-
-	glUnmapBuffer(GL_ARRAY_BUFFER);
+	void *ptr;
 
 	//-----------------------------------------------------------------------------
 	// tex indices
@@ -533,15 +610,18 @@ static LoadResult update_render_data(
 		uint64_t code = tile_code_pack(parents[i]);
 		TileGPUIndex idx = textures[i];
 
-		TileCode tile = tiles[i];
+		TileCode child = tiles[i];
 		TileCode parent = parents[i];
 
-		aabb2_t rect = morton_u64_to_rect_f64(tile.idx,tile.zoom);
+		aabb2_t rect = morton_u64_to_rect_f64(child.idx,child.zoom);
 		aabb2_t rect_tex = parent == TILE_CODE_NONE ? 
 			aabb2_t{.min = glm::dvec2(0), .max = glm::dvec2(1)} : 
-			sub_rect(parent, tile);
+			sub_rect(parent, child);
 
-		metadata[i] = {
+		// TODO : Fix TileCode struct fiasco
+		size_t slot = globe->tile_allocator->map[tile_code_pack(child)];
+
+		metadata[slot] = {
 			.coord = glm::vec4(0),
 			.tex_uv = {rect_tex.min, rect_tex.max},
 			.globe_uv = {rect.min, rect.max},
@@ -553,13 +633,7 @@ static LoadResult update_render_data(
 
 	glUnmapBuffer(GL_ARRAY_BUFFER);
 
-	//-----------------------------------------------------------------------------
-	// Indirect Draw Buffer
-	 const GLBuffer* indirect = rt->get<GLBuffer>(globe->render_data.indirect);
-
-	ptr = glMapNamedBuffer(indirect->id, GL_WRITE_ONLY);
-	draw_cmds(static_cast<DrawCommand*>(ptr), count);
-	glUnmapNamedBuffer(indirect->id);
+	update_draw_cmds(globe);
 
 	return RT_OK;
 };
@@ -629,11 +703,14 @@ Globe *globe_create(ResourceTable *rt)
 	if (result != RT_OK)
 		return nullptr;
 
-	globe->terrain.reset(
+	globe->cpu_cache.reset(
 		CPUTileCache::create()
 	);
 	globe->gpu_cache.reset(
 		GPUTileCache::create()
+	);
+	globe->tile_allocator.reset(
+		PoolAllocator::create(MAX_TILES)
 	);
 	globe_init_debug(globe.get());
 
@@ -650,7 +727,7 @@ void globe_imgui(Globe *globe)
 	ImGui::Begin("Globe debug");	
 
 	ImGui::SliderInt("res", &globe->dbg.zoom, 0, 8, "%d");
-	ImGui::SliderInt("Max zoom", const_cast<int*>(&globe->terrain->m_debug_zoom), 0, 24);
+	ImGui::SliderInt("Max zoom", const_cast<int*>(&globe->cpu_cache->m_debug_zoom), 0, 24);
 
 	if (ImGui::Button(globe->dbg.enable_boxes ? 
 		"Disable globe tile boxes##globe tile boxes" : 
@@ -675,7 +752,7 @@ int globe_add_source(Globe *globe, CPUTileCache *source)
 
 float globe_sample_elevation(const Globe *globe, const glm::dvec3& p)
 {
-	return globe->terrain->sample_elevation_at(p);
+	return globe->cpu_cache->sample_elevation_at(p);
 }
 
 LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
@@ -683,7 +760,7 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 	const Camera * p_camera = info->camera; 
 
 	ResourceTable *rt = globe->rt;
-	CPUTileCache *source = globe->terrain.get();
+	CPUTileCache *cpu_cache = globe->cpu_cache.get();
 
 	if (globe->dbg.fix_camera)
 		p_camera = globe->dbg.camera->get_camera();
@@ -691,7 +768,7 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 		globe->dbg.camera->set_camera(info->camera);
 	}
 
-	globe->tiles.clear();
+	globe->selected_tiles.clear();
 
 	//----------------------------------------------------------------------------
 	// Adjust the test frustum to only go to the horizon
@@ -708,8 +785,8 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 	// Adjust culling frustum to only extend enough so that worst-case
 	// terrain is visible
 	if (true) {
-		double h_max = (double)source->max();
-		double h_min = (double)source->min();
+		double h_max = (double)cpu_cache->max();
+		double h_min = (double)cpu_cache->min();
 
 		double r_min = 1.0 + h_min;
 		double r_max = 1.0 + h_max;
@@ -726,7 +803,7 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 	// Process visible tiles
 	
 	select_tiles_params params = {
-		.source = source,
+		.cpu_cache = cpu_cache,
 		.debug = &globe->dbg,
 		.cull_radius = r_cull,
 		.frust = frust,
@@ -735,15 +812,15 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 		.res = resolution,
 	};
 
-	select_tiles(params, globe->tiles);
+	select_tiles(params, globe->selected_tiles);
 
-	size_t count = std::min(globe->tiles.size(),(size_t)MAX_TILES);
+	size_t count = std::min(globe->selected_tiles.size(),(size_t)MAX_TILES);
 
-	globe->tiles.resize(count);
+	globe->selected_tiles.resize(count);
 
 	std::vector<TileCode> loaded_tiles (count, TILE_CODE_NONE);
 
-	std::vector<TileCode> tmp_tiles = globe->tiles;
+	std::vector<TileCode> tmp_tiles = globe->selected_tiles;
 
 	for (size_t i = 0; i < tmp_tiles.size(); ++i) {
 		if (tmp_tiles[i].zoom > 2) {
@@ -751,20 +828,19 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 			tmp_tiles[i].zoom -= 2;
 		}
 	}
-
-	source->load_tiles(count, tmp_tiles.data(), loaded_tiles.data());
+	cpu_cache->load_tiles(count, tmp_tiles.data(), loaded_tiles.data());
 
 	std::vector<TileGPUIndex> tile_textures;
 
 	size_t new_count = globe->gpu_cache->update(
-		source, loaded_tiles, tile_textures);
+		cpu_cache, loaded_tiles, tile_textures);
 
 	LoadResult result = update_render_data(globe,
 		pos, loaded_tiles, tile_textures);
 	
 	globe->stats.new_loads = new_count;
 	globe->stats.loaded = count;
-	globe->loaded_count = count;
+	globe->prev_selected = globe->selected_tiles;
 
 	if (globe->dbg.enable_boxes)
 		globe->dbg.boxes->update();
@@ -801,7 +877,7 @@ void globe_draw(const Globe *globe, const RenderContext& ctx)
 		GL_TRIANGLES, 
 		GL_UNSIGNED_INT, 
 		nullptr, 
-		(GLsizei)globe->loaded_count, 
+		(GLsizei)globe->selected_tiles.size(), 
 		sizeof(DrawCommand)	
 	);
 

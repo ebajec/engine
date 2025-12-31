@@ -131,7 +131,7 @@ void main()
 
 		vec4 ambient = mix(color,vec4(0,0,0.05,0),0.0); 
 
-		color = clamp(mix(diffuse,ambient,0.2),
+		color = clamp(mix(diffuse,ambient,0.5),
 				vec4(0),color) 
 				+ spec*vec4(1)
 		;
@@ -156,7 +156,7 @@ void main()
 		color = vec4(vec3(quant/float(levels)),color.a);
 	}
 
-	FragColor = mix(color,vec4(0,in_uv,1),0.0);
+	FragColor = mix(color,vec4(0,in_uv,1),0.1);
 	//FragColor = vec4(v.xyz,1);
 	//FragColor = mix(FragColor,FACE_COLORS[cube_face(in_pos)],0.0);
 

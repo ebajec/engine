@@ -39,11 +39,11 @@ static inline double smooth_max_zero(double x)
 static double weierstrass(double x, double y, float phase = 0)
 {
 	static constexpr double 
-	L = 1.0, 
-	D = 2.1,
+	L = 1.2, 
+	D = 2.3,
 	G = 4, 
 	gamma =	2.4;
-	static constexpr size_t M = 20, N = 8;
+	static constexpr size_t M = 20, N = 9;
 
 	double A = L*pow(G/D,D-2.0)*sqrt(log(gamma)/(double)M); 
 
