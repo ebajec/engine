@@ -80,7 +80,7 @@ union frustum_t
 	plane_t planes[6];
 };
 
-struct alignas(64) obb_t
+struct  obb_t
 {
 	glm::dmat3 T; // transform
 	glm::dvec3 O; // center

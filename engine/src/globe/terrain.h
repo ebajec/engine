@@ -32,7 +32,7 @@ struct CPUTileCache
 	static CPUTileCache *create();
 	~CPUTileCache();
 
-	void load_tiles(size_t count, const TileCode *tiles, TileCode *out);
+	void load_tiles(size_t count, const tile_code_t *tiles, tile_code_t *out);
 
 	float sample_elevation_at(glm::dvec2 uv, uint8_t f) const;
 	float sample_elevation_at(glm::dvec3 p) const;

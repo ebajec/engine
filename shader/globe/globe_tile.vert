@@ -18,6 +18,7 @@ layout (location = 0) out vec3 out_pos;
 layout (location = 1) out vec2 out_uv;
 layout (location = 2) out vec3 out_normal;
 layout (location = 3) out vec4 out_color;
+layout (location = 4) out float out_height;
 layout (location = 7) flat out tex_idx_t out_tex_idx;
 
 const float GLOBE_SCALE = 0.00138f;
@@ -212,6 +213,7 @@ void main()
 
 	out_color = palette(d); 
 	out_tex_idx = tex_idx;
+	out_height = f;
 
 	gl_Position = (pv*wpos);
 }

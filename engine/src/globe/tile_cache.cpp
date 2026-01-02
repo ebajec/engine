@@ -200,14 +200,14 @@ tc_error tc_load(
 	tc_post_load_fn post_load,
 
 	size_t count, 
-	TileCode const *tiles,
-	TileCode *out
+	tile_code_t const *tiles,
+	tile_code_t *out
 )
 {
 	std::vector<TileCode> available (count);
 
 	for (size_t i = 0; i < count; ++i) {
-		uint64_t code = tile_code_pack(tiles[i]);
+		uint64_t code = tiles[i];
 		TileCode found = tile_code_unpack(ds->vtbl.find(ds->usr, code));
 		available[i] = found;
 	}
@@ -239,7 +239,7 @@ tc_error tc_load(
 
 		TileCode code = res.is_ready ? ideal : find_best(tc, ideal); 
 
-		out[i] = code;
+		out[i] = tile_code_pack(code);
 	}
 
 	const bool has_post_load = post_load;
@@ -285,9 +285,9 @@ tc_error tc_load(
 	return TC_OK;
 }
 
-tc_error tc_acquire(const tc_cache *tc, TileCode code, tc_ref *p_ref)
+tc_error tc_acquire(const tc_cache *tc, tile_code_t id, tc_ref *p_ref)
 {
-	uint64_t id = tile_code_pack(code);
+	TileCode code = tile_code_unpack(id);
 
 	auto it = tc->alc->map.find(id);
 	if (it == tc->alc->map.end()) {

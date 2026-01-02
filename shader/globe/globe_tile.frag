@@ -13,6 +13,7 @@ layout (location = 0) in vec3 in_pos;
 layout (location = 1) in vec2 in_uv;
 layout (location = 2) in vec3 in_normal;
 layout (location = 3) in vec4 in_color;
+layout (location = 4) in float in_height;
 layout (location = 7) flat in tex_idx_t in_tex_idx;
 
 layout (location = 0) out vec4 FragColor;
@@ -64,7 +65,7 @@ void main()
 	if (!valid) 
 		discard;
 
-	float val = valid ? texture(u_tex_arrays[in_tex_idx.page], uvw).r : 0;
+	float val = in_height;//valid ? texture(u_tex_arrays[in_tex_idx.page], uvw).r : 0;
 
 	float s = 1.0 + 10*val; 
 
@@ -156,9 +157,9 @@ void main()
 		color = vec4(vec3(quant/float(levels)),color.a);
 	}
 
-	FragColor = mix(color,vec4(0,in_uv,1),0.1);
+	FragColor = mix(color,vec4(0,in_uv,1),0.0);
 	//FragColor = vec4(v.xyz,1);
-	//FragColor = mix(FragColor,FACE_COLORS[cube_face(in_pos)],0.0);
+	FragColor = mix(FragColor,FACE_COLORS[cube_face(in_pos)],0.0);
 
 	//vec2 diff = 2.0*in_uv - vec2(1.0);
 	//FragColor = FragColor * dot(diff,diff);

@@ -77,39 +77,131 @@ struct alignas(16) TileMetadata
 	uint32_t code_upper;
 };
 
-struct PoolAllocator
-{
-	std::vector<size_t> free_list;
-	std::unordered_map<uint64_t, size_t> map;
 
-	static PoolAllocator *create(size_t cap)
+template<
+	typename ArgIt, 
+	typename OutIt, 
+	typename OpEqual,
+	typename OpUnequal
+>
+OutIt set_difference2(ArgIt a_start, ArgIt a_end, ArgIt b_start, ArgIt b_end, OutIt out,
+					  OpEqual op_equal, OpUnequal op_unequal)
+{
+	ArgIt a_begin = a_start;
+
+	for (; a_start < a_end; ++a_start) {
+		while (b_start < b_end && *b_start < *a_start)
+			++b_start;
+
+		if (b_start >= b_end || *a_start < *b_start) {
+			op_unequal(*a_start);
+			*(out++) = *a_start;
+		} else { // when a[i] == b[i]
+			op_equal(*a_start, *b_start);
+		}
+	}
+	return out;
+}
+
+struct TileAllocator
+{
+	struct kv_t {
+		uint64_t code;
+		size_t idx;
+
+		bool operator == (const kv_t &other) const {
+			return code == other.code;
+		}
+		bool operator < (const kv_t &other) const {
+			return code < other.code;
+		}
+	};
+
+	std::vector<size_t> free_list;
+
+	std::vector<kv_t> new_tiles;
+	std::vector<kv_t> current;
+	std::vector<kv_t> previous;
+
+	static TileAllocator *create(size_t cap)
 	{
-		PoolAllocator *alloc = new PoolAllocator{};
+		TileAllocator *alloc = new TileAllocator{};
 
 		alloc->free_list.resize(cap);
 		std::iota(alloc->free_list.begin(), alloc->free_list.end(), 0);
 
 		return alloc;
 	}
-	
-	size_t alloc(uint64_t key)
+
+	size_t get_idx(uint64_t code)
 	{
-		if (free_list.empty())
-			return UINT64_MAX;
+		auto it = std::lower_bound(current.begin(), current.end(), kv_t{.code = code});
 
-		size_t val = free_list.back();
-		free_list.pop_back();
+		if (it != current.end()) {
+			return it->idx;
+		}
 
-		map[key] = val;
-
-		return val;
+		return SIZE_MAX;
 	}
 
-	void free(uint64_t key)
+	const void get_new(const kv_t **keys, size_t *count) const {
+		*keys = new_tiles.data();
+		*count = new_tiles.size();
+	}
+
+	// @brief Replaces old key-value pairs with new ones, allocating slots
+	// for any new keys from stale entries
+	void set(const std::vector<uint64_t> &keys)
 	{
-		auto it = map.find(key);
-		free_list.push_back(it->second);
-		map.erase(it);
+		size_t cap = free_list.size() + current.size();
+
+		std::swap(current, previous);
+
+		current.resize(keys.size());
+
+		for (size_t i = 0; i < keys.size(); ++i) {
+			current[i].code = keys[i];
+		}
+
+		std::sort(current.begin(), current.end());
+
+		current.resize(std::min(keys.size(), cap));
+
+		new_tiles.resize(std::max(previous.size(), current.size()));
+
+		// stale tiles (previous \ current)
+		// for tiles that are the same copy the values over
+		auto iter = set_difference2(
+			previous.begin(), previous.end(), 
+			current.begin(), current.end(), 
+			new_tiles.begin(),
+			[](kv_t a, kv_t b){},		
+			[](kv_t a){}
+		);
+
+		for (auto it = new_tiles.begin(); it < iter; ++it) {
+			free_list.push_back(it->idx);
+		}
+
+		std::vector<size_t> &tmp = free_list;
+
+		// newly added (current \ previous)
+		iter = set_difference2(
+			current.begin(), current.end(), 
+			previous.begin(), previous.end(), 
+			new_tiles.begin(),
+			[](kv_t &a, kv_t b){
+				a.idx = b.idx;
+			},
+			[&tmp](kv_t &a){
+				size_t idx = tmp.back();
+				tmp.pop_back();
+
+				a.idx = idx;
+			}
+		);
+		
+		new_tiles.resize(iter - new_tiles.begin());
 	}
 };
 
@@ -135,10 +227,9 @@ struct Globe
 	GlobeStats stats;
 	DebugInfo dbg;
 
-	std::vector<TileCode> selected_tiles;
-	std::vector<TileCode> prev_selected;
+	std::vector<uint64_t> selected_tiles;
 
-	std::unique_ptr<PoolAllocator> tile_allocator;
+	std::unique_ptr<TileAllocator> tile_allocator;
 
 	RenderData render_data;
 
@@ -151,6 +242,7 @@ struct select_tiles_params
 	const CPUTileCache * cpu_cache;
 	const DebugInfo *debug;
 
+	size_t max_tiles;
 	double cull_radius;
 	frustum_t frust;
 	aabb3_t frust_box;
@@ -175,8 +267,7 @@ static void globe_draw_debug(Globe const *globe, RenderContext const & ctx)
 		globe->dbg.camera->render(ctx);
 }
 
-static aabb3_t tile_aabb(const CPUTileCache *source, TileCode code, 
-						float min, float max) 
+static aabb3_t tile_aabb(TileCode code, float min, float max) 
 {
 	uint8_t face = code.face;
 
@@ -213,8 +304,7 @@ static aabb3_t tile_aabb(const CPUTileCache *source, TileCode code,
 	return box;
 }
 
-static obb_t tile_obb(const CPUTileCache *source, TileCode code, 
-						float min, float max) 
+static obb_t tile_obb(TileCode code, float min, float max) 
 {
 	uint8_t face = code.face;
 
@@ -273,7 +363,7 @@ static inline int select_tiles_rec(
 	uint64_t u64 = tile_code_pack(code);
 
 	mmt_result_t mmt_res = mmt_minmax(params->cpu_cache->mmt, u64);
-	obb_t box = tile_obb(params->cpu_cache, code, mmt_res.min, mmt_res.max);
+	obb_t box = tile_obb(code, mmt_res.min, mmt_res.max);
 
 	if (code.zoom > 1 && dot(box.T[2],params->origin) < 0)
 		return 0;
@@ -325,7 +415,7 @@ static inline int select_tiles_rec(
 // @note The resulting tiles are sorted by distance from the camera.
 static void select_tiles(
 	select_tiles_params& params,
-	std::vector<TileCode>& tiles
+	std::vector<tile_code_t>& tiles
 )
 {
 	params.res = std::max(params.res, 1e-5);
@@ -345,10 +435,12 @@ static void select_tiles(
 		return a.dist < b.dist;
 	};
 	std::sort(selection.begin(), selection.end(), comp);
-	tiles.resize(selection.size());
 
-	for (size_t i = 0; i < selection.size(); ++i) {
-		tiles[i] = selection[i].code;
+	size_t count = std::min(selection.size(), params.max_tiles);
+
+	tiles.resize(count);
+	for (size_t i = 0; i < count; ++i) {
+		tiles[i] = tile_code_pack(selection[i].code);
 	}
 }
 
@@ -496,8 +588,8 @@ static void update_draw_cmds(Globe *globe)
 	DrawCommand *cmds = (DrawCommand *)glMapNamedBuffer(indirect->id, GL_WRITE_ONLY);
 
 	for (size_t i = 0; i < count; ++i) {
-		uint64_t code = tile_code_pack(globe->selected_tiles[i]);
-		size_t slot = globe->tile_allocator->map[code];
+		uint64_t code = globe->selected_tiles[i];
+		size_t slot = globe->tile_allocator->get_idx(code);
 
 		DrawCommand cmd = {
 			.count = 6*TILE_VERT_COUNT,
@@ -515,64 +607,34 @@ static void update_draw_cmds(Globe *globe)
 
 static void update_vbo(Globe *globe)
 {
-	auto start = std::chrono::high_resolution_clock::now();
-
-	std::vector<uint64_t> curr (globe->selected_tiles.size());
-	for (size_t i = 0; i < curr.size(); ++i) {
-		curr[i] = tile_code_pack(globe->selected_tiles[i]);
-	}
-	std::vector<uint64_t> prev (globe->prev_selected.size());
-	for (size_t i = 0; i < prev.size(); ++i) {
-		prev[i] = tile_code_pack(globe->prev_selected[i]);
-	}
-
-	std::sort(curr.begin(), curr.end());
-	std::sort(prev.begin(), prev.end());
-
-	std::vector<uint64_t> diff (std::max(prev.size(), curr.size()));
-
-	// stale tiles (prev / current)
-	auto iter = set_difference(
-		prev.begin(), prev.end(), 
-		curr.begin(), curr.end(), 
-		diff.begin()
-	);
-
-	for (auto it = diff.begin(); it < iter; ++it) {
-		globe->tile_allocator->free(*it);
-	}
-
-	// newly added (current / prev)
-	iter = set_difference(
-		curr.begin(), curr.end(), 
-		prev.begin(), prev.end(), 
-		diff.begin()
-	);
-	
-	size_t new_count = iter - diff.begin();
-	std::vector<size_t> slots (new_count);
-
-	for (size_t i = 0; i < new_count; ++i) {
-		slots[i] = globe->tile_allocator->alloc(diff[i]);
-	}
-
-	auto end = std::chrono::high_resolution_clock::now();
-
-	printf("%ld new (%f ms)\n", iter - diff.begin(), (double)(end - start).count()/1e6);
-
-	const std::vector<TileCode>& tiles = globe->selected_tiles;
-	uint32_t count = (uint32_t)tiles.size();
+	const TileAllocator::kv_t * new_tiles; 
+	size_t new_count;
+	globe->tile_allocator->get_new(&new_tiles, &new_count);
 
 	const GLBuffer *buf = globe->rt->get<GLBuffer>(globe->render_data.vbo);
 	glBindBuffer(GL_ARRAY_BUFFER, buf->id);
 
+	size_t batch_size = std::max(2*new_count/(std::thread::hardware_concurrency()),1LU);
+	std::atomic_int ctr = new_count;
+
 	GlobeVertex *ptr = (GlobeVertex*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
 
-	for (size_t i = 0; i < new_count; ++i) {
-		GlobeVertex *dst = ptr + slots[i] * TILE_VERT_COUNT;
-		TileCode code = tile_code_unpack(diff[i]);
-		create_tile_verts(code, dst);
+	for (size_t start = 0; start < new_count; start += batch_size) {
+		size_t end = std::min(start + batch_size, new_count);
+		g_schedule_task([ptr, start, end, new_tiles, &ctr](){
+			for (size_t i = start; i < end; ++i) {
+				TileAllocator::kv_t kv = new_tiles[i];
+
+				GlobeVertex *dst = ptr + kv.idx * TILE_VERT_COUNT;
+				TileCode code = tile_code_unpack(kv.code);
+				create_tile_verts(code, dst);
+				--ctr;
+			}
+		});
 	}
+
+	while (ctr)
+		std::this_thread::yield();
 
 	glUnmapBuffer(GL_ARRAY_BUFFER);
 }
@@ -580,14 +642,16 @@ static void update_vbo(Globe *globe)
 static LoadResult update_render_data(
 	Globe *globe,
 	glm::dvec3 origin,
-	const std::vector<TileCode>& parents, 
+	const std::vector<uint64_t>& parents, 
 	const std::vector<TileGPUIndex> &textures
 )
 {
 	ResourceTable *rt = globe->rt;
 
-	const std::vector<TileCode>& tiles = globe->selected_tiles;
+	const std::vector<uint64_t>& tiles = globe->selected_tiles;
 	uint32_t count = (uint32_t)tiles.size();
+
+	globe->tile_allocator->set(tiles);
 
 	//-----------------------------------------------------------------------------
 	// vbo
@@ -607,27 +671,28 @@ static LoadResult update_render_data(
 	TileMetadata *metadata = static_cast<TileMetadata*>(ptr);
 
 	for (uint32_t i = 0; i < count; ++i) {
-		uint64_t code = tile_code_pack(parents[i]);
+		uint64_t code_parent = parents[i];
+		uint64_t code_child = tiles[i];
+
 		TileGPUIndex idx = textures[i];
 
-		TileCode child = tiles[i];
-		TileCode parent = parents[i];
+		TileCode child = tile_code_unpack(code_child);
+		TileCode parent = tile_code_unpack(code_parent);
 
 		aabb2_t rect = morton_u64_to_rect_f64(child.idx,child.zoom);
 		aabb2_t rect_tex = parent == TILE_CODE_NONE ? 
 			aabb2_t{.min = glm::dvec2(0), .max = glm::dvec2(1)} : 
 			sub_rect(parent, child);
 
-		// TODO : Fix TileCode struct fiasco
-		size_t slot = globe->tile_allocator->map[tile_code_pack(child)];
+		size_t slot = globe->tile_allocator->get_idx(code_child);
 
 		metadata[slot] = {
 			.coord = glm::vec4(0),
 			.tex_uv = {rect_tex.min, rect_tex.max},
 			.globe_uv = {rect.min, rect.max},
 			.tex_idx = idx,
-			.code_lower = (uint32_t)(code & 0xFFFFFFFF),
-			.code_upper = (uint32_t)(code >> 32),
+			.code_lower = (uint32_t)(code_parent & 0xFFFFFFFF),
+			.code_upper = (uint32_t)(code_parent >> 32),
 		};
 	}
 
@@ -710,7 +775,7 @@ Globe *globe_create(ResourceTable *rt)
 		GPUTileCache::create()
 	);
 	globe->tile_allocator.reset(
-		PoolAllocator::create(MAX_TILES)
+		TileAllocator::create(MAX_TILES)
 	);
 	globe_init_debug(globe.get());
 
@@ -805,6 +870,7 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 	select_tiles_params params = {
 		.cpu_cache = cpu_cache,
 		.debug = &globe->dbg,
+		.max_tiles = MAX_TILES,
 		.cull_radius = r_cull,
 		.frust = frust,
 		.frust_box = frustum_aabb(frust),
@@ -813,22 +879,20 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 	};
 
 	select_tiles(params, globe->selected_tiles);
+	size_t count = globe->selected_tiles.size();
 
-	size_t count = std::min(globe->selected_tiles.size(),(size_t)MAX_TILES);
+	std::vector<uint64_t> loaded_tiles (count, tile_code_pack(TILE_CODE_NONE));
+	std::vector<uint64_t> ideal_tiles = globe->selected_tiles;
 
-	globe->selected_tiles.resize(count);
-
-	std::vector<TileCode> loaded_tiles (count, TILE_CODE_NONE);
-
-	std::vector<TileCode> tmp_tiles = globe->selected_tiles;
-
-	for (size_t i = 0; i < tmp_tiles.size(); ++i) {
-		if (tmp_tiles[i].zoom > 2) {
-			tmp_tiles[i].idx >>= 4;
-			tmp_tiles[i].zoom -= 2;
+	for (size_t i = 0; i < ideal_tiles.size(); ++i) {
+		TileCode code = tile_code_unpack(ideal_tiles[i]);
+		if (code.zoom > 2) {
+			code.idx >>= 4;
+			code.zoom -= 2;
 		}
+		ideal_tiles[i] = tile_code_pack(code);
 	}
-	cpu_cache->load_tiles(count, tmp_tiles.data(), loaded_tiles.data());
+	cpu_cache->load_tiles(count, ideal_tiles.data(), loaded_tiles.data());
 
 	std::vector<TileGPUIndex> tile_textures;
 
@@ -840,7 +904,6 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 	
 	globe->stats.new_loads = new_count;
 	globe->stats.loaded = count;
-	globe->prev_selected = globe->selected_tiles;
 
 	if (globe->dbg.enable_boxes)
 		globe->dbg.boxes->update();

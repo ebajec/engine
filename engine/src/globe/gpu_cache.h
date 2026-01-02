@@ -19,7 +19,7 @@
 #include <atomic>
 
 static constexpr uint32_t TILE_PAGE_SIZE = 128;
-static constexpr uint32_t MAX_TILE_PAGES = 8;
+static constexpr uint32_t MAX_TILE_PAGES = 16;
 static constexpr uint32_t MAX_TILES = TILE_PAGE_SIZE*MAX_TILE_PAGES;
 
 struct TileGPUIndex
@@ -49,7 +49,7 @@ struct TileGPUUploadData
 	tc_ref data_ref;
 	std::atomic<TileGPULoadState> *p_state;
 	size_t offset;
-	TileCode code;
+	tile_code_t code;
 	TileGPUIndex idx;
 };
 
@@ -68,7 +68,7 @@ struct TileGPUPage
 
 struct GPUTileCache
 {
-	typedef std::list<std::pair<TileCode,TileGPUIndex>> lru_list_t;
+	typedef std::list<std::pair<tile_code_t,TileGPUIndex>> lru_list_t;
 
 	// TODO : Robin hood hash table instead of this
 	lru_list_t m_lru;
@@ -100,7 +100,7 @@ private:
 
 	void deallocate(TileGPUIndex idx);
 	void reserve(uint32_t count);
-	void insert(TileCode, TileGPUIndex);
+	void insert(tile_code_t, TileGPUIndex);
 	void asynchronous_upload(std::span<TileGPUUploadData> upload_data);
 
 public:
@@ -108,7 +108,7 @@ public:
 
 	size_t update(
 		CPUTileCache const *source,
-		const std::span<TileCode> tiles, 
+		const std::span<tile_code_t> tiles, 
 		std::vector<TileGPUIndex>& textures
 	);
 	void bind_textures(const RenderContext &ctx, uint32_t base) const;

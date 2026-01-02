@@ -43,7 +43,7 @@ static double weierstrass(double x, double y, float phase = 0)
 	D = 2.3,
 	G = 4, 
 	gamma =	2.4;
-	static constexpr size_t M = 20, N = 9;
+	static constexpr size_t M = 9, N = 9;
 
 	double A = L*pow(G/D,D-2.0)*sqrt(log(gamma)/(double)M); 
 

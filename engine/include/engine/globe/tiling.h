@@ -35,6 +35,8 @@ typedef enum
 	TILE_UPPER_RIGHT = 0x3
 } tile_quadrant_t;
 
+typedef uint64_t tile_code_t;
+
 // NOTE: layout is not portable.  This is only to be used 
 // for convenience.
 struct alignas(8) TileCode
@@ -48,7 +50,7 @@ struct alignas(8) TileCode
 	}
 };
 
-static inline constexpr uint64_t tile_code_coarsen(uint64_t u64)
+static inline constexpr tile_code_t tile_code_coarsen(tile_code_t u64)
 {
 	uint8_t zoom = (uint8_t)((u64 >> TILE_CODE_ZOOM_SHIFT) & TILE_CODE_ZOOM_MASK);
 	uint64_t idx  = (u64 >> TILE_CODE_IDX_SHIFT) & TILE_CODE_IDX_MASK;
@@ -68,7 +70,7 @@ static inline constexpr uint64_t tile_code_coarsen(uint64_t u64)
 	return u64;
 }
 
-static constexpr uint64_t tile_code_refine(uint64_t u64, tile_quadrant_t quadrant)
+static constexpr tile_code_t tile_code_refine(tile_code_t u64, tile_quadrant_t quadrant)
 {
 	uint8_t zoom = (uint8_t)((u64 >> TILE_CODE_ZOOM_SHIFT) & TILE_CODE_ZOOM_MASK);
 	uint64_t idx  = (u64 >> TILE_CODE_IDX_SHIFT) & TILE_CODE_IDX_MASK;
@@ -109,7 +111,7 @@ static inline constexpr uint64_t tile_code_idx(uint64_t u64)
 
 /// upper <- lower
 /// | idx (56 bits) | zoom (5 bits) | face (3 bits) |
-static inline constexpr TileCode tile_code_unpack(uint64_t u64)
+static inline constexpr TileCode tile_code_unpack(tile_code_t u64)
 {
 	TileCode code;
 	code.face = (uint8_t)((u64 >> TILE_CODE_FACE_SHIFT) & TILE_CODE_FACE_MASK);
@@ -121,7 +123,7 @@ static inline constexpr TileCode tile_code_unpack(uint64_t u64)
 
 /// upper <- lower
 /// | idx (56 bits) | zoom (5 bits) | face (3 bits) |
-static inline constexpr uint64_t tile_code_pack(TileCode code) {
+static inline constexpr tile_code_t tile_code_pack(TileCode code) {
 	uint64_t u64 = 0;
 	u64 |= ((uint64_t)code.face << TILE_CODE_FACE_SHIFT); 
 	u64 |= ((uint64_t)code.zoom << TILE_CODE_ZOOM_SHIFT); 
@@ -132,7 +134,7 @@ static inline constexpr uint64_t tile_code_pack(TileCode code) {
 
 /// upper <- lower
 /// | idx (56 bits) | zoom (5 bits) | face (3 bits) |
-static inline uint64_t tile_code_pack2(uint8_t face, uint8_t zoom, uint64_t idx) {
+static inline tile_code_t tile_code_pack2(uint8_t face, uint8_t zoom, uint64_t idx) {
 	uint64_t u64 = 0;
 	u64 |= ((uint64_t)face << TILE_CODE_FACE_SHIFT); 
 	u64 |= ((uint64_t)zoom << TILE_CODE_ZOOM_SHIFT); 
@@ -140,7 +142,8 @@ static inline uint64_t tile_code_pack2(uint8_t face, uint8_t zoom, uint64_t idx)
 	return u64;
 }
 
-static constexpr TileCode TILE_CODE_NONE = tile_code_unpack(UINT64_MAX);
+static constexpr tile_code_t TILE_CODE_NONE_U = UINT64_MAX;
+static constexpr TileCode TILE_CODE_NONE = tile_code_unpack(TILE_CODE_NONE_U);
 
 static_assert(tile_code_pack(tile_code_unpack(0x8493724890123809)) == 0x8493724890123809); 
 static_assert(tile_code_pack(tile_code_unpack(0x020)) == 0x020); 

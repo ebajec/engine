@@ -49,11 +49,11 @@ tc_error tc_load(
 	tc_post_load_fn post_load,
 
 	size_t count, 
-	TileCode const *tiles, 
-	TileCode *out
+	tile_code_t const *tiles, 
+	tile_code_t *out
 );
 
-tc_error tc_acquire(const tc_cache *tc, TileCode code, tc_ref *p_ref);
+tc_error tc_acquire(const tc_cache *tc, tile_code_t code, tc_ref *p_ref);
 void tc_release(tc_ref ref);
 
 #endif // CPU_CACHE_H

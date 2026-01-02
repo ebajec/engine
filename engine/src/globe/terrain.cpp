@@ -64,7 +64,7 @@ void post_load(void* usr, uint64_t code, const ds_buf *buf)
 	});
 }
 
-void CPUTileCache::load_tiles(size_t count, const TileCode *tiles, TileCode *out)
+void CPUTileCache::load_tiles(size_t count, const tile_code_t *tiles, tile_code_t *out)
 {
 
 	tc_error err = tc_load(

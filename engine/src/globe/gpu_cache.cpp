@@ -193,7 +193,7 @@ TileGPUIndex GPUTileCache::evict_one()
 {
 	assert(!m_lru.empty());
 	
-	std::pair<TileCode, TileGPUIndex> ent = m_lru.back();
+	std::pair<tile_code_t, TileGPUIndex> ent = m_lru.back();
 
 	TileGPUIndex idx = ent.second;
 
@@ -213,23 +213,22 @@ TileGPUIndex GPUTileCache::evict_one()
 	//log_info("Evicted tile %d from GPU cache",ent.first);
 
 	m_lru.pop_back();
-	m_map.erase(tile_code_pack(ent.first));
+	m_map.erase(ent.first);
 
 	return ent.second;
 }
 
-void GPUTileCache::insert(TileCode code, TileGPUIndex idx)
+void GPUTileCache::insert(tile_code_t code, TileGPUIndex idx)
 {
-	uint64_t packed = tile_code_pack(code);
-	assert(m_map.find(packed) == m_map.end());
+	assert(m_map.find(code) == m_map.end());
 
 	m_lru.push_front({code,idx});
-	m_map[packed] = m_lru.begin();
+	m_map[code] = m_lru.begin();
 }
 
 size_t GPUTileCache::update(
 	CPUTileCache const *source,
-	const std::span<TileCode> loaded_tiles, 
+	const std::span<tile_code_t> loaded_tiles, 
 	std::vector<TileGPUIndex>& textures
 )
 {
@@ -241,14 +240,14 @@ size_t GPUTileCache::update(
 	size_t offset = 0;
 
 	for (size_t i = 0; i < tile_count; ++i) {
-		TileCode code = loaded_tiles[i];
+		tile_code_t code = loaded_tiles[i];
 
-		if (code == TILE_CODE_NONE) {
+		if (code == TILE_CODE_NONE_U) {
 			textures.push_back(TILE_GPU_INDEX_NONE);
 			continue;
 		}
 
-		auto it = m_map.find(tile_code_pack(code));
+		auto it = m_map.find(code);
 
 		const bool found = it != m_map.end();
 
