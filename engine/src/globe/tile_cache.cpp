@@ -84,7 +84,7 @@ TileCode find_best(const tc_cache *tc, TileCode code)
 	return TILE_CODE_NONE;
 }
 
-uint8_t *get_block(const tc_cache *tc, alc_index idx)
+static uint8_t *get_block(const tc_cache *tc, alc_index idx)
 {
 	alc_page_handle_t pg_handle = tc->alc->pages[idx.page].handle; 
 
@@ -94,7 +94,7 @@ uint8_t *get_block(const tc_cache *tc, alc_index idx)
 }
 
 
-int my_cancel(struct ds_token *tok)
+static int my_cancel(struct ds_token *tok)
 {
 	alc_atomic_state *p_state = static_cast<alc_atomic_state*>(tok->usr);
 	alc_atomic_state state = p_state->load(std::memory_order_relaxed);

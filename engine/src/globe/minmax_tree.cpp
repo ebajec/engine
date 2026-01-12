@@ -5,7 +5,7 @@
 
 #include <cfloat>
 
-void modify_update(mmt_tree *mmt, uint64_t key, mmt_value_t new_val)
+static void modify_update(mmt_tree *mmt, uint64_t key, mmt_value_t new_val)
 {
 	auto end = mmt->map.end();
 
@@ -24,8 +24,6 @@ void modify_update(mmt_tree *mmt, uint64_t key, mmt_value_t new_val)
 			.max = -FLT_MAX
 		};
 
-		bool found_child = false;
-
 		for (uint64_t i = 0; i < 4; ++i) {
 			uint64_t c = children[i];
 
@@ -33,7 +31,6 @@ void modify_update(mmt_tree *mmt, uint64_t key, mmt_value_t new_val)
 
 			if (c == key) {
 				c_val = new_val;
-				found_child = true;
 			} else {
 				auto it = mmt->map.find(c);
 
@@ -54,16 +51,16 @@ void modify_update(mmt_tree *mmt, uint64_t key, mmt_value_t new_val)
 
 		if (p_it == end) {
 			log_error("Parent entry with id %lld not present in tree", parent);
-			return;
 		}
 
 		p_it->second = p_val;
 
 		key = parent;
+
 	}
 }
 
-void insert_update(mmt_tree *mmt, uint64_t key, mmt_value_t new_val)
+static void insert_update(mmt_tree *mmt, uint64_t key, mmt_value_t new_val)
 {
 	while (tile_code_zoom(key) != 0) {
 		uint64_t parent = tile_code_coarsen(key);

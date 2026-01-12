@@ -32,7 +32,7 @@ struct ds_vtbl
 	ds_load_fn 		loader;
 	ds_find_fn		find;
 
-	float (*sample)(void *usr, float u, float v, uint8_t f);
+	float (*sample)(void *usr, double u, double v, uint8_t f);
 	float (*max)(void *usr);
 	float (*min)(void *usr);
 };

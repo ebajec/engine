@@ -1,16 +1,12 @@
 #include "engine/globe/test_source.h"
-#include "utils/log.h"
 
 #include "terrain.h"
 
 #include <algorithm>
-#include <atomic>
 
 CPUTileCache 
 *CPUTileCache::create()
 {
-	static std::atomic_uint64_t id_ctr = 0;
-
 	CPUTileCache *source = new CPUTileCache{};
 
 	if (test_data_source_init(&source->ds))
@@ -19,7 +15,7 @@ CPUTileCache
 	if (tc_create(&source->tc, TILE_SIZE*sizeof(float), (size_t)1*GIGABYTE))
 		goto create_failed;
 
-	if (mmt_create(&source->mmt, mmt_value_t{.min = -0.1, .max = 0.1}))
+	if (mmt_create(&source->mmt, mmt_value_t{.min = - 0.1f, .max = 0.1f}))
 		goto create_failed;
 
 	return source;
@@ -41,7 +37,7 @@ CPUTileCache::~CPUTileCache()
 	mmt_destroy(mmt);
 }
 
-void post_load(void* usr, uint64_t code, const ds_buf *buf)
+static void post_load(void* usr, uint64_t code, const ds_buf *buf)
 {
 	CPUTileCache *cache = static_cast<CPUTileCache*>(usr);
 

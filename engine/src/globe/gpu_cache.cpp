@@ -83,7 +83,7 @@ static std::unique_ptr<TileGPUPage> create_page(GLuint format)
 		TILE_PAGE_SIZE
 	);
 	
-	GLuint filter = GL_LINEAR;
+	GLint filter = GL_LINEAR;
 
 	glTextureParameteri(page->tex_array, GL_TEXTURE_MIN_FILTER, filter);
 	glTextureParameteri(page->tex_array, GL_TEXTURE_MAG_FILTER, filter);

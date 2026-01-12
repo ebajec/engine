@@ -87,8 +87,6 @@ template<
 OutIt set_difference2(ArgIt a_start, ArgIt a_end, ArgIt b_start, ArgIt b_end, OutIt out,
 					  OpEqual op_equal, OpUnequal op_unequal)
 {
-	ArgIt a_begin = a_start;
-
 	for (; a_start < a_end; ++a_start) {
 		while (b_start < b_end && *b_start < *a_start)
 			++b_start;
@@ -135,7 +133,8 @@ struct TileAllocator
 
 	size_t get_idx(uint64_t code)
 	{
-		auto it = std::lower_bound(current.begin(), current.end(), kv_t{.code = code});
+		auto it = std::lower_bound(current.begin(), current.end(), 
+							 kv_t{.code = code, .idx = 0});
 
 		if (it != current.end()) {
 			return it->idx;
@@ -144,7 +143,7 @@ struct TileAllocator
 		return SIZE_MAX;
 	}
 
-	const void get_new(const kv_t **keys, size_t *count) const {
+	void get_new(const kv_t **keys, size_t *count) const {
 		*keys = new_tiles.data();
 		*count = new_tiles.size();
 	}
@@ -200,8 +199,9 @@ struct TileAllocator
 				a.idx = idx;
 			}
 		);
-		
-		new_tiles.resize(iter - new_tiles.begin());
+
+		size_t count = (size_t)(iter - new_tiles.begin());
+		new_tiles.resize(count);
 	}
 };
 
@@ -274,8 +274,8 @@ static aabb3_t tile_aabb(TileCode code, float min, float max)
 	aabb2_t rect = morton_u64_to_rect_f64(code.idx,code.zoom);
 	glm::dvec2 mid_uv = 0.5*(rect.ur() + rect.ll());
 
-	double s_min = 1.0 + min;
-	double s_max = 1.0 + max;
+	double s_min = 1.0 + (double)min;
+	double s_max = 1.0 + (double)max;
 
 	glm::dvec3 c[4] = {
 		cube_to_globe(face, rect.ll()),
@@ -304,7 +304,7 @@ static aabb3_t tile_aabb(TileCode code, float min, float max)
 	return box;
 }
 
-static obb_t tile_obb(TileCode code, float min, float max) 
+static obb_t tile_obb(TileCode code, double min, double max) 
 {
 	uint8_t face = code.face;
 
@@ -363,7 +363,7 @@ static inline int select_tiles_rec(
 	uint64_t u64 = tile_code_pack(code);
 
 	mmt_result_t mmt_res = mmt_minmax(params->cpu_cache->mmt, u64);
-	obb_t box = tile_obb(code, mmt_res.min, mmt_res.max);
+	obb_t box = tile_obb(code, (double)mmt_res.min, (double)mmt_res.max);
 
 	if (code.zoom > 1 && dot(box.T[2],params->origin) < 0)
 		return 0;
@@ -381,7 +381,7 @@ static inline int select_tiles_rec(
 	double area = tile_factor(code.zoom);
 
 	if (area/d_min_sq < params->res 
-		|| mmt_res.dist >= TILE_WIDTH/(TILE_VERT_WIDTH)
+		|| mmt_res.dist >= (int)(TILE_WIDTH/(TILE_VERT_WIDTH))
 	) {
 
 		out.push_back({code,d_min_sq});
@@ -615,7 +615,7 @@ static void update_vbo(Globe *globe)
 	glBindBuffer(GL_ARRAY_BUFFER, buf->id);
 
 	size_t batch_size = std::max(2*new_count/(std::thread::hardware_concurrency()),1LU);
-	std::atomic_int ctr = new_count;
+	std::atomic_int ctr = (int)new_count;
 
 	GlobeVertex *ptr = (GlobeVertex*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
 
@@ -810,11 +810,6 @@ void globe_imgui(Globe *globe)
 
 }
 
-int globe_add_source(Globe *globe, CPUTileCache *source)
-{
-	return 0;
-}
-
 float globe_sample_elevation(const Globe *globe, const glm::dvec3& p)
 {
 	return globe->cpu_cache->sample_elevation_at(p);
@@ -824,7 +819,6 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 {
 	const Camera * p_camera = info->camera; 
 
-	ResourceTable *rt = globe->rt;
 	CPUTileCache *cpu_cache = globe->cpu_cache.get();
 
 	if (globe->dbg.fix_camera)

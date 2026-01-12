@@ -8,7 +8,7 @@ static int test_loader_fn2(void *usr, uint64_t id,
 static_assert(std::is_same<decltype(&test_loader_fn2), ds_load_fn>::value);
 
 static uint64_t test_loader_find(void *usr, uint64_t id);
-static float sample(void *usr, float u, float v, uint8_t f);
+static float sample(void *usr, double u, double v, uint8_t f);
 static float min_val(void *usr);
 static float max_val(void *usr);
 
@@ -17,7 +17,7 @@ static void destroy(struct ds_context *ctx);
 int test_data_source_init(struct ds_context **p_ctx)
 {
 	struct ds_context *ctx = new ds_context;
-	*ctx = {
+	*ctx = ds_context{
 		.usr = nullptr,
 		.vtbl = {
 			.destroy = destroy,
@@ -57,12 +57,12 @@ uint64_t test_loader_find(void *usr, uint64_t id)
 
 float min_val(void *usr)
 {
-	return -TEST_AMP;
+	return (float)-TEST_AMP;
 
 }
 float max_val(void *usr)
 {
-	return TEST_AMP;
+	return (float)TEST_AMP;
 }
 
 static constexpr size_t coeff_count = 100;
@@ -78,7 +78,7 @@ static void init_coeffs()
 	}
 }
 
-static float sample(void *usr, float u, float v, uint8_t f)
+float sample(void *usr, double u, double v, uint8_t f)
 {
 	return test_elev_fn(glm::dvec2(u,v), f);
 }
@@ -112,7 +112,7 @@ float test_elev_fn(glm::dvec2 uv, uint8_t f)
 	double x = 1.0 - 2.0*uv.x;
 	double y = 1.0 - 2.0*uv.y;
 
-	double g = weierstrass(x,y, TWOPI*(float)f);
+	double g = weierstrass(x,y, TWOPIf*(float)f);
 
 	g *= TEST_AMP;
 	g = smooth_max_zero(g*filter_band(x)*filter_band(y));

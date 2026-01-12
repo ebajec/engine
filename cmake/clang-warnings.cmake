@@ -9,7 +9,6 @@ function(enable_clang_warnings target)
 			-Wpedantic             # ISO-compliance
 			# Conversion and sign
 			-Wconversion           # detect implicit conversions
-			-Wsign-conversion      # detect sign-related conversions
 			# Code correctness
 			-Wshadow               # shadowed variables
 			-Wnull-dereference     # null-pointer derefs

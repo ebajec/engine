@@ -12,6 +12,7 @@ typedef struct mmt_value_s
 
 typedef struct {
 	float min, max;
+	// number of levels searched up before entry found
 	int dist;
 } mmt_result_t;
 
