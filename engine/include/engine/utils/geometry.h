@@ -181,7 +181,7 @@ static inline double obb_dist_sq(const obb_t &obb, glm::dvec3 v)
 
 	double d = 0;
 
-	for (size_t i = 0; i < 3; ++i) { 
+	for (int i = 0; i < 3; ++i) { 
 		double l = fabs(v[i]);  
 		double s = fabs(obb.S[i]);
 		if (l > s) {

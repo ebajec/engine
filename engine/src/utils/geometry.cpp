@@ -5,7 +5,6 @@
 #include <complex>
 
 #include <cstdint>
-#include <cfloat>
 
 void geometry::mesh_s2(uint32_t ntht, uint32_t nphi, 
 					   std::vector<vertex3d>& verts, 
@@ -70,9 +69,9 @@ static inline int obb_aabb_intersects_origin(
 	for (size_t i = 0; i < 9; ++i)
 		T_data[i] = fabs(T_data[i]);
 
-	for (size_t i = 0; i < 3; ++i) {
+	for (int i = 0; i < 3; ++i) {
 		double value = sA[i];
-		for (size_t j = 0; j < 3; ++j)
+		for (int j = 0; j < 3; ++j)
 			value += sB[j] * T_abs[i][j];
 
 		if (fabs(O[i]) > value)
@@ -81,19 +80,19 @@ static inline int obb_aabb_intersects_origin(
 
 	glm::dvec3 O_A = O*T;
 
-	for (size_t i = 0; i < 3; ++i) {
+	for (int i = 0; i < 3; ++i) {
 		double value = sB[i];
-		for (size_t j = 0; j < 3; ++j)
+		for (int j = 0; j < 3; ++j)
 			value += sA[j] * T_abs[j][i];
 
 		if (fabs(O_A[i]) > value)
 			return false;
 	}
 
-	for (size_t i = 0; i < 3; ++i) {
-		for (size_t j = 0; j < 3; ++j) {
-			size_t k = (i + 1)%3;
-			size_t l = (i + 2)%3;
+	for (int i = 0; i < 3; ++i) {
+		for (int j = 0; j < 3; ++j) {
+			int k = (i + 1)%3;
+			int l = (i + 2)%3;
 
 			double c = fabs(O[k]*T_abs[l][j] + O[l]*T_abs[k][j]);
 			double rA = sA[l] *T_abs[k][j] + sA[k] * T_abs[l][j];
