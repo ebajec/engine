@@ -103,7 +103,7 @@ bool use_edges = true;
 
 void main()
 {
-	uint idx = gl_InstanceID;
+	uint idx = gl_InstanceIndex;
 
 	vert_data_t verts[4];
 
@@ -148,7 +148,7 @@ void main()
 
 	float width = u_thickness;
 
-	uint id = gl_VertexID;
+	uint id = gl_VertexIndex;
 
 	bool top = bool(id & TOP_BIT);
 	bool right = bool(id & RIGHT_BIT);

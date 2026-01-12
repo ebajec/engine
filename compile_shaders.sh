@@ -31,7 +31,8 @@ for ext in "${EXTENSIONS[@]}"; do
 
 	if [ ${out} -ot ${src} ]; then
 		echo "Compiling $src → $out"
-		glslangValidator -G ${INCLUDE_FLAGS} "$src" -o "$out"
+		# glslangValidator -V ${INCLUDE_FLAGS} "$src" -o "$out"
+		glslc -c ${INCLUDE_FLAGS} "$src" -o "$out"
 		i=$((i + 1))
 	fi
   done

@@ -39,13 +39,13 @@ layout (location = 2) out vec3 fnormal;
 
 void main() {
 
-	vec4 offset = data[gl_InstanceID].position;
+	vec4 offset = data[gl_InstanceIndex].position;
 	
 	// Apply geometry transformation
 	vec4 position = model*vec4(scale*v_pos.xyz + offset.xyz,1);
 	vec4 normal = model*vec4(v_normal.xyz,0);
 
-	fcolor = data[gl_InstanceID].color;
+	fcolor = data[gl_InstanceIndex].color;
 	fpos = vec3(position);
 	fnormal = vec3(normal);
 

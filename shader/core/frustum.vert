@@ -11,12 +11,12 @@ layout (location = 0) out vec4 out_pos;
 
 void main()
 {
-	uint idx = gl_InstanceID;
+	uint idx = gl_InstanceIndex;
 
 	mat4 pv = matrices[idx];
 	mat4 inv = inverse(pv);
 
-	uint vidx = gl_VertexID;
+	uint vidx = gl_VertexIndex;
 
 	vec4 pos = vec4(0,0,0,1);
 	pos.x += bool(vidx & 0x1) ? -1 : 1;

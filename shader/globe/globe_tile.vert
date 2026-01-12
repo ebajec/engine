@@ -61,7 +61,7 @@ tile_code_t from_input(uint left, uint right)
 
 tile_code_t get_code()
 {
-	uint tile_idx = gl_VertexID/TILE_VERT_COUNT;
+	uint tile_idx = gl_VertexIndex/TILE_VERT_COUNT;
 	metadata_t mdata = metadata[tile_idx];
 	return from_input(mdata.code_lower,mdata.code_upper);
 }
@@ -106,7 +106,6 @@ float sample_tex(tex_idx_t idx, vec2 uv)
 		aabb2_t rect = morton_u32_to_rect_f32(code.idx, code.zoom);
 
 		vec3 p = cube_to_globe(code.face, mix(rect.min, rect.max, uv));
-
 
 		float t = TWOPI*fract(0.3*u_frame.t);
 		float h1 = 1;
@@ -179,7 +178,7 @@ void main()
 
 	vec4 wpos = vec4(pos, 1);
 
-	uint tile_idx = gl_VertexID/TILE_VERT_COUNT;
+	uint tile_idx = gl_VertexIndex/TILE_VERT_COUNT;
 
 	metadata_t mdata = metadata[tile_idx];
 	tex_idx_t tex_idx = decode_tex_idx(mdata.tex_idx);
