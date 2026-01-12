@@ -15,7 +15,6 @@ struct MatrixCache
 	std::vector<glm::mat4> matrices;
 
 	size_t capacity;
-	size_t count;
 
 	BufferID buffer;
 

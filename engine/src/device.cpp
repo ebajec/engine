@@ -39,7 +39,7 @@ uint32_t MatrixCache::add_matrix(const glm::mat4& mat)
 		free.pop_back();
 		matrices[idx] = mat;
 	} else {
-		idx = matrices.size();
+		idx = (uint32_t)matrices.size();
 		matrices.push_back(mat);
 	}
 
@@ -77,7 +77,9 @@ bool MatrixCache::update(Device *dev)
 	if (capacity < matrices.size()) {
 		capacity = capacity > 4 ? (capacity*3)/2 : 4;
 
-		destroy_buffer(dev, buffer);
+		if (buffer.id)
+			destroy_buffer(dev, buffer);
+
 		buffer = create_buffer(dev, capacity * sizeof(glm::mat4));
 
 		resized = true;
@@ -88,7 +90,8 @@ bool MatrixCache::update(Device *dev)
 	Buffer *buf = dev->buffers->get(ResourceID{buffer.id});
 
 	uint32_t count = u_end - u_start;
-	glBufferSubData(buf->id, u_start * sizeof(glm::mat4), count*sizeof(glm::mat4), matrices.data());
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, buf->id);
+	glBufferSubData(GL_SHADER_STORAGE_BUFFER, u_start * sizeof(glm::mat4), count*sizeof(glm::mat4), matrices.data());
 
 	u_start = UINT32_MAX;
 	u_end = 0;
