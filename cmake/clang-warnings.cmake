@@ -31,6 +31,7 @@ function(enable_clang_warnings target)
 			-Wno-gnu-zero-variadic-macro-arguments
 			-Wno-gnu-anonymous-struct
 			-Wno-nested-anon-types
+			-Wno-sign-conversion
     	)
   	endif()
 endfunction()

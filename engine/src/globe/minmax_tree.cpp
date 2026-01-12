@@ -45,8 +45,6 @@ static void modify_update(mmt_tree *mmt, uint64_t key, mmt_value_t new_val)
 			p_val.max = std::min(c_val.max,p_val.max);
 		}
 
-		assert(found_child);
-
 		auto p_it = mmt->map.find(parent);
 
 		if (p_it == end) {
