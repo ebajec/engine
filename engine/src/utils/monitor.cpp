@@ -512,14 +512,12 @@ void monitor::watch()
     std::condition_variable cv;
     while (m_watching) cv.wait_for(lk, std::chrono::milliseconds(250));
 
-    // Stop + cleanup
+    // Stop stream and cleanup
     FSEventStreamStop(stream);
     FSEventStreamInvalidate(stream);
     FSEventStreamRelease(stream);
-
     CFRelease(pathsToWatch);
     CFRelease(dir);
-
 #if !OS_OBJECT_USE_OBJC
     dispatch_release(q);
 #endif
@@ -528,9 +526,6 @@ void monitor::watch()
 void monitor::interrupt()
 {
     m_watching = false;
-    // If you want instant wake-up instead of up-to-250ms, keep cv as members and notify here.
 }
-
-}
-
+};
 #endif // __APPLE__
