@@ -21,3 +21,19 @@ if [ -f /etc/os-release ]; then
     fi
 fi
 
+# Detect Apple
+if [ "$(unname -S)" = "Darwin" ]; then
+    if ! command -v brew >/dev/null 2>&1; then
+        echo "Homebrew is required. Install from https://brew.sh and re-run."
+        exit 1
+    fi
+
+    brew install \
+        glm \
+        yaml-cpp \
+        cmake \
+        glfw \
+        glslang \
+        coreutils
+fi
+
