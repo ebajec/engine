@@ -22,7 +22,7 @@ if [ -f /etc/os-release ]; then
 fi
 
 # Detect Apple
-if [ "$(unname -S)" = "Darwin" ]; then
+if [ "$(uname -s)" = "Darwin" ]; then
     if ! command -v brew >/dev/null 2>&1; then
         echo "Homebrew is required. Install from https://brew.sh and re-run."
         exit 1
