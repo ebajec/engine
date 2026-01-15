@@ -71,7 +71,7 @@ private:
 	MyApp() {}
 };
 
-extern int init_gl_basic(GLFWwindow *window);
+extern int init_gl_context(GLFWwindow *window);
 
 //--------------------------------------------------------------------------------------------------
 // Template defintions

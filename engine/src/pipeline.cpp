@@ -6,6 +6,7 @@
 
 #include "resource/gl_utils.h"
 
+#include "utils/ansi_colors.h"
 #include "utils/log.h"
 
 #pragma clang diagnostic push
@@ -23,7 +24,6 @@
 #include <fstream>
 
 namespace fs = std::filesystem;
-
 
 //------------------------------------------------------------------------------
 // OpenGL shader loading
@@ -196,6 +196,20 @@ ev2::ShaderStage gl_stage_to_ev2(GLenum stage)
 	};
 }
 
+std::string get_layout_string(const ev2::DescriptorLayout& layout)
+{
+	std::string info;
+	for (const auto [name, binding] : layout.bindings) {
+		info += "\t(set " + std::to_string(binding.set) 
+			+ ", index " + std::to_string(binding.id) + ") : " 
+			 + name + "\n";	
+	}
+	if (!info.empty())
+		info.erase(info.size() - 1);
+
+	return info;
+}
+
 std::string get_shader_info(ev2::Shader *shader)
 {
 	const char *stage;
@@ -207,21 +221,12 @@ std::string get_shader_info(ev2::Shader *shader)
 			stage = "???";
 	}
 
-	// TODO: not pretty, but it works for now
-
 	std::string info;
-
 	info += "\tstage : " + std::string(stage) + "\n";
-
-	for (const auto [name, binding] : shader->layout->bindings) {
-		info += "\t(set " + std::to_string(binding.set) 
-			+ ", index " + std::to_string(binding.id) + ") : " 
-			 + name + "\n";	
-	}
-	if (!info.empty())
-		info.erase(info.size() - 1);
+	info += get_layout_string(*shader->layout);
 
 	return info;
+
 }
 
 static ev2::Result load_shader_file(const char *path, ev2::Shader* out)
@@ -234,7 +239,6 @@ static ev2::Result load_shader_file(const char *path, ev2::Shader* out)
 		return ev2::ELOAD_FAILED;
 	}
 
-	std::string name = file.filename().string();
 	std::string ext = file.extension().string();
 
 	// turn .stage.spv into .stage
@@ -266,8 +270,6 @@ static ev2::Result load_shader_file(const char *path, ev2::Shader* out)
 
 		ext.resize(len);
 		memcpy(ext.data(), start, len);
-
-		name.resize(name.size() - sizeof(".spv") + 1);
 	} else {
 		log_error("Filename extension must be '.spv'");
 		return ev2::ELOAD_FAILED;
@@ -293,7 +295,7 @@ static ev2::Result load_shader_file(const char *path, ev2::Shader* out)
 
 	if (!id) {
 		log_error("While loading shader '%s' , failed to compile '%s'", 
-			name.c_str(), filestr.c_str());
+			path, filestr.c_str());
 		return ev2::ELOAD_FAILED;
 	}
 
@@ -310,16 +312,17 @@ static ev2::Result load_shader_file(const char *path, ev2::Shader* out)
 	out->stage = gl_stage_to_ev2(stage);
 	out->layout = std::move(layout);
 
-	std::string info_str = get_shader_info(out);
-
-	log_info("Loaded shader : %s\n%s",name.c_str(), info_str.c_str());
-
 	return res;
 }
 
 ev2::Result gl_shader_create(ev2::Device *dev, ev2::Shader *p_shader, const char *path)
 {
-	ev2::Result res = load_shader_file(path, p_shader);
+	std::string syspath = dev->assets->get_system_path(path);
+	ev2::Result res = load_shader_file(syspath.c_str(), p_shader);
+
+	std::string info_str = get_shader_info(p_shader);
+	log_info("Shader : "COLORIZE_PATH(%s)"\n%s",path, info_str.c_str());
+
 	return res;
 }
 
@@ -332,6 +335,7 @@ void gl_shader_destroy(ev2::Device *dev, void *usr)
 
 	if (shader->id) 
 		glDeleteShader(shader->id);
+
 	delete shader;
 }
 
@@ -457,6 +461,22 @@ static ev2::Result init_gfx_pipeline_shaders(
 	return res;
 }
 
+std::string get_gfx_pipeline_info(ev2::Device *dev, ev2::GraphicsPipeline *p_pipeline)
+{
+	const char *vert = dev->assets->get_entry((AssetID)p_pipeline->vert.id)->path;
+	const char *frag = dev->assets->get_entry((AssetID)p_pipeline->frag.id)->path;
+
+	const char *fmt = 
+		"\tvert: "COLORIZE_PATH(%s)"\n"
+		"\tfrag: "COLORIZE_PATH(%s)"";
+
+	std::string buf;
+	buf.resize((strlen(fmt) + strlen(vert) + strlen(frag)) + 1);
+	
+	snprintf(buf.data(), buf.size(), fmt, vert, frag);
+	return buf;
+}
+
 static ev2::Result gl_gfx_pipeline_create(
 	ev2::Device *dev, 
 	ev2::GraphicsPipeline *p_pipeline, 
@@ -464,10 +484,11 @@ static ev2::Result gl_gfx_pipeline_create(
 )
 {
 	ev2::Result result = ev2::SUCCESS;
+	std::string syspath = dev->assets->get_system_path(path);
 
 	GfxPipelineInfo gfx_info;
 	try {
-		result = parse_gfx_pipeline_file(&gfx_info,path);
+		result = parse_gfx_pipeline_file(&gfx_info,syspath.c_str());
 	} catch (YAML::Exception e) {
 		log_error("Error while parsing YAML: %s",e.what());
 		return ev2::ELOAD_FAILED;
@@ -485,6 +506,9 @@ static ev2::Result gl_gfx_pipeline_create(
 
 	if (result)
 		return result;
+
+	std::string info = get_gfx_pipeline_info(dev, p_pipeline);
+	log_info("Graphics pipeline : "COLORIZE_PATH(%s)"\n%s", path, info.c_str());
 
 	return result;
 }
@@ -528,26 +552,19 @@ static ev2::Result gl_compute_pipeline_create(
 	const char *path
 )
 {
-	ev2::Result result = ev2::SUCCESS;
+	ev2::Shader *p_shader = &p_pipeline->shader;
+	ev2::Result result = gl_shader_create(dev, p_shader, path);
 
-	std::string realpath = dev->assets->get_system_path(path);
-
-	ev2::ShaderID handle = ev2::load_shader(dev, realpath.c_str());
-
-	if (!handle.id) {
-		result = ev2::ELOAD_FAILED;
+	if (result)
 		return result;
-	}
 
-	ev2::Shader *comp = dev->assets->get<ev2::Shader>(handle.id);
-
-	if (comp->stage != ev2::STAGE_COMPUTE) {
-		ev2::unload_shader(dev, handle);
+	if (p_shader->stage != ev2::STAGE_COMPUTE) {
+		gl_shader_destroy(dev, p_shader);
 		return ev2::ELOAD_FAILED;
 	}
 
 	GLuint program = glCreateProgram();
-	glAttachShader(program, comp->id);
+	glAttachShader(program, p_shader->id);
 	glLinkProgram(program);
 
 	if (!gl_check_program(program, path)) {
@@ -556,8 +573,6 @@ static ev2::Result gl_compute_pipeline_create(
 	}
 
 	p_pipeline->program = program;
-	p_pipeline->comp = handle;
-	p_pipeline->layout = *comp->layout;
 
 	return result;
 }
@@ -569,7 +584,7 @@ static void gl_compute_pipeline_destroy(ev2::Device *dev, void* usr)
 	if (pipeline->program)
 		glDeleteProgram(pipeline->program);
 
-	ev2::unload_shader(dev, pipeline->comp);
+	glDeleteShader(pipeline->shader.id);
 
 	delete pipeline;
 }
@@ -609,8 +624,7 @@ ShaderID load_shader(Device *dev, const char *path)
 
 	ev2::Shader *shader = new ev2::Shader{}; 
 
-	std::string realpath = dev->assets->get_system_path(path);
-	ev2::Result res = gl_shader_create(dev, shader, realpath.c_str());
+	ev2::Result res = gl_shader_create(dev, shader, path);
 
 	if (res == ev2::SUCCESS) {
 		id = dev->assets->allocate(&vtbl, shader, path); 
@@ -643,7 +657,7 @@ GraphicsPipelineID load_graphics_pipeline(Device *dev, const char *path)
 	std::string realpath = dev->assets->get_system_path(path);
 
 	ev2::GraphicsPipeline *pipeline = new ev2::GraphicsPipeline{}; 
-	ev2::Result res = gl_gfx_pipeline_create(dev, pipeline, realpath.c_str());
+	ev2::Result res = gl_gfx_pipeline_create(dev, pipeline, path);
 
 	if (res == ev2::SUCCESS) {
 		id = dev->assets->allocate(&vtbl, pipeline, path);
@@ -684,7 +698,7 @@ ComputePipelineID load_compute_pipeline(Device *dev, const char *path)
 	if (res == ev2::SUCCESS) {
 		id = dev->assets->allocate(&vtbl, pipeline, path);
 		if (dev->assets->reloader)
-			dev->assets->reloader->add_dependency(pipeline->comp.id, id);
+			dev->assets->reloader->add_dependency(pipeline->shader.id, id);
 		return ComputePipelineID{id};
 	}
 
@@ -711,12 +725,12 @@ DescriptorLayoutID get_compute_pipeline_layout(Device *dev, ComputePipelineID pi
 		return EV2_NULL_HANDLE(DescriptorLayout);
 
 	const ev2::ComputePipeline * res = dev->assets->get<ev2::ComputePipeline>(pipe.id);
-	const DescriptorLayout *p_layout = &res->layout;
+	const DescriptorLayout *p_layout = res->shader.layout.get();
 
-	return DescriptorLayoutID{.id = reinterpret_cast<uint64_t>(&res->layout)};
+	return DescriptorLayoutID{.id = reinterpret_cast<uint64_t>(p_layout)};
 }
 
-DescriptorSlot find_descriptor(DescriptorLayoutID id, const char *name)
+BindingSlot find_binding(DescriptorLayoutID id, const char *name)
 {
 	DescriptorLayout *layout = EV2_TYPE_PTR_CAST(DescriptorLayout, id);
 
@@ -725,6 +739,8 @@ DescriptorSlot find_descriptor(DescriptorLayoutID id, const char *name)
 	if (it != layout->bindings.end()) {
 		return {.set = it->second.set, .id = it->second.id};
 	}
+
+	log_warn("Failed to find binding : %s", name);
 	return {UINT16_MAX,UINT16_MAX};
 }
 
@@ -759,10 +775,10 @@ void destroy_descriptor_set(Device *dev, DescriptorSetID id)
 	delete set;
 }
 
-void descriptor_set_bind_buffer(
+void bind_buffer(
 	Device *dev, 
 	DescriptorSetID set_id, 
-	DescriptorSlot slot, 
+	BindingSlot slot, 
 	BufferID buf_id, 
 	size_t offset, 
 	size_t size
@@ -782,7 +798,7 @@ void descriptor_set_bind_buffer(
 	auto it = set->bindings.find(slot.id);
 
 	if (it == set->bindings.end()) {
-		log_error(
+		log_warn(
 			"Attempting to bind buffer %d to nonexistent index %d in set %d", 
 			buf_id, slot.id, slot.set);
 	}
@@ -796,15 +812,15 @@ void descriptor_set_bind_buffer(
 	binding->buf = buf_id;
 }
 
-void bind_set_texture(
+void bind_texture(
 	Device *dev, 
 	DescriptorSetID set_id, 
-	DescriptorSlot slot, 
+	BindingSlot slot, 
 	TextureID tex_id  
 ) 
 {
 	DescriptorSet *set = EV2_TYPE_PTR_CAST(DescriptorSet, set_id);
-	Texture *tex = dev->get_buffer(tex_id);
+	Texture *tex = dev->get_texture(tex_id);
 
 	if (set->index != slot.set) {
 		log_error(
@@ -866,8 +882,8 @@ void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 			case ev2::DESCRIPTOR_TYPE_SAMPLED_IMAGE:
 			case ev2::DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
 			case ev2::DESCRIPTOR_TYPE_SAMPLER:
-				Texture *tex = dev->get_buffer(binding.tex);
-				Image *img = dev->get_buffer(tex->img);
+				Texture *tex = dev->get_texture(binding.tex);
+				Image *img = dev->get_image(tex->img);
 				glBindTextureUnit(index, img->id);
 			break;
 		}

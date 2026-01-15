@@ -1,6 +1,8 @@
 #include "device_impl.h"
 #include "resource_impl.h"
 
+#include "utils/ansi_colors.h"
+
 #include "stb_image.h"
 
 #include <filesystem>
@@ -59,25 +61,24 @@ static void image_upload_gl(Device *dev, ImageID h, void *data, size_t size)
 
 static ev2::Result create(Device *dev, ImageAsset * asset, const char *path)
 {
-	std::string realpath = 
+	std::string syspath = 
 		dev->assets->get_system_path(path);
 
-	path = realpath.c_str();
 
-	if (!fs::exists(realpath)) {
+	if (!fs::exists(syspath)) {
 		log_error("Image does not exist : %s", path);
 		return ev2::ELOAD_FAILED;
 	}
 
 	int width, height, channels;
-	int stbi_res = stbi_info(path, &width, &height, &channels);
+	int stbi_res = stbi_info(syspath.c_str(), &width, &height, &channels);
 
 	if (!stbi_res) {
 		log_error("Failed to load image_file : %s",path);
 		return ev2::ELOAD_FAILED;
 	}
 
-	uint8_t* rgba = stbi_load(path,&width,&height,&channels,STBI_rgb_alpha);
+	uint8_t* rgba = stbi_load(syspath.c_str(),&width,&height,&channels,STBI_rgb_alpha);
 
 	if (!rgba) {
 		log_error("Failed to load image_file : %s",path);
@@ -92,6 +93,12 @@ static ev2::Result create(Device *dev, ImageAsset * asset, const char *path)
 	asset->img = img;
 
 	free(rgba);
+
+	log_info(
+		"Image: " COLORIZE_PATH(%s)"\n"
+		"\tw=%d\n\th=%d\n"
+		"\tchannels=%d"
+		, path, width, height, channels);
 
 	return ev2::SUCCESS;
 }

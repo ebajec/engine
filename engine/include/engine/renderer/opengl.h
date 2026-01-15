@@ -33,6 +33,8 @@ static inline int gl_check_err()
         case GL_INVALID_FRAMEBUFFER_OPERATION:
            log_error("Invalid framebuffer operation\n");
            return error;
+		default:
+			log_error("Unknown GL error detected");
     }
 
 	return error;

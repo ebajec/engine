@@ -5,6 +5,8 @@
 #include <backends/imgui_impl_glfw.h>
 #include "backends/imgui_impl_opengl3.h"
 
+#include "engine/utils/log.h"
+
 AppGlobals g_;
 
 void MyApp::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -157,61 +159,23 @@ MyApp::~MyApp()
 {
 }
 
-int init_gl_basic(GLFWwindow *window)
+int init_gl_context(GLFWwindow *window)
 {
 	glfwMakeContextCurrent(window);
+
+	#ifndef NDEBUG
+	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
+	#endif
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_SAMPLES, 4);
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         fprintf(stderr,"Failed to initialize GLAD\n");
 		return EXIT_FAILURE;
     }
 
-	glEnable(GL_DEBUG_OUTPUT);
-	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);       // makes callback synchronous
-
-	glDebugMessageCallback([]( GLenum source,
-							  GLenum type,
-							  GLuint id,
-							  GLenum severity,
-							  GLsizei length,
-							  const GLchar* message,
-							  const void* userParam )
-	{
-		if (severity != GL_DEBUG_SEVERITY_NOTIFICATION) {				
-			fprintf(stderr,
-				"GL DEBUG: [%u] %s\n"
-				"    Source:   0x%x\n"
-				"    Type:     0x%x\n"
-				"    Severity: 0x%x\n"
-				"    Message:  %s\n\n",
-				id, (type == GL_DEBUG_TYPE_ERROR ? "** ERROR **" : ""),
-				source, type, severity, message);
-		}
-
-	}, nullptr);
-
-	glDebugMessageControl(
-		GL_DONT_CARE,          // source
-		GL_DONT_CARE,          // type
-		GL_DONT_CARE,          // severity
-		0, nullptr,            // count + list of IDs
-		GL_TRUE);              // enable
-
-    glfwWindowHint(GLFW_SAMPLES, 4);
-    glEnable(GL_MULTISAMPLE);
-
-	const GLubyte* renderer = glGetString(GL_RENDERER);
-    const GLubyte* version = glGetString(GL_VERSION);
-    const GLubyte* vendor = glGetString(GL_VENDOR);
-    const GLubyte* glslVersion = glGetString(GL_SHADING_LANGUAGE_VERSION);
-
-    printf("Renderer: %s\n", renderer);
-    printf("OpenGL version: %s\n", version);
-    printf("Vendor: %s\n", vendor);
-    printf("GLSL version: %s\n", glslVersion);
 	return EXIT_SUCCESS;
 }

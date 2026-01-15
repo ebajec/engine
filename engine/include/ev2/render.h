@@ -27,16 +27,15 @@ void destroy_render_target(
 	RenderTargetID id
 );
 
+void begin_frame(Device *dev);
+void end_frame(Device *dev);
+
+
 MAKE_HANDLE(View);
 
 ViewID create_view(Device *dev, float view[], float proj[]);
 void update_view(Device *dev, ViewID handle, float view[], float proj[]);
 void destroy_view(Device *dev, ViewID handle);
-
-MAKE_HANDLE(Frame);
-
-void begin_frame(Device *dev);
-void end_frame(Device *dev);
 
 MAKE_HANDLE(Pass);
 
@@ -63,7 +62,8 @@ enum DrawMode
 	MODE_TRIANGLES
 };
 
-void cmd_draw(RecorderID rec, DrawMode mode, uint32_t vert_count); 
+void cmd_bind_pipeline(RecorderID rec, GraphicsPipelineID h);
+void cmd_draw_screen_quad(RecorderID rec); 
 
 };
 

@@ -60,10 +60,8 @@ struct GraphicsPipeline
 
 struct ComputePipeline
 {
-	ev2::ShaderID comp;
+	Shader shader;
 	GLuint program;
-
-	DescriptorLayout layout;
 };
 
 struct ResourceBinding

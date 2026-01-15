@@ -25,6 +25,48 @@ struct ResourceID
 	uint32_t gen() const {return static_cast<uint32_t>(u64 >> 32);} 
 };
 
+struct AtomicResourceState {
+	typedef uint64_t value_t;
+
+	std::atomic_uint64_t value;
+
+	value_t ref() {
+		value_t expected = value.load(std::memory_order_relaxed);
+		value_t desired;
+		do {
+			uint32_t refs = (uint32_t)expected;
+			desired = (expected & (0xFFFFFFFFLLU << 32)) | (uint64_t)(refs + 1);
+		} while (!value.compare_exchange_weak(expected, desired, 
+			std::memory_order_acq_rel, std::memory_order_relaxed));
+
+		return expected;
+	}
+
+	value_t deref() {
+		value_t expected = value.load(std::memory_order_relaxed);
+		value_t desired;
+		do {
+			uint32_t refs = (uint32_t)expected;
+			desired = (expected & (0xFFFFFFFFLLU << 32)) | (uint64_t)(refs - 1);
+		} while (!value.compare_exchange_weak(expected, desired, 
+			std::memory_order_acq_rel, std::memory_order_relaxed));
+
+		return expected;
+	}
+
+	value_t inc_gen() {
+		value_t expected = value.load(std::memory_order_relaxed);
+		value_t desired;
+		do {
+			uint32_t gen = (uint32_t)(expected >> 32);
+			desired = (((uint64_t)gen) << 32) | (expected & (0xFFFFFFFFLLU));
+		} while (!value.compare_exchange_weak(expected, desired, 
+			std::memory_order_acq_rel, std::memory_order_relaxed));
+
+		return expected;
+	}
+};
+
 template<typename T>
 struct ResourcePool {
 	static constexpr uint32_t PAGE_SIZE_BITS = 6;
@@ -33,8 +75,15 @@ struct ResourcePool {
 
 	struct entry_t {
 		T val;
-		std::atomic_uint32_t gen;
+		AtomicResourceState state;
 	};
+
+	static uint32_t get_gen(uint64_t state) {
+		return (uint32_t)(state >> 32);
+	}
+	static uint32_t get_refs(uint64_t state) {
+		return (uint32_t)(state >> 32);
+	}
 
 	static ResourcePool<T> *create();
 
@@ -113,8 +162,9 @@ void ResourcePool<T>::deallocate(ResourceID id)
 	uint32_t gen = id.gen();
 
 	entry_t *ent = get_entry(slot);
+	uint64_t state = ent->state.inc_gen();
 
-	if (ent->gen++ != gen)
+	if (get_gen(state) != gen)
 		return;
 
 	memset(&ent->val, 0x0, sizeof(T));
@@ -135,7 +185,9 @@ T *ResourcePool<T>::get(ResourceID id) const
 
 	entry_t *ent = get_entry(slot);
 
-	return (ent->gen == gen) ? &ent->val : nullptr;
+	uint64_t state = ent->state.value.load(std::memory_order_acquire);
+
+	return (get_gen(state) == gen) ? &ent->val : nullptr;
 }
 
 

@@ -1,59 +1,56 @@
 #include "utils/log.h"
 
+#include "utils/ansi_colors.h"
+
 #include <stdarg.h>
 #include <stdio.h>
 
 log_callback_t _log_callback{};
 log_flags _log_flags = LOG_ERROR_BIT;
 
-void _log_info(const char* format, ...)
-{
-	va_list args;
-    va_start(args, format);   
+static FILE * _log_files[LOG_LEVEL_MAX_ENUM] = {
+	stdout, 
+	stdout,
+	stderr
+};
 
-	if (_log_flags & LOG_INFO_BIT) 
-	{
-		printf("\x1b[\x1b[36m[INFO]\x1b[0m ");
-    	vprintf(format, args);      
-		printf("\n");
+void _log_function(log_level_t lvl, const char *file, int, const char *format, ...)
+{
+	FILE *out = _log_files[lvl];
+
+	switch(lvl) {
+		case LOG_LEVEL_INFO:
+		if (_log_flags & LOG_INFO_BIT)
+			fprintf(out, ANSI_CYAN([INFO])" ");
+		break;
+
+		case LOG_LEVEL_WARN:
+		if (_log_flags & LOG_WARN_BIT)
+			fprintf(out, ANSI_YELLOW([WARN])" ");
+		break;
+
+		case LOG_LEVEL_ERROR:
+		if (_log_flags & LOG_ERROR_BIT)
+			fprintf(out, ANSI_RED([ERROR])" ");
+		break;
+
+		case LOG_LEVEL_MAX_ENUM:
+			return;
 	}
-    va_end(args);
-
-	if (_log_callback) _log_callback(LOG_INFO_BIT,format,args);
-}
-
-void _log_error(const char* format, ...)
-{
-
-	va_list args;
-    va_start(args, format);   
-
-	if (_log_flags & LOG_ERROR_BIT) 
-	{
-		printf("\x1b[\x1b[91m[ERROR]\x1b[0m ");
-    	vprintf(format, args);      
-		printf("\n");
-	}
-    va_end(args);
-
-	if (_log_callback) _log_callback(LOG_ERROR_BIT,format,args);
-}
-
-void _log_warn(const char* format, ...)
-{
 
 	va_list args;
     va_start(args, format);   
-
-	if (_log_flags & LOG_WARN_BIT) 
-	{
-		printf("\x1b[\x1b[33m[WARN]\x1b[0m ");
-    	vprintf(format, args);      
-		printf("\n");
-	}
+	vfprintf(out, format, args);      
     va_end(args);
+
+	fprintf(out, "\n");
 
 	if (_log_callback) _log_callback(LOG_WARN_BIT,format,args);
+}
+
+void log_set_file(log_level_t lvl, FILE *file)
+{
+	_log_files[lvl] = file;
 }
 
 void log_set_callback(void *, log_callback_t callback)

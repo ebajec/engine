@@ -20,7 +20,7 @@ static constexpr AssetID ASSET_ID_NULL = 0;
 //------------------------------------------------------------------------------
 // Table
 
-enum AssetStatus
+enum AssetStatus : uint8_t
 {
 	ASSET_STATUS_EMPTY,
 	ASSET_STATUS_LOADING,

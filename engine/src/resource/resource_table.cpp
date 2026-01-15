@@ -103,7 +103,7 @@ static LoadResult reload_file_resource(ResourceTable *loader, ResourceHandle h)
 LoadResult ResourceReloader::process_updates()
 {
 	std::unique_lock<std::mutex> lock (mut);
-	std::vector<ResourceUpdateInfo> queue = std::move(queue);
+	std::vector<ResourceUpdateInfo> queue = std::move(updates);
 	lock.unlock();
 
 	for (ResourceUpdateInfo& info : queue) {

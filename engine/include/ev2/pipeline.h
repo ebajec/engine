@@ -35,7 +35,7 @@ enum Usage
     USAGE_MAX_ENUM,
 };
 
-struct DescriptorSlot
+struct BindingSlot
 {
 	uint32_t set;
 	uint32_t id;
@@ -55,7 +55,7 @@ DescriptorLayoutID get_graphics_pipeline_layout(
 DescriptorLayoutID get_compute_pipeline_layout(
 	Device *Dev, ComputePipelineID pipe);
 
-DescriptorSlot find_descriptor(DescriptorLayoutID layout, const char *name);
+BindingSlot find_binding(DescriptorLayoutID layout, const char *name);
 
 DescriptorSetID create_descriptor_set(
 	Device *dev, 
@@ -68,19 +68,19 @@ void destroy_descriptor_set(
 	DescriptorSetID set 
 );
 
-void descriptor_set_bind_buffer(
+void bind_buffer(
 	Device *dev, 
 	DescriptorSetID set, 
-	DescriptorSlot slot, 
+	BindingSlot slot, 
 	BufferID buf, 
 	size_t offset, 
 	size_t size
 ); 
 
-void bind_set_texture(
+void bind_texture(
 	Device *dev, 
 	DescriptorSetID set, 
-	DescriptorSlot slot, 
+	BindingSlot slot, 
 	TextureID tex 
 ); 
 

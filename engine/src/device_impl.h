@@ -5,6 +5,7 @@
 #include "pool.h"
 #include "resource_impl.h"
 #include "render_impl.h"
+#include "pipeline_impl.h"
 
 #include <algorithm>
 #include <set>
@@ -89,13 +90,24 @@ struct Device
 		ResourceID rid = {.u64 = h.id};
 		return buffer_pool->get(rid);
 	}
-	inline Image *get_buffer(ImageID h) {
+	inline Image *get_image(ImageID h) {
 		ResourceID rid = {.u64 = h.id};
 		return image_pool->get(rid);
 	}
-	inline Texture *get_buffer(TextureID h) {
+	inline Texture *get_texture(TextureID h) {
 		ResourceID rid = {.u64 = h.id};
 		return texture_pool->get(rid);
+	}
+
+	inline GraphicsPipeline *get_gfx_pipeline(GraphicsPipelineID h) {
+		AssetID id = static_cast<uint32_t>(h.id);
+		AssetEntry *ent = assets->get_entry(id);
+		return (GraphicsPipeline*)ent->usr;
+	}
+	inline Shader *get_shader(ShaderID h) {
+		AssetID id = static_cast<uint32_t>(h.id);
+		AssetEntry *ent = assets->get_entry(id);
+		return (Shader*)ent->usr;
 	}
 };
 

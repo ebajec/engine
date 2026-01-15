@@ -110,8 +110,8 @@ void destroy_render_target(
 
 static inline ViewData view_data_from_matrices(float view[], float proj[])
 {
-	glm::mat4 view_mat = glm::make_mat4(view);
-	glm::mat4 proj_mat = glm::make_mat4(proj);
+	glm::mat4 view_mat = view ? glm::make_mat4(view) : glm::mat4(1.f);
+	glm::mat4 proj_mat = proj ? glm::make_mat4(proj) : glm::mat4(1.f);
 
 	return ViewData{
 		.p = proj_mat,
@@ -148,6 +148,9 @@ void destroy_view(Device *dev, ViewID handle)
 
 void begin_frame(Device *dev)
 {
+	if (gl_check_err()) {
+	}
+
 	if (dev->assets->reloader) {
 		dev->assets->reloader->update();
 	}
@@ -222,9 +225,40 @@ SyncID end_pass(Device *dev, PassCtx ctx)
 	return EV2_NULL_HANDLE(Sync);
 }
 
-void cmd_draw(RecorderID rec, DrawMode mode, uint32_t vert_count)
+void cmd_bind_pipeline(RecorderID rec, GraphicsPipelineID h)
 {
+	Device *dev = EV2_TYPE_PTR_CAST(Device, rec);
+	GraphicsPipeline *pipeline = dev->get_gfx_pipeline(h);
 
+	if (!pipeline) {
+		log_error("Invalid pipeline handle %lld", (unsigned long long)h.id);
+		return;
+	}
+
+	glUseProgram(pipeline->program);
+}
+
+void cmd_draw_screen_quad(RecorderID rec)
+{
+	// A temporary thing while I use OpenGL
+	static GLuint vao = 0;
+	static GLuint ibo = 0;
+	if (!vao) { 
+		const uint32_t indices[] = {
+			0,1,2,0,2,3
+		};
+		glCreateBuffers(1, &ibo);
+		glNamedBufferStorage(ibo, sizeof(indices), indices, 0);
+
+		glGenVertexArrays(1, &vao);
+
+		glBindVertexArray(vao);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+		glBindVertexArray(0);
+	}
+	glBindVertexArray(vao);
+	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+	glBindVertexArray(0);
 }
 
 };

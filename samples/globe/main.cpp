@@ -95,6 +95,7 @@ int main(int argc, char* argv[])
 	}
 #endif
 
+	//glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
 	if (!glfwInit()) {
 		log_error("Failed to initialize GLFW!");
 		return EXIT_FAILURE;
@@ -151,7 +152,7 @@ int main(int argc, char* argv[])
 		params.win.y
 	);
 
-	if (int code = init_gl_basic(window); code == EXIT_FAILURE) {
+	if (int code = init_gl_context(window); code == EXIT_FAILURE) {
 		fprintf(stderr, "ERROR: Failed to load OpenGL\n");
 		return code; 
 	}

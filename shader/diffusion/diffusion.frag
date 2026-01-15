@@ -6,10 +6,10 @@
 
 layout (binding = 0) uniform sampler2D u_tex;
 
-layout (binding = 1) uniform Uniforms
-{
-	float u_s;
-};
+//layout (binding = 1) uniform Uniforms
+//{
+//	float u_s;
+//};
 
 layout (location = 0) in vec2 frag_pos;
 layout (location = 1) in vec2 frag_uv;
@@ -108,5 +108,5 @@ void main()
 	);
 
 	float f = 0.01*length(diff);
-	FragColor = mix(color,f*vec4(1),u_s);
+	FragColor = mix(color,f*vec4(1),0.5);
 }

@@ -14,7 +14,6 @@ layout (location = 0) out vec4 FragColor;
 void main()
 {
 	vec4 color = texture(u_tex,frag_uv);
-	color = vec4(1,1,1,0);
 	FragColor = color;
 }
 

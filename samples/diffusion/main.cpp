@@ -207,7 +207,7 @@ int main(int argc, char* argv[])
 		params.win.y
 	);
 
-	if (int code = init_gl_basic(window); code == EXIT_FAILURE) {
+	if (int code = init_gl_context(window); code == EXIT_FAILURE) {
 		fprintf(stderr, "ERROR: Failed to load OpenGL\n");
 		return code; 
 	}
