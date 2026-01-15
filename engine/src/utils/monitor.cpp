@@ -412,3 +412,250 @@ void monitor::interrupt()
 
 };
 #endif
+
+// Apple implementation
+#ifdef __APPLE__
+
+// Apple
+#include <CoreServices/CoreServices.h>
+#include <CoreFoundation/CoreFoundation.h>
+
+// kernel 
+#include <errno.h>
+#include <signal.h>
+#include <poll.h>
+
+// C++
+#include <atomic>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+
+static int to_monitor_flags(FSEventStreamEventFlags f) {
+    int out = 0;
+
+    if (f & kFSEventStreamEventFlagItemCreated)  
+        out |= MONITOR_FLAGS_CREATE;
+    if (f & kFSEventStreamEventFlagItemRemoved)  
+        out |= MONITOR_FLAGS_DELETE;
+    if (f & kFSEventStreamEventFlagItemModified) 
+        out |= MONITOR_FLAGS_MODIFY;
+    if (f & kFSEventStreamEventFlagItemRenamed)  
+        out |= (MONITOR_FLAGS_CREATE | MONITOR_FLAGS_DELETE); // “move” analogue
+    if (f & kFSEventStreamEventFlagItemIsDir)     
+        out |= MONITOR_FLAGS_ISDIR;
+    
+    return out;
+}
+
+static int add_watch_recursive(int inotifyFd, std::unordered_map<int,std::string>& watches, const char * path, uint32_t flags)
+{
+    if (!path) 
+        return 0;
+
+    tinydir_dir dir;
+
+    if (tinydir_open(&dir,path) == -1) 
+        return 0;
+
+    int wd = k(inotifyFd, path ,flags);
+
+    watches[wd] = std::string(path);
+
+    if (wd == -1) 
+    {
+        perror("inotify_add_watch");
+        return 0;
+    }
+
+    while (dir.has_next)
+    {
+        tinydir_file file;
+        tinydir_readfile(&dir, &file);
+
+        if (file.is_dir && strcmp(file.name,".") && strcmp(file.name,".."))
+            add_watch_recursive(inotifyFd, watches, file.path, flags);
+
+        tinydir_next(&dir);
+    }
+
+    tinydir_close(&dir);
+    return 1;
+}
+
+static void interrupt_handler(int) 
+{
+    
+}
+
+namespace utils
+{
+
+void monitor::watch() {
+    // Make dir
+    CFStringRef dir = CFStringCreateWithCString(nullptr, .c_str(), kCFStringEncodingUTF8)
+    CFArrayRef paths = CFArrayCreate(nullptr, &dir, 1, &kCFTypeArrayCallBacks)
+    FSEventStreamCreateFlags flags = kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagWatchRoot;
+    FSEventStreamContext ctx{
+        .info = this;
+    };
+    
+    FSEventsStreamRef ref = FSEventStreamCreate(nullptr, &lFSEventStreamCallBacks, &ctx, paths, nullptr, nullptr, flags);
+    
+    // FSEventStreamRef FSEventStreamCreate (CFAllocatorRef allocator,
+    //                               FSEventStreamCallback callback,
+    //                               FSEventStreamContext *context,
+    //                               CFArrayRef pathsToWatch,
+    //                               FSEventStreamEventId sinceWhen,
+    //                               CFTimeInterval latency,
+    //                               FSEventStreamCreateFlags flags);
+
+
+    int inotifyFd;
+    inotifyFd = inotify_init1(IN_NONBLOCK);
+    ssize_t numRead;
+    struct inotify_event* event;
+
+    if (inotifyFd < 0)
+    {
+        perror("inotify_init");
+        return;
+    }
+
+	std::unique_ptr<char[]> buffer (new (std::align_val_t{alignof(struct inotify_event)}) char[MONITOR_MAX_EVENT_BUFFER]);
+
+    uint32_t watchFlags =
+      IN_CREATE 
+    | IN_DELETE 
+    | IN_MODIFY 
+    | IN_MOVED_TO 
+    | IN_MOVED_FROM;
+    
+
+    struct sigaction sa;
+    sa.sa_handler = interrupt_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+
+    if (sigaction(SIGINT, &sa, NULL) < 0)
+    {
+        perror("sigaction");
+        return;
+    }
+
+    struct pollfd fds[1];
+    fds[0].fd = inotifyFd;
+    fds[0].events = POLLIN;
+
+    std::unordered_map<int,std::string> activeWatches;
+
+    add_watch_recursive(inotifyFd, activeWatches, m_dir.c_str(), watchFlags);
+
+    while (m_watching)
+    {
+        int pollNum = poll(fds, 1, 1000);  // Timeout after 1 second
+        if (pollNum < 0) {
+            if (errno == EINTR) {
+                printf("Poll interrupted by signal\n");
+                break;
+            }
+            perror("poll");
+            break;
+        }
+
+        if (pollNum == 0) {
+            // Timeout - continue loop
+            continue;
+        }
+
+        if (! (fds[0].revents & POLLIN)) 
+        {
+            continue;
+        }
+
+        // TODO: robust handling for overflows
+
+		numRead = read(inotifyFd, buffer.get(), MONITOR_MAX_EVENT_BUFFER*sizeof(char));
+        if (numRead < 0)
+        {
+            if (errno == EINTR)
+            {
+                printf("Read interrupted by signal\n");
+                break;
+            }
+            else 
+            {
+                perror("read");
+                break;
+            }
+        }
+
+		for (char* p = buffer.get(); p < buffer.get() + numRead; ) 
+        {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wcast-align"
+            event = (struct inotify_event *) p;
+#pragma clang diagnostic pop
+
+            if (!activeWatches.count(event->wd))
+            {
+                fprintf(stderr, "ERROR: Watch not tracked for %d\n",event->wd);
+                continue;
+            }
+
+            char path[PATH_MAX] = {0};
+            int flags = 0;
+
+            snprintf(path,sizeof(path),"%s",activeWatches[event->wd].c_str());
+            pathcat(path,event->name,sizeof(path));
+
+            // --- TEMP ---
+
+            flags = to_monitor_flags(FSFlags);
+
+            if (event->mask & IN_CREATE)
+                flags |= MONITOR_FLAGS_CREATE;
+            if (event->mask & IN_DELETE)
+                flags |= MONITOR_FLAGS_DELETE;
+            if (event->mask & IN_MODIFY)
+                flags |= MONITOR_FLAGS_MODIFY;
+            if (event->mask & IN_ISDIR)
+                flags |= MONITOR_FLAGS_ISDIR;
+            if (event->mask & IN_MOVED_TO)
+                flags |= MONITOR_FLAGS_CREATE;
+            if (event->mask & IN_MOVED_FROM)
+                flags |= MONITOR_FLAGS_DELETE;
+            if (event->mask & IN_CLOSE_WRITE)
+                flags |= MONITOR_FLAGS_CREATE;
+
+            if (event->mask & IN_CREATE && event->mask & IN_ISDIR)
+            {
+                add_watch_recursive(inotifyFd, activeWatches, path, IN_CREATE | IN_DELETE | IN_MODIFY);            
+            }
+            else if (event->mask & IN_IGNORED)
+            {
+                inotify_rm_watch(inotifyFd, event->wd);
+                activeWatches.erase(event->wd);
+            }
+
+            monitor_event_t result = {path,flags};
+            
+            if (m_callback && !(event->mask & IN_IGNORED)) 
+                m_callback(m_usr,result);
+
+            p += sizeof(struct inotify_event) + event->len;
+        }
+    }
+
+    close(inotifyFd);
+}
+
+void monitor::interrupt()
+{
+    m_watching = false;
+    //pthread_kill(m_watcherThread.native_handle(),SIGINT);
+}
+
+};
+
+#endif

@@ -13,6 +13,12 @@ file(GLOB SOURCES "src/*.cpp" "src/*.c" "src/*/*.cpp" "src/*/*.c")
 
 add_library(${TARGET} STATIC ${SOURCES})
 
+if(APPLE)
+  find_library(CORESERVICES_FRAMEWORK CoreServices REQUIRED)
+  target_link_libraries(${TARGET} PUBLIC ${CORESERVICES_FRAMEWORK})
+  set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+endif()
+
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 if(ENABLE_ASAN AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU"))
 message(STATUS "AddressSanitizer Enabled")
