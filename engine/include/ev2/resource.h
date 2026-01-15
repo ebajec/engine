@@ -28,6 +28,8 @@ enum BufferFlagBits
 {
 	MAP_READ = 0x1,
 	MAP_WRITE = 0x2,
+	MAP_PERSISTENT = 0x4,
+	MAP_COHERENT = 0x8,
 };
 typedef uint32_t BufferFlags;
 
@@ -53,7 +55,7 @@ void destroy_texture(Device *dev, TextureID tex);
 // Image assets
 
 ImageAssetID load_image_asset(Device *dev, const char *path);
-void unload_texture_asset(Device *dev, const char *path);
+void unload_image_asset(Device *dev, ImageAssetID id);
 ImageID get_image_resource(Device *dev, ImageAssetID id);
 
 };

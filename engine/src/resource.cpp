@@ -10,9 +10,13 @@ BufferID create_buffer(Device *dev, size_t size, BufferFlags flags)
 	GLenum gl_flags = GL_DYNAMIC_STORAGE_BIT;
 
 	if (flags & MAP_READ)
-		gl_flags |= GL_MAP_READ_BIT | GL_MAP_COHERENT_BIT | GL_MAP_PERSISTENT_BIT;
+		gl_flags |= GL_MAP_READ_BIT;
 	else if (flags & MAP_WRITE)
-		gl_flags |= GL_MAP_WRITE_BIT | GL_MAP_COHERENT_BIT | GL_MAP_PERSISTENT_BIT;
+		gl_flags |= GL_MAP_WRITE_BIT;
+	else if (flags & MAP_PERSISTENT)
+		gl_flags |= GL_MAP_PERSISTENT_BIT;
+	else if (flags & MAP_COHERENT)
+		gl_flags |= GL_MAP_COHERENT_BIT;
 
 	glCreateBuffers(1, &buf.id);
 	glNamedBufferStorage(buf.id, size, nullptr, gl_flags);
@@ -21,7 +25,7 @@ BufferID create_buffer(Device *dev, size_t size, BufferFlags flags)
 		return EV2_NULL_HANDLE(Buffer);
 	}
 
-	ResourceID id = dev->buffers->allocate(&buf);
+	ResourceID id = dev->buffer_pool->allocate(&buf);
 
 	return EV2_HANDLE_CAST(Buffer, id.u64);
 }
@@ -29,11 +33,11 @@ BufferID create_buffer(Device *dev, size_t size, BufferFlags flags)
 void destroy_buffer(Device *dev, BufferID h)
 {
 	ResourceID id = ResourceID{h.id};
-	Buffer* buf = dev->buffers->get(id);
+	Buffer* buf = dev->buffer_pool->get(id);
 
 	glDeleteBuffers(1, &buf->id);
 
-	dev->buffers->deallocate(id);
+	dev->buffer_pool->deallocate(id);
 }
 
 
@@ -65,7 +69,7 @@ ImageID create_image(Device *dev, uint32_t w, uint32_t h, uint32_t d, ImageForma
 		return EV2_NULL_HANDLE(Image);
 	}
 
-	ResourceID id = dev->images->allocate(&img);
+	ResourceID id = dev->image_pool->allocate(&img);
 
 	return EV2_HANDLE_CAST(Image, id.u64);
 }
@@ -73,11 +77,11 @@ ImageID create_image(Device *dev, uint32_t w, uint32_t h, uint32_t d, ImageForma
 void destroy_image(Device *dev, ImageID h)
 {
 	ResourceID id = ResourceID{h.id};
-	Image *img = dev->images->get(id);
+	Image *img = dev->image_pool->get(id);
 
 	glDeleteTextures(1, &img->id);
 
-	dev->images->deallocate(id);
+	dev->image_pool->deallocate(id);
 }
 
 TextureID create_texture(Device *dev, ImageID img, TextureFilter filter)
@@ -86,14 +90,14 @@ TextureID create_texture(Device *dev, ImageID img, TextureFilter filter)
 	tex.img = img;
 	tex.filter = filter;
 
-	ResourceID id = dev->textures->allocate(&tex);
+	ResourceID id = dev->texture_pool->allocate(&tex);
 	return EV2_HANDLE_CAST(Texture, id.u64);
 }
 
 void destroy_texture(Device *dev, TextureID h)
 {
 	ResourceID id = {.u64 = h.id};
-	dev->textures->deallocate(id);
+	dev->texture_pool->deallocate(id);
 }
 
 };

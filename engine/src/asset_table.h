@@ -38,6 +38,8 @@ struct AssetEntry
 	void *usr;
 	const AssetVTable *vtbl;
 	char *path;
+
+	// Internal refcount
 	std::atomic_uint32_t refs;
 	std::atomic_uint16_t gen;
 	std::atomic_uint8_t status;
@@ -61,17 +63,16 @@ struct AssetTable
 	mutable std::shared_mutex mut;
 
 	static AssetTable *create(ev2::Device *dev, const char *root, bool reload = true);
-	~AssetTable();
-
 	static void destroy(AssetTable *tbl);
 
 	/// @brief allocate an entry for an initialized asset.  The resulting
 	/// entry is inserted with ASSET_STATUS_READY.
-	AssetID allocate(const AssetVTable *vtbl, void *usr, const char *path);
+	AssetID allocate(const AssetVTable *vtbl, void *usr, 
+				  const char *path, const char *msg = nullptr);
 	void deallocate(AssetID id);
 
+	// @brief Get unique handle for a resource
 	AssetID load(const char *path);
-	void unload(AssetID id);
 
 	ev2::Result reload(AssetID id);
 

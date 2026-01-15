@@ -13,7 +13,7 @@ void _log_info(const char* format, ...)
 
 	if (_log_flags & LOG_INFO_BIT) 
 	{
-		printf("[INFO] ");
+		printf("\x1b[\x1b[36m[INFO]\x1b[0m ");
     	vprintf(format, args);      
 		printf("\n");
 	}
@@ -30,7 +30,7 @@ void _log_error(const char* format, ...)
 
 	if (_log_flags & LOG_ERROR_BIT) 
 	{
-		printf("[ERROR] ");
+		printf("\x1b[\x1b[91m[ERROR]\x1b[0m ");
     	vprintf(format, args);      
 		printf("\n");
 	}
@@ -47,7 +47,7 @@ void _log_warn(const char* format, ...)
 
 	if (_log_flags & LOG_WARN_BIT) 
 	{
-		printf("[WARN] ");
+		printf("\x1b[\x1b[33m[WARN]\x1b[0m ");
     	vprintf(format, args);      
 		printf("\n");
 	}

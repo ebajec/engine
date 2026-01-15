@@ -8,8 +8,8 @@ layout (std140, binding = 0) uniform Uniforms
 	uint count;
 };
 
-layout (binding = 0) uniform sampler2D img_in;
-layout (rgba8, binding = 1) writeonly uniform image2D img_out;
+layout (binding = 1) uniform sampler2D img_in;
+layout (rgba8, binding = 2) writeonly uniform image2D img_out;
 
 void main() {
     uvec3 id = gl_GlobalInvocationID;

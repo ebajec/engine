@@ -1,6 +1,8 @@
 #ifndef EV2_POOL_H
 #define EV2_POOL_H
 
+#include <utils/log.h>
+
 #include <vector>
 #include <mutex>
 #include <array>
@@ -39,6 +41,8 @@ struct ResourcePool {
 	std::vector<std::unique_ptr<entry_t[]>> pages;
 	std::vector<uint32_t> free_list;
 
+	size_t cap = 0;
+
 	// TODO: Eventually want to not use a mutex and have pages of 
 	// atomic counters
 	mutable std::mutex sync;
@@ -46,6 +50,21 @@ struct ResourcePool {
 	ResourceID allocate(T* ptr = nullptr);
 	void deallocate(ResourceID id);
 	T* get(ResourceID id) const;
+
+	bool check_handle(ResourceID id) const {
+		uint32_t slot = id.slot();
+		if (!slot || slot > cap) {
+			log_error("Invalid resource handle passed : %d", slot);
+			throw std::runtime_error("Invalid resource handle passed");
+			return false;
+		}
+		return true;
+	}
+
+	entry_t *get_entry(uint32_t slot) const {
+		--slot;
+		return &pages[slot >> PAGE_SIZE_BITS][slot & PAGE_MASK];
+	}
 };
 
 //------------------------------------------------------------------------------
@@ -68,21 +87,14 @@ ResourceID ResourcePool<T>::allocate(T* ptr)
 		slot = free_list.back();
 		free_list.pop_back();
 	} else {
-		entry_t *page = new entry_t[PAGE_SIZE];
+		slot = static_cast<uint32_t>(++cap);
 
-		uint32_t start = static_cast<uint32_t>(pages.size()) * PAGE_SIZE;
-
-		// leave room for the one we're allocating
-		for (uint32_t i = 1; i < PAGE_SIZE; ++i) {
-			free_list.push_back(start + i);
-		}
-		pages.emplace_back(page);
-
-		slot = start;
+		if (slot > static_cast<uint32_t>(pages.size()) * PAGE_SIZE)
+			pages.emplace_back(new entry_t[PAGE_SIZE]);
 	}
 	lock.unlock();
 
-	entry_t *ent = &pages[slot >> PAGE_SIZE_BITS][slot & PAGE_MASK];
+	entry_t *ent = get_entry(slot);
 
 	if (ptr)
 		ent->val = *ptr; 
@@ -93,10 +105,14 @@ ResourceID ResourcePool<T>::allocate(T* ptr)
 template<typename T>
 void ResourcePool<T>::deallocate(ResourceID id)
 {
+	if (!check_handle(id)) {
+		return;
+	}
+
 	uint32_t slot = id.slot();
 	uint32_t gen = id.gen();
 
-	entry_t *ent = &pages[slot >> PAGE_SIZE_BITS][slot & PAGE_MASK];
+	entry_t *ent = get_entry(slot);
 
 	if (ent->gen++ != gen)
 		return;
@@ -110,10 +126,14 @@ void ResourcePool<T>::deallocate(ResourceID id)
 template<typename T>
 T *ResourcePool<T>::get(ResourceID id) const
 {
+	if (!check_handle(id)) {
+		return nullptr;
+	}
+
 	uint32_t slot = id.slot();
 	uint32_t gen = id.gen();
 
-	entry_t *ent = &pages[slot >> PAGE_SIZE_BITS][slot & PAGE_MASK];
+	entry_t *ent = get_entry(slot);
 
 	return (ent->gen == gen) ? &ent->val : nullptr;
 }

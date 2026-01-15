@@ -43,10 +43,19 @@ MAKE_HANDLE(Pass);
 struct PassCtx
 {
 	RecorderID rec;
-	PassID id;
+	PassID pass;
 };
 
-PassCtx begin_pass(Device *dev, RenderTargetID target, ViewID view);
+struct Rect
+{
+	uint32_t x0, y0;
+	uint32_t w, h;
+};
+
+// @brief Begin a render pass.  Configures bindings for pass-specific data  
+// (view matrices, etc).    
+PassCtx begin_pass(Device *dev, RenderTargetID target, ViewID view,
+				   Rect viewport, Rect scissor = {});
 SyncID end_pass(Device *dev, PassCtx pass);
 
 enum DrawMode

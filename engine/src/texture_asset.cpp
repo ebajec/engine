@@ -43,7 +43,7 @@ static ev2::Result reload(Device *dev, void **usr, const char *path)
 
 static void image_upload_gl(Device *dev, ImageID h, void *data, size_t size)
 {
-	Image *image = dev->images->get(ResourceID{h.id});
+	Image *image = dev->image_pool->get(ResourceID{h.id});
 	GLenum fmt, type;
 
 	image_format_to_gl(image->fmt, &fmt, &type);
@@ -119,12 +119,11 @@ ImageAssetID load_image_asset(Device *dev, const char *path)
 
 void unload_image_asset(Device *dev, ImageAssetID h)
 {
-	dev->assets->unload((AssetID)h.id);
 }
 
 ImageID get_image_resource(Device *dev, ImageAssetID h)
 {
-	ImageAsset *asset = dev->assets->get<ImageAsset>(h.id);
+	ImageAsset *asset = dev->assets->get<ImageAsset>((uint32_t)h.id);
 	return asset->img;
 }
 

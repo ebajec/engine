@@ -13,11 +13,36 @@ layout (location = 1) out vec2 frag_uv;
 
 void main()
 {
-	vec2 p = vec2(vec4(pos,0,1));
+	uint id = gl_VertexIndex; 
 
-	frag_pos = p;
+	vec2 pos;
+	vec2 uv;
+
+	switch (id) {
+		case 0: 
+			pos = vec2(-1,-1);
+			uv = vec2(0, 0);
+			break;
+
+		case 1: 
+			pos = vec2(1, -1);
+			uv = vec2(1, 0);
+			break;
+
+		case 2: 
+			pos = vec2(1,  1);
+			uv = vec2(1, 1);
+			break;
+
+		case 3: 
+			pos = vec2(-1, 1);
+			uv = vec2(0, 1);
+			break;
+	}
+
+	frag_pos = pos;
 	frag_uv = uv;
 
-	gl_Position = vec4(p,0.0,1.0);
+	gl_Position = vec4(pos,0.0,1.0);
 }
 

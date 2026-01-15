@@ -10,6 +10,11 @@
 
 extern int init_gl_basic(GLFWwindow *window);
 
+class App
+{
+	GLFWwindow *p_window;
+};
+
 int main(int argc, char *argv[])
 {
 	if (!glfwInit()) {
@@ -89,6 +94,17 @@ int main(int argc, char *argv[])
 		ctr = (ctr + 1) & 0x1;
 		int next = ctr;
 
+		int win_w, win_h;
+
+		glfwGetFramebufferSize(p_window, &win_w, &win_h);
+
+		ev2::Rect view_rect = {
+			.x0 = 0,
+			.y0 = 0,
+			.w = (uint32_t)win_w,
+			.h = (uint32_t)win_h
+		};
+
 		ev2::begin_frame(dev);
 
 		ev2::bind_set_texture(dev, diffusion_set, img_in_slot, swap_tex[curr]);
@@ -102,7 +118,7 @@ int main(int argc, char *argv[])
 		ev2::cmd_use_texture(rec, swap_tex[curr], ev2::USAGE_SAMPLED_GRAPHICS);
 		ev2::SyncID cmd_sync = ev2::end_commands(rec);
 
-		ev2::PassCtx pass = ev2::begin_pass(dev, ev2::RenderTargetID{0}, camera);
+		ev2::PassCtx pass = ev2::begin_pass(dev, {}, camera, view_rect);
 		ev2::cmd_bind_descriptor_set(pass.rec, screen_quad_set);
 		ev2::cmd_draw(pass.rec, ev2::MODE_TRIANGLES, 6);
 		ev2::SyncID pass_sync = ev2::end_pass(dev, pass);

@@ -6,7 +6,7 @@
 
 layout (binding = 0) uniform sampler2D u_tex;
 
-layout (binding = 1) uniform UBO
+layout (binding = 1) uniform Uniforms
 {
 	float u_s;
 };

@@ -30,7 +30,7 @@ namespace fs = std::filesystem;
 
 typedef GLenum shader_stage_t;
 
-static uint32_t compile_shader_spv(shader_stage_t stage, const uint32_t* data, size_t size) 
+static GLuint compile_spv_gl(shader_stage_t stage, const uint32_t* data, size_t size) 
 {
 	GLuint s = glCreateShader(stage);
 
@@ -111,7 +111,7 @@ ev2::DescriptorType spv_reflect_binding_type_to_internal(SpvReflectDescriptorTyp
 	}
 }
 
-static ev2::Result spv_bindings_create(ev2::DescriptorLayout *layout, 
+static ev2::Result get_spv_module_layout(ev2::DescriptorLayout *layout, 
 									  const void* code, size_t size)
 {
 	SpvReflectShaderModule module;
@@ -132,7 +132,24 @@ static ev2::Result spv_bindings_create(ev2::DescriptorLayout *layout,
 
 	for (uint32_t i = 0; i < binding_count; ++i) {
 		SpvReflectDescriptorBinding *binding = bindings[i];
+		std::string tmpname;
+
 		const char *name = binding->name;
+
+		bool no_instance = !name || *name == '\0'; 
+
+		if (no_instance && 
+			binding->type_description &&
+			binding->type_description->type_name
+		) {
+			name = binding->type_description->type_name;
+		}
+		else if (no_instance) {
+			tmpname = 
+				"set" + std::to_string(binding->set) + 
+				"binding" + std::to_string(binding->binding);
+		}
+
 		uint32_t id = binding->binding;
 
 		layout->bindings[name] = {
@@ -147,7 +164,7 @@ static ev2::Result spv_bindings_create(ev2::DescriptorLayout *layout,
 	return result == SPV_REFLECT_RESULT_SUCCESS ? ev2::SUCCESS : ev2::ELOAD_FAILED;
 }
 
-static ev2::Result check_shader(uint32_t id)
+static ev2::Result check_shader_gl(uint32_t id)
 {
 	GLint success = 0;
 	glGetShaderiv(id, GL_COMPILE_STATUS, &success);
@@ -179,6 +196,34 @@ ev2::ShaderStage gl_stage_to_ev2(GLenum stage)
 	};
 }
 
+std::string get_shader_info(ev2::Shader *shader)
+{
+	const char *stage;
+	switch (shader->stage) {
+		case ev2::STAGE_VERTEX: stage = "vertex"; break;
+		case ev2::STAGE_FRAGMENT: stage = "fragment"; break;
+		case ev2::STAGE_COMPUTE: stage = "compute"; break;
+		default:
+			stage = "???";
+	}
+
+	// TODO: not pretty, but it works for now
+
+	std::string info;
+
+	info += "\tstage : " + std::string(stage) + "\n";
+
+	for (const auto [name, binding] : shader->layout->bindings) {
+		info += "\t(set " + std::to_string(binding.set) 
+			+ ", index " + std::to_string(binding.id) + ") : " 
+			 + name + "\n";	
+	}
+	if (!info.empty())
+		info.erase(info.size() - 1);
+
+	return info;
+}
+
 static ev2::Result load_shader_file(const char *path, ev2::Shader* out)
 {
 	fs::path file (path);
@@ -192,6 +237,7 @@ static ev2::Result load_shader_file(const char *path, ev2::Shader* out)
 	std::string name = file.filename().string();
 	std::string ext = file.extension().string();
 
+	// turn .stage.spv into .stage
 	if (ext == ".spv") {
 		const char* str = filestr.c_str();
 
@@ -234,13 +280,16 @@ static ev2::Result load_shader_file(const char *path, ev2::Shader* out)
 		return ev2::ELOAD_FAILED;
 	}
 
-	uint32_t id = 0;
-
 	std::vector<uint32_t> code;
 	if (spv_load(file,code) < 0) 
 		return ev2::ELOAD_FAILED;
 
-	id = compile_shader_spv(stage, code.data(), code.size());
+	auto layout = std::make_unique<ev2::DescriptorLayout>();
+
+	ev2::Result res = get_spv_module_layout(
+		layout.get(), code.data(), code.size()*sizeof(uint32_t));
+
+	GLuint id = compile_spv_gl(stage, code.data(), code.size());
 
 	if (!id) {
 		log_error("While loading shader '%s' , failed to compile '%s'", 
@@ -248,25 +297,22 @@ static ev2::Result load_shader_file(const char *path, ev2::Shader* out)
 		return ev2::ELOAD_FAILED;
 	}
 
-	ev2::Result res = check_shader(id);
+	res = check_shader_gl(id);
 
 	if (res) 
 		return res;
-
-	auto layout = std::make_unique<ev2::DescriptorLayout>();
-
-	res = spv_bindings_create(
-		layout.get(), code.data(), code.size()*sizeof(uint32_t));
 
 	if (res < 0) {
 		return res;
 	}
 
-	//log_info("loaded shader : %s",name.c_str());
-
 	out->id = id;
 	out->stage = gl_stage_to_ev2(stage);
 	out->layout = std::move(layout);
+
+	std::string info_str = get_shader_info(out);
+
+	log_info("Loaded shader : %s\n%s",name.c_str(), info_str.c_str());
 
 	return res;
 }
@@ -578,7 +624,6 @@ ShaderID load_shader(Device *dev, const char *path)
 
 void unload_shader(Device *dev, ShaderID shader)
 {
-	dev->assets->unload(shader.id);
 }
 
 //------------------------------------------------------------------------------
@@ -617,7 +662,6 @@ GraphicsPipelineID load_graphics_pipeline(Device *dev, const char *path)
 
 void unload_graphics_pipeline(Device *dev, GraphicsPipelineID pipe)
 {
-	dev->assets->unload(pipe.id);
 }
 
 //------------------------------------------------------------------------------
@@ -650,7 +694,6 @@ ComputePipelineID load_compute_pipeline(Device *dev, const char *path)
 
 void unload_compute_pipeline(Device *dev, ComputePipelineID pipe)
 {
-	dev->assets->unload(pipe.id);
 }
 
 //------------------------------------------------------------------------------
@@ -761,7 +804,7 @@ void bind_set_texture(
 ) 
 {
 	DescriptorSet *set = EV2_TYPE_PTR_CAST(DescriptorSet, set_id);
-	Texture *tex = EV2_TYPE_PTR_CAST(Texture, tex_id);
+	Texture *tex = dev->get_buffer(tex_id);
 
 	if (set->index != slot.set) {
 		log_error(
@@ -784,8 +827,11 @@ void bind_set_texture(
 
 	if (
 		binding->type != DESCRIPTOR_TYPE_SAMPLER && 
-		binding->type != DESCRIPTOR_TYPE_STORAGE_IMAGE) 
+		binding->type != DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER && 
+		binding->type != DESCRIPTOR_TYPE_STORAGE_IMAGE) {
+		log_error("Attempting to bind invalid resource to texture");
 		return;
+	}
 
 	binding->tex = tex_id;
 }
@@ -794,6 +840,7 @@ void bind_set_texture(
 
 RecorderID begin_commands(Device * dev, CommandMode mode)
 {
+	return EV2_HANDLE_CAST(Recorder, dev);
 	return EV2_NULL_HANDLE(Recorder);
 }
 
@@ -808,6 +855,23 @@ void submit(SyncID)
 
 void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 {
+	Device *dev = EV2_TYPE_PTR_CAST(Device, rec);
+	DescriptorSet *set = EV2_TYPE_PTR_CAST(DescriptorSet, set_id);
+
+	for (auto [index, binding] : set->bindings) {
+		if (EV2_IS_NULL(binding.tex))
+			continue;
+
+		switch(binding.type) {
+			case ev2::DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+			case ev2::DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+			case ev2::DESCRIPTOR_TYPE_SAMPLER:
+				Texture *tex = dev->get_buffer(binding.tex);
+				Image *img = dev->get_buffer(tex->img);
+				glBindTextureUnit(index, img->id);
+			break;
+		}
+	}
 }
 
 void cmd_dispatch(

@@ -30,22 +30,12 @@ AssetTable *AssetTable::create(ev2::Device *dev, const char *root, bool reload)
 	return tbl.release();
 }
 
-AssetTable::~AssetTable()
+void AssetTable::destroy(AssetTable *tbl)
 {
-	std::vector<uint32_t> tmp (entries.size());
-	std::iota(tmp.begin(),tmp.end(),0);
-
-	std::sort(tmp.begin(), tmp.end(),[&](
-		uint32_t a, uint32_t b
-	){
-		return entries[a]->refs < entries[b]->refs;
-	});
-
-	for (uint32_t i : tmp) {
-		AssetEntry *ent = entries[i].get();
-
+	for (uint32_t i = 0; i < static_cast<uint32_t>(tbl->entries.size()); ++i) {
+		AssetEntry *ent = tbl->entries[i].get();
 		if (ent->status != ASSET_STATUS_EMPTY) {
-			unload(i + 1);
+			tbl->deallocate(i + 1);
 		}
 	}
 }
@@ -54,7 +44,8 @@ AssetTable::~AssetTable()
 AssetID AssetTable::allocate(
 	const AssetVTable *vtbl, 
 	void *usr, 
-	const char *path 
+	const char *path, 
+	const char *msg
 )
 {
 	std::unique_lock<std::shared_mutex> lock(mut);
@@ -84,7 +75,11 @@ AssetID AssetTable::allocate(
 
 	map[path] = id;
 
-	log_info("Loaded asset : %s", path);
+	if (msg) {
+		log_info("Loaded asset : %s\n%s", path, msg);
+	} else {
+		log_info("Loaded asset : %s", path);
+	}
 
 	return id;
 }
@@ -96,6 +91,11 @@ void AssetTable::deallocate(AssetID id)
 	}
 
 	AssetEntry *ent = entries[id - 1].get();
+
+	if (ent->status == ASSET_STATUS_EMPTY) {
+		log_error("Double destroy on asset with id %d", id);
+		return;
+	}
 
 	if (ent->usr)
 		ent->vtbl->destroy(dev, ent->usr); 
@@ -170,29 +170,7 @@ AssetID AssetTable::load(const char *path)
 	}
 	AssetID id = it->second;
 
-	AssetEntry *ent = entries[id - 1].get();
-	++ent->refs;
-
 	return id;
-}
-
-void AssetTable::unload(AssetID id)
-{
-	AssetEntry *ent = entries[id - 1].get();
-
-	// TODO: This is needs a CAS loop to be thread safe
-	uint32_t refs = ent->refs;
-	if (!refs)
-		return;
-
-	refs = --ent->refs;
-
-	if (refs <= 1) {
-		deallocate(id);
-	}
-
-	return;
-
 }
 
 ev2::Result AssetTable::reload(AssetID id)

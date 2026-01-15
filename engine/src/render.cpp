@@ -5,7 +5,7 @@
 
 #include <glm/gtc/type_ptr.hpp>
 
-ev2::Result create_render_target_gl(
+static ev2::Result create_render_target_gl(
 	ev2::Device *dev, 
 	ev2::RenderTarget *p_target, 
 	uint32_t w,
@@ -77,7 +77,7 @@ GL_RENDER_TARGET_CREATE_CLEANUP:
 	return ev2::EUNKNOWN;
 }
 
-void destroy_render_target_gl(ev2::Device *dev, ev2::RenderTarget *p_target)
+static void destroy_render_target_gl(ev2::Device *dev, ev2::RenderTarget *p_target)
 {
 	if (p_target->fbo) glDeleteFramebuffers(1,&p_target->fbo);
 	if (p_target->color) glDeleteTextures(1,&p_target->color);
@@ -108,66 +108,121 @@ void destroy_render_target(
 	delete target;
 }
 
-ViewID create_view(Device *dev, float view[], float proj[])
+static inline ViewData view_data_from_matrices(float view[], float proj[])
 {
 	glm::mat4 view_mat = glm::make_mat4(view);
 	glm::mat4 proj_mat = glm::make_mat4(proj);
 
-	uint32_t view_id = dev->view_transforms.add_matrix(view_mat);
-	uint32_t proj_id = dev->view_transforms.add_matrix(proj_mat);
+	return ViewData{
+		.p = proj_mat,
+		.v = view_mat,
+		.pv = proj_mat * view_mat,
+		.center = glm::vec3(0),
+	};
 
-	uint64_t handle = (((uint64_t)view_id) << 32) | (((uint64_t)proj_id));
+}
 
-	return EV2_HANDLE_CAST(View, handle);
+ViewID create_view(Device *dev, float view[], float proj[])
+{
+	ViewData data = view_data_from_matrices(view, proj);
+	uint32_t id = dev->view_data.add(data);
+
+	return EV2_HANDLE_CAST(View, id);
 }
 
 void update_view(Device *dev, ViewID handle, float view[], float proj[])
 {
-	uint32_t view_id = (handle.id >> 32);
-	uint32_t proj_id = (handle.id & 0xFFFFFFFF);
+	ViewData data = view_data_from_matrices(view, proj);
+
+	uint32_t id = static_cast<uint32_t>(handle.id);
+
+	if (!dev->view_data.set(id, data))
+		log_error("ViewID %d is invalid",id);
 }
 
 void destroy_view(Device *dev, ViewID handle)
 {
-	uint32_t view_id = (handle.id >> 32);
-	uint32_t proj_id = (handle.id & 0xFFFFFFFF);
-
-	dev->view_transforms.remove_matrix(view_id);
-	dev->view_transforms.remove_matrix(proj_id);
+	uint32_t id = static_cast<uint32_t>(handle.id);
+	dev->view_data.remove(id);
 }
 
 void begin_frame(Device *dev)
 {
-	dev->view_transforms.update(dev);
-
+	if (dev->assets->reloader) {
+		dev->assets->reloader->update();
+	}
+	dev->transforms.update(dev);
+	dev->view_data.update(dev);
 }
 
 void end_frame(Device *dev)
 {
 
-	if (dev->assets->reloader) {
-		dev->assets->reloader->update();
+}
+
+struct RenderPass
+{
+	RenderTargetID target;
+	ViewID view;
+};
+
+PassCtx begin_pass(Device *dev, RenderTargetID h_target, ViewID h_view,
+					Rect viewport, Rect scissor)
+{
+	Buffer * buf = dev->get_buffer(dev->view_data.buffer);
+	uint32_t view_id = static_cast<uint32_t>(h_view.id);
+
+	glBindBufferRange(
+		GL_UNIFORM_BUFFER, 
+		VIEWDATA_BINDING, 
+		buf->id,
+		view_id * dev->view_data.stride,
+		dev->view_data.stride
+	);
+
+	RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget, h_target);
+
+	if (!target) {
+		glBindFramebuffer(GL_FRAMEBUFFER,0);
+	} else {
+		glBindFramebuffer(GL_FRAMEBUFFER,target->fbo);
 	}
+
+	static float rgb[3] = {0.15f,0.15f,0.2f};
+
+	glEnable(GL_DEPTH_TEST);
+	glViewport(viewport.x0, viewport.y0, viewport.w, viewport.h);
+
+	if (scissor.w && scissor.h) {
+		glEnable(GL_SCISSOR_TEST);
+		glScissor(scissor.x0, scissor.y0, scissor.w, scissor.h);
+	} else {
+		glDisable(GL_SCISSOR_TEST);
+	}
+    glClearColor(rgb[0],rgb[1],rgb[2],1);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+
+	RenderPass * pass = new RenderPass{
+		.target = h_target,
+		.view = h_view,
+	};
+
+	return PassCtx{
+		.rec = EV2_HANDLE_CAST(Recorder, dev),
+		.pass = EV2_HANDLE_CAST(Pass, pass),
+	};
 }
 
-PassCtx begin_pass(Device *dev, RenderTargetID target, ViewID view)
+SyncID end_pass(Device *dev, PassCtx ctx)
 {
-	PassCtx ctx {};
+	RenderPass *pass = EV2_TYPE_PTR_CAST(RenderPass, ctx.pass);
+	delete pass;
 
-	return ctx;
-}
-
-SyncID end_pass(Device *dev, PassCtx pass)
-{
 	return EV2_NULL_HANDLE(Sync);
 }
 
 void cmd_draw(RecorderID rec, DrawMode mode, uint32_t vert_count)
-{
-
-}
-
-void present(Device *dev, RenderTargetID target, uint32_t w, uint32_t h)
 {
 
 }
