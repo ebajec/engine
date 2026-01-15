@@ -424,6 +424,7 @@ void monitor::interrupt()
 #include <mutex>
 #include <condition_variable>
 #include <string>
+
 namespace utils {
 
 /// @brief Helper to map filesystem changes to monitor flags
