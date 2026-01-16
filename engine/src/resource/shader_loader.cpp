@@ -31,12 +31,6 @@ ResourceAllocFns gl_shader_alloc_fns = {
 
 static uint32_t compile_shader_spv(shader_stage_t stage, const uint32_t* data, size_t size) 
 {
-    if (!glad_glShaderBinary || !glad_glSpecializeShaderARB) {
-        log_error("SPIR-V shader path not supported on this OpenGL driver (missing glShaderBinary/glSpecializeShaderARB).\n"
-            "On macOS OpenGL 4.1, ARB_gl_spirv / OpenGL 4.6 SPIR-V ingestion is typically unavailable.");
-        exit(EXIT_FAILURE);
-    }
-
 	GLuint s = glCreateShader(stage);
 
 	glShaderBinary(1, &s,

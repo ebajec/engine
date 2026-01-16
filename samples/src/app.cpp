@@ -155,47 +155,41 @@ std::unique_ptr<MyApp> MyApp::create(GLFWwindow *window)
 
 int init_gl_basic(GLFWwindow *window)
 {
-    // Should hints be defined in this function or in main.cpp?
+    glfwMakeContextCurrent(window);
+
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    glfwMakeContextCurrent(window);
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         fprintf(stderr,"Failed to initialize GLAD\n");
 		return EXIT_FAILURE;
     }
 
-	// Only enable debug output if the entry points exist
-    if (glad_glDebugMessageCallback && glad_glDebugMessageControl) {
-        glEnable(GL_DEBUG_OUTPUT);
-        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+    glEnable(GL_DEBUG_OUTPUT);
+    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
 
-        glDebugMessageCallback([](GLenum source, GLenum type, GLuint id,
-                                  GLenum severity, GLsizei, const GLchar* message,
-                                  const void*) {
-            if (severity != GL_DEBUG_SEVERITY_NOTIFICATION) {
-                fprintf(stderr,
-                    "GL DEBUG: [%u] %s\n"
-                    "    Source:   0x%x\n"
-                    "    Type:     0x%x\n"
-                    "    Severity: 0x%x\n"
-                    "    Message:  %s\n\n",
-                    id, (type == GL_DEBUG_TYPE_ERROR ? "** ERROR **" : ""),
-                    source, type, severity, message);
-            }
-        }, nullptr);
+    glDebugMessageCallback([](GLenum source, GLenum type, GLuint id,
+                                GLenum severity, GLsizei, const GLchar* message,
+                                const void*) {
+        if (severity != GL_DEBUG_SEVERITY_NOTIFICATION) {
+            fprintf(stderr,
+                "GL DEBUG: [%u] %s\n"
+                "    Source:   0x%x\n"
+                "    Type:     0x%x\n"
+                "    Severity: 0x%x\n"
+                "    Message:  %s\n\n",
+                id, (type == GL_DEBUG_TYPE_ERROR ? "** ERROR **" : ""),
+                source, type, severity, message);
+        }
+    }, nullptr);
 
-        glDebugMessageControl(
-            GL_DONT_CARE,          // source
-            GL_DONT_CARE,          // type
-            GL_DONT_CARE,          // severity
-            0, nullptr,            // count + list of IDs
-            GL_TRUE);              // enable
-    } else {
-        log_warn("Note: GL debug callbacks not available (skipping glDebugMessageCallback)");
-    }
+    glDebugMessageControl(
+        GL_DONT_CARE,          // source
+        GL_DONT_CARE,          // type
+        GL_DONT_CARE,          // severity
+        0, nullptr,            // count + list of IDs
+        GL_TRUE);              // enable
 
     glfwWindowHint(GLFW_SAMPLES, 4);
     glEnable(GL_MULTISAMPLE);
