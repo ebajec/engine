@@ -42,8 +42,8 @@ extern void log_set_file(log_level_t lvl, FILE *file);
 
 #if LOG_ENABLE
 #define log_info(format, ...)  _log_function(LOG_LEVEL_INFO, __FILE__, __LINE__, format, ##__VA_ARGS__)
-#define log_error(format, ...) _log_function(LOG_LEVEL_WARN, __FILE__, __LINE__, format, ##__VA_ARGS__)
-#define log_warn(format, ...)  _log_function(LOG_LEVEL_ERROR, __FILE__, __LINE__, format, ##__VA_ARGS__)
+#define log_error(format, ...) _log_function(LOG_LEVEL_ERROR, __FILE__, __LINE__, format, ##__VA_ARGS__)
+#define log_warn(format, ...)  _log_function(LOG_LEVEL_WARN, __FILE__, __LINE__, format, ##__VA_ARGS__)
 #else 
 #define log_info(format, ...);
 #define log_error(format, ...);

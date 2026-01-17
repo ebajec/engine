@@ -54,6 +54,7 @@ uint64_t commit_buffer_uploads(Device *dev, UploadContext ctx, BufferID buf,
 							   const BufferUpload *uploads, uint32_t count);
 uint64_t commit_image_uploads(Device *dev, UploadContext ctx, ImageID img, 
 							  const ImageUpload *uploads, uint32_t count);
+void flush_uploads(Device * dev);
 
 struct Texture
 {

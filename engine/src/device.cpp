@@ -74,6 +74,15 @@ Device *create_device(const char *path)
 	dev->image_pool.reset(ResourcePool<Image>::create());
 	dev->texture_pool.reset(ResourcePool<Texture>::create());
 
+	size_t upload_capacity = (1 << 8) * 1 << 20;
+	size_t upload_alignment = 512;
+
+	dev->pool.reset(UploadPool::create(dev, 
+		upload_capacity, 
+		upload_alignment, 
+		1 << 16
+	));
+
 	GLint64 ubo_offset_alignment;
 	glGetInteger64v(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &ubo_offset_alignment);
 
@@ -111,6 +120,12 @@ UploadPool *UploadPool::create(Device *dev, size_t capacity, size_t align, size_
 	}
 
 	BufferID h_buf = create_buffer(dev, capacity, ev2::MAP_WRITE | ev2::MAP_PERSISTENT);
+
+	if (EV2_IS_NULL(h_buf)) {
+		log_error("Failed to create buffer for upload pool");
+		return nullptr;
+	}
+
 	Buffer *buf = dev->get_buffer(h_buf);
 
 	GLenum access = 
@@ -118,7 +133,12 @@ UploadPool *UploadPool::create(Device *dev, size_t capacity, size_t align, size_
 		GL_MAP_PERSISTENT_BIT | 
 		GL_MAP_FLUSH_EXPLICIT_BIT;
 
-	void *mapped = glMapNamedBuffer(buf->id, access);
+	void *mapped = glMapNamedBufferRange(buf->id, 0, capacity, access);
+
+	if (!mapped) {
+		log_error("Failed to map buffer for upload pool");
+		return nullptr;
+	}
 
 	UploadPool *pool = new UploadPool{
 		.max_uploads = max_uploads,
@@ -390,6 +410,7 @@ UploadPool::alloc_result_t UploadPool::alloc(size_t _bytes, size_t _align)
 				return ALLOC_FAILED;
 			}
 
+			epochs.pop();
 			wait_value = epoch.id;
 		}
 

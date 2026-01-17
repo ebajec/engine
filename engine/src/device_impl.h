@@ -100,7 +100,7 @@ struct UploadPool
 		size_t size;
 		GLsync sync;
 
-		constexpr bool operator < (epoch_t other) {
+		constexpr bool operator < (epoch_t other) const {
 			return id < other.id;
 		}
 	};
@@ -140,10 +140,13 @@ struct UploadPool
 
 	entry_t *entries;
 
-	std::atomic_uint64_t done_ctr{};
-	std::atomic_uint64_t timeline_ctr{};
+	std::atomic_uint64_t done_ctr {};
+	std::atomic_uint64_t timeline_ctr {};
 
-	std::priority_queue<epoch_t> epochs;
+	std::priority_queue<
+		epoch_t, 
+		std::vector<epoch_t>
+	> epochs {};
 
 	struct {
 		std::vector<BufferUpload> buffers;

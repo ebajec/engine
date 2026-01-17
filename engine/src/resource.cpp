@@ -11,11 +11,11 @@ BufferID create_buffer(Device *dev, size_t size, BufferFlags flags)
 
 	if (flags & MAP_READ)
 		gl_flags |= GL_MAP_READ_BIT;
-	else if (flags & MAP_WRITE)
+	if (flags & MAP_WRITE)
 		gl_flags |= GL_MAP_WRITE_BIT;
-	else if (flags & MAP_PERSISTENT)
+	if (flags & MAP_PERSISTENT)
 		gl_flags |= GL_MAP_PERSISTENT_BIT;
-	else if (flags & MAP_COHERENT)
+	if (flags & MAP_COHERENT)
 		gl_flags |= GL_MAP_COHERENT_BIT;
 
 	glCreateBuffers(1, &buf.id);
@@ -84,6 +84,9 @@ void destroy_image(Device *dev, ImageID h)
 	dev->image_pool->deallocate(id);
 }
 
+//------------------------------------------------------------------------------
+// Uploads
+
 UploadContext begin_upload(Device *dev, size_t bytes, size_t align)
 {
 	UploadPool *pool = dev->pool.get();
@@ -112,6 +115,16 @@ uint64_t commit_image_uploads(Device *dev, UploadContext ctx, ImageID img,
 
 	return pool->commmit_image(ctx.idx, img, regions, count);
 }
+
+void flush_uploads(Device *dev) 
+{
+	UploadPool *pool = dev->pool.get();
+
+	pool->flush();
+}
+
+//------------------------------------------------------------------------------
+// Textures
 
 TextureID create_texture(Device *dev, ImageID img, TextureFilter filter)
 {
