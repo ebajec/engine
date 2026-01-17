@@ -467,7 +467,7 @@ void monitor::watch()
     CFStringRef dir = CFStringCreateWithCString(NULL, m_dir.c_str(), kCFStringEncodingUTF8);
     CFArrayRef pathsToWatch = CFArrayCreate(NULL, (const void**)&dir, 1, &kCFTypeArrayCallBacks);
     FSEventStreamCreateFlags flags = kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagWatchRoot; // Types of events to listen to
-    constexpr float latency = 0.05;
+    constexpr CFTimeInterval latency = 0.05;
     FSEventStreamContext ctx{
         .info = this
     };
