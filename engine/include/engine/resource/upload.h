@@ -18,8 +18,7 @@ enum UploadResult
 enum UploadMode
 {
 	UPLOAD_MODE_MAPPED,
-	UPLOAD_MODE_STAGING,
-	UPLOAD_MODE_DIRECT
+	UPLOAD_MODE_STAGING
 };
 
 struct UploadParams

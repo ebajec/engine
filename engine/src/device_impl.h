@@ -9,6 +9,8 @@
 
 #include <algorithm>
 #include <set>
+#include <mutex>
+#include <queue>
 
 #include <glm/mat4x4.hpp>
 
@@ -18,6 +20,27 @@ static inline size_t align_up(size_t x, size_t alignment)
 {
     return ((x + alignment - 1) / alignment) * alignment;
 }
+
+static inline size_t align_up_pow2(size_t x, size_t align)
+{
+    return (x + (align - 1)) & ~(align - 1);;
+}
+
+static inline constexpr bool is_pow2(size_t x)
+{
+	return !x || (((x - 1) & x) == 0);
+}
+
+static inline constexpr size_t mod_pow2(ptrdiff_t a, size_t b) {
+	assert(is_pow2(b));
+	return ((size_t)a) & (b - 1);
+}
+
+static_assert(mod_pow2(-3,4) == 1);
+static_assert(mod_pow2(-6,8) == 2);
+static_assert(1 + mod_pow2(-1,8) == 8);
+static_assert(1 + mod_pow2(-1,16) == 16);
+
 
 template<typename T>
 struct GPUTTable
@@ -58,6 +81,95 @@ struct GPUTTable
 	void destroy(Device *dev);
 };
 
+struct UploadPool
+{
+	enum UploadType 
+	{
+		UPLOAD_TYPE_BUFFER,
+		UPLOAD_TYPE_IMAGE,
+	};
+
+	struct alloc_result_t
+	{
+		void *ptr;
+		uint32_t idx;
+	};
+
+	struct epoch_t {
+		uint64_t id;
+		size_t size;
+		GLsync sync;
+
+		constexpr bool operator < (epoch_t other) {
+			return id < other.id;
+		}
+	};
+
+	struct entry_t
+	{
+		// set at allocation time
+		size_t start;
+
+		// set at commit time
+		uint64_t done_value;
+
+		union {
+			BufferID buf;
+			ImageID img;
+		} resource = {};
+
+		uint64_t size : 46;  // size in bytes of upload
+		uint64_t count : 16; // number of upload regions
+		uint64_t type : 2;   // upload type
+	};
+
+	size_t max_uploads;
+	size_t capacity;
+	size_t align;
+
+	void *mapped;
+
+	// head and tail indices of THE allocated range
+	size_t head = 0, tail = 0;
+
+	// tail index of non-flushed entries
+	uint32_t flush_idx = 0; 
+
+	// head and tail indices of allocated entries
+	uint32_t head_idx = 0, tail_idx = 0;
+
+	entry_t *entries;
+
+	std::atomic_uint64_t done_ctr{};
+	std::atomic_uint64_t timeline_ctr{};
+
+	std::priority_queue<epoch_t> epochs;
+
+	struct {
+		std::vector<BufferUpload> buffers;
+		std::vector<ImageUpload> images;
+	} queues[2] {};
+
+	mutable std::mutex sync{};
+
+	BufferID buffer;
+	Device *dev;
+
+	//------------------------------------------------------------------------------ 
+	//
+	static UploadPool *create(Device *dev, size_t capacity, size_t align, size_t max_uploads);
+	alloc_result_t alloc(size_t _bytes, size_t _align);
+
+	/// @note GPU uploads are performed in commit order
+	
+	uint64_t set_commited(entry_t *ent); 
+	
+	uint64_t commmit_buffer(uint32_t idx, BufferID buf, const BufferUpload *regions, uint32_t count);
+	uint64_t commmit_image(uint32_t idx, ImageID buf, const ImageUpload *regions, uint32_t count);
+
+	void flush();
+};
+
 struct FrameContext
 {
 	double t; 
@@ -69,6 +181,8 @@ struct FrameContext
 
 struct Device
 {
+	std::unique_ptr<UploadPool> pool;
+
 	// Assets
 	std::unique_ptr<AssetTable> assets;
 
@@ -110,6 +224,9 @@ struct Device
 		return (Shader*)ent->usr;
 	}
 };
+
+//------------------------------------------------------------------------------
+// GPUTTable
 
 template<typename T>
 GPUTTable<T>::GPUTTable(size_t _alignment) : 
@@ -229,7 +346,6 @@ bool GPUTTable<T>::update(Device *dev)
 
 	return resized;
 }
-
 };
 
 #endif //DEVICE_INTERNAL_H

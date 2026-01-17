@@ -84,6 +84,35 @@ void destroy_image(Device *dev, ImageID h)
 	dev->image_pool->deallocate(id);
 }
 
+UploadContext begin_upload(Device *dev, size_t bytes, size_t align)
+{
+	UploadPool *pool = dev->pool.get();
+
+	UploadPool::alloc_result_t allocation = pool->alloc(bytes, align);
+
+	return UploadContext {
+		.ptr = allocation.ptr,
+		.size = bytes,
+		.idx = allocation.idx,
+	};
+}
+
+uint64_t commit_buffer_uploads(Device *dev, UploadContext ctx, BufferID buf, 
+							   const BufferUpload *regions, uint32_t count)
+{
+	UploadPool *pool = dev->pool.get();
+
+	return pool->commmit_buffer(ctx.idx, buf, regions, count);
+}
+
+uint64_t commit_image_uploads(Device *dev, UploadContext ctx, ImageID img, 
+							  const ImageUpload *regions, uint32_t count)
+{
+	UploadPool *pool = dev->pool.get();
+
+	return pool->commmit_image(ctx.idx, img, regions, count);
+}
+
 TextureID create_texture(Device *dev, ImageID img, TextureFilter filter)
 {
 	Texture tex {};
