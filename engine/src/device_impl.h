@@ -161,6 +161,8 @@ struct UploadPool
 	//------------------------------------------------------------------------------ 
 	//
 	static UploadPool *create(Device *dev, size_t capacity, size_t align, size_t max_uploads);
+	static void destroy(UploadPool *pool);
+
 	alloc_result_t alloc(size_t _bytes, size_t _align);
 
 	/// @note GPU uploads are performed in commit order
@@ -184,10 +186,14 @@ struct FrameContext
 
 struct Device
 {
-	std::unique_ptr<UploadPool> pool;
+	std::unique_ptr<UploadPool, void(*)(UploadPool*)> pool = {
+		nullptr, UploadPool::destroy
+	};
 
 	// Assets
-	std::unique_ptr<AssetTable> assets;
+	std::unique_ptr<AssetTable, void(*)(AssetTable*)> assets = {
+		nullptr, AssetTable::destroy
+	};
 
 	// Resource pools
 	std::unique_ptr<ResourcePool<Buffer>> buffer_pool;

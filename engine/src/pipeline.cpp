@@ -236,6 +236,7 @@ static ev2::Result load_shader_file(const char *path, ev2::Shader* out)
 	std::string filestr = file.string(); 
 
 	if (!fs::is_regular_file(file)) {
+		log_error("File does not exist: %s", filestr.c_str());
 		return ev2::ELOAD_FAILED;
 	}
 
@@ -319,6 +320,9 @@ ev2::Result gl_shader_create(ev2::Device *dev, ev2::Shader *p_shader, const char
 {
 	std::string syspath = dev->assets->get_system_path(path);
 	ev2::Result res = load_shader_file(syspath.c_str(), p_shader);
+
+	if (res != ev2::SUCCESS)
+		return res;
 
 	std::string info_str = get_shader_info(p_shader);
 	log_info("Shader : "COLORIZE_PATH(%s)"\n%s",path, info_str.c_str());
@@ -504,8 +508,10 @@ static ev2::Result gl_gfx_pipeline_create(
 		gfx_info.frag.c_str()
 	);
 
-	if (result)
+	if (result) {
+		log_error("Failed to initialize shaders for %s", path);
 		return result;
+	}
 
 	std::string info = get_gfx_pipeline_info(dev, p_pipeline);
 	log_info("Graphics pipeline : "COLORIZE_PATH(%s)"\n%s", path, info.c_str());
@@ -713,6 +719,10 @@ void unload_compute_pipeline(Device *dev, ComputePipelineID pipe)
 DescriptorLayoutID get_graphics_pipeline_layout(Device *dev, GraphicsPipelineID pipe)
 {
 	const ev2::GraphicsPipeline * res = dev->assets->get<ev2::GraphicsPipeline>(pipe.id);
+
+	if (!res)
+		return EV2_NULL_HANDLE(DescriptorLayout);
+
 	const DescriptorLayout *p_layout = &res->layout;
 	return DescriptorLayoutID{.id = reinterpret_cast<uint64_t>(&res->layout)};
 }
@@ -749,6 +759,10 @@ DescriptorSetID create_descriptor_set(
 )
 {
 	DescriptorLayout * layout = EV2_TYPE_PTR_CAST(DescriptorLayout, layout_id);
+
+	if (!layout)
+		return EV2_NULL_HANDLE(DescriptorSet);
+
 	DescriptorSet * set = new DescriptorSet{};
 	set->index = index;
 
@@ -787,7 +801,7 @@ void bind_buffer(
 
 	if (set->index != slot.set) {
 		log_error(
-			"Mismatched binding for buffer %d. (set=%d, index=%d) to set %d",
+			"Mismatched binding for buffer %d. (set=%d, index=%d) in set %d",
 			buf_id, slot.set, slot.id, set->index
 		);
 		return;
@@ -796,18 +810,27 @@ void bind_buffer(
 	auto it = set->bindings.find(slot.id);
 
 	if (it == set->bindings.end()) {
-		log_warn(
-			"Attempting to bind buffer %d to nonexistent index %d in set %d", 
-			buf_id, slot.id, slot.set);
+		log_error(
+			"Mismatched binding for buffer %d. (set=%d, index=%d) in set %d",
+			buf_id, slot.set, slot.id, set->index
+		);
+		return;
 	}
 
 	ResourceBinding *binding = &it->second;
 	if (
 		binding->type != DESCRIPTOR_TYPE_STORAGE_BUFFER && 
-		binding->type != DESCRIPTOR_TYPE_UNIFORM_BUFFER) 
+		binding->type != DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
+		binding->type != DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
+		binding->type != DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC
+	) 
 		return;
 
-	binding->buf = buf_id;
+	binding->buf = BufferBinding{
+		.handle = buf_id,
+		.size = size,
+		.offset = offset,
+	};
 }
 
 void bind_texture(
@@ -847,7 +870,7 @@ void bind_texture(
 		return;
 	}
 
-	binding->tex = tex_id;
+	binding->tex = TextureBinding{.handle = tex_id};
 }
 
 //------------------------------------------------------------------------------
@@ -873,17 +896,37 @@ void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 	DescriptorSet *set = EV2_TYPE_PTR_CAST(DescriptorSet, set_id);
 
 	for (auto [index, binding] : set->bindings) {
-		if (EV2_IS_NULL(binding.tex))
-			continue;
-
 		switch(binding.type) {
 			case ev2::DESCRIPTOR_TYPE_SAMPLED_IMAGE:
 			case ev2::DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-			case ev2::DESCRIPTOR_TYPE_SAMPLER:
-				Texture *tex = dev->get_texture(binding.tex);
+			case ev2::DESCRIPTOR_TYPE_SAMPLER: {
+				if (EV2_IS_NULL(binding.tex.handle))
+					continue;
+
+				Texture *tex = dev->get_texture(binding.tex.handle);
 				Image *img = dev->get_image(tex->img);
 				glBindTextureUnit(index, img->id);
-			break;
+				break;
+			}
+			case ev2::DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+			case ev2::DESCRIPTOR_TYPE_STORAGE_BUFFER: {
+				if (EV2_IS_NULL(binding.buf.handle))
+					continue;
+
+				Buffer *buf = dev->get_buffer(binding.buf.handle);
+				glBindBufferRange(GL_SHADER_STORAGE_BUFFER, index, buf->id, 
+					  binding.buf.offset, binding.buf.size); 
+			}
+
+			case ev2::DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+			case ev2::DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
+				if (EV2_IS_NULL(binding.buf.handle))
+					continue;
+
+				Buffer *buf = dev->get_buffer(binding.buf.handle);
+				glBindBufferRange(GL_UNIFORM_BUFFER, index, buf->id, 
+					  binding.buf.offset, binding.buf.size); 
+			}
 		}
 	}
 }

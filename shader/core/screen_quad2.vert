@@ -2,6 +2,8 @@
 #extension GL_GOOGLE_include_directive : require
 #include "framedata.glsl"
 
+layout (binding = 0) uniform sampler2D u_tex;
+
 //--------------------------------------------------------------------------------------------------
 // Vert
 
@@ -37,9 +39,14 @@ void main()
 			break;
 	}
 
+	ivec2 size = textureSize(u_tex, 0);
+	float aspect = float(size.x)/float(size.y);
+
+	pos.x *= aspect;
+
 	frag_pos = pos;
 	frag_uv = uv;
 
-	gl_Position = vec4(pos,0.0,1.0);
+	gl_Position = u_view.pv * vec4(pos,0.0,1.0);
 }
 

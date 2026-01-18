@@ -96,7 +96,8 @@ Device *create_device(const char *path)
 
 void destroy_device(Device *dev)
 {
-	AssetTable::destroy(dev->assets.get());
+	dev->assets.reset();
+	dev->pool.reset();
 
 	dev->transforms.destroy(dev);
 	dev->view_data.destroy(dev);
@@ -151,6 +152,22 @@ UploadPool *UploadPool::create(Device *dev, size_t capacity, size_t align, size_
 	};
 
 	return pool;
+}
+
+void UploadPool::destroy(UploadPool *pool)
+{
+	if (!pool)
+		return;
+
+	ev2::Device *dev = pool->dev;
+
+	Buffer *buf = dev->get_buffer(pool->buffer);
+	glUnmapNamedBuffer(buf->id);
+
+	ev2::destroy_buffer(dev, pool->buffer);
+
+	delete[] pool->entries;
+	delete pool;
 }
 
 static inline void record_buffer_copy(Buffer *src, Buffer *dst, 
@@ -292,6 +309,7 @@ void UploadPool::flush()
 		.sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0),
 	};
 
+	/*
 	log_info(
 		"Flushed uploads:\n"
 		"	epoch=%lld\n"
@@ -301,6 +319,7 @@ void UploadPool::flush()
 		(unsigned long long)epoch.size, 
 		(unsigned long long)flush_start
 	);
+	*/
 
 	epochs.push(epoch);
 

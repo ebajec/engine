@@ -64,12 +64,24 @@ struct ComputePipeline
 	GLuint program;
 };
 
+struct BufferBinding
+{
+	ev2::BufferID handle;
+	size_t offset;
+	size_t size;
+};
+
+struct TextureBinding
+{
+	ev2::TextureID handle;
+};
+
 struct ResourceBinding
 {
 	DescriptorType type;
 	union {
-		ev2::BufferID buf = EV2_NULL_HANDLE(Buffer);
-		ev2::TextureID tex;
+		BufferBinding buf {};
+		TextureBinding tex;
 	};
 };
 
