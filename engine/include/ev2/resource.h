@@ -33,6 +33,37 @@ enum BufferFlagBits
 };
 typedef uint32_t BufferFlags;
 
+struct ImageUpload
+{
+	size_t src_offset;
+	uint32_t x, y, z;
+	uint32_t w, h, d{1};
+	uint32_t level;
+};
+
+struct BufferUpload
+{
+	size_t src_offset;
+	size_t dst_offset;
+	size_t size;
+};
+
+struct UploadContext
+{
+	void *ptr;
+	size_t size;
+	uint32_t idx;
+};
+
+UploadContext begin_upload(Device *dev, size_t bytes, size_t align);
+void flush_uploads(Device * dev);
+
+uint64_t commit_buffer_uploads(Device *dev, UploadContext ctx, BufferID buf, 
+							   const BufferUpload *uploads, uint32_t count);
+uint64_t commit_image_uploads(Device *dev, UploadContext ctx, ImageID img, 
+							  const ImageUpload *uploads, uint32_t count);
+
+
 //--------------------------------------------------------------------
 // Buffer
 

@@ -108,5 +108,5 @@ void main()
 	);
 
 	float f = 0.01*length(diff);
-	FragColor = mix(color,f*vec4(1),0.5);
+	FragColor = mix(color,f*vec4(1),0.9);
 }

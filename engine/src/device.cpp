@@ -74,13 +74,13 @@ Device *create_device(const char *path)
 	dev->image_pool.reset(ResourcePool<Image>::create());
 	dev->texture_pool.reset(ResourcePool<Texture>::create());
 
-	size_t upload_capacity = (1 << 8) * 1 << 20;
+	size_t upload_capacity = (1 << 8) * (1 << 20);
 	size_t upload_alignment = 512;
 
 	dev->pool.reset(UploadPool::create(dev, 
 		upload_capacity, 
 		upload_alignment, 
-		1 << 16
+		1 << 14
 	));
 
 	GLint64 ubo_offset_alignment;
@@ -170,7 +170,7 @@ static inline void record_buffer_copy(Buffer *src, Buffer *dst,
 static inline void record_image_copy(Buffer *src, Image *img, 
 						uint32_t count, const ImageUpload *regions)
 {
-	const bool is_3d = img->d != 0;
+	const bool is_3d = img->d > 1;
 	GLenum format, type;
 	image_format_to_gl(img->fmt, &format, &type);
 
@@ -229,7 +229,7 @@ void UploadPool::flush()
 	// "Grabs" the largest commited range possible, starting from the tail
 	for (uint32_t i = flush_idx; 
 		i != head_idx && entries[i].done_value != 0; 
-		i = (i + i) & (capacity - 1)
+		i = (i + 1) & (max_uploads - 1)
 	) {
 		flushed_bytes += entries[i].size;
 		++flush_head;
@@ -241,19 +241,25 @@ void UploadPool::flush()
 
 	std::swap(queues[1],queues[0]);
 
-	flush_head &= (capacity - 1);
+	flush_head &= (max_uploads - 1);
 	flush_idx = flush_head;
 	lock.unlock();
 
 	size_t flush_start = entries[flush_tail].start;
 
 	Buffer *src_buf = dev->get_buffer(buffer);
-	glFlushMappedNamedBufferRange(src_buf->id, flush_start, flushed_bytes);
+
+	if (flush_start + flushed_bytes < capacity) {
+		glFlushMappedNamedBufferRange(src_buf->id, flush_start, flushed_bytes);
+	} else {
+		glFlushMappedNamedBufferRange(src_buf->id, flush_start, capacity - flush_start);
+		glFlushMappedNamedBufferRange(src_buf->id, 0, (flushed_bytes + flush_start) - capacity);
+	}
 
 	size_t buf_idx = 0;
 	size_t img_idx = 0;
 
-	for (uint32_t i = flush_tail; i != flush_head; i = (i + 1) & capacity) {
+	for (uint32_t i = flush_tail; i != flush_head; i = (i + 1) & (max_uploads - 1)) {
 		entry_t *ent = &entries[i];
 
 		uint32_t count = ent->count;
@@ -285,6 +291,16 @@ void UploadPool::flush()
 		.size = flushed_bytes,
 		.sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0),
 	};
+
+	log_info(
+		"Flushed uploads:\n"
+		"	epoch=%lld\n"
+		"	size=%lld\n"
+		"	start=%lld",
+		(unsigned long long)epoch.id, 
+		(unsigned long long)epoch.size, 
+		(unsigned long long)flush_start
+	);
 
 	epochs.push(epoch);
 
@@ -414,13 +430,20 @@ UploadPool::alloc_result_t UploadPool::alloc(size_t _bytes, size_t _align)
 			wait_value = epoch.id;
 		}
 
-		assert(entries[tail_idx].start = tail);
+		assert(entries[tail_idx].start == tail);
 
 		entry_t tail_entry;
 		do {
 			tail_entry = entries[tail_idx];
-			tail_idx = (tail_idx + 1) & (capacity - 1);
-		} while (tail_idx != head_idx && tail_entry.done_value && tail_entry.done_value < wait_value);
+			tail_idx = (tail_idx + 1) & (max_uploads - 1);
+
+			if (tail_idx == head_idx) {
+				tail = head;
+				break;
+			} else {
+				tail = entries[tail_idx].start;
+			}
+		} while (tail_entry.done_value && tail_entry.done_value < wait_value);
 	} while (true);
 
 	entry_t ent = {
@@ -438,10 +461,10 @@ UploadPool::alloc_result_t UploadPool::alloc(size_t _bytes, size_t _align)
 		.idx = head_idx
 	};
 
-	head_idx = (head_idx + 1) & (capacity - 1); 
+	head_idx = (head_idx + 1) & (max_uploads - 1); 
 
 	// note that required is always aligned properly, so head is after this as well
-	head = required + ((head > tail) && (capacity - head) > tail) * head;
+	head = (capacity - head) > required ?  head + required : 0;
 
 	return res;
 }

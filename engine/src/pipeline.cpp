@@ -697,8 +697,6 @@ ComputePipelineID load_compute_pipeline(Device *dev, const char *path)
 
 	if (res == ev2::SUCCESS) {
 		id = dev->assets->allocate(&vtbl, pipeline, path);
-		if (dev->assets->reloader)
-			dev->assets->reloader->add_dependency(pipeline->shader.id, id);
 		return ComputePipelineID{id};
 	}
 

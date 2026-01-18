@@ -12,7 +12,6 @@ AppGlobals g_;
 void MyApp::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
 	ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
-
 	MyApp *app = static_cast<MyApp*>(glfwGetWindowUserPointer(window));
 
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) 
