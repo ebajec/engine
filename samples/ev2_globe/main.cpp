@@ -22,8 +22,9 @@
 struct MyStuff
 {
 	App *app;
-
 	Globe *globe;
+
+	ev2::Device *dev;
 
 	struct RenderData {
 		glm::mat4 proj;
@@ -36,15 +37,17 @@ struct MyStuff
 	SphericalMotionCamera control;
 	glm::dvec3 keydir = glm::dvec3(0);
 
-	int init(ev2::Device *dev);
-	int update(ev2::Device *dev);
+	int init();
+	int update();
 
-	void render(ev2::Device *dev);
-	void destroy(ev2::Device *dev);
+	void render();
+	void destroy();
 };
 
-int MyStuff::init(ev2::Device *dev)
+int MyStuff::init()
 {
+	dev = app->dev;
+
 	rd.camera = ev2::create_view(dev, nullptr, nullptr);
 
 	ImPlot::CreateContext();
@@ -61,7 +64,7 @@ int MyStuff::init(ev2::Device *dev)
 	return App::OK;
 }
 
-int MyStuff::update(ev2::Device *dev)
+int MyStuff::update()
 {
 
 	Camera camera = {
@@ -107,7 +110,7 @@ int MyStuff::update(ev2::Device *dev)
 	return App::OK;
 }
 
-void MyStuff::render(ev2::Device *dev)
+void MyStuff::render()
 {
 	ev2::Rect view_rect = { .x0 = 0, .y0 = 0,
 		.w = (uint32_t)app->win.width,
@@ -121,7 +124,7 @@ void MyStuff::render(ev2::Device *dev)
 	ev2::submit(pass_sync);
 }
 
-void MyStuff::destroy(ev2::Device *dev)
+void MyStuff::destroy()
 {
 	globe_destroy(globe);
 	ImPlot::DestroyContext();
@@ -142,23 +145,23 @@ int main(int argc, char *argv[])
 
 	ev2::Device *dev = app->dev;
 
-	MyStuff data = {
+	MyStuff sim = {
 		.app = app.get()
 	};
 
-	if (data.init(dev) != App::OK)
+	if (sim.init() != App::OK)
 		return EXIT_FAILURE;
 
 	while (
 		app->update() == App::OK &&
-		data.update(dev) == App::OK
+		sim.update() == App::OK
 	) {
 		app->begin_frame();
-		data.render(dev);
+		sim.render();
 		app->end_frame();
 	}
 
-	data.destroy(dev);
+	sim.destroy();
 	app->terminate();
 
 	return EXIT_SUCCESS;

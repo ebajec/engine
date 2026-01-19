@@ -54,7 +54,7 @@ struct GraphicsPipeline
 	ev2::ShaderID vert;
 	ev2::ShaderID frag;
 	GLuint program;
-
+	GLuint vao;
 	DescriptorLayout layout;
 };
 

@@ -120,6 +120,8 @@ struct alc_entry
 {
 	uint64_t key;
 	alc_atomic_state state;
+
+
 };
 
 struct alc_page
@@ -137,7 +139,7 @@ struct alc_result
 	bool is_ready;
 };
 
-struct alc_create_info
+struct alc_params
 {
 	size_t capacity;
 	size_t page_size;
@@ -149,7 +151,7 @@ struct alc_create_info
 
 struct alc_table;
 
-extern int alc_create(alc_table **p_alc, alc_create_info const *ci);
+extern int alc_create(alc_table **p_alc, alc_params const *ci);
 extern void alc_destroy(alc_table *alc);
 
 /// @brief If key does not exist in the table, attempts to evict an existing 

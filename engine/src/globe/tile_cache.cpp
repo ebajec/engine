@@ -163,7 +163,7 @@ tc_error tc_create(tc_cache **p_tc, size_t tile_size, size_t capacity)
 	tc->tile_size = tile_size;
 	tc->tile_cap = (std::max(capacity,(size_t)1) - 1)/tile_size + 1;
 
-	alc_create_info ci = {
+	alc_params p = {
 		.capacity = tc->tile_cap,
 		.page_size = TILE_CPU_PAGE_SIZE,
 		.usr = tc,
@@ -171,14 +171,14 @@ tc_error tc_create(tc_cache **p_tc, size_t tile_size, size_t capacity)
 		.page_destroy = &destroy_cpu_tile_page
 	};
 
-	if (alc_create(&tc->alc, &ci) < 0)
-		goto tc_seg_create_failed;
+	if (alc_create(&tc->alc, &p) < 0)
+		goto tc_create_failed;
 
 	*p_tc = tc;
 
 	return TC_OK;
 
-tc_seg_create_failed:
+tc_create_failed:
 	delete tc;
 	return TC_ENULL;
 }

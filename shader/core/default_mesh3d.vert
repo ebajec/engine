@@ -19,7 +19,7 @@ layout (location = 2) out vec3 frag_normal;
 void main()
 {
 	float t = u_frame.t;
-	mat4 pv = u_frame.pv;
+	mat4 pv = u_view.pv;
 
 	mat4 m = mat4(1.0f);
 

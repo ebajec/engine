@@ -326,7 +326,6 @@ static void tile_upload_fn(
 
 cleanup:
 	tc_release(ref);
-	--ctx->refs;
 	return;
 }
 
@@ -338,28 +337,41 @@ void GPUTileCache::asynchronous_upload(std::span<TileGPUUploadData> upload_data)
 	if (!upload_data.size())
 		return;
 
-	size_t total_size = upload_data.size()*m_tile_size_bytes;
+	size_t upload_count = upload_data.size();
+	size_t total_size = upload_count*m_tile_size_bytes;
 
 	UploadSession uctx;
 
 	std::unique_ptr<GPUUploadContext,decltype(&upload_context_destroy)> ctx (
 		upload_context_create(total_size),upload_context_destroy);
 
+	std::atomic_int ctr = static_cast<int>(upload_count);
+	std::atomic_bool done = false;
+
 	GPUUploadContext* p_ctx = ctx.get();
-	for (const TileGPUUploadData& tmp_data : upload_data) {
-		TileGPUUploadData data = tmp_data;
+	for (size_t i = 0; i < upload_count; ++i) {
+		TileGPUUploadData data = upload_data[i];
 
-		++ctx->refs;
-
-		g_schedule_task([=](){
+		g_schedule_task([=,&ctr, &done](){
 			tile_upload_fn(p_ctx, data);
+
+			int value = ctr.fetch_sub(1);
+			if(value <= 1) {
+				done.store(true);
+				done.notify_one();
+			}
 		});
 
 	}
 
-	while (ctx->refs > 0) {
+	while (ctr)
 		std::this_thread::yield();
-	}
+
+	if (upload_count)
+		done.wait(false);
+
+	if (ctr)
+		throw std::runtime_error("bad gpu");
 
 	glBindBuffer(GL_PIXEL_UNPACK_BUFFER,ctx->pbo);
 	for (size_t i = 0; i < upload_data.size(); ++i) {

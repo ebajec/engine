@@ -36,18 +36,19 @@ static inline double smooth_max_zero(double x)
 	return -(1.0/(b*b))*log(1/(1.0 + exp((b*b)*x)));
 }
 
-static double weierstrass(double x, double y, float phase = 0)
+static inline double weierstrass(double x, double y, double phase = 0)
 {
 	static constexpr double 
 	L = 1.2, 
 	D = 2.3,
 	G = 4, 
 	gamma =	2.4;
-	static constexpr size_t M = 9, N = 9;
+	static constexpr size_t M = 20, N = 9;
 
 	double A = L*pow(G/D,D-2.0)*sqrt(log(gamma)/(double)M); 
 
 	static std::atomic_int init = 0;
+	static std::atomic_int done = 0;
 
 	static double phi[M][N];
 	static double cos_phi[M][N];
@@ -64,9 +65,12 @@ static double weierstrass(double x, double y, float phase = 0)
 		}
 
 		for (size_t n = 0; n < N; ++n) {
-			gammaD3n[n] = pow(gamma, (D - 3.0)*n);
-			gamman[n] = pow(gamma, n);
+			gammaD3n[n] = pow(gamma, (D - 3.0)*(double)n);
+			gamman[n] = pow(gamma, (double)n);
 		}
+		done.store(1,std::memory_order_release);
+	} else {
+		done.wait(0);
 	}
 
 	double g = 0;
@@ -78,7 +82,7 @@ static double weierstrass(double x, double y, float phase = 0)
 		for (size_t n = 0; n < N; ++n) {
 			double phi_mn = phase + phi[m][n];
 
-			g += gammaD3n[n] * (cos_phi[m][n] - cos(TWOPI*gamman[n]*r*cos(tht - PI*m/M)/L + phi_mn));
+			g += gammaD3n[n] * (cos_phi[m][n] - cos(TWOPI*gamman[n]*r*cos(tht - PI*(double)m/M)/L + phi_mn));
 		}
 	}
 	return A*g;

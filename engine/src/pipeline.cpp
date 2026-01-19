@@ -1,4 +1,5 @@
 #include "ev2/pipeline.h"
+#include "vulkan/vulkan_core.h"
 
 #include "device_impl.h"
 #include "pipeline_impl.h"
@@ -58,7 +59,7 @@ static shader_stage_t shader_stage_from_ext(std::string_view ext)
 	return stage;
 }
 
-static int spv_load(const fs::path& path, std::vector<uint32_t> &data)
+static int read_spv_file(const fs::path& path, std::vector<uint32_t> &data)
 {
 	size_t size = fs::file_size(path);
 
@@ -284,7 +285,7 @@ static ev2::Result load_shader_file(const char *path, ev2::Shader* out)
 	}
 
 	std::vector<uint32_t> code;
-	if (spv_load(file,code) < 0) 
+	if (read_spv_file(file,code) < 0) 
 		return ev2::ELOAD_FAILED;
 
 	auto layout = std::make_unique<ev2::DescriptorLayout>();
@@ -405,6 +406,60 @@ ev2::Result parse_gfx_pipeline_file(GfxPipelineInfo *info, const char *path)
 	return ev2::SUCCESS;
 }
 
+size_t spv_input_var_size(SpvReflectInterfaceVariable *var)
+{
+	size_t struct_size = 0;
+
+	if (var->members) {
+		for (uint32_t i = 0; i < var->member_count; ++i) {
+			struct_size += spv_input_var_size(&var->members[i]);
+		}
+	} else if (var->numeric.vector.component_count) {
+		struct_size = var->numeric.vector.component_count;
+	} else if (var->numeric.matrix.column_count) {
+		struct_size = var->numeric.vector.component_count;
+	}
+
+	for (uint32_t i = 0; i < var->array.dims_count; ++i) {
+		struct_size *= var->array.dims[i];
+	}
+
+	return struct_size;
+}
+
+ev2::Result parse_vertex_layout(const char *path)
+{
+	std::vector<uint32_t> data;
+	if (read_spv_file(path, data) < 0)
+		return ev2::ELOAD_FAILED;
+
+	SpvReflectShaderModule reflection;
+	SpvReflectResult spv_res = spvReflectCreateShaderModule(
+		data.size()*sizeof(uint32_t), 
+		data.data(), 
+		&reflection);
+
+	if (spv_res != SPV_REFLECT_RESULT_SUCCESS)
+		return ev2::ELOAD_FAILED;
+
+	uint32_t in_count;
+	spvReflectEnumerateInputVariables(&reflection, &in_count, nullptr);
+
+	std::vector<SpvReflectInterfaceVariable*> vars (in_count);
+	spvReflectEnumerateInputVariables(&reflection, &in_count, vars.data());
+
+	size_t offset = 0;
+
+	for (uint32_t i = 0; i < in_count; ++i) {
+		SpvReflectInterfaceVariable* var = vars[i];
+		if (var->built_in >= 0)
+			continue;
+	}
+
+	spvReflectDestroyShaderModule(&reflection);
+
+	return ev2::SUCCESS;
+}
 
 static ev2::Result init_gfx_pipeline_shaders(
 	ev2::Device *dev, 
@@ -429,6 +484,9 @@ static ev2::Result init_gfx_pipeline_shaders(
 
 	const ev2::Shader *vert = dev->assets->get<ev2::Shader>(vert_handle.id);
 	const ev2::Shader *frag = dev->assets->get<ev2::Shader>(frag_handle.id);
+
+	std::string sys_vert_path = dev->assets->get_system_path(vert_path);
+	parse_vertex_layout(sys_vert_path.c_str());
 
 	uint32_t program = glCreateProgram();
 	glAttachShader(program, vert->id);

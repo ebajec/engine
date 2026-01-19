@@ -14,7 +14,7 @@
 
 #include "terrain.h"
 
-//#include <debug/box_debug_view.h>
+#include <debug/box_debug_view.h>
 //#include <debug/camera_debug_view.h>
 
 #include <imgui.h>
@@ -51,7 +51,7 @@ static constexpr double tile_scale_factor = 12;
 struct DebugInfo
 {
 	//std::unique_ptr<CameraDebugView> camera;
-	//std::unique_ptr<BoxDebugView> boxes;
+	std::unique_ptr<BoxDebugView> boxes;
 	bool enable_boxes;
 	bool fix_camera;
 	int zoom;
@@ -232,10 +232,9 @@ struct Globe
 
 	std::vector<uint64_t> selected_tiles;
 
-	std::unique_ptr<TileAllocator> tile_allocator;
-
 	RenderData render_data;
 
+	std::unique_ptr<TileAllocator> tile_allocator;
 	std::unique_ptr<GPUTileCache> gpu_cache;
 	std::unique_ptr<CPUTileCache> cpu_cache;
 };
@@ -254,17 +253,16 @@ struct select_tiles_params
 };
 
 static void globe_init_debug(Globe *globe) {
-	//globe->dbg.boxes.reset(new BoxDebugView(globe->rt));
+	globe->dbg.boxes.reset(new BoxDebugView(globe->dev));
 	//globe->dbg.camera.reset(new CameraDebugView(globe->rt));
 	globe->dbg.enable_boxes = false;
 }
 
 static void globe_draw_debug(Globe const *globe, ev2::PassCtx const &ctx)
 {
-	//if (globe->dbg.enable_boxes) {
-	//	ctx.bind_material(globe->dbg.boxes->material);
-	//	ctx.draw_cmd_mesh_outline(globe->dbg.boxes->model);
-	//}
+	if (globe->dbg.enable_boxes) {
+		globe->dbg.boxes->draw(ctx);
+	}
 
 	//if (globe->dbg.fix_camera)
 	//	globe->dbg.camera->render(ctx);
@@ -357,8 +355,8 @@ static inline int select_tiles_rec(
 	const select_tiles_params *params,
 	TileCode code)
 {
-	//BoxDebugView * boxes = params->debug->enable_boxes ? 
-	//	params->debug->boxes.get() : nullptr;
+	BoxDebugView * boxes = params->debug->enable_boxes ? 
+		params->debug->boxes.get() : nullptr;
 
 	if (code.zoom > 23)
 		return 0;
@@ -388,7 +386,7 @@ static inline int select_tiles_rec(
 	) {
 
 		out.push_back({code,d_min_sq});
-		//if(boxes) boxes->add(box);
+		if(boxes) boxes->add(box);
 		return 1;
 	}
 
@@ -407,7 +405,7 @@ static inline int select_tiles_rec(
 	// If status is zero than no tiles were added, so add this tile
 	if (!status) {
 		out.push_back({code,d_min_sq});
-		//if (boxes) boxes->add(box);
+		if (boxes) boxes->add(box);
 		return 1;
 	}
 
@@ -648,14 +646,16 @@ static uint64_t update_vbo(Globe *globe)
 	ev2::UploadContext uc = ev2::begin_upload(globe->dev, total_size, alignof(GlobeVertex));
 
 	size_t batch_size = std::max(2*new_count/(std::thread::hardware_concurrency()),1LU);
-	std::atomic_int ctr = (int)new_count;
 
 	GlobeVertex *ptr = (GlobeVertex*)uc.ptr;
+
+	std::atomic_int ctr = (int)new_count;
+	std::atomic_bool done = false;
 
 	for (size_t start = 0; start < new_count; start += batch_size) {
 		size_t end = std::min(start + batch_size, new_count);
 
-		g_schedule_task([ptr, start, end, new_tiles, &ctr](){
+		g_schedule_task([ptr, start, end, new_tiles, &ctr, &done](){
 
 			for (size_t i = start; i < end; ++i) {
 				TileAllocator::kv_t kv = new_tiles[i];
@@ -663,7 +663,11 @@ static uint64_t update_vbo(Globe *globe)
 				GlobeVertex *dst = ptr + i * TILE_VERT_COUNT;
 				TileCode code = tile_code_unpack(kv.code);
 				create_tile_verts(code, dst);
-				--ctr;
+				int value = ctr.fetch_sub(1);
+				if (value <= 1) {
+					done.store(true);
+					done.notify_one();
+				}
 			}
 		});
 	}
@@ -671,6 +675,13 @@ static uint64_t update_vbo(Globe *globe)
 	while (ctr)
 		std::this_thread::yield();
 
+	if (new_count)
+		done.wait(false);
+
+	if (ctr)
+		throw std::runtime_error("bad");
+
+	// TODO : Consolidate these
 	std::vector<ev2::BufferUpload> uploads (new_count); 
 
 	size_t tile_size = sizeof(GlobeVertex) * TILE_VERT_COUNT;
@@ -745,6 +756,7 @@ static ev2::Result update_render_data(
 		};
 	}
 
+	// TODO : Consolidate these
 	std::vector<ev2::BufferUpload> uploads (count);
 
 	for (size_t i = 0; i < count; ++i) {
@@ -970,8 +982,8 @@ ev2::Result globe_update(Globe *globe, GlobeUpdateInfo *info)
 	globe->stats.new_loads = new_count;
 	globe->stats.loaded = count;
 
-	//if (globe->dbg.enable_boxes)
-	//	globe->dbg.boxes->update();
+	if (globe->dbg.enable_boxes)
+		globe->dbg.boxes->update();
 
 	return result;
 }
@@ -1016,5 +1028,5 @@ void globe_draw(const Globe *globe, const ev2::PassCtx& ctx)
 
 	glBindVertexArray(0);
 
-	//globe_draw_debug(globe, ctx);
+	globe_draw_debug(globe, ctx);
 }

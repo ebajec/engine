@@ -65,10 +65,6 @@ float max_val(void *usr)
 	return (float)TEST_AMP;
 }
 
-static constexpr size_t coeff_count = 100;
-static double coeffs[coeff_count] = {};
-static glm::dvec3 phases[coeff_count] = {};
-
 float sample(void *usr, double u, double v, uint8_t f)
 {
 	return test_elev_fn(glm::dvec2(u,v), f);
@@ -76,8 +72,6 @@ float sample(void *usr, double u, double v, uint8_t f)
 
 float test_elev_fn(glm::dvec2 uv, uint8_t f)
 {
-	return 0.f;
-
 	double x = 1.0 - 2.0*uv.x;
 	double y = 1.0 - 2.0*uv.y;
 

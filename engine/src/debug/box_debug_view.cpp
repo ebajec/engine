@@ -1,5 +1,9 @@
 #include "box_debug_view.h"
 
+#include "device_impl.h"
+
+#include <cstring>
+
 struct edge_t 
 {
 	uint32_t u, v;
@@ -102,15 +106,66 @@ void BoxDebugView::update()
 		idxv = verts.size();
 	}
 
-	Mesh3DCreateInfo ci = {
-		.data = verts.data(),
-		.vcount = verts.size(),
-		.indices = indices.data(),
-		.icount = indices.size()
-	};
+	if (sizeof(vertex3d) * verts.size() > vcap) {
+		vcap = verts.size() * sizeof(vertex3d);
+		if (vbo.id)
+			ev2::destroy_buffer(dev, vbo);
+		vbo = ev2::create_buffer(dev, vcap);
+	}
+	vsize = verts.size() * sizeof(vertex3d);
 
-	table->upload(model, "model3d", &ci);
+	if (indices.size() * sizeof(uint32_t) > icap) {
+		icap = indices.size() * sizeof(uint32_t);
+		if (ibo.id)
+			ev2::destroy_buffer(dev, ibo);
+		ibo = ev2::create_buffer(dev, icap);
+	}
+	isize = indices.size() * sizeof(uint32_t);
+
+	ev2::UploadContext ctx = ev2::begin_upload(dev, vsize, alignof(vertex3d)); 
+	memcpy(ctx.ptr, verts.data(), vsize);
+	ev2::BufferUpload up = {
+		.src_offset = 0,
+		.dst_offset = 0,
+		.size = vsize,
+	};
+	ev2::commit_buffer_uploads(dev, ctx, vbo, &up, 1);
+
+	ctx = ev2::begin_upload(dev, isize, alignof(uint32_t));
+	memcpy(ctx.ptr, indices.data(), isize);
+	up = {
+		.src_offset = 0,
+		.dst_offset = 0,
+		.size = isize,
+	};
+	upload_index = ev2::commit_buffer_uploads(dev, ctx, ibo, &up, 1);
+
+	ev2::flush_uploads(dev);
 
 	boxes.clear();
 	oboxes.clear();
+}
+
+void BoxDebugView::draw(ev2::PassCtx ctx)
+{
+	ev2::wait_complete(dev, upload_index);
+	if (!vbo.id || !ibo.id)
+		return;
+
+	ev2::cmd_bind_pipeline(ctx.rec, pipeline);
+
+	ev2::Buffer *vbo_obj = dev->get_buffer(vbo);
+	ev2::Buffer *ibo_obj = dev->get_buffer(ibo);
+
+	glBindVertexArray(vao);
+	glBindVertexBuffer(0, vbo_obj->id, 0, sizeof(vertex3d));
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_obj->id);
+
+	uint32_t count = (uint32_t)(isize/(sizeof(uint32_t)));
+
+	glDrawElements(GL_LINES, count, GL_UNSIGNED_INT, nullptr); 
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);
 }

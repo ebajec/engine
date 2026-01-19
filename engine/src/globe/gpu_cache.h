@@ -5,6 +5,8 @@
 /*
 #include "engine/renderer/renderer.h"
 */
+
+#include "ev2/device.h"
 #include "engine/globe/tiling.h"
 
 #include "terrain.h"
@@ -86,6 +88,8 @@ struct GPUTileCache
 	> m_open_pages;
 
 	std::vector<std::unique_ptr<TileGPUPage>> m_pages;
+
+	ev2::Device * dev;
 
 	GLuint m_gl_tex_format = GL_R32F;
 	GLuint m_gl_img_format = GL_RED;
