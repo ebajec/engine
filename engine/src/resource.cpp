@@ -123,6 +123,11 @@ void flush_uploads(Device *dev)
 	pool->flush();
 }
 
+ev2::Result wait_complete(Device *dev, uint64_t sync)
+{
+	return dev->pool->wait_for(sync);
+}
+
 //------------------------------------------------------------------------------
 // Textures
 

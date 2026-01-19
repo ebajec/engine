@@ -7,9 +7,10 @@ namespace ev2 {
 
 enum Result
 {
-	SUCCESS,
-	ELOAD_FAILED,
-	EUNKNOWN
+	TIMEOUT = 1,
+	SUCCESS = 0,
+	ELOAD_FAILED = -1,
+	EUNKNOWN = -1024
 };
 
 struct Device;

@@ -7,9 +7,6 @@
 #include <engine/utils/camera.h>
 #include "app.h"
 
-// glfw
-#include <GLFW/glfw3.h>
-
 // glm
 #include <glm/mat4x4.hpp>
 #include <glm/gtc/type_ptr.hpp>

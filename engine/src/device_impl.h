@@ -100,8 +100,11 @@ struct UploadPool
 		size_t size;
 		GLsync sync;
 
-		constexpr bool operator < (epoch_t other) const {
-			return id < other.id;
+		constexpr bool operator == (epoch_t other) const {
+			return id == other.id;
+		}
+		constexpr bool operator > (epoch_t other) const {
+			return id > other.id;
 		}
 	};
 
@@ -145,7 +148,8 @@ struct UploadPool
 
 	std::priority_queue<
 		epoch_t, 
-		std::vector<epoch_t>
+		std::vector<epoch_t>,
+		std::greater<epoch_t>
 	> epochs {};
 
 	struct {
@@ -173,6 +177,8 @@ struct UploadPool
 	uint64_t commmit_image(uint32_t idx, ImageID buf, const ImageUpload *regions, uint32_t count);
 
 	void flush();
+
+	ev2::Result wait_for(uint64_t value);
 };
 
 struct FrameContext

@@ -2,7 +2,9 @@
 #define TILE_CACHE_H
 
 #include "engine/renderer/opengl.h"
+/*
 #include "engine/renderer/renderer.h"
+*/
 #include "engine/globe/tiling.h"
 
 #include "terrain.h"
@@ -111,7 +113,7 @@ public:
 		const std::span<tile_code_t> tiles, 
 		std::vector<TileGPUIndex>& textures
 	);
-	void bind_textures(const RenderContext &ctx, uint32_t base) const;
+	void bind_textures(uint32_t base) const;
 
 	/*
 	void synchronous_upload(const TileCacheSegment *data_cache,

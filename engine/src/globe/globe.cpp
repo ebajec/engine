@@ -1,10 +1,9 @@
 #include "engine/globe/globe.h"
 #include "engine/globe/tiling.h"
 
-#include "renderer/opengl.h"
-#include "renderer/gl_debug.h"
-
-#include "resource/buffer.h"
+//#include "renderer/opengl.h"
+//#include "renderer/gl_debug.h"
+//#include "resource/buffer.h"
 
 #include "utils/camera.h"
 #include "utils/geometry.h"
@@ -15,8 +14,8 @@
 
 #include "terrain.h"
 
-#include <debug/box_debug_view.h>
-#include <debug/camera_debug_view.h>
+//#include <debug/box_debug_view.h>
+//#include <debug/camera_debug_view.h>
 
 #include <imgui.h>
 #include <implot.h>
@@ -27,6 +26,7 @@
 
 #include <vector>
 
+#include <thread>
 #include <numeric>
 #include <vector>
 #include <cstdint>
@@ -50,8 +50,8 @@ static constexpr double tile_scale_factor = 12;
 
 struct DebugInfo
 {
-	std::unique_ptr<CameraDebugView> camera;
-	std::unique_ptr<BoxDebugView> boxes;
+	//std::unique_ptr<CameraDebugView> camera;
+	//std::unique_ptr<BoxDebugView> boxes;
 	bool enable_boxes;
 	bool fix_camera;
 	int zoom;
@@ -207,14 +207,16 @@ struct TileAllocator
 
 struct RenderData
 {
-	BufferID vbo;
-	BufferID indirect;
-	BufferID ibo;
+	ev2::BufferID vbo;
+	ev2::BufferID indirect;
+	ev2::BufferID ibo;
 
 	// texture array indices
-	BufferID ssbo;
+	ev2::BufferID ssbo;
 
-	MaterialID material;
+	ev2::GraphicsPipelineID pipeline;
+
+	//MaterialID material;
 	GLuint vao;
 
 	std::vector<DrawCommand> cmds;
@@ -222,7 +224,8 @@ struct RenderData
 
 struct Globe
 {
-	ResourceTable *rt;
+	//ResourceTable *rt;
+	ev2::Device *dev;
 
 	GlobeStats stats;
 	DebugInfo dbg;
@@ -251,20 +254,20 @@ struct select_tiles_params
 };
 
 static void globe_init_debug(Globe *globe) {
-	globe->dbg.boxes.reset(new BoxDebugView(globe->rt));
-	globe->dbg.camera.reset(new CameraDebugView(globe->rt));
+	//globe->dbg.boxes.reset(new BoxDebugView(globe->rt));
+	//globe->dbg.camera.reset(new CameraDebugView(globe->rt));
 	globe->dbg.enable_boxes = false;
 }
 
-static void globe_draw_debug(Globe const *globe, RenderContext const & ctx)
+static void globe_draw_debug(Globe const *globe, ev2::PassCtx const &ctx)
 {
-	if (globe->dbg.enable_boxes) {
-		ctx.bind_material(globe->dbg.boxes->material);
-		ctx.draw_cmd_mesh_outline(globe->dbg.boxes->model);
-	}
+	//if (globe->dbg.enable_boxes) {
+	//	ctx.bind_material(globe->dbg.boxes->material);
+	//	ctx.draw_cmd_mesh_outline(globe->dbg.boxes->model);
+	//}
 
-	if (globe->dbg.fix_camera)
-		globe->dbg.camera->render(ctx);
+	//if (globe->dbg.fix_camera)
+	//	globe->dbg.camera->render(ctx);
 }
 
 static aabb3_t tile_aabb(TileCode code, float min, float max) 
@@ -354,8 +357,8 @@ static inline int select_tiles_rec(
 	const select_tiles_params *params,
 	TileCode code)
 {
-	BoxDebugView * boxes = params->debug->enable_boxes ? 
-		params->debug->boxes.get() : nullptr;
+	//BoxDebugView * boxes = params->debug->enable_boxes ? 
+	//	params->debug->boxes.get() : nullptr;
 
 	if (code.zoom > 23)
 		return 0;
@@ -385,7 +388,7 @@ static inline int select_tiles_rec(
 	) {
 
 		out.push_back({code,d_min_sq});
-		if(boxes) boxes->add(box);
+		//if(boxes) boxes->add(box);
 		return 1;
 	}
 
@@ -404,7 +407,7 @@ static inline int select_tiles_rec(
 	// If status is zero than no tiles were added, so add this tile
 	if (!status) {
 		out.push_back({code,d_min_sq});
-		if (boxes) boxes->add(box);
+		//if (boxes) boxes->add(box);
 		return 1;
 	}
 
@@ -502,49 +505,66 @@ static std::vector<uint32_t> create_tile_indices()
 	return indices;
 }
 
-static LoadResult create_render_data(ResourceTable *rt, RenderData &data)
+static ev2::Result create_render_data(ev2::Device *dev, RenderData &data)
 {
-	LoadResult result = RT_OK;
+	ev2::Result result = ev2::SUCCESS;
 
-	std::vector<uint32_t> tile_indices = create_tile_indices();
+	size_t vbo_size = MAX_TILES*TILE_VERT_COUNT*sizeof(GlobeVertex);
+	size_t ibo_size = sizeof(uint32_t)*6*TILE_VERT_COUNT;
+	size_t indirect_size = MAX_TILES*sizeof(DrawCommand);
+	size_t ssbo_size = MAX_TILES*sizeof(TileMetadata);
+
+	data.pipeline = ev2::load_graphics_pipeline(dev, "pipelines/globe_tile.yaml");
 
 	data.vao = globe_vao();
-	data.material = material_load_file(rt, "material/globe_tile.yaml");
 
-	if (!data.material)
+	if (!data.pipeline.id)
 		goto load_failed;
 
-	data.vbo = buffer_create(rt, MAX_TILES*TILE_VERT_COUNT*sizeof(GlobeVertex),
-						  GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
-	if (!data.vbo)
+	data.vbo = ev2::create_buffer(dev, vbo_size);
+
+	if (!data.vbo.id)
 		goto load_failed;
 
-	data.indirect = buffer_create(rt, MAX_TILES*sizeof(DrawCommand),
-						  GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
-	if (!data.indirect)
+	data.indirect = ev2::create_buffer(dev, indirect_size);
+
+	if (!data.indirect.id)
 		goto load_failed;
 
-	data.ssbo = buffer_create(rt, MAX_TILES*sizeof(TileMetadata),
-						  GL_DYNAMIC_STORAGE_BIT | GL_MAP_WRITE_BIT);
-	if (!data.ssbo)
+	data.ssbo = ev2::create_buffer(dev, ssbo_size);
+
+	if (!data.ssbo.id)
 		goto load_failed;
 
-	data.ibo = buffer_create(rt, sizeof(uint32_t)*6*TILE_VERT_COUNT);
-	if (!data.ibo)
+	data.ibo = ev2::create_buffer(dev, ibo_size);
+
+	if (!data.ibo.id)
 		goto load_failed;
 
-	result = buffer_upload(rt, data.ibo, tile_indices.data(), 
-			   tile_indices.size()*sizeof(uint32_t));
+	{
+		std::vector<uint32_t> tile_indices = create_tile_indices();
+		ev2::UploadContext uc = ev2::begin_upload(dev, ibo_size, 4);
+
+		memcpy(uc.ptr, tile_indices.data(), ibo_size); 
+
+		ev2::BufferUpload upload = {
+			.src_offset = 0,
+			.dst_offset = 0,
+			.size = ibo_size
+		};
+		ev2::commit_buffer_uploads(dev, uc, data.ibo, &upload, 1);
+		ev2::flush_uploads(dev);
+	}
 
 	if (result)
 		goto load_failed;
 
 	return result;
 load_failed:
-	if (data.vbo) rt->destroy_handle(data.vbo);
-	if (data.ibo) rt->destroy_handle(data.ibo);
-	if (data.ssbo) rt->destroy_handle(data.ssbo);
-	if (data.indirect) rt->destroy_handle(data.indirect);
+	if (data.vbo.id) ev2::destroy_buffer(dev, data.vbo);
+	if (data.ibo.id) ev2::destroy_buffer(dev, data.ibo);
+	if (data.ssbo.id) ev2::destroy_buffer(dev, data.ssbo);
+	if (data.indirect.id) ev2::destroy_buffer(dev, data.indirect);
 	return result;
 }
 
@@ -577,15 +597,18 @@ static void create_tile_verts(TileCode code, GlobeVertex* out_verts)
 	}
 }
 
-static void update_draw_cmds(Globe *globe) 
+static uint64_t update_draw_cmds(Globe *globe) 
 {
 	size_t count = globe->selected_tiles.size();
 
 	//-----------------------------------------------------------------------------
 	// Indirect Draw Buffer
-	const GLBuffer* indirect = globe->rt->get<GLBuffer>(globe->render_data.indirect);
 
-	DrawCommand *cmds = (DrawCommand *)glMapNamedBuffer(indirect->id, GL_WRITE_ONLY);
+	size_t size = count * sizeof(DrawCommand);
+
+	ev2::UploadContext uc = ev2::begin_upload(globe->dev, size, alignof(DrawCommand));
+
+	DrawCommand * cmds = (DrawCommand*)uc.ptr;
 
 	for (size_t i = 0; i < count; ++i) {
 		uint64_t code = globe->selected_tiles[i];
@@ -602,30 +625,42 @@ static void update_draw_cmds(Globe *globe)
 		cmds[i] = cmd;
 	}
 
-	glUnmapNamedBuffer(indirect->id);
+	ev2::BufferUpload upload = {
+		.src_offset = 0,
+		.dst_offset = 0,
+		.size = size,
+	};
+
+	return ev2::commit_buffer_uploads(globe->dev, uc, globe->render_data.indirect, &upload, 1);
 }
 
-static void update_vbo(Globe *globe)
+static uint64_t update_vbo(Globe *globe)
 {
 	const TileAllocator::kv_t * new_tiles; 
 	size_t new_count;
 	globe->tile_allocator->get_new(&new_tiles, &new_count);
 
-	const GLBuffer *buf = globe->rt->get<GLBuffer>(globe->render_data.vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, buf->id);
+	if (!new_count)
+		return 0;
+	
+	size_t total_size = new_count * TILE_VERT_COUNT * sizeof(GlobeVertex);
+
+	ev2::UploadContext uc = ev2::begin_upload(globe->dev, total_size, alignof(GlobeVertex));
 
 	size_t batch_size = std::max(2*new_count/(std::thread::hardware_concurrency()),1LU);
 	std::atomic_int ctr = (int)new_count;
 
-	GlobeVertex *ptr = (GlobeVertex*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+	GlobeVertex *ptr = (GlobeVertex*)uc.ptr;
 
 	for (size_t start = 0; start < new_count; start += batch_size) {
 		size_t end = std::min(start + batch_size, new_count);
+
 		g_schedule_task([ptr, start, end, new_tiles, &ctr](){
+
 			for (size_t i = start; i < end; ++i) {
 				TileAllocator::kv_t kv = new_tiles[i];
 
-				GlobeVertex *dst = ptr + kv.idx * TILE_VERT_COUNT;
+				GlobeVertex *dst = ptr + i * TILE_VERT_COUNT;
 				TileCode code = tile_code_unpack(kv.code);
 				create_tile_verts(code, dst);
 				--ctr;
@@ -636,17 +671,34 @@ static void update_vbo(Globe *globe)
 	while (ctr)
 		std::this_thread::yield();
 
-	glUnmapBuffer(GL_ARRAY_BUFFER);
+	std::vector<ev2::BufferUpload> uploads (new_count); 
+
+	size_t tile_size = sizeof(GlobeVertex) * TILE_VERT_COUNT;
+
+	for (size_t i = 0; i < new_count; ++i) {
+		uploads[i] = ev2::BufferUpload{
+			.src_offset = i * tile_size,
+			.dst_offset = new_tiles[i].idx * tile_size,
+			.size = tile_size
+		};
+	}
+
+	uint64_t value = ev2::commit_buffer_uploads(globe->dev, uc, 
+							globe->render_data.vbo, 
+							uploads.data(), 
+							(uint32_t)uploads.size());
+
+	return value;
 }
 
-static LoadResult update_render_data(
+static ev2::Result update_render_data(
 	Globe *globe,
 	glm::dvec3 origin,
 	const std::vector<uint64_t>& parents, 
 	const std::vector<TileGPUIndex> &textures
 )
 {
-	ResourceTable *rt = globe->rt;
+	ev2::Device *dev = globe->dev;
 
 	const std::vector<uint64_t>& tiles = globe->selected_tiles;
 	uint32_t count = (uint32_t)tiles.size();
@@ -656,19 +708,18 @@ static LoadResult update_render_data(
 	//-----------------------------------------------------------------------------
 	// vbo
 	
-	update_vbo(globe);
+	uint64_t vbo_sync = update_vbo(globe);
 
-	void *ptr;
+	ev2::flush_uploads(dev);
 
 	//-----------------------------------------------------------------------------
 	// tex indices
 	
-	const GLBuffer *ssbo = rt->get<GLBuffer>(globe->render_data.ssbo);
+	size_t ssbo_size = count * sizeof(TileMetadata);
 
-	glBindBuffer(GL_ARRAY_BUFFER, ssbo->id);
-	ptr = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+	ev2::UploadContext uc = ev2::begin_upload(dev, ssbo_size, alignof(TileMetadata));
 
-	TileMetadata *metadata = static_cast<TileMetadata*>(ptr);
+	TileMetadata *metadata = static_cast<TileMetadata*>(uc.ptr);
 
 	for (uint32_t i = 0; i < count; ++i) {
 		uint64_t code_parent = parents[i];
@@ -684,9 +735,7 @@ static LoadResult update_render_data(
 			aabb2_t{.min = glm::dvec2(0), .max = glm::dvec2(1)} : 
 			sub_rect(parent, child);
 
-		size_t slot = globe->tile_allocator->get_idx(code_child);
-
-		metadata[slot] = {
+		metadata[i] = {
 			.coord = glm::vec4(0),
 			.tex_uv = {rect_tex.min, rect_tex.max},
 			.globe_uv = {rect.min, rect.max},
@@ -696,11 +745,33 @@ static LoadResult update_render_data(
 		};
 	}
 
-	glUnmapBuffer(GL_ARRAY_BUFFER);
+	std::vector<ev2::BufferUpload> uploads (count);
 
-	update_draw_cmds(globe);
+	for (size_t i = 0; i < count; ++i) {
+		size_t slot = globe->tile_allocator->get_idx(tiles[i]);
+		uploads[i] = {
+			.src_offset = i*sizeof(TileMetadata),
+			.dst_offset = slot*sizeof(TileMetadata),
+			.size = sizeof(TileMetadata)
+		};
+	}
 
-	return RT_OK;
+	uint64_t ssbo_sync = ev2::commit_buffer_uploads(dev, uc, 
+												 globe->render_data.ssbo, 
+												 uploads.data(), 
+												 (uint32_t)uploads.size()
+												 );
+
+	//------------------------------------------------------------------------------
+	// Indirect draw buffer
+	
+	uint64_t indirect_sync = update_draw_cmds(globe);
+
+	ev2::flush_uploads(dev);
+
+	ev2::wait_complete(dev, std::max(std::max(vbo_sync, ssbo_sync), indirect_sync));
+
+	return ev2::SUCCESS;
 };
 
 static double dtime()
@@ -758,14 +829,14 @@ static void plot_tile_counts(size_t total, size_t new_tiles)
 //------------------------------------------------------------------------------
 // Interface
 
-Globe *globe_create(ResourceTable *rt)
+Globe *globe_create(ev2::Device *dev)
 {
 	std::unique_ptr<Globe> globe(new Globe{});
-	globe->rt = rt;
+	globe->dev = dev;
 
-	LoadResult result = create_render_data(rt, globe->render_data);
+	ev2::Result result = create_render_data(dev, globe->render_data);
 
-	if (result != RT_OK)
+	if (result != ev2::SUCCESS)
 		return nullptr;
 
 	globe->cpu_cache.reset(
@@ -815,17 +886,17 @@ float globe_sample_elevation(const Globe *globe, const glm::dvec3& p)
 	return globe->cpu_cache->sample_elevation_at(p);
 }
 
-LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
+ev2::Result globe_update(Globe *globe, GlobeUpdateInfo *info)
 {
 	const Camera * p_camera = info->camera; 
 
 	CPUTileCache *cpu_cache = globe->cpu_cache.get();
 
-	if (globe->dbg.fix_camera)
-		p_camera = globe->dbg.camera->get_camera();
-	else {
-		globe->dbg.camera->set_camera(info->camera);
-	}
+	//if (globe->dbg.fix_camera)
+	//	p_camera = globe->dbg.camera->get_camera();
+	//else {
+	//	globe->dbg.camera->set_camera(info->camera);
+	//}
 
 	globe->selected_tiles.clear();
 
@@ -893,30 +964,33 @@ LoadResult globe_update(Globe *globe, GlobeUpdateInfo *info)
 	size_t new_count = globe->gpu_cache->update(
 		cpu_cache, loaded_tiles, tile_textures);
 
-	LoadResult result = update_render_data(globe,
+	ev2::Result result = update_render_data(globe,
 		pos, loaded_tiles, tile_textures);
 	
 	globe->stats.new_loads = new_count;
 	globe->stats.loaded = count;
 
-	if (globe->dbg.enable_boxes)
-		globe->dbg.boxes->update();
+	//if (globe->dbg.enable_boxes)
+	//	globe->dbg.boxes->update();
 
 	return result;
 }
 
-void globe_draw(const Globe *globe, const RenderContext& ctx)
+#include "device_impl.h"
+
+void globe_draw(const Globe *globe, const ev2::PassCtx& ctx)
 {
 	const RenderData &data = globe->render_data;
 
-	const GLBuffer* vbo = ctx.rt->get<GLBuffer>(data.vbo); 
-	const GLBuffer* ibo = ctx.rt->get<GLBuffer>(data.ibo); 
-	const GLBuffer* indirect = ctx.rt->get<GLBuffer>(data.indirect); 
-	const GLBuffer* ssbo = ctx.rt->get<GLBuffer>(data.ssbo);
+	ev2::Device *dev = globe->dev;
 
-	ctx.bind_material(data.material);
+	const ev2::Buffer* vbo = dev->get_buffer(data.vbo); 
+	const ev2::Buffer* ibo = dev->get_buffer(data.ibo); 
+	const ev2::Buffer* indirect = dev->get_buffer(data.indirect); 
+	const ev2::Buffer* ssbo = dev->get_buffer(data.ssbo);
 
-	globe->gpu_cache->bind_textures(ctx, 1);
+	ev2::cmd_bind_pipeline(ctx.rec, globe->render_data.pipeline);
+	globe->gpu_cache->bind_textures(1);
 
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo->id); 
 	
@@ -942,5 +1016,5 @@ void globe_draw(const Globe *globe, const RenderContext& ctx)
 
 	glBindVertexArray(0);
 
-	globe_draw_debug(globe, ctx);
+	//globe_draw_debug(globe, ctx);
 }

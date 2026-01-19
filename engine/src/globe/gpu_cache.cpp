@@ -461,7 +461,7 @@ void TileGPUCache::synchronous_upload(
 }
 */
 
-void GPUTileCache::bind_textures(const RenderContext &ctx, uint32_t base) const 
+void GPUTileCache::bind_textures(uint32_t base) const 
 {
 	assert(m_pages.size() <= MAX_TILE_PAGES);
 

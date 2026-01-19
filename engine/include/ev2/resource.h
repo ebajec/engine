@@ -63,6 +63,8 @@ uint64_t commit_buffer_uploads(Device *dev, UploadContext ctx, BufferID buf,
 uint64_t commit_image_uploads(Device *dev, UploadContext ctx, ImageID img, 
 							  const ImageUpload *uploads, uint32_t count);
 
+ev2::Result wait_complete(Device *dev, uint64_t sync);
+
 
 //--------------------------------------------------------------------
 // Buffer

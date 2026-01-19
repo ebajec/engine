@@ -62,10 +62,7 @@ void main()
 
 	bool valid = is_valid(in_tex_idx);
 
-	if (!valid) 
-		discard;
-
-	float val = in_height;//valid ? texture(u_tex_arrays[in_tex_idx.page], uvw).r : 0;
+	float val = valid ? in_height : 0;//valid ? texture(u_tex_arrays[in_tex_idx.page], uvw).r : 0;
 
 	float s = 1.0 + 10*val; 
 
@@ -157,7 +154,7 @@ void main()
 		color = vec4(vec3(quant/float(levels)),color.a);
 	}
 
-	FragColor = mix(color,vec4(0,in_uv,1),0.0);
+	FragColor = mix(color,vec4(0,in_uv,1),0.5);
 	//FragColor = vec4(v.xyz,1);
 	FragColor = mix(FragColor,FACE_COLORS[cube_face(in_pos)],0.0);
 

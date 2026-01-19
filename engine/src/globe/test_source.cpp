@@ -3,9 +3,9 @@
 
 static float test_elev_fn(glm::dvec2 uv, uint8_t f);
 
-static int test_loader_fn2(void *usr, uint64_t id, 
+static int test_loader_fn(void *usr, uint64_t id, 
 					struct ds_buf *buf, struct ds_token *token);
-static_assert(std::is_same<decltype(&test_loader_fn2), ds_load_fn>::value);
+static_assert(std::is_same<decltype(&test_loader_fn), ds_load_fn>::value);
 
 static uint64_t test_loader_find(void *usr, uint64_t id);
 static float sample(void *usr, double u, double v, uint8_t f);
@@ -22,7 +22,7 @@ int test_data_source_init(struct ds_context **p_ctx)
 		.vtbl = {
 			.destroy = destroy,
 
-			.loader = test_loader_fn2,
+			.loader = test_loader_fn,
 			.find = test_loader_find,
 
 			.sample = sample,
@@ -69,46 +69,15 @@ static constexpr size_t coeff_count = 100;
 static double coeffs[coeff_count] = {};
 static glm::dvec3 phases[coeff_count] = {};
 
-static void init_coeffs()
-{
-	for (size_t i = 0; i < coeff_count; ++i) {
-		coeffs[i] = (1.0 - (double)rand())/(double)RAND_MAX; 
-		phases[i] = glm::vec3(
-			urandf1(),urandf1(),urandf1());
-	}
-}
-
 float sample(void *usr, double u, double v, uint8_t f)
 {
 	return test_elev_fn(glm::dvec2(u,v), f);
 }
 
-static double test_elev_fn2(glm::dvec2 uv, uint8_t f, uint8_t zoom)
-{
-	glm::dvec3 p = cube_to_globe(f, uv);
-
-	static int init = 0;
-
-	if (!init) {
-		++init;
-		init_coeffs();
-	}
-
-	double g = 0;
-	for (size_t i = 0; i < coeff_count; ++i) {
-		double idx = (double)i + 1;
-		double c = TEST_FREQ*(idx);
-		glm::dvec3 h = phases[i]*TWOPI;
-		g += (coeffs[i]/(double)(2*idx))*(sin(c*p.x - h.x)*sin(c*p.y - h.y)*sin(c*p.z - h.z));
-	}
-
-	g *= TEST_AMP;
-
-	return g;
-}
-
 float test_elev_fn(glm::dvec2 uv, uint8_t f)
 {
+	return 0.f;
+
 	double x = 1.0 - 2.0*uv.x;
 	double y = 1.0 - 2.0*uv.y;
 
@@ -120,7 +89,7 @@ float test_elev_fn(glm::dvec2 uv, uint8_t f)
 	return (float)g;
 }
 
-int test_loader_fn2(
+int test_loader_fn(
 	void *usr, uint64_t id, struct ds_buf *buf, struct ds_token *token)
 {
 	float *data = static_cast<float*>(buf->dst);

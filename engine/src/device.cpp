@@ -120,6 +120,8 @@ UploadPool *UploadPool::create(Device *dev, size_t capacity, size_t align, size_
 		return nullptr;
 	}
 
+	capacity = align_up_pow2(capacity, align);
+
 	BufferID h_buf = create_buffer(dev, capacity, ev2::MAP_WRITE | ev2::MAP_PERSISTENT);
 
 	if (EV2_IS_NULL(h_buf)) {
@@ -226,7 +228,29 @@ static inline void record_image_copy(Buffer *src, Image *img,
 	}
 
 	glBindBuffer(GL_PIXEL_UNPACK_BUFFER,0);
+}
 
+ev2::Result UploadPool::wait_for(uint64_t value)
+{
+	while (!epochs.empty()) {
+		epoch_t epoch = epochs.top();
+
+		if (value < epoch.id)
+			return SUCCESS;
+
+		uint64_t timeout_ns = 1e9;
+		GLenum result = glClientWaitSync(epoch.sync, 0, timeout_ns); 
+
+		if (result == GL_TIMEOUT_EXPIRED) {
+			log_warn("Upload timed out: epoch=%d, size=%d", epoch.id);
+			return ev2::TIMEOUT;
+		} else if (result == GL_WAIT_FAILED) {
+			log_error("Upload failed, aborting");
+			return ev2::EUNKNOWN;
+		}
+		epochs.pop();
+	}
+	return SUCCESS;
 }
 
 void UploadPool::flush()
@@ -250,10 +274,12 @@ void UploadPool::flush()
 	) {
 		flushed_bytes += entries[i].size;
 		++flush_head;
+
+		assert(capacity - entries[i].start >= entries[i].size);
 	}
 
-	// If the flush range is empty, no uploads have been commited yet
-	if (!flushed_bytes)
+	// If no uploads are commited, return early
+	if (flush_head == flush_tail)
 		return;
 
 	std::swap(queues[1],queues[0]);
@@ -309,17 +335,15 @@ void UploadPool::flush()
 		.sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0),
 	};
 
-	/*
-	log_info(
-		"Flushed uploads:\n"
-		"	epoch=%lld\n"
-		"	size=%lld\n"
-		"	start=%lld",
-		(unsigned long long)epoch.id, 
-		(unsigned long long)epoch.size, 
-		(unsigned long long)flush_start
-	);
-	*/
+	//log_info(
+	//	"Flushed uploads:\n"
+	//	"	epoch=%lld\n"
+	//	"	size=%lld\n"
+	//	"	start=%lld",
+	//	(unsigned long long)epoch.id, 
+	//	(unsigned long long)epoch.size, 
+	//	(unsigned long long)flush_start
+	//);
 
 	epochs.push(epoch);
 
@@ -421,13 +445,21 @@ UploadPool::alloc_result_t UploadPool::alloc(size_t _bytes, size_t _align)
 		// ^^^^^
 		// _t----h_____
 		//		  ^^^^^
-		available = head < tail ? tail - head : std::max(tail, capacity - head); 
+
+		if (head == tail) {
+			available = capacity;
+			head = 0;
+			tail = 0;
+		} else {
+			available = head < tail ? tail - head : std::max(tail, capacity - head); 
+		}
 
 		if (required < available) 
 			break;
 
 		if (head_idx == tail_idx) {
 			log_error("This should never happen!");
+			assert(false);
 		}
 
 		uint64_t wait_value = done_ctr.load(std::memory_order_acquire);
@@ -456,7 +488,7 @@ UploadPool::alloc_result_t UploadPool::alloc(size_t _bytes, size_t _align)
 			tail_entry = entries[tail_idx];
 			tail_idx = (tail_idx + 1) & (max_uploads - 1);
 
-			if (tail_idx == head_idx) {
+			if (tail_idx == head_idx) { // entries is empty here
 				tail = head;
 				break;
 			} else {
@@ -464,6 +496,15 @@ UploadPool::alloc_result_t UploadPool::alloc(size_t _bytes, size_t _align)
 			}
 		} while (tail_entry.done_value && tail_entry.done_value < wait_value);
 	} while (true);
+
+	if (capacity - head <= required) {
+		size_t old_head = head;
+		head = 0;
+		
+		// ensures that the tail seen in the entry list always matches a previos 
+		// upload start
+		tail = tail == old_head ? 0 : tail;
+	}
 
 	entry_t ent = {
 		.start = head,
@@ -473,6 +514,8 @@ UploadPool::alloc_result_t UploadPool::alloc(size_t _bytes, size_t _align)
 		.type = {}
 	};
 
+	assert(capacity - ent.start >= ent.size);
+
 	entries[head_idx] = ent;
 
 	alloc_result_t res = {
@@ -480,10 +523,9 @@ UploadPool::alloc_result_t UploadPool::alloc(size_t _bytes, size_t _align)
 		.idx = head_idx
 	};
 
-	head_idx = (head_idx + 1) & (max_uploads - 1); 
-
 	// note that required is always aligned properly, so head is after this as well
-	head = (capacity - head) > required ?  head + required : 0;
+	head += required;
+	head_idx = (head_idx + 1) & (max_uploads - 1); 
 
 	return res;
 }

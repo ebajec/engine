@@ -490,6 +490,11 @@ static ev2::Result gl_gfx_pipeline_create(
 	ev2::Result result = ev2::SUCCESS;
 	std::string syspath = dev->assets->get_system_path(path);
 
+	if (!fs::exists(syspath)) {
+		log_error("File does not exist: %s", syspath.c_str());
+		return ev2::ELOAD_FAILED;
+	}
+
 	GfxPipelineInfo gfx_info;
 	try {
 		result = parse_gfx_pipeline_file(&gfx_info,syspath.c_str());

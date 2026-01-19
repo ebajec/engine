@@ -13,7 +13,26 @@
 // STL / libc
 #include <cstdio>
 
-extern int init_gl_context(GLFWwindow *window);
+int init_gl_context(GLFWwindow *window)
+{
+	glfwMakeContextCurrent(window);
+
+	#ifndef NDEBUG
+	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
+	#endif
+
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_SAMPLES, 4);
+
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+        fprintf(stderr,"Failed to initialize GLAD\n");
+		return EXIT_FAILURE;
+    }
+
+	return EXIT_SUCCESS;
+}
 
 void print_glfw_platform()
 {
@@ -32,6 +51,21 @@ void App::key_callback(GLFWwindow* window, int key, int scancode, int action, in
 {
 	ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
 	App *app = static_cast<App*>(glfwGetWindowUserPointer(window));
+
+	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) 
+	{
+		if (app->input.mouse_mode == GLFW_CURSOR_DISABLED) {
+			app->input.mouse_mode = GLFW_CURSOR_NORMAL;
+		} else  {
+			app->input.mouse_mode = GLFW_CURSOR_DISABLED;
+		}
+
+		glfwSetInputMode(window, GLFW_CURSOR, app->input.mouse_mode);
+	}
+
+	for (const key_callback_t callback : app->key_callbacks) {
+		callback(key, scancode, action, mods);
+	}
 }
 void App::mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
@@ -50,7 +84,6 @@ void App::mouse_button_callback(GLFWwindow* window, int button, int action, int 
 	if (button == GLFW_MOUSE_BUTTON_2 && action == GLFW_RELEASE) {
 		app->input.right_mouse_pressed = false;
 	}
-
 }
 void App::scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
@@ -63,9 +96,6 @@ void App::cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
 	App *app = static_cast<App*>(glfwGetWindowUserPointer(window));
 
 	glm::dvec2 pos = glm::dvec2(xpos, ypos);
-
-	//std::swap(app->input.mouse_pos[0], app->input.mouse_pos[1]);
-	//app->input.mouse_pos[0] = pos;
 }
 void App::framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
@@ -104,15 +134,19 @@ int App::update()
 
 	int result = OK;
 
+	// I find it nicer to have ImGui captured wherever I need it to between frames
 	if (frame_counter++) {
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());	
 		ImGui::EndFrame();
-
-		ev2::end_frame(dev);
-
 		glfwSwapBuffers(win.ptr);
+	} else {
+		input.t0 = glfwGetTime();
 	}
+
+	input.t1 = input.t0;
+	input.t0 = glfwGetTime();
+	input.dt = input.t0 - input.t1;
 
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
@@ -124,8 +158,17 @@ int App::update()
 	glfwPollEvents();
 	update_input();
 
-	ev2::begin_frame(dev);
 	return result;
+}
+
+void App::begin_frame()
+{
+	ev2::begin_frame(dev);
+}
+
+void App::end_frame()
+{
+	ev2::end_frame(dev);
 }
 
 int App::initialize()

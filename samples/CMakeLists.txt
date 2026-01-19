@@ -5,12 +5,12 @@ include(clang-warnings)
 
 project(samples)
 
-file(GLOB SOURCES "src/*.cpp" "src/*.c" "src/*/*.cpp" "src/*/*.c")
+file(GLOB SOURCES "shared/*.cpp" "shared/*.c" "src/*/*.cpp" "src/*/*.c")
 
-add_library(samples STATIC ${SOURCES})
-target_include_directories(samples PUBLIC src )
+add_library(samples-common STATIC ${SOURCES})
+target_include_directories(samples-common PUBLIC shared )
 
-target_link_libraries(samples PUBLIC 
+target_link_libraries(samples-common PUBLIC 
 	engine
 	glfw
     glad
@@ -19,8 +19,9 @@ target_link_libraries(samples PUBLIC
     OpenGL::GL
     glm::glm)
 
-add_subdirectory(lines)
-add_subdirectory(globe)
-add_subdirectory(diffusion)
-add_subdirectory(ev2_test)
+#add_subdirectory(lines)
+#add_subdirectory(globe)
+#add_subdirectory(diffusion)
+#add_subdirectory(ev2_test)
+add_subdirectory(ev2_globe)
 #add_subdirectory(hopf)

@@ -174,7 +174,7 @@ vec4 palette(float v)
 
 void main()
 {
-	mat4 pv = u_frame.pv;
+	mat4 pv = u_view.pv;
 
 	vec4 wpos = vec4(pos, 1);
 
