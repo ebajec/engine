@@ -71,12 +71,14 @@ struct App
 	int resize(int width, int height);
 
 	int update();
+
 	void begin_frame();
 	void end_frame();
+	void imgui();
 
 	void update_input();
 
-	int initialize();
+	int initialize(int argc, char *argv[]);
 	void terminate();
 
 	//-----------------------------------------------------------------------------
@@ -150,8 +152,6 @@ static inline void plot_frame_times(float delta)
 
 	avg = 0.99*avg + 0.01*delta;
 
-	ImGui::Begin("Stats");
-
 	if (ImPlot::BeginPlot("Frame times (ms)",ImVec2(200,200))) {
 		ImPlot::SetupAxesLimits(times[scroll], 
 		   times[scroll  ? scroll - 1 : samples - 1], 
@@ -160,7 +160,6 @@ static inline void plot_frame_times(float delta)
 			deltas.data(), samples, ImPlotCond_Always, scroll);
 		ImPlot::EndPlot();
 	}
-	ImGui::End();
 }
 
 

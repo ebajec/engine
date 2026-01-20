@@ -979,6 +979,8 @@ void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 				Buffer *buf = dev->get_buffer(binding.buf.handle);
 				glBindBufferRange(GL_SHADER_STORAGE_BUFFER, index, buf->id, 
 					  binding.buf.offset, binding.buf.size); 
+
+				break;
 			}
 
 			case ev2::DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
@@ -989,6 +991,7 @@ void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 				Buffer *buf = dev->get_buffer(binding.buf.handle);
 				glBindBufferRange(GL_UNIFORM_BUFFER, index, buf->id, 
 					  binding.buf.offset, binding.buf.size); 
+				break;
 			}
 		}
 	}

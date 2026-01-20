@@ -76,6 +76,12 @@ int MyStuff::update()
 		.camera = &camera 
 	};
 
+	static float speedmult = 1.f;
+
+	ImGui::Begin("Editor");
+	ImGui::SliderFloat("speed mult", &speedmult, 1.f, 3.f, "%.5f");
+	ImGui::End();
+
 	globe_update(globe, &globe_info);
 	globe_imgui(globe);
 	plot_frame_times(app->input.dt);
@@ -84,17 +90,17 @@ int MyStuff::update()
 	// Update camera
 
 	double elev = globe_sample_elevation(globe, control.get_pos());
-	control.set_min_height(2*near + elev);
+	control.set_min_height(elev + 1e-4);
 
 	glm::dvec2 delta = app->input.get_mouse_delta()/(double)app->win.width;
 
-	static float speed = 1.f;
-	
-	ImGui::Begin("Demo Window");
-	ImGui::SliderFloat("speed", &speed, 0.f, 1.f, "%.5f");
-	ImGui::End();
-
 	float aspect = (float)app->win.height/(float)app->win.width;
+
+	float h = (control.height - 1.) - elev; 
+
+	near = glm::clamp(0.25f*h, 0.0001f, 0.02f);
+	far = glm::clamp(1000.f*near, 1.f, 2.f);
+	float speed = speedmult*std::min(0.001f + h,1.f);
 
 	rd.proj = camera_proj_3d(fov, aspect, far, near);
 	rd.view = control.get_view();
@@ -140,7 +146,7 @@ int main(int argc, char *argv[])
 		}
 	});
 
-	if (app->initialize() != App::OK)
+	if (app->initialize(argc, argv) != App::OK)
 		return EXIT_FAILURE;
 
 	ev2::Device *dev = app->dev;

@@ -26,5 +26,5 @@ void main()
 	vec4 wpos = inv*pos;
 	out_pos = wpos;
 
-	gl_Position = u_frame.pv * wpos;
+	gl_Position = u_view.pv * wpos;
 }

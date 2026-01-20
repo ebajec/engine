@@ -113,8 +113,6 @@ static alc_index alc_evict_one(alc_table *alc)
 	alc->map.erase(key);	
 	alc->lru.pop_back();
 
-	log_info("evicted %d",ent->key);
-
 	return idx;
 }
 
@@ -200,16 +198,22 @@ void alc_destroy(alc_table *alc)
 		alc_entry *ent = alc_entry_get(alc, idx);
 
 		uint64_t state = ent->state.load(std::memory_order_relaxed);
+
 		alc_state desired;
 		do {
 			desired = alc_state_unpack(state);
 
-			if (desired.status == ALC_STATUS_EMPTY)
+			if (desired.status != ALC_STATUS_LOADING && 
+				desired.status != ALC_STATUS_CANCELLED
+			)
 				break;
 			else 
 				desired.status = ALC_STATUS_CANCELLED;
-
 		} while (!ent->state.compare_exchange_weak(state, alc_state_pack(desired)));
+
+		if (desired.status == ALC_STATUS_CANCELLED) {
+			ent->state.wait(alc_state_pack(desired));
+		}
 	}
 
 	for (alc_page &page : alc->pages) {

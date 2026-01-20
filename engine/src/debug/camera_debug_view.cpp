@@ -1,11 +1,16 @@
+#include "engine/renderer/opengl.h"
 #include "camera_debug_view.h"
 
-CameraDebugView::CameraDebugView(ResourceTable * rt) : m_rt(rt)
+#include "device_impl.h"
+
+#include <glm/gtc/type_ptr.hpp>
+
+#include <cstring>
+
+CameraDebugView::CameraDebugView(ev2::Device *_dev) : dev(_dev)
 {
 	//------------------------------------------------------------------------------
 	// Test Camera
-	
-	m_ubo = buffer_create(m_rt, sizeof(glm::mat4));
 
 	static uint32_t frust_indices[] = {
 		0,1, 0,2, 2,3, 3,1, 
@@ -13,55 +18,68 @@ CameraDebugView::CameraDebugView(ResourceTable * rt) : m_rt(rt)
 		4,5, 4,6, 6,7, 7,5
 	};
 
-	BufferID test_ibo = buffer_create(m_rt, sizeof(frust_indices));
-	LoadResult result = buffer_upload(m_rt, test_ibo, frust_indices, sizeof(frust_indices));
-	if (result)
-		return;
+	ibo = ev2::create_buffer(dev, sizeof(frust_indices));
 
-	frust_material = material_load_file(m_rt, "material/frustum.yaml");
+	ssbo = ev2::create_buffer(dev, sizeof(glm::mat4), 
+						  ev2::MAP_WRITE | ev2::MAP_COHERENT | ev2::MAP_PERSISTENT);
 
-	if (!frust_material)
-		return;
+	mapped = glMapNamedBufferRange(dev->get_buffer(ssbo)->id, 0, sizeof(glm::mat4),
+						GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT); 
+
+	pipeline = ev2::load_graphics_pipeline(dev, "pipelines/frustum.yaml");
+
+	ev2::DescriptorLayoutID layout = ev2::get_graphics_pipeline_layout(dev, pipeline);
+	desc = ev2::create_descriptor_set(dev, layout);
+
+	ev2::BindingSlot slot = ev2::find_binding(layout, "Cameras");
+	ev2::bind_buffer(dev, desc, slot, ssbo, 0, sizeof(glm::mat4));
 
 	glGenVertexArrays(1,&m_vao);
-	glBindVertexArray(m_vao);
 
-	const GLBuffer *test_ibo_data = m_rt->get<GLBuffer>(test_ibo);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, test_ibo_data->id);
+	ev2::UploadContext uc = ev2::begin_upload(dev, sizeof(frust_indices), alignof(uint32_t));
+	memcpy(uc.ptr, frust_indices, sizeof(frust_indices));
+	ev2::BufferUpload up = {
+		.src_offset = 0,
+		.dst_offset = 0,
+		.size = sizeof(frust_indices)
+	};
+	uint64_t sync = ev2::commit_buffer_uploads(dev, uc, ibo, &up, 1);
+	ev2::flush_uploads(dev);
 
-	glBindVertexArray(0);
+	ev2::wait_complete(dev, sync);
+
 }
 
-void CameraDebugView::set_camera(const Camera* camera) {
+CameraDebugView::~CameraDebugView()
+{
+	glDeleteVertexArrays(1, &m_vao);
+	glUnmapNamedBuffer(dev->get_buffer(ssbo)->id);
+
+	ev2::destroy_buffer(dev, ssbo);
+	ev2::destroy_buffer(dev, ibo);
+	ev2::destroy_descriptor_set(dev, desc);
+}
+
+void CameraDebugView::set_camera(const Camera *camera) {
 	if (camera)
 		m_camera = *camera;
-	else 
-		m_camera.reset();
 }
 
 const Camera *CameraDebugView::get_camera() {
-	return m_camera ? &m_camera.value() : nullptr;
+	return &m_camera;
 }
 
-void CameraDebugView::render(const RenderContext& ctx)
+void CameraDebugView::render(const ev2::PassCtx& ctx)
 { 
-	glm::mat4 pv = glm::mat4(0);
-	if (!m_camera) {
-		return;
-	} else {
-		pv = m_camera->proj*m_camera->view;
-	}
+	glm::mat4 pv = m_camera.proj*m_camera.view;
 
-	LoadResult result = buffer_upload(m_rt, m_ubo, &pv, sizeof(pv));
+	memcpy(mapped, glm::value_ptr(pv), sizeof(glm::mat4));
 
-	if (result)
-		return;
+	ev2::cmd_bind_pipeline(ctx.rec, pipeline);
+	ev2::cmd_bind_descriptor_set(ctx.rec, desc);
 
-	ctx.bind_material(frust_material);
-
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_rt->get<GLBuffer>(m_ubo)->id);
 	glBindVertexArray(m_vao);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, dev->get_buffer(ibo)->id);
 	glDrawElements(GL_LINES, 24, GL_UNSIGNED_INT,nullptr);
 	glBindVertexArray(0);
-
 }

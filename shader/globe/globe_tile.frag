@@ -141,10 +141,8 @@ void main()
 
 		float z = gl_FragCoord.z;
 
-		z = exp(1.0/(3*pow(z,60)-1.0) + 1);
-
 		if(z > 1)
-			z = 0;
+			z = -1;
 		color *= z;
 	}
 
@@ -154,9 +152,9 @@ void main()
 		color = vec4(vec3(quant/float(levels)),color.a);
 	}
 
-	FragColor = mix(color,vec4(0,in_uv,1),0.5);
+	FragColor = mix(color,vec4(0,in_uv,1),0.0);
 	//FragColor = vec4(v.xyz,1);
-	FragColor = mix(FragColor,FACE_COLORS[cube_face(in_pos)],0.0);
+	//FragColor = mix(FragColor,FACE_COLORS[cube_face(in_pos)],0.0);
 
 	//vec2 diff = 2.0*in_uv - vec2(1.0);
 	//FragColor = FragColor * dot(diff,diff);

@@ -364,9 +364,6 @@ void GPUTileCache::asynchronous_upload(std::span<TileGPUUploadData> upload_data)
 
 	}
 
-	while (ctr)
-		std::this_thread::yield();
-
 	if (upload_count)
 		done.wait(false);
 

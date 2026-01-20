@@ -120,8 +120,6 @@ struct alc_entry
 {
 	uint64_t key;
 	alc_atomic_state state;
-
-
 };
 
 struct alc_page
@@ -189,5 +187,87 @@ struct alc_table
 	alc_page_create page_create;
 	alc_page_destroy page_destroy;
 };
+
+//------------------------------------------------------------------------------
+// Atomic state updates
+
+// @return true if state was set, false otherwise
+static inline bool alc_state_set_loading(alc_atomic_state *p_state)
+{
+	uint64_t state_pkd = p_state->load(std::memory_order_relaxed);
+	alc_state desired;
+	do {
+		alc_state state = alc_state_unpack(state_pkd);
+		desired = state;
+		// If it was cancelled then we are the one stuff is waiting on to 
+		// se the status back to empty
+		if (state.status == ALC_STATUS_CANCELLED) {
+			desired.status = ALC_STATUS_EMPTY;
+		} else {
+			desired.status = ALC_STATUS_LOADING;
+		}
+	} while (!p_state->compare_exchange_weak(state_pkd, alc_state_pack(desired), 
+										std::memory_order_acq_rel,std::memory_order_relaxed));
+
+	p_state->notify_one();
+	return desired.status == ALC_STATUS_LOADING;
+}
+
+// @return true if state was set, false otherwise
+static inline bool alc_state_set_ready(alc_atomic_state *p_state)
+{
+	uint64_t state_pkd = p_state->load(std::memory_order_relaxed);
+	alc_state desired;
+	do {
+		alc_state state = alc_state_unpack(state_pkd);
+		desired = state;
+		if (state.status == ALC_STATUS_CANCELLED) {
+			desired.status = ALC_STATUS_EMPTY;
+		} else { 
+			desired.status = ALC_STATUS_READY;
+		}
+	} while(!p_state->compare_exchange_weak(state_pkd, alc_state_pack(desired),
+										 std::memory_order_acq_rel, std::memory_order_relaxed));
+
+	p_state->notify_one();
+	return desired.status == ALC_STATUS_READY;
+}
+
+// @return true if refcount was incremented, false otherwise
+static inline bool alc_state_inc_ref(alc_atomic_state *p_state)
+{
+	uint64_t state = p_state->load(std::memory_order_relaxed);
+	alc_state desired;
+	do {
+		if (alc_state_status(state) != ALC_STATUS_READY)
+			return false;
+
+		desired = alc_state_unpack(state); 
+		desired.status = ALC_STATUS_READY;
+		++desired.refs;
+	} while (!p_state->compare_exchange_weak(state, alc_state_pack(desired),
+		std::memory_order_acq_rel, std::memory_order_relaxed));
+
+	return true;
+}
+
+// @return true if refcount was decremented, false otherwise
+// TODO : Handle other states
+static inline bool alc_state_dec_ref(alc_atomic_state *p_state)
+{
+	uint64_t state = p_state->load();
+	uint64_t desired;
+	do {
+		desired = alc_state_pack({
+			.status = ALC_STATUS_READY, 
+			.flags = 0,
+			.gen = 0,
+			.refs = alc_state_refs(state) - 1
+		});
+	} while (!p_state->compare_exchange_weak(state, 
+		desired, std::memory_order_acq_rel, std::memory_order_relaxed));
+	return true;
+}
+
 
 #endif //ALC_TABLE_H

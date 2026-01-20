@@ -43,12 +43,12 @@ static inline double weierstrass(double x, double y, double phase = 0)
 	D = 2.3,
 	G = 4, 
 	gamma =	2.4;
-	static constexpr size_t M = 20, N = 9;
+	static constexpr size_t M = 11, N = 9;
 
 	double A = L*pow(G/D,D-2.0)*sqrt(log(gamma)/(double)M); 
 
 	static std::atomic_int init = 0;
-	static std::atomic_int done = 0;
+	static std::atomic_bool done = false;
 
 	static double phi[M][N];
 	static double cos_phi[M][N];
@@ -68,10 +68,13 @@ static inline double weierstrass(double x, double y, double phase = 0)
 			gammaD3n[n] = pow(gamma, (D - 3.0)*(double)n);
 			gamman[n] = pow(gamma, (double)n);
 		}
-		done.store(1,std::memory_order_release);
-	} else {
-		done.wait(0);
+		
+		done = 1;
+		done.notify_all();
 	}
+
+	if (!done)
+		done.wait(0);
 
 	double g = 0;
 

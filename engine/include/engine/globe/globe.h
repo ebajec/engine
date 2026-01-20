@@ -1,9 +1,6 @@
 #ifndef GLOBE_H
 #define GLOBE_H
 
-//#include "engine/renderer/renderer.h"
-//#include "engine/resource/resource_table.h"
-
 #include "engine/globe/data_source.h"
 
 #include "ev2/device.h"

@@ -1,10 +1,6 @@
 #include "engine/globe/globe.h"
 #include "engine/globe/tiling.h"
 
-//#include "renderer/opengl.h"
-//#include "renderer/gl_debug.h"
-//#include "resource/buffer.h"
-
 #include "utils/camera.h"
 #include "utils/geometry.h"
 #include "utils/thread_pool.h"
@@ -15,7 +11,7 @@
 #include "terrain.h"
 
 #include <debug/box_debug_view.h>
-//#include <debug/camera_debug_view.h>
+#include <debug/camera_debug_view.h>
 
 #include <imgui.h>
 #include <implot.h>
@@ -50,7 +46,7 @@ static constexpr double tile_scale_factor = 12;
 
 struct DebugInfo
 {
-	//std::unique_ptr<CameraDebugView> camera;
+	std::unique_ptr<CameraDebugView> camera;
 	std::unique_ptr<BoxDebugView> boxes;
 	bool enable_boxes;
 	bool fix_camera;
@@ -254,7 +250,7 @@ struct select_tiles_params
 
 static void globe_init_debug(Globe *globe) {
 	globe->dbg.boxes.reset(new BoxDebugView(globe->dev));
-	//globe->dbg.camera.reset(new CameraDebugView(globe->rt));
+	globe->dbg.camera.reset(new CameraDebugView(globe->dev));
 	globe->dbg.enable_boxes = false;
 }
 
@@ -264,8 +260,8 @@ static void globe_draw_debug(Globe const *globe, ev2::PassCtx const &ctx)
 		globe->dbg.boxes->draw(ctx);
 	}
 
-	//if (globe->dbg.fix_camera)
-	//	globe->dbg.camera->render(ctx);
+	if (globe->dbg.fix_camera)
+		globe->dbg.camera->render(ctx);
 }
 
 static aabb3_t tile_aabb(TileCode code, float min, float max) 
@@ -672,9 +668,6 @@ static uint64_t update_vbo(Globe *globe)
 		});
 	}
 
-	while (ctr)
-		std::this_thread::yield();
-
 	if (new_count)
 		done.wait(false);
 
@@ -872,23 +865,24 @@ void globe_destroy(Globe *globe)
 
 void globe_imgui(Globe *globe)
 {
-	ImGui::Begin("Globe debug");	
+	ImGui::Begin("Editor");	
+	if (ImGui::CollapsingHeader("Globe Debug")) {
+		ImGui::SliderInt("res", &globe->dbg.zoom, 0, 8, "%d");
+		ImGui::SliderInt("Max zoom", const_cast<int*>(&globe->cpu_cache->m_debug_zoom), 0, 24);
 
-	ImGui::SliderInt("res", &globe->dbg.zoom, 0, 8, "%d");
-	ImGui::SliderInt("Max zoom", const_cast<int*>(&globe->cpu_cache->m_debug_zoom), 0, 24);
+		if (ImGui::Button(globe->dbg.enable_boxes ? 
+			"Disable globe tile boxes##globe tile boxes" : 
+			"Enable globe tile boxes##globe tile boxes")) 
+			globe->dbg.enable_boxes = !globe->dbg.enable_boxes;
 
-	if (ImGui::Button(globe->dbg.enable_boxes ? 
-		"Disable globe tile boxes##globe tile boxes" : 
-		"Enable globe tile boxes##globe tile boxes")) 
-		globe->dbg.enable_boxes = !globe->dbg.enable_boxes;
-
-	if (ImGui::Button(globe->dbg.fix_camera ? 
-			"Unfix globe camera##globe tile camera" : 
-			"Fix globe camera##globe tile camera")
-	) {
-		globe->dbg.fix_camera = !globe->dbg.fix_camera;
+		if (ImGui::Button(globe->dbg.fix_camera ? 
+				"Unfix globe camera##globe tile camera" : 
+				"Fix globe camera##globe tile camera")
+		) {
+			globe->dbg.fix_camera = !globe->dbg.fix_camera;
+		}
+		plot_tile_counts(globe->stats.loaded, globe->stats.new_loads);
 	}
-	plot_tile_counts(globe->stats.loaded, globe->stats.new_loads);
 	ImGui::End();
 
 }
@@ -904,11 +898,11 @@ ev2::Result globe_update(Globe *globe, GlobeUpdateInfo *info)
 
 	CPUTileCache *cpu_cache = globe->cpu_cache.get();
 
-	//if (globe->dbg.fix_camera)
-	//	p_camera = globe->dbg.camera->get_camera();
-	//else {
-	//	globe->dbg.camera->set_camera(info->camera);
-	//}
+	if (globe->dbg.fix_camera)
+		p_camera = globe->dbg.camera->get_camera();
+	else {
+		globe->dbg.camera->set_camera(info->camera);
+	}
 
 	globe->selected_tiles.clear();
 

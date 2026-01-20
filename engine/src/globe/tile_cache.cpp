@@ -53,7 +53,7 @@ static alc_entry * alc_entry_get(alc_table *ct, alc_index idx)
 	return &ct->pages[idx.page].entries[idx.ent];
 }
 
-TileCode find_best(const tc_cache *tc, TileCode code)
+static TileCode find_best(const tc_cache *tc, TileCode code)
 {
 	auto end = tc->alc->map.end();
 	auto it = tc->alc->map.find(tile_code_pack(code));
@@ -93,12 +93,12 @@ static uint8_t *get_block(const tc_cache *tc, alc_index idx)
 	return &mem[idx.ent*tc->tile_size];
 }
 
-
 static int my_cancel(struct ds_token *tok)
 {
 	alc_atomic_state *p_state = static_cast<alc_atomic_state*>(tok->usr);
 	alc_atomic_state state = p_state->load(std::memory_order_relaxed);
-	return alc_state_status(state) == ALC_STATUS_CANCELLED;
+	bool cancelled = alc_state_status(state) == ALC_STATUS_CANCELLED; 
+	return cancelled;
 }
 
 static int load_thread_fn(
@@ -108,24 +108,10 @@ static int load_thread_fn(
 	ds_buf *buf
 )
 {
-	uint64_t state_pkd = p_state->load(std::memory_order_relaxed);
-	alc_state desired;
-	do {
-		alc_state state = alc_state_unpack(state_pkd);
-		desired = state;
-		// If it was cancelled then we are the one stuff is waiting on to 
-		// se the status back to empty
-		if (state.status == ALC_STATUS_CANCELLED) {
-			desired.status = ALC_STATUS_EMPTY;
-			p_state->store(alc_state_pack(desired), std::memory_order_relaxed);
-			log_info("load cancelled successfully (tile %d)",id);
-
-			return LOAD_FAILED;
-		} else {
-			desired.status = ALC_STATUS_LOADING;
-		}
-	} while (!p_state->compare_exchange_weak(state_pkd, alc_state_pack(desired), 
-										std::memory_order_acq_rel,std::memory_order_relaxed));
+	if (!alc_state_set_loading(p_state)) {
+		log_info("load cancelled successfully (tile %d)",id);
+		return LOAD_FAILED;
+	}
 
 	static const struct ds_token_vtbl vtbl = {
 		.is_cancelled = &my_cancel
@@ -138,18 +124,7 @@ static int load_thread_fn(
 
 	ds->vtbl.loader(ds->usr, id, buf, &tok);
 
-	state_pkd = p_state->load(std::memory_order_relaxed);
-	do {
-		alc_state state = alc_state_unpack(state_pkd);
-		desired = state;
-		if (state.status == ALC_STATUS_CANCELLED)
-			desired.status = ALC_STATUS_EMPTY;
-		else 
-			desired.status = ALC_STATUS_READY;
-	} while(!p_state->compare_exchange_weak(state_pkd, alc_state_pack(desired),
-										 std::memory_order_acq_rel, std::memory_order_relaxed));
-
-	if (desired.status == ALC_STATUS_EMPTY) { 
+	if (!alc_state_set_ready(p_state)) {
 		log_info("load cancelled successfully (tile %d)",id);
 		return LOAD_FAILED;
 	}
@@ -299,17 +274,8 @@ tc_error tc_acquire(const tc_cache *tc, tile_code_t id, tc_ref *p_ref)
 	alc_index idx = *it->second;
 	alc_entry *ent = alc_entry_get(tc->alc,idx);
 
-	uint64_t state = ent->state.load(std::memory_order_relaxed);
-	alc_state desired;
-	do {
-		if (alc_state_status(state) != ALC_STATUS_READY)
-			return TC_ENULL;
-
-		desired = alc_state_unpack(state); 
-		desired.status = ALC_STATUS_READY;
-		++desired.refs;
-	} while (!ent->state.compare_exchange_weak(state, alc_state_pack(desired),
-		std::memory_order_acq_rel, std::memory_order_relaxed));
+	if (!alc_state_inc_ref(&ent->state))
+		return TC_ENULL;
 
 	//log_info("Acquired tile %d from CPU cache");
 
@@ -326,17 +292,7 @@ tc_error tc_acquire(const tc_cache *tc, tile_code_t id, tc_ref *p_ref)
 
 void tc_release(tc_ref ref)
 {
-	uint64_t state = ref.p_state->load();
-	uint64_t desired;
-	do {
-		desired = alc_state_pack({
-			.status = ALC_STATUS_READY, 
-			.flags = 0,
-			.gen = 0,
-			.refs = alc_state_refs(state) - 1
-		});
-	} while (!ref.p_state->compare_exchange_weak(state, 
-		desired, std::memory_order_acq_rel, std::memory_order_relaxed));
+	alc_state_dec_ref(ref.p_state);
 
 	//log_info("Released tile %d from CPU cache");
 }

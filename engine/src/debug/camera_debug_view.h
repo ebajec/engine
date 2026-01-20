@@ -1,24 +1,33 @@
-#include "renderer/renderer.h"
+#include <ev2/device.h>
+#include <ev2/render.h>
 
-#include <resource/resource_table.h>
-#include <resource/buffer.h>
-#include <resource/material_loader.h>
+#include "engine/renderer/types.h"
 
-#include <optional>
+#include <glm/mat4x4.hpp>
 
 class CameraDebugView
 {
-	ResourceTable *m_rt;
+	Camera m_camera = {
+		.proj = glm::mat4(1.f), 
+		.view = glm::mat4(1.f)
+	};
 
-	MaterialID frust_material;
-	BufferID m_ubo;
+	ev2::Device *dev;
+
+	ev2::GraphicsPipelineID pipeline;
+	ev2::DescriptorSetID desc;
+
+	ev2::BufferID ssbo;
+	ev2::BufferID ibo;
+
 	uint32_t m_vao;
 
-	std::optional<Camera> m_camera;
+	void *mapped;
 public:
-	CameraDebugView(ResourceTable * rt);
-	void render(const RenderContext& ctx);
-	void set_camera(const Camera* camera);
+	CameraDebugView(ev2::Device *dev);
+	~CameraDebugView();
+	void render(const ev2::PassCtx& ctx);
+	void set_camera(const Camera *camera);
 	const Camera *get_camera();
 };
 

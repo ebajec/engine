@@ -158,6 +158,8 @@ int App::update()
 	glfwPollEvents();
 	update_input();
 
+	imgui();
+
 	return result;
 }
 
@@ -171,9 +173,15 @@ void App::end_frame()
 	ev2::end_frame(dev);
 }
 
-int App::initialize()
+int App::initialize(int argc, char *argv[])
 {
-	glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+	for (int i = 0; i < argc; ++i) {
+		if (!strcmp(argv[i],"--wayland"))
+			glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
+		else if (!strcmp(argv[i],"--x11"))
+			glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+	}
+
 	if (!glfwInit()) {
 		log_error("Failed to initialize GLFW!");
 		return EXIT_FAILURE;
@@ -229,4 +237,15 @@ void App::terminate()
 	glfwDestroyWindow(win.ptr);
 	glfwTerminate();
 }
+
+void App::imgui()
+{
+	ImGui::SetNextWindowPos(ImVec2(0,0),ImGuiCond_Always);
+	ImGui::Begin("Editor"); 
+	if (ImGui::CollapsingHeader("Frame times")) {
+		plot_frame_times(input.dt);
+	}
+	ImGui::End();
+}
+
 
