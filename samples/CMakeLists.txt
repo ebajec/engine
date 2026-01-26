@@ -19,9 +19,5 @@ target_link_libraries(samples-common PUBLIC
     OpenGL::GL
     glm::glm)
 
-#add_subdirectory(lines)
-#add_subdirectory(globe)
-#add_subdirectory(diffusion)
-#add_subdirectory(ev2_test)
+add_subdirectory(ev2_test)
 add_subdirectory(ev2_globe)
-#add_subdirectory(hopf)

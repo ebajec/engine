@@ -153,7 +153,7 @@ int MyStuff::init(ev2::Device *dev)
 
 int MyStuff::update(ev2::Device *dev)
 {
-	ImGui::Begin("Parameters");
+	ImGui::Begin("Editor");
 	ImGui::SliderFloat("s", &uniforms.s, 0.f, 1.f);
 	ImGui::End();
 
@@ -239,7 +239,7 @@ int main(int argc, char *argv[])
 		}
 	});
 
-	if (app->initialize() != App::OK)
+	if (app->initialize(argc, argv) != App::OK)
 		return EXIT_FAILURE;
 
 	ev2::Device *dev = app->dev;
@@ -255,7 +255,9 @@ int main(int argc, char *argv[])
 		app->update() == App::OK &&
 		data.update(dev) == App::OK
 	) {
+		app->begin_frame();
 		data.render(dev);
+		app->end_frame();
 	}
 
 	data.destroy(dev);
