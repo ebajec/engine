@@ -8,6 +8,15 @@
 
 namespace ev2 {
 
+struct DrawCommand 
+{
+    unsigned int  count;
+    unsigned int  instanceCount;
+    unsigned int  firstIndex;
+    int  baseVertex;
+    unsigned int  baseInstance;
+};
+
 MAKE_HANDLE(RenderTarget);
 
 enum RenderTargetFlags

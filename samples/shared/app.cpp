@@ -13,6 +13,21 @@
 // STL / libc
 #include <cstdio>
 
+#ifdef __linux__
+
+// posix
+#include <unistd.h>
+#include <signal.h>
+
+static int g_should_close = false;;
+
+void handle_sigint(int sig)
+{
+	(void)sig;
+	g_should_close = true;
+}
+#endif
+
 int init_gl_context(GLFWwindow *window)
 {
 	glfwMakeContextCurrent(window);
@@ -102,10 +117,10 @@ void App::framebuffer_size_callback(GLFWwindow* window, int width, int height)
 	App *app = static_cast<App*>(glfwGetWindowUserPointer(window));
 
 	if (width != app->win.width || height != app->win.height) {
-		if (app->resize(width, height) == App::OK) {
-			app->win.width = width;
-			app->win.height = height;
-		}
+		app->win.width = width;
+		app->win.height = height;
+
+		app->input.needs_resize = true;
 	}
 }
 
@@ -113,6 +128,9 @@ void App::update_input()
 {
 	std::swap(input.mouse_pos[0], input.mouse_pos[1]);
 	glfwGetCursorPos(win.ptr, &input.mouse_pos[0].x, &input.mouse_pos[0].y);
+
+	ImGuiIO& io = ImGui::GetIO();
+	input.mouse_in_gui = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) || io.WantCaptureMouse;
 }
 
 int App::resize(int width, int height)
@@ -129,7 +147,7 @@ int App::resize(int width, int height)
 
 int App::update()
 {
-	if (glfwWindowShouldClose(win.ptr))
+	if (g_should_close || glfwWindowShouldClose(win.ptr))
 		return SHOULD_CLOSE;
 
 	int result = OK;
@@ -152,11 +170,16 @@ int App::update()
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
-	ImGuiIO& io = ImGui::GetIO();
-	input.mouse_in_gui = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) || io.WantCaptureMouse;
-
 	glfwPollEvents();
+
 	update_input();
+
+	if (input.needs_resize) {
+		if ((result = resize(win.width, win.height)) != App::OK)
+			return result;
+
+		input.needs_resize = false;
+	}
 
 	imgui();
 
@@ -181,6 +204,17 @@ int App::initialize(int argc, char *argv[])
 		else if (!strcmp(argv[i],"--x11"))
 			glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
 	}
+
+#ifdef __linux__
+	struct sigaction sa{};
+	sa.sa_handler = handle_sigint;
+	sa.sa_flags = SA_RESTART;
+
+	if (sigaction(SIGINT, &sa, NULL) == -1) {
+		perror("sigaction");
+		return EXIT_FAILURE;
+	}
+#endif
 
 	if (!glfwInit()) {
 		log_error("Failed to initialize GLFW!");

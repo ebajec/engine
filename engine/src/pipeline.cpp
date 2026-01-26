@@ -408,26 +408,32 @@ ev2::Result parse_gfx_pipeline_file(GfxPipelineInfo *info, const char *path)
 
 size_t spv_input_var_size(SpvReflectInterfaceVariable *var)
 {
-	size_t struct_size = 0;
+	size_t size = var->numeric.scalar.width/8;
 
 	if (var->members) {
 		for (uint32_t i = 0; i < var->member_count; ++i) {
-			struct_size += spv_input_var_size(&var->members[i]);
+			size += spv_input_var_size(&var->members[i]);
 		}
 	} else if (var->numeric.vector.component_count) {
-		struct_size = var->numeric.vector.component_count;
+		size *= var->numeric.vector.component_count;
 	} else if (var->numeric.matrix.column_count) {
-		struct_size = var->numeric.vector.component_count;
+		size *= var->numeric.matrix.column_count * var->numeric.matrix.row_count;
 	}
 
 	for (uint32_t i = 0; i < var->array.dims_count; ++i) {
-		struct_size *= var->array.dims[i];
+		size *= var->array.dims[i];
 	}
 
-	return struct_size;
+	return size;
 }
 
-ev2::Result parse_vertex_layout(const char *path)
+struct VertexInputLayout
+{
+	std::vector<VkVertexInputAttributeDescription> desc;
+	size_t stride;
+};
+
+ev2::Result parse_vertex_layout(const char *path, VertexInputLayout *p_out)
 {
 	std::vector<uint32_t> data;
 	if (read_spv_file(path, data) < 0)
@@ -448,17 +454,113 @@ ev2::Result parse_vertex_layout(const char *path)
 	std::vector<SpvReflectInterfaceVariable*> vars (in_count);
 	spvReflectEnumerateInputVariables(&reflection, &in_count, vars.data());
 
+	std::sort(vars.begin(), vars.end(), [](
+				const SpvReflectInterfaceVariable *a,
+				const SpvReflectInterfaceVariable *b) {
+				return a->location < b->location;
+		   });
+
 	size_t offset = 0;
+
+	std::vector<VkVertexInputAttributeDescription> attributes;
+	attributes.reserve(in_count);
 
 	for (uint32_t i = 0; i < in_count; ++i) {
 		SpvReflectInterfaceVariable* var = vars[i];
 		if (var->built_in >= 0)
 			continue;
-	}
 
+		VkVertexInputAttributeDescription desc = {
+			.binding = 0,
+			.location = var->location,
+			.format = (VkFormat)var->format,
+			.offset = offset
+		};
+
+		size_t size = spv_input_var_size(var);
+		offset += size;
+
+		attributes.push_back(desc);
+	}
 	spvReflectDestroyShaderModule(&reflection);
 
+	p_out->desc = std::move(attributes);
+	p_out->stride = offset;
+
 	return ev2::SUCCESS;
+}
+
+static GLuint gen_gl_vao_from_vtx_layout(const VertexInputLayout *p_layout)
+{
+	GLuint vao;
+	glCreateVertexArrays(1, &vao);
+	glBindVertexArray(vao);
+
+	GLsizei stride = p_layout->stride;
+
+	for (const VkVertexInputAttributeDescription &desc : p_layout->desc) {
+		GLenum type = GL_FLOAT;
+		GLint scalar_size;
+
+		switch (desc.format) {
+  			case VK_FORMAT_UNDEFINED:
+				continue;
+
+  			case VK_FORMAT_R32_UINT:
+  			case VK_FORMAT_R32_SINT:
+  			case VK_FORMAT_R32_SFLOAT:
+				scalar_size = 1;
+				break;
+
+  			case VK_FORMAT_R32G32_UINT:
+  			case VK_FORMAT_R32G32_SINT:
+  			case VK_FORMAT_R32G32_SFLOAT:
+				scalar_size = 2;
+				break;
+
+  			case VK_FORMAT_R32G32B32_UINT:
+  			case VK_FORMAT_R32G32B32_SINT:
+  			case VK_FORMAT_R32G32B32_SFLOAT:
+				scalar_size = 3;
+				break;
+
+  			case VK_FORMAT_R32G32B32A32_UINT:
+  			case VK_FORMAT_R32G32B32A32_SINT:
+			case VK_FORMAT_R32G32B32A32_SFLOAT:
+				scalar_size = 4;
+				break;
+		}
+
+		switch (desc.format) {
+  			case VK_FORMAT_UNDEFINED:
+				continue;
+
+  			case VK_FORMAT_R32_UINT:
+  			case VK_FORMAT_R32G32_UINT:
+  			case VK_FORMAT_R32G32B32_UINT:
+  			case VK_FORMAT_R32G32B32A32_UINT:
+				type = GL_UNSIGNED_INT;
+				break;
+  			case VK_FORMAT_R32_SINT:
+  			case VK_FORMAT_R32G32_SINT:
+  			case VK_FORMAT_R32G32B32_SINT:
+  			case VK_FORMAT_R32G32B32A32_SINT:
+				type = GL_INT;	
+				break;
+  			case VK_FORMAT_R32_SFLOAT:
+  			case VK_FORMAT_R32G32_SFLOAT:
+  			case VK_FORMAT_R32G32B32_SFLOAT:
+			case VK_FORMAT_R32G32B32A32_SFLOAT:
+				type = GL_FLOAT;
+				break;
+		}
+
+		glEnableVertexArrayAttrib(vao,desc.location);
+		glVertexAttribFormat(desc.location,scalar_size,type,0,desc.offset);
+		glVertexAttribBinding(desc.location,0);
+	}
+
+	return vao;
 }
 
 static ev2::Result init_gfx_pipeline_shaders(
@@ -485,8 +587,12 @@ static ev2::Result init_gfx_pipeline_shaders(
 	const ev2::Shader *vert = dev->assets->get<ev2::Shader>(vert_handle.id);
 	const ev2::Shader *frag = dev->assets->get<ev2::Shader>(frag_handle.id);
 
+	VertexInputLayout vertex_layout {};
+
 	std::string sys_vert_path = dev->assets->get_system_path(vert_path);
-	parse_vertex_layout(sys_vert_path.c_str());
+	parse_vertex_layout(sys_vert_path.c_str(), &vertex_layout);
+
+	GLuint vao = gen_gl_vao_from_vtx_layout(&vertex_layout);
 
 	uint32_t program = glCreateProgram();
 	glAttachShader(program, vert->id);
@@ -501,6 +607,7 @@ static ev2::Result init_gfx_pipeline_shaders(
 	}
 
 	pipe->program = program;
+	pipe->vao = vao;
 	pipe->vert = vert_handle;
 	pipe->frag = frag_handle;
 
@@ -864,7 +971,7 @@ void bind_buffer(
 
 	if (set->index != slot.set) {
 		log_error(
-			"Mismatched binding for buffer %d. (set=%d, index=%d) in set %d",
+			"Mismatched binding for buffer %d. (set=%d, index=%d)",
 			buf_id, slot.set, slot.id, set->index
 		);
 		return;
@@ -874,7 +981,7 @@ void bind_buffer(
 
 	if (it == set->bindings.end()) {
 		log_error(
-			"Mismatched binding for buffer %d. (set=%d, index=%d) in set %d",
+			"Mismatched binding for buffer %d. (set=%d, index=%d)",
 			buf_id, slot.set, slot.id, set->index
 		);
 		return;
@@ -886,8 +993,13 @@ void bind_buffer(
 		binding->type != DESCRIPTOR_TYPE_UNIFORM_BUFFER &&
 		binding->type != DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
 		binding->type != DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC
-	) 
+	) {
+		log_error(
+			"Mismatched binding type (%d) for buffer %d. (set=%d, index=%d)",
+			binding->type, buf_id, slot.set, slot.id, set->index
+		);
 		return;
+	}
 
 	binding->buf = BufferBinding{
 		.handle = buf_id,

@@ -24,6 +24,20 @@ struct Camera
 	glm::mat4 view;
 };
 
+struct vertex2d
+{
+	glm::vec2 position;
+	glm::vec2 uv;
+};
+
+struct vertex3d
+{
+	glm::vec3 position;
+	glm::vec2 uv;
+	glm::vec3 normal;
+};
+
+
 enum ImgFormat : uint8_t
 {
 	IMG_FORMAT_RGBA8,
@@ -43,19 +57,6 @@ struct Framedata
 	glm::mat4 pv;
 	glm::vec3 center;
 	float t;
-};
-
-struct vertex2d
-{
-	glm::vec2 position;
-	glm::vec2 uv;
-};
-
-struct vertex3d
-{
-	glm::vec3 position;
-	glm::vec2 uv;
-	glm::vec3 normal;
 };
 
 static inline size_t img_format_to_bytes(ImgFormat fmt)

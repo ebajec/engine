@@ -38,7 +38,7 @@ const uint TILE_VERT_COUNT = TILE_VERT_WIDTH*TILE_VERT_WIDTH;
 layout (binding = 0) uniform sampler2D u_tex;
 layout (binding = 1) uniform sampler2DArray u_tex_arrays[MAX_TILE_PAGES];
 
-layout (std430, binding = 0) buffer Metadata
+layout (std430, binding = 2) buffer Metadata
 {
 	metadata_t metadata[];
 };

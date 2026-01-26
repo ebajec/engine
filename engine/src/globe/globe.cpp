@@ -211,9 +211,7 @@ struct RenderData
 	ev2::BufferID ssbo;
 
 	ev2::GraphicsPipelineID pipeline;
-
-	//MaterialID material;
-	GLuint vao;
+	ev2::DescriptorSetID bindings;
 
 	std::vector<DrawCommand> cmds;
 };
@@ -452,31 +450,6 @@ static aabb2_t sub_rect(TileCode parent, TileCode child)
 	return morton_u64_to_rect_f64(child.idx, (uint8_t)diff);
 }
 
-static GLuint globe_vao()
-{
-	GLuint vao;
-	glGenVertexArrays(1,&vao);
-
-	glBindVertexArray(vao);
-
-	glEnableVertexArrayAttrib(vao,0);
-	glEnableVertexArrayAttrib(vao,1);
-	glEnableVertexArrayAttrib(vao,2);
-
-	glVertexAttribFormat(0,3,GL_FLOAT,0,offsetof(GlobeVertex,pos));
-	glVertexAttribFormat(1,2,GL_FLOAT,0,offsetof(GlobeVertex,uv));
-	glVertexAttribFormat(2,3,GL_FLOAT,0,offsetof(GlobeVertex,normal));
-
-	glVertexAttribBinding(0,0);
-	glVertexAttribBinding(1,0);
-	glVertexAttribBinding(2,0);
-
-	glBindVertexArray(0);
-
-	return vao;
-}
-
-
 static std::vector<uint32_t> create_tile_indices()
 {
 	static const uint32_t n = TILE_VERT_WIDTH;
@@ -509,8 +482,6 @@ static ev2::Result create_render_data(ev2::Device *dev, RenderData &data)
 	size_t ssbo_size = MAX_TILES*sizeof(TileMetadata);
 
 	data.pipeline = ev2::load_graphics_pipeline(dev, "pipelines/globe_tile.yaml");
-
-	data.vao = globe_vao();
 
 	if (!data.pipeline.id)
 		goto load_failed;
@@ -549,6 +520,14 @@ static ev2::Result create_render_data(ev2::Device *dev, RenderData &data)
 		ev2::commit_buffer_uploads(dev, uc, data.ibo, &upload, 1);
 		ev2::flush_uploads(dev);
 	}
+	{
+		ev2::DescriptorLayoutID layout = ev2::get_graphics_pipeline_layout(dev, data.pipeline);
+		ev2::BindingSlot slot = ev2::find_binding(layout, "Metadata");
+
+		data.bindings = ev2::create_descriptor_set(dev, layout);
+		ev2::bind_buffer(dev, data.bindings, slot, data.ssbo, 0, ssbo_size);
+	}
+
 
 	if (result)
 		goto load_failed;
@@ -993,22 +972,18 @@ void globe_draw(const Globe *globe, const ev2::PassCtx& ctx)
 	const ev2::Buffer* vbo = dev->get_buffer(data.vbo); 
 	const ev2::Buffer* ibo = dev->get_buffer(data.ibo); 
 	const ev2::Buffer* indirect = dev->get_buffer(data.indirect); 
-	const ev2::Buffer* ssbo = dev->get_buffer(data.ssbo);
 
 	ev2::cmd_bind_pipeline(ctx.rec, globe->render_data.pipeline);
-	globe->gpu_cache->bind_textures(1);
-
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo->id); 
-	
-	glBindVertexArray(data.vao);
-
-	glBindVertexBuffer(0, vbo->id, 0, sizeof(GlobeVertex));
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo->id);
-	glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirect->id);
-
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
 	glFrontFace(GL_CCW);
+
+	ev2::cmd_bind_descriptor_set(ctx.rec, globe->render_data.bindings);
+	globe->gpu_cache->bind_textures(1);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo->id);
+	glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirect->id);
+	glBindVertexBuffer(0, vbo->id, 0, sizeof(GlobeVertex));
 
 	glMultiDrawElementsIndirect(
 		GL_TRIANGLES, 
@@ -1019,8 +994,6 @@ void globe_draw(const Globe *globe, const ev2::PassCtx& ctx)
 	);
 
 	glDisable(GL_CULL_FACE);
-
-	glBindVertexArray(0);
 
 	globe_draw_debug(globe, ctx);
 }

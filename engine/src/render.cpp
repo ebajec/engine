@@ -236,6 +236,7 @@ void cmd_bind_pipeline(RecorderID rec, GraphicsPipelineID h)
 	}
 
 	glUseProgram(pipeline->program);
+	glBindVertexArray(pipeline->vao);
 }
 
 void cmd_draw_screen_quad(RecorderID rec)

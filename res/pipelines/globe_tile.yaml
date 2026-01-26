@@ -1,6 +1,8 @@
 shaders:
   vert: shader/globe_tile.vert.spv
   frag: shader/globe_tile.frag.spv
+layout:
+  vert: default
 states:
   cull: front
   depth_test: less_equal

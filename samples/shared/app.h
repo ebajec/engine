@@ -20,18 +20,22 @@ struct InputData
 {
 	glm::dvec2 mouse_pos[2];
 
+	double t0;
+	double t1;
+	double dt;
+
 	int mouse_mode = GLFW_CURSOR_NORMAL;
-	bool mouse_in_gui = false;
-	bool left_mouse_pressed = false;
-	bool right_mouse_pressed = false;
+
+	bool mouse_in_gui : 1 = false;
+
+	bool left_mouse_pressed : 1 = false;
+	bool right_mouse_pressed : 1 = false;
+
+	bool needs_resize : 1 = true;
 
 	glm::dvec2 get_mouse_delta() {
 		return mouse_pos[0] - mouse_pos[1];
 	}
-
-	double t0;
-	double t1;
-	double dt;
 };
 
 struct WindowData 
