@@ -6,6 +6,7 @@
 #include <vector>
 #include <mutex>
 #include <array>
+#include <cassert>
 #include <memory>
 #include <atomic>
 
@@ -147,6 +148,8 @@ ResourceID ResourcePool<T>::allocate(T* ptr)
 
 	if (ptr)
 		ent->val = *ptr; 
+
+	assert(slot);
 
 	return ResourceID::create(slot, gen);
 }

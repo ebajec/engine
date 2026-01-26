@@ -172,6 +172,9 @@ struct RenderPass
 PassCtx begin_pass(Device *dev, RenderTargetID h_target, ViewID h_view,
 					Rect viewport, Rect scissor)
 {
+	if (EV2_IS_NULL(dev->view_data.buffer))
+		log_error("No views created.  Did you remember to call begin_frame()?"); 
+
 	Buffer * buf = dev->get_buffer(dev->view_data.buffer);
 	uint32_t view_id = static_cast<uint32_t>(h_view.id);
 
