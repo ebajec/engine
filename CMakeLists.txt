@@ -21,7 +21,6 @@ if(RESOURCE_PATH)
 	message(STATUS "Default resource path : ${RESOURCE_PATH}") 
 endif()
 
-# Windows things
 if(WIN32)
   include(FetchContent)
 
@@ -31,15 +30,11 @@ if(WIN32)
     # GIT_TAG bf71a834948186f4097caa076cd2663c69a10e1e #refs/tags/1.0.1
   )
 
-  FetchContent_MakeAvailable(glm)
-
   FetchContent_Declare(
     yaml-cpp
     GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
     # GIT_TAG f7320141120f720aecc4c32be25586e7da9eb978 # Can be a tag (yaml-cpp-x.x.x), a commit hash, or a branch name (master)
   )
-
-  FetchContent_MakeAvailable(yaml-cpp)
 
   FetchContent_Declare(
     glfw3
@@ -52,6 +47,8 @@ if(WIN32)
   set(GLFW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
   set(GLFW_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
 
+  FetchContent_MakeAvailable(glm)
+  FetchContent_MakeAvailable(yaml-cpp)
   FetchContent_MakeAvailable(glfw3) 
 else()
   find_package(glm CONFIG REQUIRED)
@@ -63,8 +60,36 @@ find_package(OpenGL REQUIRED)
 
 add_compile_options(-g)
 
-set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -mavx2")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
+option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
+if(ENABLE_ASAN AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU"))
+message(STATUS "AddressSanitizer Enabled")
+	add_compile_options(
+    -fsanitize=address
+    -fno-omit-frame-pointer    
+    -g                          
+  )
+	add_link_options(
+    -fsanitize=address
+  )
+endif()
+
+option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+if(ENABLE_TSAN AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU"))
+	message(STATUS "ThreadSanitizer Enabled")
+	add_compile_options(
+    -fsanitize=thread
+    -fno-omit-frame-pointer    
+    -g                          
+  )
+	add_link_options(
+    -fsanitize=thread
+  )
+endif()
+
+if(NOT APPLE)
+  set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -mavx2")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
+endif()
 
 add_subdirectory(deps)
 add_subdirectory(engine)

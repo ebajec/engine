@@ -153,13 +153,9 @@ std::unique_ptr<MyApp> MyApp::create(GLFWwindow *window)
 	return app;
 }
 
-MyApp::~MyApp()
-{
-}
-
 int init_gl_basic(GLFWwindow *window)
 {
-	glfwMakeContextCurrent(window);
+    glfwMakeContextCurrent(window);
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
@@ -170,36 +166,30 @@ int init_gl_basic(GLFWwindow *window)
 		return EXIT_FAILURE;
     }
 
-	glEnable(GL_DEBUG_OUTPUT);
-	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);       // makes callback synchronous
+    glEnable(GL_DEBUG_OUTPUT);
+    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
 
-	glDebugMessageCallback([]( GLenum source,
-							  GLenum type,
-							  GLuint id,
-							  GLenum severity,
-							  GLsizei length,
-							  const GLchar* message,
-							  const void* userParam )
-	{
-		if (severity != GL_DEBUG_SEVERITY_NOTIFICATION) {				
-			fprintf(stderr,
-				"GL DEBUG: [%u] %s\n"
-				"    Source:   0x%x\n"
-				"    Type:     0x%x\n"
-				"    Severity: 0x%x\n"
-				"    Message:  %s\n\n",
-				id, (type == GL_DEBUG_TYPE_ERROR ? "** ERROR **" : ""),
-				source, type, severity, message);
-		}
+    glDebugMessageCallback([](GLenum source, GLenum type, GLuint id,
+                                GLenum severity, GLsizei, const GLchar* message,
+                                const void*) {
+        if (severity != GL_DEBUG_SEVERITY_NOTIFICATION) {
+            fprintf(stderr,
+                "GL DEBUG: [%u] %s\n"
+                "    Source:   0x%x\n"
+                "    Type:     0x%x\n"
+                "    Severity: 0x%x\n"
+                "    Message:  %s\n\n",
+                id, (type == GL_DEBUG_TYPE_ERROR ? "** ERROR **" : ""),
+                source, type, severity, message);
+        }
+    }, nullptr);
 
-	}, nullptr);
-
-	glDebugMessageControl(
-		GL_DONT_CARE,          // source
-		GL_DONT_CARE,          // type
-		GL_DONT_CARE,          // severity
-		0, nullptr,            // count + list of IDs
-		GL_TRUE);              // enable
+    glDebugMessageControl(
+        GL_DONT_CARE,          // source
+        GL_DONT_CARE,          // type
+        GL_DONT_CARE,          // severity
+        0, nullptr,            // count + list of IDs
+        GL_TRUE);              // enable
 
     glfwWindowHint(GLFW_SAMPLES, 4);
     glEnable(GL_MULTISAMPLE);

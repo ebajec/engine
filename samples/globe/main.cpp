@@ -79,8 +79,13 @@ void handle_sigint(int sig)
 }
 #endif
 
+void glfw_err(int code, const char* desc) {
+    log_error("GLFW error %d: %s", code, desc);
+}
+
 int main(int argc, char* argv[])
 {
+    glfwSetErrorCallback(glfw_err);
 	stbi_set_flip_vertically_on_load(true);
 	log_set_flags(LOG_ERROR_BIT | LOG_INFO_BIT);
 
@@ -127,9 +132,15 @@ int main(int argc, char* argv[])
 		}
 	}
 
+#ifdef __APPLE__
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1); 
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+#else
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+#endif
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
 	GLFWwindow *window = glfwCreateWindow(
 		params.win.width, 

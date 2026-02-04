@@ -52,7 +52,7 @@ struct MyApp
 	//-----------------------------------------------------------------------------
 	
 	static std::unique_ptr<MyApp> create(GLFWwindow *window);
-	~MyApp();
+	~MyApp() = default;
 
 	template<typename T>
 	int addComponent(std::shared_ptr<T> t_component); 
