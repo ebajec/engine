@@ -40,13 +40,13 @@ vec2 polar(vec2 p)
 
 void main()
 {
-	float t = u_frame.t;
+	float t = ftime();
 
 	//vec2 uv = polar(frag_uv);
 	vec2 uv = frag_uv;
 	vec4 c0 = texture(u_tex,uv);
 
-	float r = length(frag_pos - u_frame.center);
+	float r = length(frag_pos - u_view.center);
 	r /= 80;
 
 	c0 *= exp(-r*r*r*r);

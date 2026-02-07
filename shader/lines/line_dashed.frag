@@ -22,7 +22,7 @@ void main()
 		discard;
 
 	vec2 uv = compute_corner_uv(p,d,join,type);
- 	uv.x -= u_frame.t;
+ 	uv.x -= ftime();
 
 	float dash_scale = 3;
 	float dash_weight = 0.4;

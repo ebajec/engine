@@ -38,6 +38,6 @@ void main() {
 	fpos = vec3(position);
 	fnormal = normal.xyz;
 
-	position = u_frame.pv*position;
+	position = u_view.pv*position;
     gl_Position = vec4(position);
 }

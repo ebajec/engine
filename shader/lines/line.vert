@@ -194,7 +194,7 @@ void main()
 	}
 	vec2 vpos = p + dY*Y + dX*X;
 
-	gl_Position = u_frame.pv*vec4(vpos,0,1);
+	gl_Position = u_view.pv*vec4(vpos,0,1);
 
 	//-------------------------------------------------------------------
 	// Adjust uvs to accomodate for joins

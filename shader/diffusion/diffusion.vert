@@ -24,6 +24,6 @@ void main()
 	frag_pos = p;
 	frag_uv = uv;
 
-	gl_Position = u_frame.pv*vec4(p,0.0,1.0);
+	gl_Position = u_view.pv*vec4(p,0.0,1.0);
 }
 

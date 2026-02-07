@@ -33,7 +33,7 @@ void main()
 	}
 
 	vec2 uv = compute_corner_uv(p,d,join,type);
- 	uv.x -= u_frame.t;
+ 	uv.x -= ftime();
 
 	vec4 color = vec4(0.5,0,0,0.5);
 	color = texture(u_tex, uv);

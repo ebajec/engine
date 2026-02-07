@@ -29,7 +29,7 @@ vec4 diff(vec2 uv)
 
 void main()
 {
-	float t = u_frame.t;
+	float t = ftime();
 
 	vec2 p = frag_uv;
 

@@ -107,7 +107,7 @@ float sample_tex(tex_idx_t idx, vec2 uv)
 
 		vec3 p = cube_to_globe(code.face, mix(rect.min, rect.max, uv));
 
-		float t = TWOPI*fract(0.3*u_frame.t);
+		float t = TWOPI*fract(0.3*ftime());
 		float h1 = 1;
 		float h2 = 1;
 

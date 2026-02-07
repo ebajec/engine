@@ -13,8 +13,8 @@ layout (location = 1) out vec2 frag_uv;
 
 void main()
 {
-	float t = u_frame.t;
-	mat4 pv = u_frame.pv;
+	float t = float(u_frame.t_seconds) + u_frame.t_fract;
+	mat4 pv = u_view.pv;
 
 	vec4 wpos = vec4(pos.x, pos.y, 0, 1);
 	frag_pos = pos;

@@ -32,7 +32,7 @@ void main()
 
 	//uv.x *= 0.5/join.width;
 
-	uv.x += u_frame.t;
+	uv.x += ftime();
 
 	float dot_spacing = 1;
 

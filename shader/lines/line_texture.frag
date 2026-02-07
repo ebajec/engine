@@ -34,7 +34,7 @@ void main()
 
 	uv.x *= (1.0 + 2.0*fbuf);
 
- 	uv.x -= u_frame.t;
+ 	uv.x -= ftime();
 
 	FragColor += texture(u_tex,uv);
 

@@ -86,7 +86,7 @@ void main()
 	),1);
 	color = in_color;
 
-	float t = TWOPI*fract(u_frame.t*0.001);
+	float t = TWOPI*fract(ftime()*0.001);
 
 	vec2 z = vec2(cos(t),sin(t));
 
@@ -136,7 +136,7 @@ void main()
 	}
 
 	if (false) {
-		float phi = TWOPI*fract(u_frame.t*0.1);
+		float phi = TWOPI*fract(ftime()*0.1);
 		float edge = pow(norm2(cross(V,n)),10);
 
 		float z = gl_FragCoord.z;
