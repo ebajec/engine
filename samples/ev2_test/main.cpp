@@ -50,7 +50,7 @@ struct MyStuff
 	ev2::ImageAssetID saro_img;
 	ev2::TextureID saro_tex;
 
-	uint32_t w, h;
+	uint32_t sim_w, sim_h;
 
 	struct {
 		float s;
@@ -110,10 +110,10 @@ int MyStuff::init(ev2::Device *dev)
 		ev2::FILTER_BILINEAR
 	);
 
-	w = 128, h = 64;
+	sim_w = 512, sim_h = sim_w;
 
-	swap_img[0] = ev2::create_image(dev, w, h, 1, ev2::IMAGE_FORMAT_RGBA8);
-	swap_img[1] = ev2::create_image(dev, w, h, 1, ev2::IMAGE_FORMAT_RGBA8);
+	swap_img[0] = ev2::create_image(dev, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_RGBA8);
+	swap_img[1] = ev2::create_image(dev, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_RGBA8);
 
 	swap_tex[0] = ev2::create_texture(dev, swap_img[0],ev2::FILTER_BILINEAR);
 	swap_tex[1] = ev2::create_texture(dev, swap_img[1],ev2::FILTER_BILINEAR);
@@ -145,7 +145,7 @@ int MyStuff::init(ev2::Device *dev)
 	//------------------------------------------------------------------------------
 	// Upload some stuff
 
-	upload_img_data(dev,swap_img[0], w, h);
+	upload_img_data(dev,swap_img[0], sim_w, sim_h);
 	ev2::flush_uploads(dev);
 
 	return EXIT_SUCCESS;
@@ -198,18 +198,19 @@ void MyStuff::render(ev2::Device *dev)
 	ev2::bind_texture(dev, diffusion_set, img_in_slot, swap_tex[curr]);
 	ev2::bind_texture(dev, diffusion_set, img_out_slot, swap_tex[next]);
 
-	//ev2::bind_texture(dev, screen_quad_set, tex_slot, swap_tex[curr]);
-	ev2::bind_texture(dev, saro_img_set, tex_slot, saro_tex);
-
 	ev2::RecorderID rec = ev2::begin_commands(dev);
+	ev2::cmd_bind_compute_pipeline(rec, diffusion);
 	ev2::cmd_bind_descriptor_set(rec, diffusion_set);
-
-	ev2::cmd_dispatch(rec, diffusion, w/32, h/32, 1);
+	ev2::cmd_use_texture(rec, swap_tex[curr], ev2::USAGE_STORAGE_READ_COMPUTE);
+	ev2::cmd_dispatch(rec, sim_w/32, sim_h/32, 1);
 	ev2::cmd_use_texture(rec, swap_tex[curr], ev2::USAGE_SAMPLED_GRAPHICS);
 	ev2::SyncID cmd_sync = ev2::end_commands(rec);
 
+	//ev2::bind_texture(dev, screen_quad_set, tex_slot, swap_tex[curr]);
+	ev2::bind_texture(dev, saro_img_set, tex_slot, swap_tex[curr]);
+
 	ev2::PassCtx pass = ev2::begin_pass(dev, {}, rd.camera, view_rect);
-	ev2::cmd_bind_pipeline(pass.rec, screen_quad);
+	ev2::cmd_bind_gfx_pipeline(pass.rec, screen_quad);
 	ev2::cmd_bind_descriptor_set(pass.rec, saro_img_set);
 	ev2::cmd_draw_screen_quad(pass.rec);
 	ev2::SyncID pass_sync = ev2::end_pass(dev, pass);

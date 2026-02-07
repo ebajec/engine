@@ -5,8 +5,6 @@ namespace ev2 {
 
 BufferID create_buffer(Device *dev, size_t size, BufferFlags flags)
 {
-	Buffer buf{};
-
 	GLenum gl_flags = GL_DYNAMIC_STORAGE_BIT;
 
 	if (flags & MAP_READ)
@@ -17,6 +15,12 @@ BufferID create_buffer(Device *dev, size_t size, BufferFlags flags)
 		gl_flags |= GL_MAP_PERSISTENT_BIT;
 	if (flags & MAP_COHERENT)
 		gl_flags |= GL_MAP_COHERENT_BIT;
+
+	Buffer buf {
+		.id = 0,
+		.flags = gl_flags,
+		.size = size,
+	};
 
 	glCreateBuffers(1, &buf.id);
 	glNamedBufferStorage(buf.id, size, nullptr, gl_flags);
@@ -96,7 +100,7 @@ UploadContext begin_upload(Device *dev, size_t bytes, size_t align)
 	return UploadContext {
 		.ptr = allocation.ptr,
 		.size = bytes,
-		.idx = allocation.idx,
+		.allocation_index = allocation.idx,
 	};
 }
 
@@ -105,7 +109,7 @@ uint64_t commit_buffer_uploads(Device *dev, UploadContext ctx, BufferID buf,
 {
 	UploadPool *pool = dev->pool.get();
 
-	return pool->commmit_buffer(ctx.idx, buf, regions, count);
+	return pool->commmit_buffer(ctx.allocation_index, buf, regions, count);
 }
 
 uint64_t commit_image_uploads(Device *dev, UploadContext ctx, ImageID img, 
@@ -113,7 +117,7 @@ uint64_t commit_image_uploads(Device *dev, UploadContext ctx, ImageID img,
 {
 	UploadPool *pool = dev->pool.get();
 
-	return pool->commmit_image(ctx.idx, img, regions, count);
+	return pool->commmit_image(ctx.allocation_index, img, regions, count);
 }
 
 void flush_uploads(Device *dev) 

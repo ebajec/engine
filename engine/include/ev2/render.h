@@ -71,7 +71,7 @@ enum DrawMode
 	MODE_TRIANGLES
 };
 
-void cmd_bind_pipeline(RecorderID rec, GraphicsPipelineID h);
+void cmd_bind_gfx_pipeline(RecorderID rec, GraphicsPipelineID h);
 void cmd_draw_screen_quad(RecorderID rec); 
 
 };

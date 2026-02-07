@@ -5,6 +5,8 @@
 
 #include <glm/gtc/type_ptr.hpp>
 
+#include <cstring>
+
 static ev2::Result create_render_target_gl(
 	ev2::Device *dev, 
 	ev2::RenderTarget *p_target, 
@@ -151,11 +153,47 @@ void begin_frame(Device *dev)
 	if (gl_check_err()) {
 	}
 
+	uint64_t time_ns = 
+		std::chrono::high_resolution_clock::now().time_since_epoch().count();
+
+	double time_seconds = (double)(time_ns - dev->start_time_ns)/1e9;
+
+	dev->frame.dt = time_seconds - dev->frame.t;
+	dev->frame.t = time_seconds;
+
 	if (dev->assets->reloader) {
 		dev->assets->reloader->update();
 	}
 	dev->transforms.update(dev);
 	dev->view_data.update(dev);
+
+	GPUFramedata gpu_data = {
+		.t_seconds = (uint32_t)dev->frame.t,
+		.t_fract = (float)fmod(dev->frame.t, 1.),
+		.dt = (float)dev->frame.dt
+	};
+
+	UploadContext uc = begin_upload(dev, sizeof(GPUFramedata), alignof(GPUFramedata));
+	memcpy(uc.ptr, &gpu_data, sizeof(GPUFramedata));
+	BufferUpload up = {
+		.src_offset = 0,
+		.dst_offset = 0,
+		.size = sizeof(GPUFramedata),
+	};
+	uint64_t sync = commit_buffer_uploads(dev, uc, dev->frame.ubo, &up, 1);
+
+	ev2::flush_uploads(dev);
+	ev2::wait_complete(dev, sync);
+
+	Buffer *ubo = dev->get_buffer(dev->frame.ubo);
+	glBindBufferRange(
+		GL_UNIFORM_BUFFER, 
+		FRAMEDATA_BINDING,
+		ubo->id,
+		0,
+		ubo->size
+	);
+
 }
 
 void end_frame(Device *dev)
@@ -228,7 +266,7 @@ SyncID end_pass(Device *dev, PassCtx ctx)
 	return EV2_NULL_HANDLE(Sync);
 }
 
-void cmd_bind_pipeline(RecorderID rec, GraphicsPipelineID h)
+void cmd_bind_gfx_pipeline(RecorderID rec, GraphicsPipelineID h)
 {
 	Device *dev = EV2_TYPE_PTR_CAST(Device, rec);
 	GraphicsPipeline *pipeline = dev->get_gfx_pipeline(h);

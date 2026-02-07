@@ -1083,6 +1083,26 @@ void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 				glBindTextureUnit(index, img->id);
 				break;
 			}
+			case ev2::DESCRIPTOR_TYPE_STORAGE_IMAGE: {
+				if (EV2_IS_NULL(binding.tex.handle))
+					continue;
+
+				Texture *tex = dev->get_texture(binding.tex.handle);
+				Image *img = dev->get_image(tex->img);
+
+				GLenum format = image_format_to_gl_internal(img->fmt);
+
+				glBindImageTexture(
+					index, 
+					img->id, 
+					0, 
+					GL_FALSE, 
+					0, 
+					GL_WRITE_ONLY, 
+					format
+				);
+				break;
+			}
 			case ev2::DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
 			case ev2::DESCRIPTOR_TYPE_STORAGE_BUFFER: {
 				if (EV2_IS_NULL(binding.buf.handle))
@@ -1109,14 +1129,22 @@ void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 	}
 }
 
+void cmd_bind_compute_pipeline(RecorderID rec, ComputePipelineID h)
+{
+	ev2::Device *dev = EV2_TYPE_PTR_CAST(Device, rec);
+	ComputePipeline *pipeline = dev->get_compute_pipeline(h);
+	glUseProgram(pipeline->program);
+}
+
 void cmd_dispatch(
 	RecorderID rec,
-	ComputePipelineID pipe, 
 	uint32_t countx, 
 	uint32_t county, 
 	uint32_t countz
 )
 {
+	ev2::Device *dev = EV2_TYPE_PTR_CAST(Device, rec);
+	glDispatchCompute(countx, county, countz);
 }
 
 void cmd_use_buffer(

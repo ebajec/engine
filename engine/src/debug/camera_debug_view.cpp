@@ -75,7 +75,7 @@ void CameraDebugView::render(const ev2::PassCtx& ctx)
 
 	memcpy(mapped, glm::value_ptr(pv), sizeof(glm::mat4));
 
-	ev2::cmd_bind_pipeline(ctx.rec, pipeline);
+	ev2::cmd_bind_gfx_pipeline(ctx.rec, pipeline);
 	ev2::cmd_bind_descriptor_set(ctx.rec, desc);
 
 	glBindVertexArray(m_vao);

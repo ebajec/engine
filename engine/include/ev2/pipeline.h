@@ -98,9 +98,10 @@ void submit(SyncID);
 
 void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id);
 
+void cmd_bind_compute_pipeline(RecorderID rec, ComputePipelineID h);
+
 void cmd_dispatch(
 	RecorderID rec,
-	ComputePipelineID pipe, 
 	uint32_t countx, 
 	uint32_t county, 
 	uint32_t countz

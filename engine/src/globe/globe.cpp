@@ -973,7 +973,7 @@ void globe_draw(const Globe *globe, const ev2::PassCtx& ctx)
 	const ev2::Buffer* ibo = dev->get_buffer(data.ibo); 
 	const ev2::Buffer* indirect = dev->get_buffer(data.indirect); 
 
-	ev2::cmd_bind_pipeline(ctx.rec, globe->render_data.pipeline);
+	ev2::cmd_bind_gfx_pipeline(ctx.rec, globe->render_data.pipeline);
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
 	glFrontFace(GL_CCW);

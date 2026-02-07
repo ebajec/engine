@@ -152,7 +152,7 @@ void BoxDebugView::draw(ev2::PassCtx ctx)
 	if (!vbo.id || !ibo.id)
 		return;
 
-	ev2::cmd_bind_pipeline(ctx.rec, pipeline);
+	ev2::cmd_bind_gfx_pipeline(ctx.rec, pipeline);
 
 	ev2::Buffer *vbo_obj = dev->get_buffer(vbo);
 	ev2::Buffer *ibo_obj = dev->get_buffer(ibo);

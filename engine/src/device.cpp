@@ -91,6 +91,11 @@ Device *create_device(const char *path)
 
 	dev->assets.reset(AssetTable::create(dev, path));
 
+	dev->frame.ubo = ev2::create_buffer(dev, sizeof(GPUFramedata), ev2::MAP_WRITE);
+
+	dev->start_time_ns = 
+		std::chrono::high_resolution_clock::now().time_since_epoch().count();
+
 	return dev;
 }
 

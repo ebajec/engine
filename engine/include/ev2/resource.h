@@ -52,12 +52,16 @@ struct UploadContext
 {
 	void *ptr;
 	size_t size;
-	uint32_t idx;
+	uint32_t allocation_index;
 };
 
 UploadContext begin_upload(Device *dev, size_t bytes, size_t align);
 void flush_uploads(Device * dev);
 
+// @brief Schedule uploads to be executed on next flush of the corresponding
+// upload pool.
+//
+// @return Counter value reached by pool upon completion of the upload.
 uint64_t commit_buffer_uploads(Device *dev, UploadContext ctx, BufferID buf, 
 							   const BufferUpload *uploads, uint32_t count);
 uint64_t commit_image_uploads(Device *dev, UploadContext ctx, ImageID img, 

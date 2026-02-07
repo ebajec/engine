@@ -181,12 +181,18 @@ struct UploadPool
 	ev2::Result wait_for(uint64_t value);
 };
 
+struct GPUFramedata
+{
+	uint32_t t_seconds;
+	float t_fract;
+	float dt;
+};
+
 struct FrameContext
 {
 	double t; 
 	double dt;
 	uint32_t w, h;
-
 	BufferID ubo;
 };
 
@@ -214,6 +220,8 @@ struct Device
 	
 	FrameContext frame;
 
+	uint64_t start_time_ns;
+
 	// convenience
 	inline Buffer *get_buffer(BufferID h) {
 		ResourceID rid = {.u64 = h.id};
@@ -232,6 +240,11 @@ struct Device
 		AssetID id = static_cast<uint32_t>(h.id);
 		AssetEntry *ent = assets->get_entry(id);
 		return (GraphicsPipeline*)ent->usr;
+	}
+	inline ComputePipeline *get_compute_pipeline(ComputePipelineID h) {
+		AssetID id = static_cast<uint32_t>(h.id);
+		AssetEntry *ent = assets->get_entry(id);
+		return (ComputePipeline*)ent->usr;
 	}
 	inline Shader *get_shader(ShaderID h) {
 		AssetID id = static_cast<uint32_t>(h.id);

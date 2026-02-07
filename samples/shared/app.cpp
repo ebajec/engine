@@ -12,19 +12,21 @@
 
 // STL / libc
 #include <cstdio>
+#include <csignal>
+#include <atomic>
 
 #ifdef __linux__
 
 // posix
 #include <unistd.h>
-#include <signal.h>
 
-static int g_should_close = false;;
+static std::atomic_int g_should_close = false;;
 
 void handle_sigint(int sig)
 {
 	(void)sig;
 	g_should_close = true;
+	log_info("received SIGINT");
 }
 #endif
 
@@ -147,8 +149,12 @@ int App::resize(int width, int height)
 
 int App::update()
 {
-	if (g_should_close || glfwWindowShouldClose(win.ptr))
+	if (glfwWindowShouldClose(win.ptr))
 		return SHOULD_CLOSE;
+	if (g_should_close) {
+		glfwSetWindowShouldClose(win.ptr, true);
+		return SHOULD_CLOSE;
+	}
 
 	int result = OK;
 
@@ -205,17 +211,6 @@ int App::initialize(int argc, char *argv[])
 			glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
 	}
 
-#ifdef __linux__
-	struct sigaction sa{};
-	sa.sa_handler = handle_sigint;
-	sa.sa_flags = SA_RESTART;
-
-	if (sigaction(SIGINT, &sa, NULL) == -1) {
-		perror("sigaction");
-		return EXIT_FAILURE;
-	}
-#endif
-
 	if (!glfwInit()) {
 		log_error("Failed to initialize GLFW!");
 		return EXIT_FAILURE;
@@ -245,6 +240,8 @@ int App::initialize(int argc, char *argv[])
 	ImGui_ImplGlfw_InitForOpenGL(win.ptr, true);
 	ImGui_ImplOpenGL3_Init("#version 450");
 
+	ImPlot::CreateContext();
+
 	glfwSetKeyCallback(win.ptr,&App::key_callback);
 	glfwSetMouseButtonCallback(win.ptr,&App::mouse_button_callback);
 	glfwSetScrollCallback(win.ptr,&App::scroll_callback);
@@ -253,6 +250,8 @@ int App::initialize(int argc, char *argv[])
 	glfwSetWindowUserPointer(win.ptr, this);
 
 	dev = ev2::create_device(RESOURCE_PATH);
+
+	std::signal(SIGINT, handle_sigint);
 
 	if (!dev)
 		return EXIT_FAILURE;
@@ -265,6 +264,8 @@ void App::terminate()
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
+
+	ImPlot::DestroyContext();
 
 	ev2::destroy_device(dev);
 
@@ -281,5 +282,4 @@ void App::imgui()
 	}
 	ImGui::End();
 }
-
 
