@@ -1,8 +1,6 @@
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
 
-#include "framedata.glsl"
-
 layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
 layout (std140, binding = 1) uniform Uniforms
@@ -26,7 +24,7 @@ vec2 swirl(vec2 p, vec2 c)
 
 vec2 v_field(vec2 p)
 {
-	return texture(img_in, p).zw;
+	return texture(img_in, p/vec2(textureSize(img_in,0))).zw;
 }
 
 vec2 RK4(vec2 x0, float dt)
@@ -46,23 +44,16 @@ void main() {
 	if (id.x >= out_size.x || id.y >= out_size.y)
 		return;
 
-	ivec2 dst = ivec2(id.xy);
-	vec2 scale = 1./vec2(out_size);
-	vec2 uv = (vec2(dst) + 0.5)*scale;
+	ivec2 ipos = ivec2(id.xy);
+
+	vec2 pos = vec2(id.xy);
 
 	// advected value
-	vec2 pos = RK4(uv, 0.005);
+	vec2 advected = RK4(pos, 0.005);
 	vec4 f_advect = texture(img_in, pos);
-
-	// stationary value
-	vec4 f_curr = texture(img_in, uv);
+	vec4 f_curr = texelFetch(img_in, ivec2(id.xy), 0);
 	vec4 f_final = vec4(f_advect.xy, f_curr.zw);
 
-	if (bool(flags)) {
-		vec2 r = uv - cursor;
-		f_final.x += exp(-10000.f*dot(r,r));
-	}
-
-	imageStore(img_out, dst, f_final);
+	imageStore(img_out, ipos, f_final);
 
 }

@@ -74,13 +74,13 @@ Device *create_device(const char *path)
 	dev->image_pool.reset(ResourcePool<Image>::create());
 	dev->texture_pool.reset(ResourcePool<Texture>::create());
 
-	size_t upload_capacity = (1 << 8) * (1 << 20);
+	size_t upload_capacity = (1 << 9) * (1 << 20);
 	size_t upload_alignment = 512;
 
 	dev->pool.reset(UploadPool::create(dev, 
 		upload_capacity, 
 		upload_alignment, 
-		1 << 14
+		(1 << 14)
 	));
 
 	GLint64 ubo_offset_alignment;

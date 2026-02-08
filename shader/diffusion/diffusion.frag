@@ -51,8 +51,6 @@ tgrad_t tex_grad2(vec2 uv)
 
 	vec2 h = 0.5/vec2(size);
 
-	//uv = floor(vec2(size)*uv)/vec2(size);
-
 	float u1 = max(uv.x - h.x,h.x);
 	float u2 = min(uv.x + h.x,1.0 - h.x);
 
@@ -87,7 +85,7 @@ void main()
 
 	tgrad_t grad = tex_grad2(uv);
 
-	ivec2 texel = ivec2(adjust_uv_for_clamp(uv,h)*vec2(size));
+	ivec2 texel = ivec2(uv*vec2(size));
 
 	vec4 samp[4] = {
 		texelFetch(u_tex,texel + ivec2(1,0),0),
@@ -98,23 +96,16 @@ void main()
 
 	vec4 avg = 1.0/4.0 * (samp[0] + samp[1] + samp[2] + samp[3]);
 
-	//vec4 color = texelFetch(u_tex,texel,0);
-	vec4 color = texture(u_tex,uv);
+	vec4 val = texelFetch(u_tex,texel,0);
 
-	float ddu = dot(grad.du,grad.du);
-	float ddv = dot(grad.dv,grad.dv);
+	vec2 grad_x = vec2(grad.du.x,grad.dv.x);
 
-	vec2 diff = vec2(
-		dot(color/length(color),grad.du),
-		dot(color/length(color),grad.dv)
-	);
+	vec3 sun = normalize(vec3(0.5,0.2,-0.5));
+	vec3 n = normalize(vec3(grad_x.x,grad_x.y,1));
 
-	vec3 sun = normalize(vec3(0.5,0.2,1));
-	vec3 n = normalize(vec3(diff.x,diff.y,1));
+	float f = 0.2 + 0.8*clamp(dot(n,sun),0,1);
 
-	float f = 1.-clamp(dot(n,sun),0,1);
-
-	//f = length(color - avg);
+	vec4 color = vec4((val.x - avg.x)*10,0.2*abs(val.zw),1);
 
 	FragColor = mix(color,f*vec4(1),u_s);
 }
