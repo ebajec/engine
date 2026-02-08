@@ -8,6 +8,8 @@ layout (binding = 0) uniform sampler2D u_tex;
 
 layout (binding = 1) uniform Uniforms
 {
+	vec2 cursor;
+	uint flags;
 	float u_s;
 };
 
@@ -107,6 +109,12 @@ void main()
 		dot(color/length(color),grad.dv)
 	);
 
-	float f = 0.01*length(diff);
+	vec3 sun = normalize(vec3(0.5,0.2,1));
+	vec3 n = normalize(vec3(diff.x,diff.y,1));
+
+	float f = 1.-clamp(dot(n,sun),0,1);
+
+	//f = length(color - avg);
+
 	FragColor = mix(color,f*vec4(1),u_s);
 }

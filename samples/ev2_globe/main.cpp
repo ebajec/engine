@@ -19,7 +19,7 @@
 #include <memory>
 #include <cstdlib>
 
-struct MyStuff
+struct Simulation
 {
 	App *app;
 	Globe *globe;
@@ -44,7 +44,7 @@ struct MyStuff
 	void destroy();
 };
 
-int MyStuff::init()
+int Simulation::init()
 {
 	dev = app->dev;
 
@@ -64,7 +64,7 @@ int MyStuff::init()
 	return App::OK;
 }
 
-int MyStuff::update()
+int Simulation::update()
 {
 
 	Camera camera = {
@@ -116,7 +116,7 @@ int MyStuff::update()
 	return App::OK;
 }
 
-void MyStuff::render()
+void Simulation::render()
 {
 	ev2::Rect view_rect = { .x0 = 0, .y0 = 0,
 		.w = (uint32_t)app->win.width,
@@ -130,7 +130,7 @@ void MyStuff::render()
 	ev2::submit(pass_sync);
 }
 
-void MyStuff::destroy()
+void Simulation::destroy()
 {
 	globe_destroy(globe);
 	ImPlot::DestroyContext();
@@ -151,7 +151,7 @@ int main(int argc, char *argv[])
 
 	ev2::Device *dev = app->dev;
 
-	MyStuff sim = {
+	Simulation sim = {
 		.app = app.get()
 	};
 

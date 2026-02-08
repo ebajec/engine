@@ -151,4 +151,11 @@ void destroy_texture(Device *dev, TextureID h)
 	dev->texture_pool->deallocate(id);
 }
 
+uint64_t get_texture_gpu_handle(Device *dev, TextureID h)
+{
+	Texture *tex = dev->get_texture(h);
+	Image *img = dev->get_image(tex->img);
+	return img->id;
+}
+
 };

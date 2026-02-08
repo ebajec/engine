@@ -5,13 +5,34 @@
 
 layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
-layout (std140, binding = 0) uniform Uniforms
+layout (std140, binding = 1) uniform Uniforms
 {
-	uint count;
+	vec2 cursor;
+	uint flags;
+	float u_s;
 };
 
-layout (binding = 1) uniform sampler2D img_in;
-layout (rgba8, binding = 2) writeonly uniform image2D img_out;
+layout (binding = 2) uniform sampler2D img_in;
+layout (rgba8, binding = 3) writeonly uniform image2D img_out;
+
+vec2 v_field(vec2 p)
+{
+	vec2 r = p - vec2(0.5);
+
+	r *= 40;
+
+	return (0.05*r + vec2(r.y,-r.x))/(0.1 + dot(r,r));
+}
+
+vec2 RK4(vec2 x0, float dt)
+{
+	vec2 k1 = v_field(x0);
+	vec2 k2 = v_field(x0 + 0.5*dt*k1);
+	vec2 k3 = v_field(x0 + 0.5*dt*k2);
+	vec2 k4 = v_field(x0 + dt*k3);
+
+	return x0 + (1./6.) * dt * (k1 + 2.*k2 + 2.*k3 + k4);
+}
 
 void main() {
     uvec3 id = gl_GlobalInvocationID;
@@ -21,9 +42,24 @@ void main() {
 		return;
 
 	ivec2 dst = ivec2(id.xy);
-	vec2 uv = vec2(dst)/vec2(out_size);
+	
+	vec2 scale = 1./vec2(out_size);
 
-	vec4 value = texture(img_in, uv);
+	vec2 uv = (vec2(dst) + 0.5)*scale;
+
+	vec2 src_pos = RK4(uv, 0.005);
+
+	vec4 value = texture(img_in, src_pos);
+
+	if (bool(flags)) {
+		value.z += 0.1*exp(-100.*length(uv - cursor));
+	}
+
+	//vec2 src_pix = vec2(textureSize(img_in,0))*mod(src_pos, vec2(1));
+	//vec4 value = texelFetch(img_in, ivec2(src_pix),0);
+
+	//value.z = 5.*abs(v_field(uv)).x;
+
 	imageStore(img_out, dst, value);
 
 }

@@ -87,6 +87,7 @@ void destroy_image(Device *dev, ImageID img);
 
 TextureID create_texture(Device *dev, ImageID img, TextureFilter filter);
 void destroy_texture(Device *dev, TextureID tex);
+uint64_t get_texture_gpu_handle(Device *dev, TextureID tex);
 
 //------------------------------------------------------------------------------
 // Image assets

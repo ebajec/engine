@@ -216,10 +216,13 @@ struct Device
 	GPUTTable<ViewData> view_data;
 	GPUTTable<glm::mat4> transforms;
 
+	// defaults to identity matrix
+	ViewID default_view;
+
 	// Frame data
-	
 	FrameContext frame;
 
+	// Misc stats
 	uint64_t start_time_ns;
 
 	// convenience

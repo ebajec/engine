@@ -19,10 +19,17 @@ struct DrawCommand
 
 MAKE_HANDLE(RenderTarget);
 
-enum RenderTargetFlags
+enum RenderTargetFlagBits
 {
 	RENDER_TARGET_COLOR_BIT = 0x1,
 	RENDER_TARGET_DEPTH_BIT = 0x2,
+};
+typedef uint32_t RenderTargetFlags;
+
+struct RenderTargetAttachments
+{
+	TextureID color;
+	TextureID depth;
 };
 
 RenderTargetID create_render_target(
@@ -33,6 +40,11 @@ RenderTargetID create_render_target(
 );
 void destroy_render_target(
 	Device *dev, 
+	RenderTargetID id
+);
+
+RenderTargetAttachments get_render_target_attachments(
+	Device *dev,
 	RenderTargetID id
 );
 

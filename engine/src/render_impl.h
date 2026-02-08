@@ -3,6 +3,10 @@
 
 #include <engine/renderer/opengl.h>
 
+#include <ev2/resource.h>
+#include <ev2/render.h>
+
+#include <glm/gtc/type_ptr.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
@@ -31,9 +35,26 @@ struct RenderTarget
 	uint32_t h;
 
 	GLuint fbo;
-	GLuint color;
+	ImageID color;
 	GLuint depth;
+
+	RenderTargetAttachments attachments;
 };
+
+static inline ViewData view_data_from_matrices(float view[], float proj[])
+{
+	glm::mat4 view_mat = view ? glm::make_mat4(view) : glm::mat4(1.f);
+	glm::mat4 proj_mat = proj ? glm::make_mat4(proj) : glm::mat4(1.f);
+
+	return ViewData{
+		.p = proj_mat,
+		.v = view_mat,
+		.pv = proj_mat * view_mat,
+		.center = glm::vec3(0),
+	};
+
+}
+
 
 };
 

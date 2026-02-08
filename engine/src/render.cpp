@@ -19,18 +19,23 @@ static ev2::Result create_render_target_gl(
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
 	// color attachment is optional
-	GLuint color {};
+	ev2::ImageID color {};
 	if (flags & ev2::RENDER_TARGET_COLOR_BIT)
 	{
-		glGenTextures(1,&color);
-		glBindTexture(GL_TEXTURE_2D,color);
-		glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,(int)w,(int)h,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+		color = ev2::create_image(dev, w, h, 0, ev2::IMAGE_FORMAT_RGBA8);
+
+		ev2::Image *img = dev->get_image(color);
+
+		//glGenTextures(1,&color);
+		//glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,(int)w,(int)h,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+
+		glBindTexture(GL_TEXTURE_2D, img->id);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);   
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 		glFramebufferTexture2D(GL_FRAMEBUFFER,
-							GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color, 0);
+							GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, img->id, 0);
 	}
 
 	// depth attachment is optional
@@ -59,7 +64,7 @@ static ev2::Result create_render_target_gl(
 	p_target->color = color;
 	p_target->depth = depth;
 
-	if (!color && !depth) {
+	if (!color.id && !depth) {
 		log_error("gl_render_target_create : No depth or color attachment set!");
 		goto GL_RENDER_TARGET_CREATE_CLEANUP;
 	}
@@ -82,8 +87,9 @@ GL_RENDER_TARGET_CREATE_CLEANUP:
 static void destroy_render_target_gl(ev2::Device *dev, ev2::RenderTarget *p_target)
 {
 	if (p_target->fbo) glDeleteFramebuffers(1,&p_target->fbo);
-	if (p_target->color) glDeleteTextures(1,&p_target->color);
 	if (p_target->depth) glDeleteRenderbuffers(1,&p_target->depth);
+
+	if (EV2_VALID(p_target->color)) ev2::destroy_image(dev, p_target->color);
 }
 
 namespace ev2 {
@@ -97,6 +103,12 @@ RenderTargetID create_render_target(
 {
 	RenderTarget *target = new RenderTarget{};
 	create_render_target_gl(dev, target, w, h, flags);
+
+	target->attachments = {
+		.color = ev2::create_texture(dev, target->color, ev2::FILTER_BILINEAR),
+		.depth = EV2_NULL_HANDLE(Texture),
+	};
+
 	return EV2_HANDLE_CAST(RenderTarget, target);
 }
 
@@ -107,21 +119,18 @@ void destroy_render_target(
 {
 	RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget, h);
 	destroy_render_target_gl(dev, target);
+
+	ev2::destroy_texture(dev, target->attachments.color);
 	delete target;
 }
 
-static inline ViewData view_data_from_matrices(float view[], float proj[])
+RenderTargetAttachments get_render_target_attachments(
+	Device *dev,
+	RenderTargetID id
+)
 {
-	glm::mat4 view_mat = view ? glm::make_mat4(view) : glm::mat4(1.f);
-	glm::mat4 proj_mat = proj ? glm::make_mat4(proj) : glm::mat4(1.f);
-
-	return ViewData{
-		.p = proj_mat,
-		.v = view_mat,
-		.pv = proj_mat * view_mat,
-		.center = glm::vec3(0),
-	};
-
+	RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget, id);
+	return target->attachments;
 }
 
 ViewID create_view(Device *dev, float view[], float proj[])
@@ -194,11 +203,14 @@ void begin_frame(Device *dev)
 		ubo->size
 	);
 
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0,0,0,0);
+	glClearColor(0,0,0,0);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
 void end_frame(Device *dev)
 {
-
 }
 
 struct RenderPass
@@ -212,6 +224,10 @@ PassCtx begin_pass(Device *dev, RenderTargetID h_target, ViewID h_view,
 {
 	if (EV2_IS_NULL(dev->view_data.buffer))
 		log_error("No views created.  Did you remember to call begin_frame()?"); 
+
+	if (h_view.id == 0) {
+		h_view = dev->default_view;
+	}
 
 	Buffer * buf = dev->get_buffer(dev->view_data.buffer);
 	uint32_t view_id = static_cast<uint32_t>(h_view.id);
@@ -232,7 +248,7 @@ PassCtx begin_pass(Device *dev, RenderTargetID h_target, ViewID h_view,
 		glBindFramebuffer(GL_FRAMEBUFFER,target->fbo);
 	}
 
-	static float rgb[3] = {0.15f,0.15f,0.2f};
+	static float rgb[3] = {0.0f,0.0f,0.0f};
 
 	glEnable(GL_DEPTH_TEST);
 	glViewport(viewport.x0, viewport.y0, viewport.w, viewport.h);
@@ -262,6 +278,10 @@ SyncID end_pass(Device *dev, PassCtx ctx)
 {
 	RenderPass *pass = EV2_TYPE_PTR_CAST(RenderPass, ctx.pass);
 	delete pass;
+
+	glBindFramebuffer(GL_FRAMEBUFFER,0);
+	glDisable(GL_SCISSOR_TEST);
+	glViewport(0,0,0,0);
 
 	return EV2_NULL_HANDLE(Sync);
 }

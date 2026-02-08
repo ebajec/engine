@@ -106,6 +106,9 @@ void App::scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
 	ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
 	App *app = static_cast<App*>(glfwGetWindowUserPointer(window));
+
+	app->input.scroll.x += xoffset;
+	app->input.scroll.y += yoffset;
 }
 void App::cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
 {
@@ -160,10 +163,6 @@ int App::update()
 
 	// I find it nicer to have ImGui captured wherever I need it to between frames
 	if (frame_counter++) {
-		ImGui::Render();
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());	
-		ImGui::EndFrame();
-		glfwSwapBuffers(win.ptr);
 	} else {
 		input.t0 = glfwGetTime();
 	}
@@ -200,6 +199,12 @@ void App::begin_frame()
 void App::end_frame()
 {
 	ev2::end_frame(dev);
+
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());	
+	ImGui::EndFrame();
+
+	glfwSwapBuffers(win.ptr);
 }
 
 int App::initialize(int argc, char *argv[])
@@ -275,8 +280,24 @@ void App::terminate()
 
 void App::imgui()
 {
+	ImGuiViewport* vp = ImGui::GetMainViewport();
+	ImVec2 workPos  = vp->WorkPos;
+	ImVec2 workSize = vp->WorkSize;
+
+	float panelW = 250.f;
+
 	ImGui::SetNextWindowPos(ImVec2(0,0),ImGuiCond_Always);
+	ImGui::SetNextWindowPos(workPos);
+	ImGui::SetNextWindowSize(ImVec2(panelW, workSize.y));
+
 	ImGui::Begin("Editor"); 
+
+	ImGuiWindowFlags flags =
+		ImGuiWindowFlags_NoMove |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoCollapse |
+		ImGuiWindowFlags_NoSavedSettings;
+
 	if (ImGui::CollapsingHeader("Frame times")) {
 		plot_frame_times(input.dt);
 	}

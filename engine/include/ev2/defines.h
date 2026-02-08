@@ -15,5 +15,6 @@ ev2::ty##ID{.id = (uint64_t)val}
 
 #define EV2_NULL_HANDLE(ty) ev2::ty##ID{.id = 0}
 #define EV2_IS_NULL(h) (h.id == 0)
+#define EV2_VALID(h) (h.id != 0)
 
 #endif // EV2_DEFINES_H

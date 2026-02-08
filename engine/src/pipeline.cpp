@@ -1041,7 +1041,9 @@ void bind_texture(
 		binding->type != DESCRIPTOR_TYPE_SAMPLER && 
 		binding->type != DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER && 
 		binding->type != DESCRIPTOR_TYPE_STORAGE_IMAGE) {
-		log_error("Attempting to bind invalid resource to texture");
+		log_error(
+			"Attempting to bind invalid resource (id=%d) to texture slot %d",
+			binding->tex.handle, slot.id);
 		return;
 	}
 
@@ -1080,7 +1082,13 @@ void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 
 				Texture *tex = dev->get_texture(binding.tex.handle);
 				Image *img = dev->get_image(tex->img);
+
+				GLenum filter = tex->filter == ev2::FILTER_BILINEAR ? GL_LINEAR : GL_NEAREST;
+
 				glBindTextureUnit(index, img->id);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);   
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
 				break;
 			}
 			case ev2::DESCRIPTOR_TYPE_STORAGE_IMAGE: {

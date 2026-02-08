@@ -119,8 +119,6 @@ void cmd_use_texture(
 	Usage usage
 );
 
-void cmd_execute(RecorderID rec, SyncID sync);
-
 };
 
 #endif //EV2_PIPELINE_H

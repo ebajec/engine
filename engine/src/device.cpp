@@ -96,6 +96,14 @@ Device *create_device(const char *path)
 	dev->start_time_ns = 
 		std::chrono::high_resolution_clock::now().time_since_epoch().count();
 
+	glm::mat4 proj_def = glm::mat4(1.f);
+	glm::mat4 view_def = glm::mat4(1.f);
+
+	ViewData viewdata = view_data_from_matrices(
+		glm::value_ptr(proj_def), glm::value_ptr(view_def));
+
+	dev->default_view = EV2_HANDLE_CAST(View,dev->view_data.add(viewdata));
+
 	return dev;
 }
 
@@ -486,7 +494,14 @@ UploadPool::alloc_result_t UploadPool::alloc(size_t _bytes, size_t _align)
 			wait_value = epoch.id;
 		}
 
-		assert(entries[tail_idx].start == tail);
+		if (entries[tail_idx].start != tail) {
+			log_error("cap=%lld, entries[tail_idx].start=%lld, tail=%lld", 
+			 	(unsigned long long)capacity,
+				(unsigned long long)entries[tail_idx].start,
+				(unsigned long long)tail);
+
+			assert(entries[tail_idx].start == tail);
+		}
 
 		entry_t tail_entry;
 		do {
@@ -508,7 +523,10 @@ UploadPool::alloc_result_t UploadPool::alloc(size_t _bytes, size_t _align)
 		
 		// ensures that the tail seen in the entry list always matches a previos 
 		// upload start
-		tail = tail == old_head ? 0 : tail;
+		if (tail == old_head)
+			tail = 0;
+
+		log_warn("Not enough room");
 	}
 
 	entry_t ent = {
