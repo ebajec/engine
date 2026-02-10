@@ -1,3 +1,0 @@
-shaders:
-  vert: shader/default_mesh3d.vert
-  frag: shader/box_debug.frag

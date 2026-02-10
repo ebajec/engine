@@ -1,3 +1,0 @@
-shaders:
-  vert: shader/frustum.vert
-  frag: shader/solidcolor.frag

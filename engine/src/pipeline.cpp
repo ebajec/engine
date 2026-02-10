@@ -5,7 +5,7 @@
 #include "pipeline_impl.h"
 #include "resource_impl.h"
 
-#include "resource/gl_utils.h"
+#include "gl_utils.h"
 
 #include "utils/ansi_colors.h"
 #include "utils/log.h"

@@ -1,3 +1,0 @@
-shaders:
-  vert: shader/default.vert
-  frag: shader/solid_color.frag

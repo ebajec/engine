@@ -1,4 +1,4 @@
-#include <resource/gl_utils.h>
+#include <gl_utils.h>
 #include <utils/log.h>
 
 #include <vector>
