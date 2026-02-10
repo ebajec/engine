@@ -1,17 +1,12 @@
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
 
+#include "pde.glsl"
+
 //--------------------------------------------------------------------------------------------------
 // Frag
 
 layout (binding = 0) uniform sampler2D u_tex;
-
-layout (binding = 1) uniform Uniforms
-{
-	vec2 cursor;
-	uint flags;
-	float u_s;
-};
 
 layout (location = 0) in vec2 frag_pos;
 layout (location = 1) in vec2 frag_uv;
@@ -96,7 +91,7 @@ void main()
 
 	vec4 avg = 1.0/4.0 * (samp[0] + samp[1] + samp[2] + samp[3]);
 
-	vec4 val = texelFetch(u_tex,texel,0);
+	vec4 val = texture(u_tex,uv);
 
 	vec2 grad_x = vec2(grad.du.x,grad.dv.x);
 
@@ -105,7 +100,17 @@ void main()
 
 	float f = 0.2 + 0.8*clamp(dot(n,sun),0,1);
 
-	vec4 color = vec4((val.x - avg.x)*10,0.2*abs(val.zw),1);
+	float curl = (grad.du.w - grad.dv.z);
+	vec4 color = vec4(val.x,val.y,tanh(length(val.zw)),1);
 
-	FragColor = mix(color,f*vec4(1),u_s);
+	ivec2 pix = ivec2(uv*vec2(size));
+	int padding = 5;
+
+	if (false && (
+		pix.x < padding || pix.x > size.x - padding || 
+		pix.y < padding || pix.y > size.y - padding)) {
+		FragColor = vec4(0.5,0.5,0.5,1);
+	} else {
+		FragColor = mix(5.*color,f*vec4(color),u_s);
+	}
 }

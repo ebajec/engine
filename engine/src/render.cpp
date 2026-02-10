@@ -300,6 +300,14 @@ void cmd_bind_gfx_pipeline(RecorderID rec, GraphicsPipelineID h)
 	glBindVertexArray(pipeline->vao);
 }
 
+void cmd_bind_index_buffer(RecorderID rec, BufferID h_buf)
+{
+	Device *dev = EV2_TYPE_PTR_CAST(Device, rec);
+
+	Buffer *buf = dev->get_buffer(h_buf);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf->id); 
+}
+
 void cmd_draw_screen_quad(RecorderID rec)
 {
 	// A temporary thing while I use OpenGL

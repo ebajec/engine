@@ -78,8 +78,6 @@ void CameraDebugView::render(const ev2::PassCtx& ctx)
 	ev2::cmd_bind_gfx_pipeline(ctx.rec, pipeline);
 	ev2::cmd_bind_descriptor_set(ctx.rec, desc);
 
-	glBindVertexArray(m_vao);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, dev->get_buffer(ibo)->id);
 	glDrawElements(GL_LINES, 24, GL_UNSIGNED_INT,nullptr);
-	glBindVertexArray(0);
 }

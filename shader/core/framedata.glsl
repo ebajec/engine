@@ -17,6 +17,8 @@ struct viewdata_t
 	mat4 v;
 	mat4 pv;
 	vec3 center;
+
+	ivec2 resolution; 
 };
 
 layout (std140, binding = FRAMEDATA_BINDING) uniform FrameData

@@ -281,14 +281,14 @@ void App::terminate()
 void App::imgui()
 {
 	ImGuiViewport* vp = ImGui::GetMainViewport();
-	ImVec2 workPos  = vp->WorkPos;
-	ImVec2 workSize = vp->WorkSize;
+	ImVec2 work_pos  = vp->WorkPos;
+	ImVec2 work_size = vp->WorkSize;
 
-	float panelW = 250.f;
+	float panel_w = 200.f;
 
 	ImGui::SetNextWindowPos(ImVec2(0,0),ImGuiCond_Always);
-	ImGui::SetNextWindowPos(workPos);
-	ImGui::SetNextWindowSize(ImVec2(panelW, workSize.y));
+	ImGui::SetNextWindowPos(work_pos);
+	ImGui::SetNextWindowSize(ImVec2(panel_w, work_size.y));
 
 	ImGui::Begin("Editor"); 
 

@@ -1,30 +1,27 @@
+
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
 
-layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
-
-layout (std140, binding = 1) uniform Uniforms
-{
-	vec2 cursor;
-	uint flags;
-	float u_s;
-};
+#include "pde.glsl"
 
 layout (binding = 2) uniform sampler2D img_in;
-layout (rgba8, binding = 3) writeonly uniform image2D img_out;
+layout (rgba32f, binding = 3) writeonly uniform image2D img_out;
+
+layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
 vec2 swirl(vec2 p, vec2 c)
 {
 	vec2 r = p - vec2(c);
 
-	r *= 20;
-
 	return (-0.1*r + vec2(r.y,-r.x))/(0.1 + dot(r,r));
 }
 
+//---------------------------------------------------------------------------
+// Advect step
+
 vec2 v_field(vec2 p)
 {
-	return texture(img_in, p/vec2(textureSize(img_in,0))).zw;
+	return 20.*texture(img_in, p/vec2(textureSize(img_in,0))).zw;
 }
 
 vec2 RK4(vec2 x0, float dt)
@@ -37,7 +34,8 @@ vec2 RK4(vec2 x0, float dt)
 	return x0 + (1./6.) * dt * (k1 + 2.*k2 + 2.*k3 + k4);
 }
 
-void main() {
+void main()
+{
     uvec3 id = gl_GlobalInvocationID;
 	ivec2 out_size = imageSize(img_out);
 
@@ -46,11 +44,12 @@ void main() {
 
 	ivec2 ipos = ivec2(id.xy);
 
-	vec2 pos = vec2(id.xy);
+	vec2 pos = vec2(id.xy) + vec2(0.5);
 
 	// advected value
-	vec2 advected = RK4(pos, 0.005);
-	vec4 f_advect = texture(img_in, pos);
+	vec2 adv = RK4(pos, 1.f);
+	vec4 f_advect = texture(img_in, adv/vec2(textureSize(img_in,0)));
+
 	vec4 f_curr = texelFetch(img_in, ivec2(id.xy), 0);
 	vec4 f_final = vec4(f_advect.xy, f_curr.zw);
 

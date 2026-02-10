@@ -100,7 +100,7 @@ struct App
 	static void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 };
 
-static inline void glfw_wasd_to_motion(glm::dvec3& dir, int key, int action) 
+static inline void glfw_wasd_to_motion(glm::vec3& dir, int key, int action) 
 {
 	static const int key_fwd = GLFW_KEY_W;
 	static const int key_bkwd = GLFW_KEY_S; 

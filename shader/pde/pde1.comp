@@ -1,0 +1,149 @@
+#version 430 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "pde.glsl"
+
+layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+layout (binding = 2) uniform sampler2D img_in;
+layout (rgba32f, binding = 3) writeonly uniform image2D img_out;
+
+//---------------------------------------------------------------------------
+// Update step
+
+vec4 get_cell_0_bd(ivec2 p)
+{
+	ivec2 size = textureSize(img_in, 0);
+
+	if (p.x <= 0 || p.y <= 0 || p.x + 1 >= size.x || p.y + 1 >= size.y)
+		return ivec4(0);
+
+	return texelFetch(img_in, p, 0);
+}
+
+vec4 get_cell_wrap(ivec2 p)
+{
+	ivec2 size = textureSize(img_in, 0);
+
+	p = ivec2(mod(mod(p, size) + size, size));
+
+	return texelFetch(img_in, p, 0);
+}
+
+
+vec4 get_cell(ivec2 p)
+{
+	return get_cell_0_bd(p);
+	ivec2 size = textureSize(img_in, 0);
+
+	return texelFetch(img_in, p, 0);
+}
+
+vec4 wave(ivec2 src)
+{
+	vec4 f   = get_cell(src);
+	vec4 f_r = get_cell(src + ivec2(1,0));
+	vec4 f_l = get_cell(src + ivec2(-1,0));
+	vec4 f_t = get_cell(src + ivec2(0,1));
+	vec4 f_b = get_cell(src + ivec2(0,-1));
+
+	vec4 dfdu = 0.5*(f_r - f_l);
+	vec4 dfdv = 0.5*(f_t - f_b);
+	vec4 lap = f_r + f_l + f_t + f_b - 4*f;
+
+	vec4 f_final = f;
+
+	float c = u_wave_c;
+	float dt = 0.05;
+
+	float df2dt2 = c*c*lap.x + 5*lap.y;
+
+	float dfdt = f.y - 0.05*f.x;
+
+	f_final.y += dt*df2dt2; 
+	f_final.x += dfdt*dt + 0.5*dt*dt*df2dt2; 
+
+	return f_final;
+}
+
+vec4 advection(ivec2 src)
+{
+	vec4 f = get_cell(src);
+	vec4 f_r = get_cell(src + ivec2(1,0));
+	vec4 f_l = get_cell(src + ivec2(-1,0));
+	vec4 f_t = get_cell(src + ivec2(0,1));
+	vec4 f_b = get_cell(src + ivec2(0,-1));
+
+	vec4 dfdu = 0.5*(f_r - f_l);
+	vec4 dfdv = 0.5*(f_t - f_b);
+
+	vec4 lap = f_r + f_l + f_t + f_b - 4*f;
+	vec4 f_final = f;
+
+	vec2 grad = vec2(dfdu.x, dfdv.x);
+	vec2 rot = vec2(grad.y, -grad.x);
+
+	float dt = 0.05;
+
+	vec2 dfzwdt = 
+		u_gradient*grad + 
+		u_conj_gradient*rot + 
+		u_laplacian*lap.zw - 
+		u_decay*f.zw; 
+
+	f_final.zw += dt * dfzwdt;
+
+	return f_final;
+}
+
+float gaussian(vec2 x, vec2 c, float sigma)
+{
+	vec2 v = x - c;
+	float r_sq = dot(v,v); 
+	return sigma*exp(-sigma*sigma*r_sq);
+}
+
+vec2 d_gaussian(vec2 x, vec2 c, float sigma)
+{
+	vec2 v = x - c;
+	float r_sq = dot(v,v); 
+
+	float sigma_sq = sigma*sigma;
+
+	float f = sigma*exp(-sigma_sq*r_sq);
+
+	return -2*sigma_sq*v*f;
+}
+
+void main()
+{
+    uvec3 id = gl_GlobalInvocationID;
+	ivec2 out_size = imageSize(img_out);
+
+	if (id.x >= out_size.x || id.y >= out_size.y)
+		return;
+
+	ivec2 src = ivec2(id.xy);
+
+	vec4 f_final = wave(src);
+	f_final.zw = advection(src).zw;
+
+	if (bool(flags)) {
+		float power = 0.1;
+		float sigma = 0.5f;
+
+		vec2 pos = src + vec2(0.5);
+		vec2 vel = (cursor1 - cursor2)*out_size;
+
+		float f = power*gaussian(pos, cursor2*out_size, sigma);
+		vec2 f_grad = power*d_gaussian(pos, cursor2*out_size, sigma);
+
+		f_final.x += f;
+		f_final.y += dot(vel,f_grad);
+	}
+
+	ivec2 dst = src;
+	imageStore(img_out, dst, f_final);
+}
+
+

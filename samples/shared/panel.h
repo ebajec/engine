@@ -4,6 +4,7 @@
 #include <ev2/device.h>
 #include <ev2/render.h>
 
+#include <glm/mat2x3.hpp>
 #include <glm/vec2.hpp>
 
 #include <string>
@@ -28,6 +29,7 @@ class Panel
 
 	bool m_hovered : 1 = false;
 	bool m_content_selected : 1 = false;
+	bool m_focused : 1 = false;
 public:
 
 	ev2::RenderTargetID get_target();
@@ -35,6 +37,7 @@ public:
 	glm::ivec2 get_size();
 	glm::ivec2 get_pos();
 
+	bool is_focused();
 	bool is_hovered();
 	bool is_content_selected();
 

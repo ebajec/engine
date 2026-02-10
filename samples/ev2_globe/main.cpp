@@ -35,7 +35,7 @@ struct Simulation
 	float near = 0.01f, far = 10.f, fov = 0.5*PIf;
 
 	SphericalMotionCamera control;
-	glm::dvec3 keydir = glm::dvec3(0);
+	glm::vec3 keydir = glm::vec3(0);
 
 	int init();
 	int update();
@@ -110,7 +110,7 @@ int Simulation::update()
 	if (app->input.mouse_mode == GLFW_CURSOR_DISABLED) 
 		control.rotate(-delta.y,delta.x);
 
-	control.move((double)app->input.dt*speed*keydir);
+	control.move(app->input.dt*glm::dvec3(speed*keydir));
 
 
 	return App::OK;

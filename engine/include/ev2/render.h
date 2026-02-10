@@ -84,6 +84,8 @@ enum DrawMode
 };
 
 void cmd_bind_gfx_pipeline(RecorderID rec, GraphicsPipelineID h);
+void cmd_bind_index_buffer(RecorderID rec, BufferID buf);
+
 void cmd_draw_screen_quad(RecorderID rec); 
 
 };

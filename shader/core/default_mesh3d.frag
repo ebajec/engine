@@ -42,14 +42,20 @@ void main()
 {
 	float t = ftime();
 
-	//vec2 uv = polar(frag_uv);
 	vec2 uv = frag_uv;
 	vec4 c0 = texture(u_tex,uv);
 
-	float r = length(frag_pos - u_view.center);
-	r /= 80;
+	vec3 sun = normalize(vec3(0.2,0.2,1));
+	vec3 n = frag_normal;
 
-	c0 *= exp(-r*r*r*r);
+	float f = 0.2 + 0.8*clamp(dot(n,sun),0,1);
 
-	FragColor = c0; 
+	vec2 vel = c0.zw;
+
+	float intensity = length(vel) + abs(c0.y); 
+
+	vec3 base = 0.2*vec3(1);
+	vec3 c = vec3(tanh(intensity),0,0) + base;
+
+	FragColor = vec4(f*c,1); 
 }

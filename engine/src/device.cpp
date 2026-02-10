@@ -495,10 +495,12 @@ UploadPool::alloc_result_t UploadPool::alloc(size_t _bytes, size_t _align)
 		}
 
 		if (entries[tail_idx].start != tail) {
-			log_error("cap=%lld, entries[tail_idx].start=%lld, tail=%lld", 
+			log_error("cap=%lld, entries[tail_idx].start=%lld, tail=%lld, head=%lld", 
 			 	(unsigned long long)capacity,
 				(unsigned long long)entries[tail_idx].start,
-				(unsigned long long)tail);
+				(unsigned long long)tail,
+				(unsigned long long)head
+			 );
 
 			assert(entries[tail_idx].start == tail);
 		}

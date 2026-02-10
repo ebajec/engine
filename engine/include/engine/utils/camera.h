@@ -201,15 +201,17 @@ struct MotionCamera
 	double phi;
 	double tht;
 
-	static MotionCamera from_normal(glm::dvec3 n, glm::dvec3 p) 
+	static MotionCamera look_at(glm::dvec3 center, glm::dvec3 eye, glm::dvec3 up) 
 	{
 		MotionCamera cam {};
+
+		glm::dvec3 n = glm::normalize(eye - center);
 
 		cam.phi = atan2(n.z,sqrt(pow(n.x,2) + pow(n.y,2)));
 		cam.tht = atan2(n.y , n.x);
 
-		cam.p = p;
-		cam.up = glm::dvec3(0,0,1);
+		cam.p = eye;
+		cam.up = up;
 
 		return cam;
 	}
@@ -232,7 +234,7 @@ struct MotionCamera
 		tht = fmod(tht + dtht, TWOPI);
 	};
 
-	void update(glm::dvec3 vloc) 
+	void move(glm::dvec3 motion) 
 	{
 		double sin_tht = sin(tht);
 		double cos_tht = cos(tht);
@@ -241,13 +243,9 @@ struct MotionCamera
 		glm::dvec3 Y = glm::vec3(-sin_tht, cos_tht, 0);
 		glm::dvec3 Z = glm::vec3(0,0,1);
 
-		glm::dvec3 V = X*vloc.x + Y*vloc.y + Z*vloc.z;
-		double norm = glm::length(V);
 
-		glm::dvec3 v = norm > DBL_EPSILON ? V/norm : glm::dvec3(0);
-
-		v *= 0.1;
-
+		glm::dvec3 V = X*motion.x + Y*motion.y + Z*motion.z;
+		glm::dvec3 v = V;
 		p += v;
 	}
 };

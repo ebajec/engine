@@ -1,0 +1,8 @@
+
+shaders:
+  vert: shader/heightmap.vert.spv
+  frag: shader/default_mesh3d.frag.spv
+states:
+  cull: front
+  depth_test: less_equal
+  blend: opaque
