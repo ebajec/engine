@@ -1,0 +1,108 @@
+
+#version 430 core
+#extension GL_GOOGLE_include_directive : require
+
+#define JACOBI_ITERATIONS 4
+#define GROUPS 16
+#define OUTPUT_W (GROUPS - 2*JACOBI_ITERATIONS)
+
+// solving for H(lhs) = rhs
+
+layout (r32f, binding = 1) readonly uniform image2D in_lhs;
+layout (r32f, binding = 2) readonly uniform image2D in_rhs;
+
+layout (r32f, binding = 3) writeonly uniform image2D out_lhs;
+
+layout (local_size_x = GROUPS, local_size_y = GROUPS, local_size_z = 1) in;
+
+shared float block[GROUPS][GROUPS];
+
+float LHS(ivec2 idx)
+{
+	ivec2 size = imageSize(in_lhs);
+	if (clamp(idx, ivec2(0), size) != idx)
+		return 0;
+	return imageLoad(in_lhs, idx).x;
+}
+
+float jacobi_it(ivec2 idx, float rhs, float h)
+{
+	ivec2 l_idx = clamp(idx + ivec2(-1,0), ivec2(0), ivec2(GROUPS - 1));
+	ivec2 r_idx = clamp(idx + ivec2(1,0), ivec2(0), ivec2(GROUPS - 1));
+	ivec2 t_idx = clamp(idx + ivec2(0,1), ivec2(0), ivec2(GROUPS - 1));
+	ivec2 b_idx = clamp(idx + ivec2(0,-1), ivec2(0), ivec2(GROUPS - 1));
+
+	float l = block[l_idx.x][l_idx.y];
+	float r = block[r_idx.x][r_idx.y];
+	float t = block[t_idx.x][t_idx.y];
+	float b = block[b_idx.x][b_idx.y];
+
+	return 0.25*(l + r + t + b - h*h*rhs);
+}
+
+float upsample_rhs(ivec2 idx)
+{
+	ivec2 size = imageSize(in_rhs);
+
+	if (idx.x < 0 || idx.y < 0 || idx.x >= size.x || idx.y >= size.y) {
+		return 0;
+	}
+
+	float l = imageLoad(in_rhs, clamp(idx + ivec2(-1, 0), ivec2(0), size) >> 1).x;
+	float r = imageLoad(in_rhs, clamp(idx + ivec2(1, 0) , ivec2(0), size) >> 1).x;
+	float t = imageLoad(in_rhs, clamp(idx + ivec2(0, 1) , ivec2(0), size) >> 1).x;
+	float b = imageLoad(in_rhs, clamp(idx + ivec2(0, -1), ivec2(0), size) >> 1).x;
+
+	return 0.25 * (l + r + t + b);
+}
+
+float fetch_and_correct_lhs(ivec2 grid_idx, float rhs, float h)
+{
+	return LHS(grid_idx) + rhs;
+}
+
+void main()
+{
+	ivec2 size = imageSize(in_lhs);
+
+	// index in local block
+	ivec2 idx = ivec2(gl_LocalInvocationID.xy);
+
+	// index relative to output region 
+	// I.e., for groups = 8, j = 2
+	// i i i i i i i i            
+	// i i i i i i i i                             
+	// i i o o o o i i                             
+	// i i o o o o i i                             
+	// i i o o o o i i                             
+	// i i o o o o i i                             
+	// i i i i i i i i                             
+	// i i i i i i i i                             
+	ivec2 out_idx = idx - ivec2(JACOBI_ITERATIONS); 
+
+	ivec2 grid_idx = 
+		ivec2(gl_WorkGroupID.xy) * (GROUPS - 2*JACOBI_ITERATIONS) + out_idx;
+
+	const float h = 1.f;
+
+	float rhs = upsample_rhs(grid_idx);
+
+	// Load the stuff into shared memory
+	block[idx.x][idx.y] = fetch_and_correct_lhs(grid_idx, rhs, h); 
+	barrier();
+
+	float lhs;
+	for (int i = 0; i < JACOBI_ITERATIONS - 1; ++i) {
+		lhs = jacobi_it(idx, rhs, h);
+		barrier();
+		block[idx.x][idx.y] = lhs;
+	}
+	
+	bool outside = out_idx.x < 0 && out_idx.y < 0 && 
+		out_idx.x >= OUTPUT_W  && out_idx.y >= OUTPUT_W; 
+
+	if (outside)
+		return;
+
+	imageStore(out_lhs, grid_idx, vec4(lhs,0,0,0));
+}
