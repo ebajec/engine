@@ -48,7 +48,7 @@ void main()
 
 	vec2 uv = vec2(tx, ty)/vec2(size);
 
-	float scale = 0.2f;
+	float scale = 1.f;
 	vec4 tex = texture(u_tex, uv)*scale; 
 
 	tgrad_t grad = tex_grad2(uv);

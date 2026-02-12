@@ -19,5 +19,6 @@ target_link_libraries(samples-common PUBLIC
     OpenGL::GL
     glm::glm)
 
+add_subdirectory(ev2_fluid)
 add_subdirectory(ev2_test)
 add_subdirectory(ev2_globe)

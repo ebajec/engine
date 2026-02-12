@@ -158,4 +158,14 @@ uint64_t get_texture_gpu_handle(Device *dev, TextureID h)
 	return img->id;
 }
 
+void get_texture_dims(Device *dev, TextureID h_tex, uint32_t *w, uint32_t *h, uint32_t*d)
+{
+	Texture *tex = dev->get_texture(h_tex);
+	Image *img = dev->get_image(tex->img);
+
+	if (w) *w = img->w;
+	if (h) *h = img->h;
+	if (d) *d = img->d;
+}
+
 };

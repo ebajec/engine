@@ -58,7 +58,7 @@ vec4 wave(ivec2 src)
 
 	float df2dt2 = c*c*lap.x + 5*lap.y;
 
-	float dfdt = f.y - 0.05*f.x;
+	float dfdt = f.y - 0.01*f.x;
 
 	f_final.y += dt*df2dt2; 
 	f_final.x += dfdt*dt + 0.5*dt*dt*df2dt2; 
@@ -68,11 +68,11 @@ vec4 wave(ivec2 src)
 
 vec4 advection(ivec2 src)
 {
-	vec4 f = get_cell(src);
-	vec4 f_r = get_cell(src + ivec2(1,0));
-	vec4 f_l = get_cell(src + ivec2(-1,0));
-	vec4 f_t = get_cell(src + ivec2(0,1));
-	vec4 f_b = get_cell(src + ivec2(0,-1));
+	vec4 f = get_cell_wrap(src);
+	vec4 f_r = get_cell_wrap(src + ivec2(1,0));
+	vec4 f_l = get_cell_wrap(src + ivec2(-1,0));
+	vec4 f_t = get_cell_wrap(src + ivec2(0,1));
+	vec4 f_b = get_cell_wrap(src + ivec2(0,-1));
 
 	vec4 dfdu = 0.5*(f_r - f_l);
 	vec4 dfdv = 0.5*(f_t - f_b);
@@ -83,6 +83,8 @@ vec4 advection(ivec2 src)
 	vec2 grad = vec2(dfdu.x, dfdv.x);
 	vec2 rot = vec2(grad.y, -grad.x);
 
+	float div_v = dfdu.z + dfdv.w;
+
 	float dt = 0.05;
 
 	vec2 dfzwdt = 
@@ -92,6 +94,11 @@ vec4 advection(ivec2 src)
 		u_decay*f.zw; 
 
 	f_final.zw += dt * dfzwdt;
+
+	float dfxdt = 2.*lap.x + -0.5*f.x - 20.*div_v;
+
+	f_final.x += dt * dfxdt;
+
 
 	return f_final;
 }
@@ -129,8 +136,8 @@ void main()
 	f_final.zw = advection(src).zw;
 
 	if (bool(flags)) {
-		float power = 0.1;
-		float sigma = 0.5f;
+		float power = 1.0f;
+		float sigma = 0.03f;
 
 		vec2 pos = src + vec2(0.5);
 		vec2 vel = (cursor1 - cursor2)*out_size;

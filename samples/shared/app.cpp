@@ -64,6 +64,13 @@ void print_glfw_platform()
 	printf("\x1b[32mGLFW is running on %s\x1b[0m\n", s); 
 }
 
+App::App(int width, int height, const char *title)
+{
+	win.width = width;
+	win.height = height;
+	win.title = title;
+}
+
 void App::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
 	ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);

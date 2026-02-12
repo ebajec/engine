@@ -111,6 +111,6 @@ void main()
 		pix.y < padding || pix.y > size.y - padding)) {
 		FragColor = vec4(0.5,0.5,0.5,1);
 	} else {
-		FragColor = mix(5.*color,f*vec4(color),u_s);
+		FragColor = 5.*f*vec4(color);
 	}
 }

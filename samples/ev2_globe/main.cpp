@@ -19,7 +19,7 @@
 #include <memory>
 #include <cstdlib>
 
-struct Simulation
+struct WaveSim
 {
 	App *app;
 	Globe *globe;
@@ -44,7 +44,7 @@ struct Simulation
 	void destroy();
 };
 
-int Simulation::init()
+int WaveSim::init()
 {
 	dev = app->dev;
 
@@ -64,7 +64,7 @@ int Simulation::init()
 	return App::OK;
 }
 
-int Simulation::update()
+int WaveSim::update()
 {
 
 	Camera camera = {
@@ -116,7 +116,7 @@ int Simulation::update()
 	return App::OK;
 }
 
-void Simulation::render()
+void WaveSim::render()
 {
 	ev2::Rect view_rect = { .x0 = 0, .y0 = 0,
 		.w = (uint32_t)app->win.width,
@@ -130,7 +130,7 @@ void Simulation::render()
 	ev2::submit(pass_sync);
 }
 
-void Simulation::destroy()
+void WaveSim::destroy()
 {
 	globe_destroy(globe);
 	ImPlot::DestroyContext();
@@ -139,11 +139,9 @@ void Simulation::destroy()
 int main(int argc, char *argv[])
 {
 	std::unique_ptr<App> app (new App{
-		.win = {
-			.width = 1000,
-			.height = 1000,
-			.title = "ev2"
-		}
+			1000,
+			1000,
+			"ev2"
 	});
 
 	if (app->initialize(argc, argv) != App::OK)
@@ -151,7 +149,7 @@ int main(int argc, char *argv[])
 
 	ev2::Device *dev = app->dev;
 
-	Simulation sim = {
+	WaveSim sim = {
 		.app = app.get()
 	};
 

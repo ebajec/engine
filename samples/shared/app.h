@@ -73,6 +73,8 @@ struct App
 
 	//-----------------------------------------------------------------------------
 	
+	App(int width, int height, const char *title);
+	
 	int resize(int width, int height);
 
 	int update();

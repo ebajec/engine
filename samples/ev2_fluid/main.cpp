@@ -41,42 +41,7 @@ static std::vector<uint32_t> create_quad_indices(uint32_t n)
 	return indices;
 }
 
-
-glm::vec2 swirl(glm::vec2 p, glm::vec2 c)
-{
-	glm::vec2 r = p - glm::vec2(c);
-
-	r *= 20;
-
-	return (0.1f * r + glm::vec2(r.y,-r.x))/(powf(1.f + glm::dot(r,r),1.5));
-}
-
-float urandf()
-{
-	return (float)rand()/(float)RAND_MAX;
-}
-
-glm::vec2 v_cool(glm::vec2 p) {
-	static uint init = 0;
-	static constexpr uint32_t count = 15;
-	static glm::vec2 pos[count];
-
-	if (!init++) {
-		for (uint32_t i = 0; i < count; ++i) {
-			pos[i] = 1.f - 2.f*glm::vec2(urandf(), urandf());
-		}
-	}
-
-	glm::vec2 out = glm::vec2(0);
-
-	for (uint32_t i = 0; i < count; ++i) {
-		out += ((i & 0x1) ? -1.f : 1.f) * swirl(p, pos[i]);	
-	}
-
-	return out;
-}
-
-void upload_img_data(ev2::Device *dev, ev2::ImageID img, 
+uint64_t upload_img_data(ev2::Device *dev, ev2::ImageID img, 
 					 uint32_t w, uint32_t h)
 {
 	size_t size = w * h * sizeof(glm::vec4);
@@ -93,13 +58,7 @@ void upload_img_data(ev2::Device *dev, ev2::ImageID img,
 
 	for (uint32_t i = 0; i < h; ++i) {
 		for (uint32_t j = 0; j < w; ++j) {
-			glm::vec2 p = glm::vec2(1.f) - 2.f*glm::vec2(j,i)/glm::vec2(w,h);
-
-			float f = power*norm*sigma*expf(-sigma*sigma*glm::dot(p,p));
-
-			glm::vec2 v = 0.f*v_cool(p);
-	  	
-			pix[i*w + j] = glm::vec4(f*p.x*p.x,f*p.y*p.y,v); 
+			pix[i*w + j] = glm::vec4(0.f); 
 		}
 	}
 
@@ -111,7 +70,7 @@ void upload_img_data(ev2::Device *dev, ev2::ImageID img,
 		.h = h,
 	};
 
-	ev2::commit_image_uploads(dev, uc, img, &upload, 1);
+	return ev2::commit_image_uploads(dev, uc, img, &upload, 1);
 }
 
 struct WaveSim;
@@ -119,15 +78,17 @@ struct WaveSim;
 struct HeightmapViewerPanel
 {
 	App *app;
-	WaveSim *sim;
 	std::unique_ptr<Panel> panel;
 
 	MotionCamera control;
-	glm::vec3 keydir;
+	glm::vec3 keydir = glm::vec3(0,0,0);
 
 	struct RenderData {
 		glm::mat4 proj = glm::mat4(1.f);
 		glm::mat4 view = glm::mat4(1.f);
+
+		uint32_t w = 0, h = 0;
+		ev2::TextureID tex;
 
 		ev2::ViewID camera;
 		ev2::BufferID ibo; 
@@ -135,7 +96,9 @@ struct HeightmapViewerPanel
 		ev2::DescriptorSetID descriptors;
 	} rd;
 
-	int init(WaveSim *sim, ev2::Device *dev);
+	int set_texture(ev2::Device *dev, ev2::TextureID tex);
+
+	int init(App *app, ev2::Device *dev, ev2::TextureID tex);
 	int update(ev2::Device *dev);
 	void render(ev2::Device *dev);
 	void destroy(ev2::Device *dev);
@@ -144,7 +107,6 @@ struct HeightmapViewerPanel
 struct TextureViewerPanel
 {
 	App *app;
-	WaveSim *sim;
 
 	std::unique_ptr<Panel> panel;
 
@@ -153,8 +115,6 @@ struct TextureViewerPanel
 
 		ev2::GraphicsPipelineID screen_quad;
 		ev2::DescriptorSetID screen_quad_set;
-		ev2::ImageAssetID saro_img;
-		ev2::TextureID saro_tex;
 
 		ev2::BindingSlot tex_slot;
 
@@ -167,7 +127,9 @@ struct TextureViewerPanel
 
 	glm::vec2 world_cursor;
 
-	int init(WaveSim *sim, ev2::Device *dev);
+	int set_texture(ev2::Device *dev, ev2::TextureID tex);
+
+	int init(App *app, ev2::Device *dev, ev2::TextureID tex);
 	int update(ev2::Device *dev);
 	void render(ev2::Device *dev);
 	void destroy(ev2::Device *dev);
@@ -177,28 +139,22 @@ struct TextureViewerPanel
 
 struct WaveSim
 {
-	App *app;
-
-	TextureViewerPanel panel_2d;
-	HeightmapViewerPanel panel_3d;
-
 	ev2::ComputePipelineID sim_pipelines[2];
 
 	uint32_t grid_w, grid_h;
 
-	struct {
-		glm::vec2 cursor1 = glm::vec2(0);
-		glm::vec2 cursor2 = glm::vec2(0);
-		uint32_t active;
-		float s;
+	struct alignas(16) {
+		alignas(8) glm::vec2 cursor1 = glm::vec2(0);
+		alignas(8) glm::vec2 cursor2 = glm::vec2(0);
 
-		// wave speed
-		float c = 12.f;
+		float c = 12.f;  // wave speed
 		float gradient = -0.0;
 		float conj_gradient = 5;
 		float laplacian = 0.9;
-		float decay = 0.8;
-	} uniforms;
+		float decay = 2.f;
+
+		uint32_t active = 0;
+	} uniforms {};
 
 	ev2::BufferID ubo;
 
@@ -215,15 +171,27 @@ struct WaveSim
 
 	int init(ev2::Device *dev);
 	int update(ev2::Device *dev);
-
-	void render(ev2::Device *dev);
 	void destroy(ev2::Device *dev);
 };
 
-int HeightmapViewerPanel::init(WaveSim *sim_, ev2::Device *dev)
+struct FluidApp : public App
 {
-	sim = sim_;
-	app = sim->app;
+	std::unique_ptr<WaveSim> sim;
+	std::unique_ptr<TextureViewerPanel> texture_panel;
+	std::unique_ptr<HeightmapViewerPanel> heightmap_panel;
+
+	FluidApp() : App(1200, 500, "fluid") {
+	}
+
+	int initialize(int argc, char **argv);
+	int update();
+	void render();
+	void destroy();
+};
+
+int HeightmapViewerPanel::init(App *app_, ev2::Device *dev, ev2::TextureID tex)
+{
+	app = app_;
 
 	panel = std::make_unique<Panel>(dev, "3D view", 700, 0, 500, 500);
 
@@ -239,24 +207,6 @@ int HeightmapViewerPanel::init(WaveSim *sim_, ev2::Device *dev)
 	control = MotionCamera::look_at(glm::vec3(0,0,0), glm::dvec3(1,1,1), glm::dvec3(0,0,1));
 
 	//-----------------------------------------------------------------------------
-	// Prepare index buffer
-	std::vector<uint32_t> indices = create_quad_indices(sim->grid_w);
-
-	size_t indices_size = indices.size()*sizeof(uint32_t);
-
-	rd.ibo = ev2::create_buffer(dev, indices_size);
-
-	ev2::UploadContext uc = ev2::begin_upload(dev, indices_size, alignof(uint32_t)); 
-	memcpy(uc.ptr, indices.data(), indices_size); 
-	ev2::BufferUpload up = {
-		.src_offset = 0,
-		.dst_offset = 0, 
-		.size = indices_size
-	};
-	uint64_t sync = ev2::commit_buffer_uploads(dev, uc, rd.ibo, &up, 1);
-	ev2::wait_complete(dev, sync);
-
-	//-----------------------------------------------------------------------------
 	// Setup pipeline
 	
 	rd.pipeline = ev2::load_graphics_pipeline(dev, "pipelines/heightmap.yaml");
@@ -267,14 +217,45 @@ int HeightmapViewerPanel::init(WaveSim *sim_, ev2::Device *dev)
 	ev2::DescriptorLayoutID layout = ev2::get_graphics_pipeline_layout(dev, rd.pipeline);
 	rd.descriptors = ev2::create_descriptor_set(dev, layout);
 
-	ev2::BindingSlot tex_slot = ev2::find_binding(layout, "u_tex");
-	ev2::bind_texture(dev, rd.descriptors, tex_slot, sim->swap_tex[1]);
+	int result = this->set_texture(dev, tex);
 
-	if (!EV2_VALID(rd.pipeline))
+	if (result)
 		return EXIT_FAILURE;
 
 	return 0;
 }
+
+int HeightmapViewerPanel::set_texture(ev2::Device *dev, ev2::TextureID tex)
+{
+	uint32_t h, w;
+	ev2::get_texture_dims(dev, tex, &w, &h, nullptr);
+
+	//-----------------------------------------------------------------------------
+	// Prepare index buffer
+	if (rd.w != w || rd.h != h) {
+		std::vector<uint32_t> indices = create_quad_indices(w);
+
+		size_t indices_size = indices.size()*sizeof(uint32_t);
+
+		rd.ibo = ev2::create_buffer(dev, indices_size);
+
+		ev2::UploadContext uc = ev2::begin_upload(dev, indices_size, alignof(uint32_t)); 
+		memcpy(uc.ptr, indices.data(), indices_size); 
+		ev2::BufferUpload up = {.size = indices_size};
+		uint64_t sync = ev2::commit_buffer_uploads(dev, uc, rd.ibo, &up, 1);
+		ev2::wait_complete(dev, sync);
+	}
+
+	ev2::DescriptorLayoutID layout = ev2::get_graphics_pipeline_layout(dev, rd.pipeline);
+	ev2::BindingSlot tex_slot = ev2::find_binding(layout, "u_tex");
+	ev2::bind_texture(dev, rd.descriptors, tex_slot, tex);
+
+	rd.w = w;
+	rd.h = h;
+
+	return 0;
+}
+
 int HeightmapViewerPanel::update(ev2::Device *dev)
 {
 	panel->imgui();
@@ -311,7 +292,7 @@ void HeightmapViewerPanel::render(ev2::Device *dev)
 	ev2::cmd_bind_descriptor_set(pass.rec, rd.descriptors);
 	ev2::cmd_bind_index_buffer(pass.rec, rd.ibo);
 
-	uint32_t idx_count = 6 * sim->grid_w * sim->grid_h;
+	uint32_t idx_count = 6 * rd.w * rd.h;
 
 	glDrawElements(GL_TRIANGLES, idx_count, GL_UNSIGNED_INT, nullptr);
 
@@ -335,7 +316,7 @@ glm::vec2 TextureViewerPanel::get_world_cursor_pos()
 	glm::ivec2 panel_pos = panel->get_pos();
 	glm::mat4 screen_to_world = glm::inverse(rd.proj*rd.view);
 
-	glm::vec2 uv = (glm::vec2(sim->app->input.mouse_pos[0]) -
+	glm::vec2 uv = (glm::vec2(app->input.mouse_pos[0]) -
 		glm::vec2(panel_pos.x, panel_pos.y)) / 
 		glm::vec2(panel_size.x, panel_size.y); 
 
@@ -347,10 +328,9 @@ glm::vec2 TextureViewerPanel::get_world_cursor_pos()
 	return glm::vec2(uv); 
 }
 
-int TextureViewerPanel::init(WaveSim *sim_, ev2::Device *dev) 
+int TextureViewerPanel::init(App *app_, ev2::Device *dev, ev2::TextureID tex) 
 {
-	sim = sim_;
-	rd.map = sim_->swap_tex[1];
+	app = app_;
 
 	panel = std::make_unique<Panel>(dev,"Simulation",200,0,500,500);
 
@@ -358,13 +338,6 @@ int TextureViewerPanel::init(WaveSim *sim_, ev2::Device *dev)
 
 	if (!EV2_VALID(rd.screen_quad))
 		return EXIT_FAILURE;
-
-	rd.saro_img = ev2::load_image_asset(dev, "image/saro.jpg");
-	rd.saro_tex = ev2::create_texture(
-		dev,
-		ev2::get_image_resource(dev, rd.saro_img),
-		ev2::FILTER_BILINEAR
-	);
 
 	rd.camera = ev2::create_view(dev, nullptr, nullptr);
 
@@ -374,9 +347,18 @@ int TextureViewerPanel::init(WaveSim *sim_, ev2::Device *dev)
 	rd.screen_quad_set = ev2::create_descriptor_set(dev, screen_quad_layout);
 	rd.tex_slot = ev2::find_binding(screen_quad_layout, "u_tex");
 
-	ev2::BindingSlot ubo_slot = ev2::find_binding(screen_quad_layout, "Uniforms");
+	int result = this->set_texture(dev, tex);
 
-	ev2::bind_buffer(dev, rd.screen_quad_set, ubo_slot, sim->ubo, 0, sizeof(sim->uniforms));
+	if (result)
+		return result;
+
+	return 0;
+}
+
+int TextureViewerPanel::set_texture(ev2::Device *dev, ev2::TextureID tex)
+{
+	ev2::bind_texture(dev, rd.screen_quad_set, rd.tex_slot, tex);
+	rd.map = tex;
 
 	return 0;
 }
@@ -389,15 +371,15 @@ int TextureViewerPanel::update(ev2::Device *dev)
 	glm::ivec2 panel_pos = panel->get_pos();
 
 	float aspect = (float)panel_size.y/(float)panel_size.x;
-	float zoom = pow(2, sim->app->input.scroll.y);
+	float zoom = pow(2, app->input.scroll.y);
 
 	rd.proj = camera_proj_2d(aspect, zoom);
 
 	glm::mat4 p_inv = glm::inverse(rd.proj);
 
 	if (panel->is_content_selected()) {
-		if (sim->app->input.left_mouse_pressed && panel->is_content_selected()) {
-			glm::dvec2 delta = sim->app->input.get_mouse_delta()/(double)panel->get_size().x; 
+		if (app->input.left_mouse_pressed && panel->is_content_selected()) {
+			glm::dvec2 delta = app->input.get_mouse_delta()/(double)panel->get_size().x; 
 			rd.center += 2.f*glm::vec2(glm::vec4(delta.x, -delta.y,0,0)/(aspect*zoom));
 		}
 
@@ -405,14 +387,11 @@ int TextureViewerPanel::update(ev2::Device *dev)
 	}
 		
 	ev2::update_view(dev, rd.camera, glm::value_ptr(rd.view), glm::value_ptr(rd.proj));
-
 	return EXIT_SUCCESS;
 }
 
 void TextureViewerPanel::render(ev2::Device *dev)
 {
-	ev2::bind_texture(dev, rd.screen_quad_set, rd.tex_slot, rd.map);
-
 	glm::ivec2 win_size = panel->get_size(); 
 
 	ev2::RenderTargetID window_target = panel->get_target();
@@ -430,7 +409,6 @@ void TextureViewerPanel::render(ev2::Device *dev)
 void TextureViewerPanel::destroy(ev2::Device *dev)
 {
 	ev2::destroy_descriptor_set(dev, rd.screen_quad_set);
-	ev2::destroy_texture(dev, rd.saro_tex);
 	panel.reset();
 }
 
@@ -451,7 +429,7 @@ int WaveSim::init(ev2::Device *dev)
 	if (!EV2_VALID(sim_pipelines[1]))
 		return EXIT_FAILURE;
 
-	grid_w = 2048, grid_h = grid_w;
+	grid_w = 256, grid_h = grid_w;
 
 	swap_img[0] = ev2::create_image(dev, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_RGBA32F);
 	swap_img[1] = ev2::create_image(dev, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_RGBA32F);
@@ -468,36 +446,33 @@ int WaveSim::init(ev2::Device *dev)
 		ev2::get_compute_pipeline_layout(dev, sim_pipelines[0]);
 
 	sim0_set = ev2::create_descriptor_set(dev, layout);
+
 	sim1_set = ev2::create_descriptor_set(dev, layout);
 
 	img_in_slot = ev2::find_binding(layout, "img_in");
 	img_out_slot = ev2::find_binding(layout, "img_out");
 
+	ev2::BindingSlot ubo_slot = ev2::find_binding(layout, "Uniforms");
+	ev2::bind_buffer(dev, sim0_set, ubo_slot, ubo, 0, sizeof(uniforms));
+	ev2::bind_buffer(dev, sim1_set, ubo_slot, ubo, 0, sizeof(uniforms));
+
 	//------------------------------------------------------------------------------
 	// Upload some stuff
 
-	upload_img_data(dev,swap_img[0], grid_w, grid_h);
+	uint64_t sync = upload_img_data(dev,swap_img[0], grid_w, grid_h);
 	ev2::flush_uploads(dev);
 
-	int result = panel_2d.init(this, dev); 
-	if (result)
-		return result;
-
-	result = panel_3d.init(this, dev); 
-	if (result)
-		return result;
+	ev2::wait_complete(dev, sync);
 
 	return EXIT_SUCCESS;
 }
 
 int WaveSim::update(ev2::Device *dev)
 {
+	uint64_t sync = 0;
 	ImGui::Begin("Editor");
 
 	if (ImGui::CollapsingHeader("Simulation")) {
-
-		ImGui::SliderFloat("2D shading", &uniforms.s, 0.f, 1.f);
-
 		ImGui::SliderFloat("gradient", &uniforms.gradient, -1.f, 1.f);
 		ImGui::SliderFloat("conj_gradient", &uniforms.conj_gradient, 0.f, 10.f);
 		ImGui::SliderFloat("laplacian", &uniforms.laplacian, 0.f, 1.f);
@@ -506,31 +481,25 @@ int WaveSim::update(ev2::Device *dev)
 		ImGui::SliderFloat("wave_speed", &uniforms.c, 0.f, 12.f);
 
 		if (ImGui::Button("reset")) {
-			upload_img_data(dev,swap_img[0], grid_w, grid_h);
+			sync = upload_img_data(dev,swap_img[0], grid_w, grid_h);
 		}
 	}
 
-	panel_2d.update(dev);
-	panel_3d.update(dev);
-
-	uniforms.cursor1 = uniforms.cursor2;
-	uniforms.cursor2 = panel_2d.get_world_cursor_pos();
-	uniforms.active = 
-		app->input.right_mouse_pressed && 
-		panel_2d.panel->is_content_selected();
-
 	ImGui::End();
-	ev2::UploadContext uc = ev2::begin_upload(dev, sizeof(uniforms), 4);
-	memcpy(uc.ptr, &uniforms, sizeof(uniforms));
+	ev2::UploadContext uc = ev2::begin_upload(dev,
+		sizeof(uniforms), alignof(decltype(uniforms)));
 
+	memcpy(uc.ptr, &uniforms, sizeof(uniforms));
 	ev2::BufferUpload upload = {
 		.src_offset = 0,
 		.dst_offset = 0,
 		.size = sizeof(uniforms),
 	};
 
-	ev2::commit_buffer_uploads(dev, uc, ubo, &upload, 1);
+	sync = ev2::commit_buffer_uploads(dev, uc, ubo, &upload, 1);
 	ev2::flush_uploads(dev);
+
+	ev2::wait_complete(dev, sync);
 
 	int img_A = 0;
 	int img_B = 1;
@@ -569,17 +538,8 @@ int WaveSim::update(ev2::Device *dev)
 	return App::OK;
 }
 
-void WaveSim::render(ev2::Device *dev)
-{
-	panel_2d.render(dev);
-	panel_3d.render(dev);
-}
-
 void WaveSim::destroy(ev2::Device *dev)
 {
-	panel_2d.destroy(dev);
-	panel_3d.destroy(dev);
-
 	ev2::destroy_descriptor_set(dev, sim0_set);
 	ev2::destroy_descriptor_set(dev, sim1_set);
 
@@ -590,37 +550,87 @@ void WaveSim::destroy(ev2::Device *dev)
 	ev2::destroy_image(dev, swap_img[1]);
 }
 
+int FluidApp::initialize(int argc, char **argv)
+{
+	int result = App::initialize(argc, argv);
+	if (result)
+		return result;
+
+	sim.reset(new WaveSim);
+	texture_panel.reset(new TextureViewerPanel);
+	heightmap_panel.reset(new HeightmapViewerPanel);
+
+	result = sim->init(dev);
+	if (result)
+		return result;
+
+	result = texture_panel->init(this, dev, sim->swap_tex[1]); 
+	if (result)
+		return result;
+
+	result = heightmap_panel->init(this, dev, sim->swap_tex[1]); 
+	if (result)
+		return result;
+
+
+	return result;
+}
+int FluidApp::update()
+{
+	int result = EXIT_SUCCESS;
+
+	if ((result = App::update()))
+		return result;
+
+	if ((result = texture_panel->update(dev)))
+		return result;
+
+	if ((result = heightmap_panel->update(dev)))
+		return result;
+
+	if ((result = sim->update(dev)))
+		return result;
+
+	sim->uniforms.cursor1 = sim->uniforms.cursor2;
+	sim->uniforms.cursor2 = texture_panel->get_world_cursor_pos();
+	sim->uniforms.active = 
+		this->input.right_mouse_pressed && 
+		texture_panel->panel->is_content_selected();
+
+	return result;
+}
+void FluidApp::render()
+{
+	texture_panel->render(dev);
+	heightmap_panel->render(dev);
+}
+void FluidApp::destroy()
+{
+	heightmap_panel->destroy(dev);
+	texture_panel->destroy(dev);
+	sim->destroy(dev);
+
+	App::terminate();
+}
+
 int main(int argc, char *argv[])
 {
-	std::unique_ptr<App> app (new App{
-			1200,
-			500,
-			"ev2"
-	});
+	std::unique_ptr<FluidApp> app (new FluidApp{});
 
 	if (app->initialize(argc, argv) != App::OK)
 		return EXIT_FAILURE;
 
 	ev2::Device *dev = app->dev;
 
-	WaveSim sim = {
-		.app = app.get()
-	};
-
-	if (sim.init(dev) != EXIT_SUCCESS)
-		return EXIT_FAILURE;
-
 	while (
-		app->update() == App::OK &&
-		sim.update(dev) == App::OK
+		app->update() == App::OK
 	) {
 		app->begin_frame();
-		sim.render(dev);
+		app->render();
 		app->end_frame();
 	}
 
-	sim.destroy(dev);
-	app->terminate();
+	app->destroy();
 
 	return EXIT_SUCCESS;
 }

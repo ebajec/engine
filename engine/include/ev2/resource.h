@@ -44,8 +44,8 @@ struct ImageUpload
 
 struct BufferUpload
 {
-	size_t src_offset;
-	size_t dst_offset;
+	size_t src_offset = 0;
+	size_t dst_offset = 0;
 	size_t size;
 };
 
@@ -89,6 +89,8 @@ void destroy_image(Device *dev, ImageID img);
 TextureID create_texture(Device *dev, ImageID img, TextureFilter filter);
 void destroy_texture(Device *dev, TextureID tex);
 uint64_t get_texture_gpu_handle(Device *dev, TextureID tex);
+
+void get_texture_dims(Device *dev, TextureID tex, uint32_t *w, uint32_t *h, uint32_t*d);
 
 //------------------------------------------------------------------------------
 // Image assets
