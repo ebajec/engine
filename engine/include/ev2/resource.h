@@ -76,12 +76,15 @@ ev2::Result wait_complete(Device *dev, uint64_t sync);
 
 BufferID create_buffer(Device *dev, size_t size, BufferFlags flags = 0);
 void destroy_buffer(Device *dev, BufferID buf);
+uint64_t get_buffer_gpu_handle(Device *dev, BufferID h);
 
 //--------------------------------------------------------------------
 // Image
 
-ImageID create_image(Device *dev, uint32_t w, uint32_t h, uint32_t d, ImageFormat fmt);
+ImageID create_image(Device *dev, uint32_t w, uint32_t h, uint32_t d, ImageFormat fmt, uint32_t levels = 1);
 void destroy_image(Device *dev, ImageID img);
+
+uint64_t get_image_gpu_handle(Device *dev, ImageID img);
 
 //--------------------------------------------------------------------
 // Texture

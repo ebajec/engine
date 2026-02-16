@@ -44,10 +44,17 @@ void destroy_buffer(Device *dev, BufferID h)
 	dev->buffer_pool->deallocate(id);
 }
 
+uint64_t get_buffer_gpu_handle(Device *dev, BufferID h)
+{
+	Buffer *buf = dev->get_buffer(h);
+	return buf->id;
+}
+
 
 //------------------------------------------------------------------------------
 
-ImageID create_image(Device *dev, uint32_t w, uint32_t h, uint32_t d, ImageFormat fmt)
+ImageID create_image(Device *dev, uint32_t w, uint32_t h, uint32_t d, ImageFormat fmt, 
+					 uint32_t levels)
 {
 	Image img {};
 
@@ -63,10 +70,10 @@ ImageID create_image(Device *dev, uint32_t w, uint32_t h, uint32_t d, ImageForma
 
 	if (d <= 1) {
 		glCreateTextures(GL_TEXTURE_2D, 1, &img.id);
-		glTextureStorage2D(img.id, 1, internal_format, w, h);
+		glTextureStorage2D(img.id, levels, internal_format, w, h);
 	} else {
 		glCreateTextures(GL_TEXTURE_3D, 1, &img.id);
-		glTextureStorage3D(img.id, 1, internal_format, w, h, d);
+		glTextureStorage3D(img.id, levels, internal_format, w, h, d);
 	}
 
 	if (gl_check_err()) {
@@ -88,6 +95,12 @@ void destroy_image(Device *dev, ImageID h)
 	dev->image_pool->deallocate(id);
 }
 
+uint64_t get_image_gpu_handle(Device *dev, ImageID h)
+{
+	Image *img = dev->get_image(h);
+	return img->id;
+}
+
 //------------------------------------------------------------------------------
 // Uploads
 
@@ -107,6 +120,9 @@ UploadContext begin_upload(Device *dev, size_t bytes, size_t align)
 uint64_t commit_buffer_uploads(Device *dev, UploadContext ctx, BufferID buf, 
 							   const BufferUpload *regions, uint32_t count)
 {
+	if (!dev->buffer_pool->check_handle(ResourceID{buf.id}))
+		return 0;
+
 	UploadPool *pool = dev->pool.get();
 
 	return pool->commmit_buffer(ctx.allocation_index, buf, regions, count);
