@@ -84,6 +84,7 @@ uint64_t get_buffer_gpu_handle(Device *dev, BufferID h);
 ImageID create_image(Device *dev, uint32_t w, uint32_t h, uint32_t d, ImageFormat fmt, uint32_t levels = 1);
 void destroy_image(Device *dev, ImageID img);
 
+void get_image_dims(Device *dev, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d);
 uint64_t get_image_gpu_handle(Device *dev, ImageID img);
 
 //--------------------------------------------------------------------

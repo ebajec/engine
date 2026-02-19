@@ -76,12 +76,18 @@ struct TextureBinding
 	ev2::TextureID handle;
 };
 
+struct ImageBinding
+{
+	ev2::ImageID handle;
+};
+
 struct ResourceBinding
 {
 	DescriptorType type;
 	union {
 		BufferBinding buf {};
 		TextureBinding tex;
+		ImageBinding img;
 	};
 };
 

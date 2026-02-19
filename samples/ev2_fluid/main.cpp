@@ -1,3 +1,8 @@
+#include "app.h"
+#include "panel.h"
+#include "texture_viewer.h"
+#include "heightmap_viewer.h"
+
 #include <engine/utils/log.h>
 
 #include <ev2/device.h>
@@ -6,9 +11,6 @@
 
 #include <engine/utils/camera.h>
 #include <engine/utils/geometry.h>
-
-#include "app.h"
-#include "panel.h"
 
 // glm
 #include <glm/mat4x4.hpp>
@@ -20,32 +22,10 @@
 #include <cstdlib>
 #include <cmath>
 
-static std::vector<uint32_t> create_quad_indices(uint32_t n)
-{
-	std::vector<uint32_t> indices;
-	for (uint32_t i = 0; i < n; ++i) {
-		for (uint32_t j = 0; j < n; ++j) {
-			uint32_t in = std::min(i + 1,n - 1);
-			uint32_t jn = std::min(j + 1,n - 1);
-
-			indices.push_back((n) * i  + j); 
-			indices.push_back((n) * in + j); 
-			indices.push_back((n) * in + jn); 
-
-			indices.push_back((n) * i  + j);
-			indices.push_back((n) * in + jn);
-			indices.push_back((n) * i  + jn);
-		}
-	}
-
-	return indices;
-}
-
 uint64_t upload_img_data(ev2::Device *dev, ev2::ImageID img, 
 					 uint32_t w, uint32_t h)
 {
 	size_t size = w * h * sizeof(glm::vec4);
-
 	ev2::UploadContext uc = ev2::begin_upload(dev, size, alignof(glm::vec4));
 
 	glm::vec4 *pix = (glm::vec4*)uc.ptr;
@@ -73,112 +53,539 @@ uint64_t upload_img_data(ev2::Device *dev, ev2::ImageID img,
 	return ev2::commit_image_uploads(dev, uc, img, &upload, 1);
 }
 
-struct WaveSim;
-
-struct HeightmapViewerPanel
+struct PressureSolver
 {
-	App *app;
-	std::unique_ptr<Panel> panel;
+	ev2::ImageID lhs_tmp; // intermediate image
 
-	MotionCamera control;
-	glm::vec3 keydir = glm::vec3(0,0,0);
-
-	struct RenderData {
-		glm::mat4 proj = glm::mat4(1.f);
-		glm::mat4 view = glm::mat4(1.f);
-
-		uint32_t w = 0, h = 0;
-		ev2::TextureID tex;
-
-		ev2::ViewID camera;
-		ev2::BufferID ibo; 
-		ev2::GraphicsPipelineID pipeline;
-		ev2::DescriptorSetID descriptors;
-	} rd;
-
-	int set_texture(ev2::Device *dev, ev2::TextureID tex);
-
-	int init(App *app, ev2::Device *dev, ev2::TextureID tex);
-	int update(ev2::Device *dev);
-	void render(ev2::Device *dev);
-	void destroy(ev2::Device *dev);
-};
-
-struct TextureViewerPanel
-{
-	App *app;
-
-	std::unique_ptr<Panel> panel;
-
-	struct RenderData {
-		ev2::TextureID map;
-
-		ev2::GraphicsPipelineID screen_quad;
-		ev2::DescriptorSetID screen_quad_set;
-
-		ev2::BindingSlot tex_slot;
-
-		glm::vec2 center = glm::vec2(0);
-
-		glm::mat4 proj = glm::mat4(1.f);
-		glm::mat4 view = glm::mat4(1.f);
-		ev2::ViewID camera;
-	} rd;
-
-	glm::vec2 world_cursor;
-
-	int set_texture(ev2::Device *dev, ev2::TextureID tex);
-
-	int init(App *app, ev2::Device *dev, ev2::TextureID tex);
-	int update(ev2::Device *dev);
-	void render(ev2::Device *dev);
-	void destroy(ev2::Device *dev);
-
-	glm::vec2 get_world_cursor_pos();
-};
-
-struct WaveSim
-{
-	ev2::ComputePipelineID sim_pipelines[2];
-
-	uint32_t grid_w, grid_h;
-
-	struct alignas(16) {
-		alignas(8) glm::vec2 cursor1 = glm::vec2(0);
-		alignas(8) glm::vec2 cursor2 = glm::vec2(0);
-
-		float c = 12.f;  // wave speed
-		float gradient = -0.0;
-		float conj_gradient = 5;
-		float laplacian = 0.9;
-		float decay = 2.f;
-
-		uint32_t active = 0;
-	} uniforms {};
-
+	ev2::ImageID R1; // level 0 upto N
+	ev2::ImageID R2; // level 1 upto N + 1
+	
 	ev2::BufferID ubo;
 
-	ev2::ImageID swap_img[2] {};
-	ev2::TextureID swap_tex[2] {};
+	ev2::ComputePipelineID multigrid_down;
+	ev2::ComputePipelineID multigrid_up;
 
-	ev2::DescriptorSetID sim0_set;
-	ev2::DescriptorSetID sim1_set;
+	ev2::DescriptorSetID down_set, up_set;
 
-	int swap_ctr = 0;
+	uint32_t sim_w = 0, sim_h = 0;
 
-	ev2::BindingSlot img_in_slot;
-	ev2::BindingSlot img_out_slot; 
+	uint32_t N = 0;
 
-	int init(ev2::Device *dev);
+	struct {
+		ev2::BindingSlot ubo;
+		ev2::BindingSlot in_lhs;
+		ev2::BindingSlot in_rhs;
+		ev2::BindingSlot R1;
+		ev2::BindingSlot R2;
+		ev2::BindingSlot out_phi;
+	} down_slots;
+
+	struct {
+		ev2::BindingSlot ubo;
+		ev2::BindingSlot out_lhs_final;
+		ev2::BindingSlot in_lhs_final;
+		ev2::BindingSlot R1;
+		ev2::BindingSlot R2;
+	} up_slots;
+
+	struct Uniforms {
+		uint32_t N;
+		uint32_t level;
+	};
+
+
+	int init(ev2::Device *dev, uint32_t w, uint32_t h);
+	void destroy(ev2::Device *dev);
+
+	void v_cycle(ev2::RecorderID rec, ev2::Device *dev, ev2::ImageID phi, ev2::ImageID f);
+};
+
+static inline constexpr bool is_pow2(size_t x)
+{
+	return !x || (((x - 1) & x) == 0);
+}
+
+int PressureSolver::init(ev2::Device *dev, uint32_t w, uint32_t h)
+{
+	sim_w = w; 
+	sim_h = h;
+
+	N = 4;
+
+	if (!is_pow2(sim_w) || !is_pow2(sim_h))
+		return EXIT_FAILURE;
+
+	R1 = ev2::create_image(dev, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, N); 
+	R2 = ev2::create_image(dev, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_32F, N); 
+
+	lhs_tmp = ev2::create_image(dev, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F);
+
+	multigrid_down = ev2::load_compute_pipeline(dev, "shader/multigrid_down.comp.spv");
+
+	ev2::DescriptorLayoutID down_layout = 
+		ev2::get_compute_pipeline_layout(dev, multigrid_down);
+
+	down_slots.ubo = ev2::find_binding(down_layout, "ubo");
+	down_slots.in_lhs = ev2::find_binding(down_layout, "in_lhs");
+	down_slots.in_rhs = ev2::find_binding(down_layout, "in_rhs");
+	down_slots.R1 = ev2::find_binding(down_layout, "R1");
+	down_slots.R2 = ev2::find_binding(down_layout, "R2");
+	down_slots.out_phi = ev2::find_binding(down_layout, "out_phi");
+
+	multigrid_up = ev2::load_compute_pipeline(dev, "shader/multigrid_up.comp.spv");
+
+	ev2::DescriptorLayoutID up_layout = 
+		ev2::get_compute_pipeline_layout(dev, multigrid_up);
+
+	up_slots.ubo = ev2::find_binding(up_layout, "ubo");
+	up_slots.out_lhs_final = ev2::find_binding(up_layout, "out_lhs_final");
+	up_slots.in_lhs_final = ev2::find_binding(up_layout, "in_lhs_final");
+	up_slots.R1 = ev2::find_binding(up_layout, "R1");
+	up_slots.R2 = ev2::find_binding(up_layout, "R2");
+
+	//--------------------------------------------------------------------
+	// create ubo
+	size_t ubo_size = (N + 1) * sizeof(Uniforms);
+
+	ubo = ev2::create_buffer(dev, ubo_size);
+
+	ev2::UploadContext uc = ev2::begin_upload(dev, ubo_size, alignof(Uniforms));
+	for (uint32_t i = 0; i <= N; ++i) {
+		((Uniforms*)uc.ptr)[i] = Uniforms{
+			.N = N,
+			.level = i,
+		};
+	}
+	ev2::BufferUpload up = {
+		.size = ubo_size
+	};
+	uint64_t sync = ev2::commit_buffer_uploads(dev, uc, ubo, &up, 1);
+
+	return EXIT_SUCCESS;
+}
+
+void PressureSolver::destroy(ev2::Device *dev)
+{
+	ev2::destroy_image(dev, R1);
+	ev2::destroy_image(dev, R2);
+
+	ev2::destroy_buffer(dev, ubo);
+}
+
+void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::Device *dev, ev2::ImageID lhs, ev2::ImageID rhs)
+{
+	GLuint phi_final_id = ev2::get_image_gpu_handle(dev, lhs);
+	GLuint f_id = ev2::get_image_gpu_handle(dev, rhs);
+	GLuint phi_mid_id = ev2::get_image_gpu_handle(dev, lhs_tmp);
+
+	GLuint R1_id = ev2::get_image_gpu_handle(dev, R1);
+	GLuint R2_id = ev2::get_image_gpu_handle(dev, R2);
+
+	GLuint ubo_id = ev2::get_buffer_gpu_handle(dev, ubo);
+
+	const uint32_t output_w = 16 - 8;
+
+	//-------------------------------------------------------------------
+	// 'down' stage
+
+	glBindImageTexture(down_slots.in_lhs.id, phi_final_id, 
+		0, GL_FALSE, 0, GL_READ_ONLY, GL_R32F
+	);
+	glBindImageTexture(down_slots.in_rhs.id, f_id, 
+		0, GL_FALSE, 0, GL_READ_ONLY, GL_R32F
+	);
+	glBindImageTexture(down_slots.out_phi.id, phi_mid_id, 
+		0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F
+	);
+
+	for (uint32_t i = 0; i < N; ++i) {
+		glBindImageTexture(down_slots.R1.id + i, R1_id,
+			i, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+		glBindImageTexture(down_slots.R2.id + i, R2_id,
+			i, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
+	}
+
+	ev2::cmd_bind_compute_pipeline(rec, multigrid_down);
+
+
+	// Downwards pass has 0 upto N passes inclusive: One pass of jacobi iterations
+	// on original, then N smooth + downsample passes on the residuals
+
+	uint32_t tw = sim_w;
+	uint32_t th = sim_h;
+	for (uint32_t i = 0; i <= N; ++i) {
+		glBindBufferRange(GL_UNIFORM_BUFFER, down_slots.ubo.id, ubo_id, 
+					i*sizeof(Uniforms), sizeof(Uniforms));
+		ev2::cmd_dispatch(rec, tw/output_w, th/output_w, 1);
+		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+		tw /= 2;
+		th /= 2;
+	}
+
+	//-------------------------------------------------------------------
+	// 'up' stage
+	
+	glBindImageTexture(up_slots.out_lhs_final.id, phi_final_id,
+		0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+
+	glBindImageTexture(up_slots.in_lhs_final.id, phi_mid_id,
+		0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+
+
+	for (uint32_t i = 0; i < N; ++i) {
+		glBindImageTexture(up_slots.R1.id + i, R1_id,
+			i, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+		glBindImageTexture(up_slots.R2.id + i, R2_id,
+			i, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+	}
+
+	ev2::cmd_bind_compute_pipeline(rec, multigrid_up);
+
+	tw *= 2;
+	th *= 2;
+	for (uint32_t i = 0; i < N; ++i) {
+		glBindBufferRange(GL_UNIFORM_BUFFER, up_slots.ubo.id, ubo_id, 
+					(N - i - 1)*sizeof(Uniforms), sizeof(Uniforms));
+		tw *= 2;
+		th *= 2;
+		ev2::cmd_dispatch(rec, tw/output_w, tw/output_w, 1);
+
+		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+	}
+}
+
+struct MeanSubtractor
+{
+	ev2::ComputePipelineID downsample16;
+	ev2::ComputePipelineID subtract_img;
+
+	ev2::DescriptorSetID downsample_set[4];
+
+	ev2::DescriptorSetID subtract_set;
+
+	ev2::ImageID downsamples[4] = {};
+	ev2::TextureID final_layer;
+	
+	// Size must be <= 65536 x 65536
+	ev2::ImageID img;
+
+	uint32_t levels;
+	uint32_t width, height;
+	
+	int init(ev2::Device *dev, ev2::ImageID in);
+	int destroy(ev2::Device *dev);
+	void record(ev2::RecorderID rec);
+};
+
+int MeanSubtractor::init(ev2::Device *dev, ev2::ImageID in)
+{
+	img = in;
+
+	downsample16 = ev2::load_compute_pipeline(dev, "shader/downsample16.comp.spv");
+	subtract_img = ev2::load_compute_pipeline(dev, "shader/subtract_img.comp.spv");
+
+	uint32_t w, h;
+	ev2::get_image_dims(dev, in, &w, &h, nullptr);
+
+	width = w;
+	height = h;
+	levels = (uint32_t)(ceil(std::max(log((double)w),log((double)h))/log(16.)));
+	
+	for (uint32_t i = 0; i < levels; ++i) {
+		w = 1 + (w - 1)/16;
+		h = 1 + (h - 1)/16;
+		downsamples[i] = ev2::create_image(dev, w, h, 1, ev2::IMAGE_FORMAT_32F);
+	}
+
+	final_layer = ev2::create_texture(dev, downsamples[levels - 1], ev2::FILTER_NEAREST);
+
+	{
+		ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(dev, downsample16);
+		ev2::BindingSlot in_slot = ev2::find_binding(layout, "img_in");
+		ev2::BindingSlot out_slot = ev2::find_binding(layout, "img_out");
+
+		downsample_set[0] = ev2::create_descriptor_set(dev, layout);
+
+		ev2::bind_image(dev, downsample_set[0], in_slot, img);
+		ev2::bind_image(dev, downsample_set[0], out_slot, downsamples[0]);
+
+		for (uint32_t i = 1; i < levels; ++i) {
+			downsample_set[i] = ev2::create_descriptor_set(dev, layout);
+			ev2::bind_image(dev, downsample_set[i], in_slot, downsamples[i-1]);
+			ev2::bind_image(dev, downsample_set[i], out_slot, downsamples[i]);
+		}
+	}
+	{
+		ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(dev, subtract_img);
+		ev2::BindingSlot in_slot = ev2::find_binding(layout, "img_in");
+		ev2::BindingSlot out_slot = ev2::find_binding(layout, "img_out");
+
+		subtract_set = ev2::create_descriptor_set(dev, layout);
+
+		ev2::bind_texture(dev, subtract_set, in_slot, final_layer);
+		ev2::bind_image(dev, subtract_set, out_slot, img);
+	}
+
+	return 0;
+}
+int MeanSubtractor::destroy(ev2::Device *dev)
+{
+	for (uint32_t i = 0; i < levels; ++i) {
+		ev2::destroy_image(dev, downsamples[i]);
+		ev2::destroy_descriptor_set(dev, downsample_set[i]);
+	}
+	ev2::destroy_texture(dev, final_layer);
+	ev2::destroy_descriptor_set(dev, subtract_set);
+
+	return 0;
+}
+
+void MeanSubtractor::record(ev2::RecorderID rec)
+{
+	ev2::cmd_bind_compute_pipeline(rec, downsample16);
+
+	uint32_t w = width;
+	uint32_t h = height;
+
+	for (uint32_t i = 0; i < levels; ++i) {
+		ev2::cmd_bind_descriptor_set(rec, downsample_set[i]);
+
+		uint32_t gx = 1 + (w- 1)/16;
+		uint32_t gy = 1 + (h - 1)/16;
+
+		ev2::cmd_dispatch(rec, gx, gy, 1);
+
+		w = 1 + (w-1)/16;
+		h = 1 + (h-1)/16;
+
+		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+	}
+
+	ev2::cmd_bind_compute_pipeline(rec, subtract_img);
+	ev2::cmd_bind_descriptor_set(rec, subtract_set);
+	ev2::cmd_dispatch(rec, 1 + (width-1)/16, 1 + (height-1)/16, 1);
+
+	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+}
+
+struct FluidSim
+{
+	uint32_t grid_w;
+	uint32_t grid_h;
+
+	ev2::ImageID q_img_1; // pre-advection state
+	ev2::ImageID q_img_2; // post-advection state
+
+	ev2::ImageID lap_p_img; // rhs of lap(phi) = f 
+	ev2::ImageID p_img; // pressure
+	
+	ev2::TextureID q_tex_1; // pre-advection state
+	ev2::TextureID q_tex_2; // post-advection state
+
+	ev2::TextureID lap_p_tex; // rhs of lap(phi) = f 
+	ev2::TextureID p_tex; // pressure
+	
+	ev2::BufferID ubo;
+
+	ev2::ComputePipelineID nvs_advect;
+	ev2::ComputePipelineID nvs_pressure;
+	ev2::ComputePipelineID nvs_project;
+
+	ev2::DescriptorSetID advect_set;
+	ev2::DescriptorSetID pressure_set;
+	ev2::DescriptorSetID project_set;
+
+	std::unique_ptr<PressureSolver> pressure_solver;
+	std::unique_ptr<MeanSubtractor> mean_subtractor;
+
+	uint64_t step = 0;
+
+	struct Uniforms {
+		glm::vec2 cursor;
+		glm::vec2 cursor_prev;
+		uint32_t flags;
+	} uniforms;
+
+	int update_advect_set(ev2::Device *dev);
+	int update_pressure_set(ev2::Device *dev);
+	int update_project_set(ev2::Device *dev);
+
+	int init(ev2::Device *dev, uint32_t w, uint32_t h);
 	int update(ev2::Device *dev);
 	void destroy(ev2::Device *dev);
 };
+
+int FluidSim::init(ev2::Device *dev, uint32_t w, uint32_t h)
+{
+	if (!is_pow2(w) || !is_pow2(h))
+		return EXIT_FAILURE;
+
+	grid_w = w;
+	grid_h = h;
+
+	q_img_1 = ev2::create_image(dev, 1 + grid_w, 1 + grid_h, 1, ev2::IMAGE_FORMAT_RGBA32F);
+	q_img_2 = ev2::create_image(dev, 1 + grid_w, 1 + grid_h, 1, ev2::IMAGE_FORMAT_RGBA32F);
+
+	lap_p_img = ev2::create_image(dev, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F);
+	p_img = ev2::create_image(dev, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F);
+
+	q_tex_1 = ev2::create_texture(dev, q_img_1, ev2::FILTER_BILINEAR);
+	q_tex_2 = ev2::create_texture(dev, q_img_2, ev2::FILTER_BILINEAR);
+
+	lap_p_tex = ev2::create_texture(dev, lap_p_img, ev2::FILTER_NEAREST);
+	p_tex = ev2::create_texture(dev, p_img, ev2::FILTER_NEAREST);
+
+	ubo = ev2::create_buffer(dev, sizeof(uniforms));
+
+	pressure_solver.reset(new PressureSolver);
+
+	int result = EXIT_SUCCESS;
+
+	if ((result = pressure_solver->init(dev, w, h))) {
+		return result;
+	}
+
+	mean_subtractor.reset(new MeanSubtractor);
+
+	if ((result = mean_subtractor->init(dev, p_img))) {
+		return result;
+	}
+
+	nvs_advect = ev2::load_compute_pipeline(dev, "shader/nvs_advect.comp.spv");
+	nvs_pressure = ev2::load_compute_pipeline(dev, "shader/nvs_pressure.comp.spv");
+	nvs_project = ev2::load_compute_pipeline(dev, "shader/nvs_project.comp.spv");
+
+	update_advect_set(dev);
+	update_pressure_set(dev);
+	update_project_set(dev);
+
+	return 0;
+}
+
+int FluidSim::update_advect_set(ev2::Device *dev)
+{
+	ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(dev, nvs_advect);
+
+	ev2::DescriptorSetID set = ev2::create_descriptor_set(dev, layout);
+	ev2::bind_texture(dev, set, ev2::find_binding(layout, "q_in"), q_tex_1);
+	ev2::bind_image(dev, set, ev2::find_binding(layout, "q_out"), q_img_2);
+	ev2::bind_buffer(dev, set, ev2::find_binding(layout, "ubo"), ubo, 0, sizeof(Uniforms));
+
+	advect_set = set;
+
+	return 0;
+}
+int FluidSim::update_pressure_set(ev2::Device *dev)
+{
+	ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(dev, nvs_pressure);
+
+	ev2::DescriptorSetID set = ev2::create_descriptor_set(dev, layout);
+	ev2::bind_texture(dev, set, ev2::find_binding(layout, "q_in"), q_tex_2);
+	ev2::bind_image(dev, set, ev2::find_binding(layout, "f_out"), lap_p_img);
+	ev2::bind_buffer(dev, set, ev2::find_binding(layout, "ubo"), ubo, 0, sizeof(Uniforms));
+
+	pressure_set = set;
+
+	return 0;
+}
+int FluidSim::update_project_set(ev2::Device *dev)
+{
+	ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(dev, nvs_project);
+
+	ev2::DescriptorSetID set = ev2::create_descriptor_set(dev, layout);
+	ev2::bind_texture(dev, set, ev2::find_binding(layout, "q_in"), q_tex_2);
+	ev2::bind_texture(dev, set, ev2::find_binding(layout, "p_in"), p_tex);
+	ev2::bind_image(dev, set, ev2::find_binding(layout, "q_out"), q_img_1);
+	ev2::bind_buffer(dev, set, ev2::find_binding(layout, "ubo"), ubo, 0, sizeof(Uniforms));
+
+	project_set = set;
+
+	return 0;
+}
+
+int FluidSim::update(ev2::Device *dev)
+{
+	ev2::UploadContext uc = ev2::begin_upload(dev, sizeof(Uniforms), alignof(Uniforms));
+	memcpy(uc.ptr, &uniforms, sizeof(Uniforms));
+	ev2::BufferUpload up = {.size = sizeof(Uniforms)};
+	uint64_t sync = ev2::commit_buffer_uploads(dev, uc, ubo, &up, 1);
+	ev2::flush_uploads(dev);
+	ev2::wait_complete(dev, sync);
+
+	uint32_t group_size = 16;
+
+	uint32_t gx = 1 + grid_w/group_size;
+	uint32_t gy = 1 + grid_h/group_size;
+
+	ev2::RecorderID rec = ev2::begin_commands(dev);
+
+	ev2::cmd_bind_compute_pipeline(rec, nvs_advect);
+	ev2::cmd_bind_descriptor_set(rec, advect_set);
+	ev2::cmd_dispatch(rec, gx, gy, 1);
+
+	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+	ev2::cmd_bind_compute_pipeline(rec, nvs_pressure);
+	ev2::cmd_bind_descriptor_set(rec, pressure_set);
+	ev2::cmd_dispatch(rec, gx, gy, 1);
+
+	mean_subtractor->record(rec);
+
+	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+	
+	for (int i = 0; i < ((step == 0) ? 128 : 32); ++i) 
+		pressure_solver->v_cycle(rec, dev, p_img, lap_p_img);
+
+	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+
+	ev2::cmd_bind_compute_pipeline(rec, nvs_project);
+	ev2::cmd_bind_descriptor_set(rec, project_set);
+	ev2::cmd_dispatch(rec, gx, gy, 1);
+
+	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+	ev2::end_commands(rec);
+
+	 ++step;
+
+	return 0;
+}
+void FluidSim::destroy(ev2::Device *dev)
+{
+	pressure_solver->destroy(dev);
+	mean_subtractor->destroy(dev);
+
+	ev2::destroy_image(dev, q_img_1);
+	ev2::destroy_image(dev, q_img_2);
+
+	ev2::destroy_image(dev, lap_p_img);
+	ev2::destroy_image(dev, p_img);
+	
+	ev2::destroy_texture(dev, q_tex_1);
+	ev2::destroy_texture(dev, q_tex_2);
+
+	ev2::destroy_texture(dev, lap_p_tex);
+	ev2::destroy_texture(dev, p_tex);
+	
+	ev2::destroy_buffer(dev, ubo);
+
+	ev2::destroy_descriptor_set(dev, advect_set);
+	ev2::destroy_descriptor_set(dev, pressure_set);
+	ev2::destroy_descriptor_set(dev, project_set);
+}
 
 struct FluidApp : public App
 {
-	std::unique_ptr<WaveSim> sim;
-	std::unique_ptr<TextureViewerPanel> texture_panel;
-	std::unique_ptr<HeightmapViewerPanel> heightmap_panel;
+	std::unique_ptr<FluidSim> sim;
+	std::unique_ptr<TextureViewerPanel> f_panel;
+	std::unique_ptr<TextureViewerPanel> phi_panel;
+
+	ev2::TextureID phi_tex;
+	ev2::TextureID f_tex;
+
+	uint64_t m_step = 0;
 
 	FluidApp() : App(1200, 500, "fluid") {
 	}
@@ -189,425 +596,83 @@ struct FluidApp : public App
 	void destroy();
 };
 
-int HeightmapViewerPanel::init(App *app_, ev2::Device *dev, ev2::TextureID tex)
-{
-	app = app_;
-
-	panel = std::make_unique<Panel>(dev, "3D view", 700, 0, 500, 500);
-
-	//-----------------------------------------------------------------------------
-	// Input
-
-	app->insert_key_callback([this](int key, int scancode, int action, int mods){
-		glfw_wasd_to_motion(this->keydir, key, action);
-	});
-
-	rd.camera = ev2::create_view(dev, nullptr, nullptr);
-
-	control = MotionCamera::look_at(glm::vec3(0,0,0), glm::dvec3(1,1,1), glm::dvec3(0,0,1));
-
-	//-----------------------------------------------------------------------------
-	// Setup pipeline
-	
-	rd.pipeline = ev2::load_graphics_pipeline(dev, "pipelines/heightmap.yaml");
-
-	if (!EV2_VALID(rd.pipeline))
-		return EXIT_FAILURE;
-
-	ev2::DescriptorLayoutID layout = ev2::get_graphics_pipeline_layout(dev, rd.pipeline);
-	rd.descriptors = ev2::create_descriptor_set(dev, layout);
-
-	int result = this->set_texture(dev, tex);
-
-	if (result)
-		return EXIT_FAILURE;
-
-	return 0;
-}
-
-int HeightmapViewerPanel::set_texture(ev2::Device *dev, ev2::TextureID tex)
-{
-	uint32_t h, w;
-	ev2::get_texture_dims(dev, tex, &w, &h, nullptr);
-
-	//-----------------------------------------------------------------------------
-	// Prepare index buffer
-	if (rd.w != w || rd.h != h) {
-		std::vector<uint32_t> indices = create_quad_indices(w);
-
-		size_t indices_size = indices.size()*sizeof(uint32_t);
-
-		rd.ibo = ev2::create_buffer(dev, indices_size);
-
-		ev2::UploadContext uc = ev2::begin_upload(dev, indices_size, alignof(uint32_t)); 
-		memcpy(uc.ptr, indices.data(), indices_size); 
-		ev2::BufferUpload up = {.size = indices_size};
-		uint64_t sync = ev2::commit_buffer_uploads(dev, uc, rd.ibo, &up, 1);
-		ev2::wait_complete(dev, sync);
-	}
-
-	ev2::DescriptorLayoutID layout = ev2::get_graphics_pipeline_layout(dev, rd.pipeline);
-	ev2::BindingSlot tex_slot = ev2::find_binding(layout, "u_tex");
-	ev2::bind_texture(dev, rd.descriptors, tex_slot, tex);
-
-	rd.w = w;
-	rd.h = h;
-
-	return 0;
-}
-
-int HeightmapViewerPanel::update(ev2::Device *dev)
-{
-	panel->imgui();
-
-	glm::ivec2 panel_size = panel->get_size();
-
-	float aspect = (float)panel_size.y/(float)panel_size.x;
-
-	rd.proj = camera_proj_3d(PIf/4.f, aspect, 10.f, 0.01f);
-	rd.view = control.get_view();
-	
-	ev2::update_view(dev, rd.camera, glm::value_ptr(rd.view), glm::value_ptr(rd.proj));
-
-	static float speed = 1.f;
-
-	if (app->input.mouse_mode == GLFW_CURSOR_DISABLED && panel->is_focused()) {
-		glm::dvec2 delta = app->input.get_mouse_delta()/(double)panel_size.x;
-		control.rotate(-delta.x, delta.y);
-		control.move(app->input.dt * glm::dvec3(speed*keydir));
-
-	}
-	return 0;
-}
-void HeightmapViewerPanel::render(ev2::Device *dev)
-{
-	glm::ivec2 panel_size = panel->get_size();
-
-	ev2::Rect rect = {
-		.x0 = 0, .y0 = 0,
-		.w = (uint32_t)panel_size.x, .h = (uint32_t)panel_size.y
-	};
-	ev2::PassCtx pass = ev2::begin_pass(dev, panel->get_target(), rd.camera, rect);
-	ev2::cmd_bind_gfx_pipeline(pass.rec, rd.pipeline);
-	ev2::cmd_bind_descriptor_set(pass.rec, rd.descriptors);
-	ev2::cmd_bind_index_buffer(pass.rec, rd.ibo);
-
-	uint32_t idx_count = 6 * rd.w * rd.h;
-
-	glDrawElements(GL_TRIANGLES, idx_count, GL_UNSIGNED_INT, nullptr);
-
-	ev2::SyncID sync = ev2::end_pass(dev, pass);
-}
-
-void HeightmapViewerPanel::destroy(ev2::Device *dev)
-{
-	ev2::destroy_descriptor_set(dev, rd.descriptors);
-	ev2::destroy_buffer(dev, rd.ibo);
-	ev2::destroy_view(dev, rd.camera);
-	panel.reset();
-}
-
-//------------------------------------------------------------------------------
-// 2D panel
-
-glm::vec2 TextureViewerPanel::get_world_cursor_pos()
-{
-	glm::ivec2 panel_size = panel->get_size();
-	glm::ivec2 panel_pos = panel->get_pos();
-	glm::mat4 screen_to_world = glm::inverse(rd.proj*rd.view);
-
-	glm::vec2 uv = (glm::vec2(app->input.mouse_pos[0]) -
-		glm::vec2(panel_pos.x, panel_pos.y)) / 
-		glm::vec2(panel_size.x, panel_size.y); 
-
-	uv = glm::vec2(uv.x, 1.f - uv.y);
-
-	uv = screen_to_world * glm::vec4(2.f*uv - glm::vec2(1.f),0,1);
-	uv = 0.5f * (uv + glm::vec2(1.f));
-
-	return glm::vec2(uv); 
-}
-
-int TextureViewerPanel::init(App *app_, ev2::Device *dev, ev2::TextureID tex) 
-{
-	app = app_;
-
-	panel = std::make_unique<Panel>(dev,"Simulation",200,0,500,500);
-
-	rd.screen_quad = ev2::load_graphics_pipeline(dev, "pipelines/screen_quad.yaml");
-
-	if (!EV2_VALID(rd.screen_quad))
-		return EXIT_FAILURE;
-
-	rd.camera = ev2::create_view(dev, nullptr, nullptr);
-
-	ev2::DescriptorLayoutID screen_quad_layout = 
-		ev2::get_graphics_pipeline_layout(dev, rd.screen_quad);
-
-	rd.screen_quad_set = ev2::create_descriptor_set(dev, screen_quad_layout);
-	rd.tex_slot = ev2::find_binding(screen_quad_layout, "u_tex");
-
-	int result = this->set_texture(dev, tex);
-
-	if (result)
-		return result;
-
-	return 0;
-}
-
-int TextureViewerPanel::set_texture(ev2::Device *dev, ev2::TextureID tex)
-{
-	ev2::bind_texture(dev, rd.screen_quad_set, rd.tex_slot, tex);
-	rd.map = tex;
-
-	return 0;
-}
-
-int TextureViewerPanel::update(ev2::Device *dev)
-{
-	panel->imgui(); 
-
-	glm::ivec2 panel_size = panel->get_size();
-	glm::ivec2 panel_pos = panel->get_pos();
-
-	float aspect = (float)panel_size.y/(float)panel_size.x;
-	float zoom = pow(2, app->input.scroll.y);
-
-	rd.proj = camera_proj_2d(aspect, zoom);
-
-	glm::mat4 p_inv = glm::inverse(rd.proj);
-
-	if (panel->is_content_selected()) {
-		if (app->input.left_mouse_pressed && panel->is_content_selected()) {
-			glm::dvec2 delta = app->input.get_mouse_delta()/(double)panel->get_size().x; 
-			rd.center += 2.f*glm::vec2(glm::vec4(delta.x, -delta.y,0,0)/(aspect*zoom));
-		}
-
-		rd.view[3] = glm::vec4(glm::inverse(glm::mat2(rd.view))*rd.center,0,1);
-	}
-		
-	ev2::update_view(dev, rd.camera, glm::value_ptr(rd.view), glm::value_ptr(rd.proj));
-	return EXIT_SUCCESS;
-}
-
-void TextureViewerPanel::render(ev2::Device *dev)
-{
-	glm::ivec2 win_size = panel->get_size(); 
-
-	ev2::RenderTargetID window_target = panel->get_target();
-	ev2::Rect view_rect = {0,0, (uint32_t)win_size.x, (uint32_t)win_size.y};
-
-	ev2::PassCtx pass = ev2::begin_pass(dev, window_target, rd.camera, view_rect);
-	ev2::cmd_bind_gfx_pipeline(pass.rec, rd.screen_quad);
-	ev2::cmd_bind_descriptor_set(pass.rec, rd.screen_quad_set);
-	ev2::cmd_draw_screen_quad(pass.rec);
-	ev2::SyncID pass_sync = ev2::end_pass(dev, pass);
-
-	ev2::submit(pass_sync);
-}
-
-void TextureViewerPanel::destroy(ev2::Device *dev)
-{
-	ev2::destroy_descriptor_set(dev, rd.screen_quad_set);
-	panel.reset();
-}
-
-//------------------------------------------------------------------------------
-// Simulation
-
-int WaveSim::init(ev2::Device *dev)
-{
-	sim_pipelines[0] = ev2::load_compute_pipeline(dev, 
-		"shader/pde0.comp.spv");
-
-	if (!EV2_VALID(sim_pipelines[0]))
-		return EXIT_FAILURE;
-
-	sim_pipelines[1] = ev2::load_compute_pipeline(dev, 
-		"shader/pde1.comp.spv");
-
-	if (!EV2_VALID(sim_pipelines[1]))
-		return EXIT_FAILURE;
-
-	grid_w = 256, grid_h = grid_w;
-
-	swap_img[0] = ev2::create_image(dev, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_RGBA32F);
-	swap_img[1] = ev2::create_image(dev, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_RGBA32F);
-
-	swap_tex[0] = ev2::create_texture(dev, swap_img[0],ev2::FILTER_BILINEAR);
-	swap_tex[1] = ev2::create_texture(dev, swap_img[1],ev2::FILTER_BILINEAR);
-
-	ubo = ev2::create_buffer(dev, sizeof(uniforms));
-
-	//------------------------------------------------------------------------------
-	// Get shader resource locations and create descriptor sets
-
-	ev2::DescriptorLayoutID layout = 
-		ev2::get_compute_pipeline_layout(dev, sim_pipelines[0]);
-
-	sim0_set = ev2::create_descriptor_set(dev, layout);
-
-	sim1_set = ev2::create_descriptor_set(dev, layout);
-
-	img_in_slot = ev2::find_binding(layout, "img_in");
-	img_out_slot = ev2::find_binding(layout, "img_out");
-
-	ev2::BindingSlot ubo_slot = ev2::find_binding(layout, "Uniforms");
-	ev2::bind_buffer(dev, sim0_set, ubo_slot, ubo, 0, sizeof(uniforms));
-	ev2::bind_buffer(dev, sim1_set, ubo_slot, ubo, 0, sizeof(uniforms));
-
-	//------------------------------------------------------------------------------
-	// Upload some stuff
-
-	uint64_t sync = upload_img_data(dev,swap_img[0], grid_w, grid_h);
-	ev2::flush_uploads(dev);
-
-	ev2::wait_complete(dev, sync);
-
-	return EXIT_SUCCESS;
-}
-
-int WaveSim::update(ev2::Device *dev)
-{
-	uint64_t sync = 0;
-	ImGui::Begin("Editor");
-
-	if (ImGui::CollapsingHeader("Simulation")) {
-		ImGui::SliderFloat("gradient", &uniforms.gradient, -1.f, 1.f);
-		ImGui::SliderFloat("conj_gradient", &uniforms.conj_gradient, 0.f, 10.f);
-		ImGui::SliderFloat("laplacian", &uniforms.laplacian, 0.f, 1.f);
-		ImGui::SliderFloat("decay", &uniforms.decay, 0.f, 20.f);
-
-		ImGui::SliderFloat("wave_speed", &uniforms.c, 0.f, 12.f);
-
-		if (ImGui::Button("reset")) {
-			sync = upload_img_data(dev,swap_img[0], grid_w, grid_h);
-		}
-	}
-
-	ImGui::End();
-	ev2::UploadContext uc = ev2::begin_upload(dev,
-		sizeof(uniforms), alignof(decltype(uniforms)));
-
-	memcpy(uc.ptr, &uniforms, sizeof(uniforms));
-	ev2::BufferUpload upload = {
-		.src_offset = 0,
-		.dst_offset = 0,
-		.size = sizeof(uniforms),
-	};
-
-	sync = ev2::commit_buffer_uploads(dev, uc, ubo, &upload, 1);
-	ev2::flush_uploads(dev);
-
-	ev2::wait_complete(dev, sync);
-
-	int img_A = 0;
-	int img_B = 1;
-
-	//-------------------------------------------------------------------
-	// Simulation
-
-	uint32_t grps_x = grid_w/32, grps_y = grid_h/32, grps_z = 1;
-
-	ev2::bind_texture(dev, sim0_set, img_in_slot, swap_tex[img_A]);
-	ev2::bind_texture(dev, sim0_set, img_out_slot, swap_tex[img_B]);
-
-	ev2::bind_texture(dev, sim1_set, img_in_slot, swap_tex[img_B]);
-	ev2::bind_texture(dev, sim1_set, img_out_slot, swap_tex[img_A]);
-
-	ev2::RecorderID rec = ev2::begin_commands(dev);
-	ev2::cmd_use_texture(rec, swap_tex[img_A], ev2::USAGE_STORAGE_READ_COMPUTE);
-	ev2::cmd_use_texture(rec, swap_tex[img_B], ev2::USAGE_STORAGE_RW_COMPUTE);
-
-	ev2::cmd_bind_descriptor_set(rec, sim0_set);
-	ev2::cmd_bind_compute_pipeline(rec, sim_pipelines[0]);
-	ev2::cmd_dispatch(rec, grps_x, grps_y, grps_z);
-
-	ev2::cmd_use_texture(rec, swap_tex[img_B], ev2::USAGE_STORAGE_READ_COMPUTE);
-	ev2::cmd_use_texture(rec, swap_tex[img_A], ev2::USAGE_STORAGE_RW_COMPUTE);
-	glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
-
-	ev2::cmd_bind_descriptor_set(rec, sim1_set);
-	ev2::cmd_bind_compute_pipeline(rec, sim_pipelines[1]);
-	ev2::cmd_dispatch(rec, grps_x, grps_y, grps_z);
-
-	ev2::cmd_use_texture(rec, swap_tex[img_B], ev2::USAGE_SAMPLED_GRAPHICS);
-
-	ev2::SyncID cmd_sync = ev2::end_commands(rec);
-
-	return App::OK;
-}
-
-void WaveSim::destroy(ev2::Device *dev)
-{
-	ev2::destroy_descriptor_set(dev, sim0_set);
-	ev2::destroy_descriptor_set(dev, sim1_set);
-
-	ev2::destroy_texture(dev, swap_tex[0]);
-	ev2::destroy_texture(dev, swap_tex[1]);
-
-	ev2::destroy_image(dev, swap_img[0]);
-	ev2::destroy_image(dev, swap_img[1]);
-}
-
 int FluidApp::initialize(int argc, char **argv)
 {
 	int result = App::initialize(argc, argv);
 	if (result)
 		return result;
 
-	sim.reset(new WaveSim);
-	texture_panel.reset(new TextureViewerPanel);
-	heightmap_panel.reset(new HeightmapViewerPanel);
+	sim.reset(new FluidSim);
 
-	result = sim->init(dev);
+	f_panel.reset(new TextureViewerPanel(this, 200, 0, 500, 500));
+	phi_panel.reset(new TextureViewerPanel(this, 700, 0, 500, 500));
+
+	result = sim->init(dev, 64, 64);
 	if (result)
 		return result;
 
-	result = texture_panel->init(this, dev, sim->swap_tex[1]); 
+	phi_tex = sim->p_tex;
+	f_tex = ev2::create_texture(dev, sim->q_img_1, ev2::FILTER_NEAREST);
+
+	result = f_panel->init(dev, f_tex); 
 	if (result)
 		return result;
 
-	result = heightmap_panel->init(this, dev, sim->swap_tex[1]); 
+	result = phi_panel->init(dev, phi_tex); 
 	if (result)
 		return result;
-
 
 	return result;
 }
 int FluidApp::update()
 {
 	int result = EXIT_SUCCESS;
+	uint64_t current_step = m_step;
+		++m_step;
 
 	if ((result = App::update()))
 		return result;
 
-	if ((result = texture_panel->update(dev)))
+	ImGui::Begin("Editor");
+	if (ImGui::Button("Step")) {
+		++m_step;
+	}
+	if (ImGui::Button("Reset")) {
+		upload_img_data(dev, sim->p_img, sim->grid_w, sim->grid_h);
+		upload_img_data(dev, sim->q_img_1, 1 + sim->grid_w, 1 + sim->grid_h);
+		upload_img_data(dev, sim->q_img_2, 1 + sim->grid_w, 1 + sim->grid_h);
+	}
+	ImGui::End();
+
+	if (current_step != m_step) {
+		if ((result = sim->update(dev)))
+			return result;
+	}
+
+	if ((result = f_panel->update(dev)))
 		return result;
 
-	if ((result = heightmap_panel->update(dev)))
+	if ((result = phi_panel->update(dev)))
 		return result;
 
-	if ((result = sim->update(dev)))
-		return result;
-
-	sim->uniforms.cursor1 = sim->uniforms.cursor2;
-	sim->uniforms.cursor2 = texture_panel->get_world_cursor_pos();
-	sim->uniforms.active = 
-		this->input.right_mouse_pressed && 
-		texture_panel->panel->is_content_selected();
+	sim->uniforms.cursor_prev = sim->uniforms.cursor;
+	sim->uniforms.cursor = f_panel->get_world_cursor_pos();
+	sim->uniforms.flags = 
+			this->input.right_mouse_pressed && 
+			f_panel->panel->is_content_selected();
 
 	return result;
 }
 void FluidApp::render()
 {
-	texture_panel->render(dev);
-	heightmap_panel->render(dev);
+	f_panel->render(dev);
+	phi_panel->render(dev);
 }
 void FluidApp::destroy()
 {
-	heightmap_panel->destroy(dev);
-	texture_panel->destroy(dev);
+	f_panel->destroy(dev);
+	phi_panel->destroy(dev);
+
 	sim->destroy(dev);
 
 	App::terminate();
@@ -619,8 +684,6 @@ int main(int argc, char *argv[])
 
 	if (app->initialize(argc, argv) != App::OK)
 		return EXIT_FAILURE;
-
-	ev2::Device *dev = app->dev;
 
 	while (
 		app->update() == App::OK

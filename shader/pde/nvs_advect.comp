@@ -1,0 +1,120 @@
+#version 430 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "nvs.glsl"
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout (binding = 1) uniform sampler2D q_in;
+layout (rgba32f, binding = 2) writeonly uniform image2D q_out;
+layout (rgba32f, binding = 3) writeonly uniform image2D p_out;
+
+#define EPS 1e-6
+
+bool within_cursor(vec2 p)
+{
+	return false;
+	ivec2 out_size = imageSize(q_out);
+	if (bool(u_cursor_flags)) {
+		float power = 1.5;
+		float sigma = 0.2f;
+
+		vec2 cursor = u_cursor*out_size;
+		vec2 vcursor = (u_cursor - u_cursor_prev) * out_size;
+
+		vec2 r = p - cursor;
+
+		return abs(r.x) < 10 && abs(r.y) < 10;
+
+		return length(r) < 10;
+	}
+	return false;
+}
+
+vec4 get_q(vec2 p)
+{
+	vec2 size = vec2(textureSize(q_in,0));
+	vec2 uv = p/size;
+
+	vec2 ll = 0.5/size;
+	vec2 ur = vec2(1) - 0.5/size;
+
+	uv = clamp(uv, ll, ur);
+	vec4 q = texture(q_in, uv); 
+
+	bool out_x = (uv.x == ll.x) || (uv.x == ur.x); 
+	bool out_y = (uv.y == ll.y) || (uv.y == ur.y);
+
+	if (within_cursor(p))
+	 return vec4(0,0,0,0);
+
+	if (out_x && out_y)
+		return vec4(0,0,0,0);
+
+	if (out_x) {
+		return vec4(0,0,0,0);
+	}
+
+	if (out_y) {
+		return vec4(0,0,0,0);
+	}
+
+	return q;
+}
+
+vec2 RK4(vec2 x0, float dt)
+{
+	vec2 k1 = get_q(x0).xy;
+	vec2 k2 = get_q(x0 - 0.5*dt*k1).xy;
+	vec2 k3 = get_q(x0 - 0.5*dt*k2).xy;
+	vec2 k4 = get_q(x0 - dt*k3).xy;
+
+	return (1./6.) * dt * (k1 + 2.*k2 + 2.*k3 + k4);
+}
+
+void main()
+{
+    ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 out_size = imageSize(q_out);
+
+	if (idx.x >= out_size.x || idx.y >= out_size.y)
+		return;
+
+	vec2 pos = vec2(idx.xy) + vec2(0.5);
+
+	vec2 c = pos - RK4(pos, TIMESTEP);
+
+	vec4 q_hat = get_q(c);
+
+	if (bool(u_cursor_flags)) {
+		float power = 1.5;
+		float sigma = 0.2f;
+
+		vec2 cursor = u_cursor*out_size;
+		vec2 vcursor = (u_cursor - u_cursor_prev) * out_size;
+
+		vec2 r = c - cursor;
+
+		q_hat.xy += 10.*(vcursor)/(1. + 20.*dot(r,r));
+		q_hat.z += 1/(1. + 5.*dot(r,r));
+	}
+
+	float S = 5;
+
+	if (pos.x <= S + 2 && pos.x > 0) {
+		float r = abs(pos.y - out_size.y/2);
+
+		float W = out_size.y/16;
+
+		if (r < W) {
+			r /= W;
+			q_hat.xy = vec2(S,0) * exp(-r*r);
+			//q_hat.z = 0.5;
+		}
+	}
+
+	//q_hat.z *= 0.99;
+
+	imageStore(q_out, idx, q_hat);
+}
+

@@ -1,0 +1,25 @@
+
+#version 430 core
+
+#define GROUPS 16
+
+layout(binding = 0) uniform sampler2D img_in;
+layout(r32f, binding = 1) uniform image2D img_out;
+
+layout (local_size_x = GROUPS, local_size_y = GROUPS, local_size_z = 1) in;
+
+void main()
+{
+    ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 size = imageSize(img_out);
+
+	if (idx.x >= size.x || idx.y >= size.y)
+		return;
+
+	vec2 uv = (vec2(idx) + vec2(0.5))/vec2(size);
+
+	float a = imageLoad(img_out, idx).x;
+	float b = texelFetch(img_in, ivec2(0),0).x;
+
+	imageStore(img_out, idx, vec4(a - b,0,0,0));
+}

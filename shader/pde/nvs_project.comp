@@ -1,0 +1,116 @@
+#version 430 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "nvs.glsl"
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout (binding = 1) uniform sampler2D q_in; // state vector, rgba32f
+layout (binding = 2) uniform sampler2D p_in; // pressure, r32f
+
+layout (rgba32f, binding = 3) writeonly uniform image2D q_out; // state vector, rgba32f
+
+
+ivec2 neumann(ivec2 idx, ivec2 size)
+{
+	if (idx.x < 0)
+		idx.x = 0;
+	else if (idx.x > size.x - 1)
+		idx.x = size.x - 1;
+
+	if (idx.y < 0)
+		idx.y = 0;
+	else if (idx.y > size.y - 1)
+		idx.y = size.y - 1;
+	return idx;
+}
+
+float get_p(ivec2 idx)
+{
+	idx = neumann(idx, textureSize(p_in,0));
+
+	return texelFetch(p_in, idx, 0).x;
+}
+
+vec4 get_q(ivec2 idx)
+{
+	if (idx != clamp(idx, ivec2(0), textureSize(q_in,0) - ivec2(1)))
+		return vec4(0);
+
+	return texelFetch(q_in, idx, 0);
+}
+
+float div_v(ivec2 p)
+{
+	vec4 ql = get_q(p + ivec2(0,0));
+	vec4 qr = get_q(p + ivec2(1,0));
+	vec4 qb = get_q(p + ivec2(0,0));
+	vec4 qt = get_q(p + ivec2(0,1));
+
+	return ((qr.x - ql.x) + (qt.y - qb.y))/(2*DELTA_X); 
+}
+
+
+vec2 pressure_grad(ivec2 p)
+{
+	float pl = get_p(p + ivec2(-1,0));
+	float pr = get_p(p + ivec2(0,0));
+
+	float pb = get_p(p + ivec2(0,-1));
+	float pt = get_p(p + ivec2(0,0));
+
+	return vec2(pr - pl, pt - pb)/(2*DELTA_X); 
+}
+
+float pressure_lap(ivec2 p)
+{
+	float pl = get_p(p + ivec2(-1,0));
+	float pr = get_p(p + ivec2(1,0));
+
+	float pb = get_p(p + ivec2(0,-1));
+	float pt = get_p(p + ivec2(0,1));
+
+	float pc = get_p(p);
+
+	return (pl + pr + pb + pt - 4*pc)/(DELTA_X*DELTA_X); 
+}
+
+// q-centered divergence
+float q_div_v(ivec2 idx)
+{
+	return 0.25*(
+		div_v(idx + ivec2(-1,0)) + 
+		div_v(idx + ivec2(1,0)) + 
+		div_v(idx + ivec2(0,-1)) +
+		div_v(idx + ivec2(0,1))
+	);
+}
+
+void main()
+{
+    ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 size = textureSize(q_in, 0);
+
+	if (idx.x >= size.x || idx.y >= size.y)
+		return;
+
+	// p:  - - - -
+	// u: - - - - - 
+
+	vec2 grad_p = pressure_grad(idx);
+
+	vec4 q = texelFetch(q_in, idx, 0);
+
+	q.xy += TIMESTEP * -grad_p/RHO;
+
+	// For debugging pressure solver: check to ensure
+	// that lap(p) = div(u*). 
+	if (idx.x < size.x - 1 && idx.y < size.y - 1) {
+		float e = abs(pressure_lap(idx) - div_v(idx));
+		q.z = 10*e;
+	}
+	//q.z = length(grad_p);
+	//q.z = abs(q_div_v(idx));
+	imageStore(q_out, idx, q);
+}
+

@@ -80,13 +80,13 @@ void main()
 
 	tgrad_t grad = tex_grad2(uv);
 
-	ivec2 texel = ivec2(uv*vec2(size));
+	ivec2 texel = ivec2(uv*vec2(size) + 0.5);
 
 	vec4 samp[4] = {
+		texelFetch(u_tex,texel + ivec2(0,0),0),
 		texelFetch(u_tex,texel + ivec2(1,0),0),
-		texelFetch(u_tex,texel + ivec2(-1,0),0),
-		texelFetch(u_tex,texel + ivec2(0,1),0),
-		texelFetch(u_tex,texel + ivec2(0,-1),0)
+		texelFetch(u_tex,texel + ivec2(0,0),0),
+		texelFetch(u_tex,texel + ivec2(0,1),0)
 	};
 
 	vec4 avg = 1.0/4.0 * (samp[0] + samp[1] + samp[2] + samp[3]);
@@ -102,6 +102,12 @@ void main()
 
 	float curl = (grad.du.w - grad.dv.z);
 	vec4 color = vec4(val.x,val.y,tanh(length(val.zw)),1);
+
+	f = 1.f;
+
+	float f_speed = tanh(length(val.xy/10));
+
+	color = vec4(val.z,0,f_speed,1);
 
 	ivec2 pix = ivec2(uv*vec2(size));
 	int padding = 5;

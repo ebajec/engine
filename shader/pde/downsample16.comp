@@ -1,0 +1,50 @@
+#version 430 core
+
+#define GROUPS 16
+
+layout(r32f, binding = 0) readonly uniform image2D img_in;
+layout(r32f, binding = 1) writeonly uniform image2D img_out;
+
+layout (local_size_x = GROUPS, local_size_y = GROUPS, local_size_z = 1) in;
+
+float vals[GROUPS][GROUPS];
+
+#define SENTINEL -9999999
+
+void main()
+{
+    ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 size = imageSize(img_in);
+	ivec2 out_size = imageSize(img_out);
+
+	float value = SENTINEL;
+
+	if (idx.x < size.x && idx.y < size.y) {
+		value = imageLoad(img_in, idx).x;
+	}
+
+	ivec2 loc_idx = ivec2(gl_LocalInvocationID.xy);
+
+	vals[loc_idx.x][loc_idx.y] = value;
+	barrier();
+
+	if (gl_LocalInvocationID != uvec3(0,0,0))
+		return;
+
+	float acc = 0;
+
+	for (int i = 0; i < GROUPS; ++i) {
+		for (int j = 0; j < GROUPS; ++j) {
+			float value = vals[i][j];
+			acc += value*float(value != SENTINEL);
+		}
+	}
+
+//	float factor = float(out_size.x*out_size.y)/float(size.x*size.y);
+	float factor = 1/float(out_size.x*out_size.y);
+
+	acc *= factor;
+
+	imageStore(img_out, ivec2(gl_WorkGroupID.xy), vec4(acc,0,0,0));
+}
+

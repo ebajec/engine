@@ -116,6 +116,9 @@ void App::scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 
 	app->input.scroll.x += xoffset;
 	app->input.scroll.y += yoffset;
+
+	app->input.scroll_delta.x = xoffset;
+	app->input.scroll_delta.y = yoffset;
 }
 void App::cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
 {
@@ -177,6 +180,7 @@ int App::update()
 	input.t1 = input.t0;
 	input.t0 = glfwGetTime();
 	input.dt = input.t0 - input.t1;
+	input.scroll_delta = glm::vec2(0);
 
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();

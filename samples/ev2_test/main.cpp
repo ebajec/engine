@@ -231,7 +231,7 @@ void WaveSim::destroy(ev2::Device *dev)
 struct FluidApp : public App
 {
 	std::unique_ptr<WaveSim> sim;
-	std::unique_ptr<TextureViewerPanel> texture_panel;
+	std::unique_ptr<TextureViewerPanel> f_panel;
 	std::unique_ptr<HeightmapViewerPanel> heightmap_panel;
 
 	ev2::TextureID phi_tex;
@@ -263,14 +263,14 @@ int FluidApp::initialize(int argc, char **argv)
 
 	sim.reset(new WaveSim);
 
-	texture_panel.reset(new TextureViewerPanel);
+	f_panel.reset(new TextureViewerPanel(this, 0, 0, 500, 500));
 	heightmap_panel.reset(new HeightmapViewerPanel);
 
 	result = sim->init(dev);
 	if (result)
 		return result;
 
-	result = texture_panel->init(this, dev, sim->swap_tex[1]); 
+	result = f_panel->init(dev, sim->swap_tex[1]); 
 	if (result)
 		return result;
 
@@ -288,7 +288,7 @@ int FluidApp::update()
 	if ((result = App::update()))
 		return result;
 
-	if ((result = texture_panel->update(dev)))
+	if ((result = f_panel->update(dev)))
 		return result;
 
 	if ((result = heightmap_panel->update(dev)))
@@ -298,22 +298,22 @@ int FluidApp::update()
 		return result;
 
 	sim->uniforms.cursor1 = sim->uniforms.cursor2;
-	sim->uniforms.cursor2 = texture_panel->get_world_cursor_pos();
+	sim->uniforms.cursor2 = f_panel->get_world_cursor_pos();
 	sim->uniforms.active = 
 		this->input.right_mouse_pressed && 
-		texture_panel->panel->is_content_selected();
+		f_panel->panel->is_content_selected();
 
 	return result;
 }
 void FluidApp::render()
 {
-	texture_panel->render(dev);
+	f_panel->render(dev);
 	heightmap_panel->render(dev);
 }
 void FluidApp::destroy()
 {
 	heightmap_panel->destroy(dev);
-	texture_panel->destroy(dev);
+	f_panel->destroy(dev);
 	sim->destroy(dev);
 
 	App::terminate();

@@ -1,0 +1,39 @@
+#version 430 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "nvs.glsl"
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout (binding = 1) uniform sampler2D q_in;
+layout(r32f, binding = 2) writeonly uniform image2D f_out;
+
+vec4 get_q(ivec2 idx)
+{
+	if (idx != clamp(idx, ivec2(0), textureSize(q_in,0) - ivec2(1)))
+		return vec4(0);
+
+	return texelFetch(q_in, idx, 0);
+}
+
+float div_v(ivec2 p)
+{
+	vec4 ql = get_q(p + ivec2(0,0));
+	vec4 qr = get_q(p + ivec2(1,0));
+	vec4 qb = get_q(p + ivec2(0,0));
+	vec4 qt = get_q(p + ivec2(0,1));
+
+	return ((qr.x - ql.x) + (qt.y - qb.y))/(2*DELTA_X); 
+}
+
+void main()
+{
+    ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 size = imageSize(f_out);
+
+	if (idx.x >= size.x || idx.y >= size.y)
+		return;
+
+	float lap = RHO*div_v(idx)/TIMESTEP;
+	imageStore(f_out, idx, vec4(lap, 0, 0, 0));
+}

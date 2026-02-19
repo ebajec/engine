@@ -1039,8 +1039,7 @@ void bind_texture(
 
 	if (
 		binding->type != DESCRIPTOR_TYPE_SAMPLER && 
-		binding->type != DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER && 
-		binding->type != DESCRIPTOR_TYPE_STORAGE_IMAGE) {
+		binding->type != DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
 		log_error(
 			"Attempting to bind invalid resource (id=%d) to texture slot %d",
 			binding->tex.handle, slot.id);
@@ -1048,6 +1047,45 @@ void bind_texture(
 	}
 
 	binding->tex = TextureBinding{.handle = tex_id};
+}
+
+void bind_image(
+	Device *dev,
+	DescriptorSetID h_set, 
+	BindingSlot slot, 
+	ImageID h_img
+)
+{
+	DescriptorSet *set = EV2_TYPE_PTR_CAST(DescriptorSet, h_set);
+	Image *img = dev->get_image(h_img);
+
+	if (set->index != slot.set) {
+		log_error(
+			"Mismatched binding for image %d. (set=%d, index=%d) to set %d",
+			h_img.id, slot.set, slot.id, set->index
+		);
+		return;
+	}
+
+	auto it = set->bindings.find(slot.id);
+
+	if (it == set->bindings.end()) {
+		log_error(
+			"Attempting to bind image %d to nonexistent index %d in set %d", 
+			h_img.id, slot.id, slot.set);
+		return;
+	}
+
+	ResourceBinding *binding = &it->second;
+
+	if (binding->type != DESCRIPTOR_TYPE_STORAGE_IMAGE) {
+		log_error(
+			"Attempting to bind invalid resource (id=%d) to image slot %d",
+			binding->tex.handle, slot.id);
+		return;
+	}
+
+	binding->img = ImageBinding{.handle = h_img};
 }
 
 //------------------------------------------------------------------------------
@@ -1086,17 +1124,17 @@ void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 				GLenum filter = tex->filter == ev2::FILTER_BILINEAR ? GL_LINEAR : GL_NEAREST;
 
 				glBindTextureUnit(index, img->id);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);   
+				glBindTexture(GL_TEXTURE_2D, img->id);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
 				break;
 			}
 			case ev2::DESCRIPTOR_TYPE_STORAGE_IMAGE: {
-				if (EV2_IS_NULL(binding.tex.handle))
+				if (EV2_IS_NULL(binding.img.handle))
 					continue;
-
-				Texture *tex = dev->get_texture(binding.tex.handle);
-				Image *img = dev->get_image(tex->img);
+				Image *img = dev->get_image(binding.img.handle);
 
 				GLenum format = image_format_to_gl_internal(img->fmt);
 
@@ -1106,7 +1144,7 @@ void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 					0, 
 					GL_FALSE, 
 					0, 
-					GL_WRITE_ONLY, 
+					GL_READ_WRITE,
 					format
 				);
 				break;

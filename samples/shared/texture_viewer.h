@@ -29,13 +29,16 @@ struct TextureViewerPanel
 		glm::mat4 proj = glm::mat4(1.f);
 		glm::mat4 view = glm::mat4(1.f);
 		ev2::ViewID camera;
+
+		float zoom = 1.f;
 	} rd;
 
 	glm::vec2 world_cursor;
+	TextureViewerPanel(App *app, uint32_t x, uint32_t y, uint32_t w, uint32_t h);
 
 	int set_texture(ev2::Device *dev, ev2::TextureID tex);
 
-	int init(App *app, ev2::Device *dev, ev2::TextureID tex);
+	int init(ev2::Device *dev, ev2::TextureID tex);
 	int update(ev2::Device *dev);
 	void render(ev2::Device *dev);
 	void destroy(ev2::Device *dev);

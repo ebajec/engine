@@ -19,12 +19,16 @@ glm::vec2 TextureViewerPanel::get_world_cursor_pos()
 	return glm::vec2(uv); 
 }
 
-int TextureViewerPanel::init(App *app_, ev2::Device *dev, ev2::TextureID tex) 
+TextureViewerPanel::TextureViewerPanel(App *app, uint32_t x, uint32_t y, uint32_t w, uint32_t h) : 
+	app(app)
 {
-	app = app_;
+	static uint32_t ctr = 0;
+	std::string name = "Texture" + std::to_string(++ctr);
+	panel.reset(new Panel(app->dev, name.c_str(), x, y, w, h));
+}
 
-	panel = std::make_unique<Panel>(dev,"Simulation",200,0,500,500);
-
+int TextureViewerPanel::init(ev2::Device *dev, ev2::TextureID tex) 
+{
 	rd.screen_quad = ev2::load_graphics_pipeline(dev, "pipelines/screen_quad.yaml");
 
 	if (!EV2_VALID(rd.screen_quad))
@@ -61,23 +65,23 @@ int TextureViewerPanel::update(ev2::Device *dev)
 	glm::ivec2 panel_size = panel->get_size();
 	glm::ivec2 panel_pos = panel->get_pos();
 
-	float aspect = (float)panel_size.y/(float)panel_size.x;
-	float zoom = pow(2, app->input.scroll.y);
-
-	rd.proj = camera_proj_2d(aspect, zoom);
-
-	glm::mat4 p_inv = glm::inverse(rd.proj);
-
 	if (panel->is_content_selected()) {
+
+		float aspect = (float)panel_size.y/(float)panel_size.x;
+		rd.zoom *= pow(2, app->input.scroll_delta.y);
+
+		rd.proj = camera_proj_2d(aspect, rd.zoom);
+
+		glm::mat4 p_inv = glm::inverse(rd.proj);
+
 		if (app->input.left_mouse_pressed && panel->is_content_selected()) {
 			glm::dvec2 delta = app->input.get_mouse_delta()/(double)panel->get_size().x; 
-			rd.center += 2.f*glm::vec2(glm::vec4(delta.x, -delta.y,0,0)/(aspect*zoom));
+			rd.center += 2.f*glm::vec2(glm::vec4(delta.x, -delta.y,0,0)/(aspect*rd.zoom));
 		}
 
 		rd.view[3] = glm::vec4(glm::inverse(glm::mat2(rd.view))*rd.center,0,1);
+		ev2::update_view(dev, rd.camera, glm::value_ptr(rd.view), glm::value_ptr(rd.proj));
 	}
-		
-	ev2::update_view(dev, rd.camera, glm::value_ptr(rd.view), glm::value_ptr(rd.proj));
 	return EXIT_SUCCESS;
 }
 

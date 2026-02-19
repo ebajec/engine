@@ -85,6 +85,15 @@ ImageID create_image(Device *dev, uint32_t w, uint32_t h, uint32_t d, ImageForma
 	return EV2_HANDLE_CAST(Image, id.u64);
 }
 
+void get_image_dims(Device *dev, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d)
+{
+	Image *img = dev->get_image(h_img);
+
+	if (w) *w = img->w;
+	if (h) *h = img->h;
+	if (d) *d = img->d;
+}
+
 void destroy_image(Device *dev, ImageID h)
 {
 	ResourceID id = ResourceID{h.id};
@@ -177,11 +186,7 @@ uint64_t get_texture_gpu_handle(Device *dev, TextureID h)
 void get_texture_dims(Device *dev, TextureID h_tex, uint32_t *w, uint32_t *h, uint32_t*d)
 {
 	Texture *tex = dev->get_texture(h_tex);
-	Image *img = dev->get_image(tex->img);
-
-	if (w) *w = img->w;
-	if (h) *h = img->h;
-	if (d) *d = img->d;
+	get_image_dims(dev, tex->img, w, h, d);
 }
 
 };

@@ -84,6 +84,13 @@ void bind_texture(
 	TextureID tex 
 ); 
 
+void bind_image(
+	Device *dev,
+	DescriptorSetID set, 
+	BindingSlot slot, 
+	ImageID img
+);
+
 // command recording
 
 enum CommandMode {

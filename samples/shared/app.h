@@ -20,6 +20,7 @@ struct InputData
 {
 	glm::dvec2 mouse_pos[2];
 	glm::dvec2 scroll;
+	glm::dvec2 scroll_delta;
 
 	double t0;
 	double t1;
