@@ -106,7 +106,7 @@ void main()
 	// that lap(p) = div(u*). 
 	if (idx.x < size.x - 1 && idx.y < size.y - 1) {
 		float e = abs(pressure_lap(idx) - div_v(idx));
-		q.z = 10*e;
+		//q.z = e > 1e-3 ? e*10 : 0;
 	}
 	//q.z = length(grad_p);
 	//q.z = abs(q_div_v(idx));

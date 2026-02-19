@@ -9,15 +9,13 @@ layout (local_size_x = GROUPS, local_size_y = GROUPS, local_size_z = 1) in;
 
 float vals[GROUPS][GROUPS];
 
-#define SENTINEL -9999999
-
 void main()
 {
     ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
 	ivec2 size = imageSize(img_in);
 	ivec2 out_size = imageSize(img_out);
 
-	float value = SENTINEL;
+	float value = 0;
 
 	if (idx.x < size.x && idx.y < size.y) {
 		value = imageLoad(img_in, idx).x;
@@ -35,15 +33,17 @@ void main()
 
 	for (int i = 0; i < GROUPS; ++i) {
 		for (int j = 0; j < GROUPS; ++j) {
-			float value = vals[i][j];
-			acc += value*float(value != SENTINEL);
+			acc += vals[i][j];
 		}
 	}
 
-	float factor = float(out_size.x*out_size.y)/float(size.x*size.y);
+	ivec2 widx = ivec2(gl_WorkGroupID.xy);
 
-	acc *= 0/float(size.x*size.y);
+	acc /= float(
+		(size.x < GROUPS ? size.x : GROUPS) *
+		(size.y < GROUPS ? size.y : GROUPS)
+	);
 
-	imageStore(img_out, ivec2(gl_WorkGroupID.xy), vec4(acc,0,0,0));
+	imageStore(img_out, widx, vec4(acc,0,0,0));
 }
 

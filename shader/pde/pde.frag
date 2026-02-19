@@ -103,11 +103,11 @@ void main()
 	float curl = (grad.du.w - grad.dv.z);
 	vec4 color = vec4(val.x,val.y,tanh(length(val.zw)),1);
 
-	f = 1.f;
-
 	float f_speed = tanh(length(val.xy/10));
 
-	color = vec4(val.z,0,f_speed,1);
+	f = 1;
+
+	color =  vec4(val.z,-val.z,f_speed,1);
 
 	ivec2 pix = ivec2(uv*vec2(size));
 	int padding = 5;

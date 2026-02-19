@@ -13,7 +13,6 @@ layout (rgba32f, binding = 3) writeonly uniform image2D p_out;
 
 bool within_cursor(vec2 p)
 {
-	return false;
 	ivec2 out_size = imageSize(q_out);
 	if (bool(u_cursor_flags)) {
 		float power = 1.5;
@@ -24,9 +23,9 @@ bool within_cursor(vec2 p)
 
 		vec2 r = p - cursor;
 
-		return abs(r.x) < 10 && abs(r.y) < 10;
+		//return abs(r.x) < 10 && abs(r.y) < 10;
 
-		return length(r) < 10;
+		return length(r) < 20;
 	}
 	return false;
 }
@@ -158,12 +157,12 @@ vec2 jet(vec2 c, vec2 O)
 	ivec2 size = imageSize(q_out);
 	vec2 cursor = u_cursor*size;
 
-	float S = 1;
-	vec2 V = vec2(1,0);//normalize(cursor - O);
+	float S = 5;
+	vec2 V = vec2(1,0);////normalize(cursor - O);
 	vec2 X = vec2(V.y, -V.x);
 	vec2 r = c - O;
 
-	if (length(r) < 2*S && abs(dot(r, X)) <= 2)
+	if (length(r) < 2*S && abs(dot(r, X)) <= 5)
 		return S * V;
 	return vec2(0);
 }
@@ -179,7 +178,7 @@ vec4 cursor_jet(vec2 c)
 		float sigma = 0.2f;
 
 		vec2 r = c - cursor;
-		return vec4(40.*(vcursor)/(1. + 20.*dot(r,r)),0.1,0);
+		return vec4(40.*(vcursor),1,0)/(1. + 20.*dot(r,r));
 	}
 	return vec4(0);
 }
@@ -203,7 +202,9 @@ void main()
 
 	vec2 v_hat = vec2(get_v(cx).x,get_v(cy).y);
 
-	vec2 O = vec2(2, size.y/2);
+	vec2 O = vec2(size.x/4, size.y/2);
+
+	vec2 q_hat = get_q(0.5*(cx + cy)).zw;
 
 	vec4 qx = cursor_jet(pos_x);
 	vec4 qy = cursor_jet(pos_y);
@@ -215,7 +216,6 @@ void main()
 
 	v_hat += f;
 
-	vec2 q_hat = get_q(0.5*(cx + cy)).zw;
 	imageStore(q_out, idx, vec4(v_hat,q_hat));
 }
 

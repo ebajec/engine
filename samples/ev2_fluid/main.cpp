@@ -110,10 +110,10 @@ int PressureSolver::init(ev2::Device *dev, uint32_t w, uint32_t h)
 	sim_w = w; 
 	sim_h = h;
 
-	N = 4;
-
 	if (!is_pow2(sim_w) || !is_pow2(sim_h))
 		return EXIT_FAILURE;
+
+	N = std::min((int)ceil(log2((double)w)), 6);
 
 	R1 = ev2::create_image(dev, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, N); 
 	R2 = ev2::create_image(dev, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_32F, N); 
@@ -216,7 +216,7 @@ void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::Device *dev, ev2::ImageID
 	for (uint32_t i = 0; i <= N; ++i) {
 		glBindBufferRange(GL_UNIFORM_BUFFER, down_slots.ubo.id, ubo_id, 
 					i*sizeof(Uniforms), sizeof(Uniforms));
-		ev2::cmd_dispatch(rec, tw/output_w, th/output_w, 1);
+		ev2::cmd_dispatch(rec, 1 + (tw - 1)/output_w, 1 + (th - 1)/output_w, 1);
 		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
 		tw /= 2;
@@ -244,12 +244,13 @@ void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::Device *dev, ev2::ImageID
 
 	tw *= 2;
 	th *= 2;
+	// N-1, N-2, ... 0
 	for (uint32_t i = 0; i < N; ++i) {
 		glBindBufferRange(GL_UNIFORM_BUFFER, up_slots.ubo.id, ubo_id, 
-					(N - i - 1)*sizeof(Uniforms), sizeof(Uniforms));
+					(N - 1 - i)*sizeof(Uniforms), sizeof(Uniforms));
 		tw *= 2;
 		th *= 2;
-		ev2::cmd_dispatch(rec, tw/output_w, tw/output_w, 1);
+		ev2::cmd_dispatch(rec, 1 + (tw - 1)/output_w, 1 + (tw - 1)/output_w, 1);
 
 		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 	}
@@ -448,7 +449,7 @@ int FluidSim::init(ev2::Device *dev, uint32_t w, uint32_t h)
 
 	mean_subtractor.reset(new MeanSubtractor);
 
-	if ((result = mean_subtractor->init(dev, p_img))) {
+	if ((result = mean_subtractor->init(dev, lap_p_img))) {
 		return result;
 	}
 
@@ -585,6 +586,7 @@ struct FluidApp : public App
 	ev2::TextureID phi_tex;
 	ev2::TextureID f_tex;
 
+	bool m_stopped = true;
 	uint64_t m_step = 0;
 
 	FluidApp() : App(1200, 500, "fluid") {
@@ -607,7 +609,7 @@ int FluidApp::initialize(int argc, char **argv)
 	f_panel.reset(new TextureViewerPanel(this, 200, 0, 500, 500));
 	phi_panel.reset(new TextureViewerPanel(this, 700, 0, 500, 500));
 
-	result = sim->init(dev, 512, 512);
+	result = sim->init(dev, 256, 256);
 	if (result)
 		return result;
 
@@ -628,15 +630,21 @@ int FluidApp::update()
 {
 	int result = EXIT_SUCCESS;
 	uint64_t current_step = m_step;
-		++m_step;
 
 	if ((result = App::update()))
 		return result;
 
 	ImGui::Begin("Editor");
+
+	if (ImGui::Checkbox("Stopped", &m_stopped)) {
+	}
+
 	if (ImGui::Button("Step")) {
 		++m_step;
+	} else if (!m_stopped) {
+		++m_step;
 	}
+
 	if (ImGui::Button("Reset")) {
 		upload_img_data(dev, sim->p_img, sim->grid_w, sim->grid_h);
 		upload_img_data(dev, sim->q_img_1, 1 + sim->grid_w, 1 + sim->grid_h);
