@@ -534,7 +534,7 @@ int FluidSim::update(ev2::Device *dev)
 
 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 	
-	for (int i = 0; i < ((step == 0) ? 128 : 32); ++i) 
+	for (int i = 0; i < ((step == 0) ? 128 : 16); ++i) 
 		pressure_solver->v_cycle(rec, dev, p_img, lap_p_img);
 
 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
@@ -607,7 +607,7 @@ int FluidApp::initialize(int argc, char **argv)
 	f_panel.reset(new TextureViewerPanel(this, 200, 0, 500, 500));
 	phi_panel.reset(new TextureViewerPanel(this, 700, 0, 500, 500));
 
-	result = sim->init(dev, 64, 64);
+	result = sim->init(dev, 512, 512);
 	if (result)
 		return result;
 

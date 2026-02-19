@@ -41,6 +41,7 @@ layout (r32f, binding = 12) writeonly uniform image2D R2[MAX_MIPS];
 layout (local_size_x = GROUPS, local_size_y = GROUPS, local_size_z = 1) in;
 
 shared float block[GROUPS][GROUPS];
+shared bool boundary[GROUPS][GROUPS];
 
 ivec2 neumann(ivec2 idx, ivec2 size)
 {
@@ -60,15 +61,25 @@ ivec2 neumann(ivec2 idx, ivec2 size)
 float RHS(ivec2 idx, uint level)
 {
 	ivec2 size = imageSize(R1[level]);
-	idx = neumann(idx, size);
+	//idx = neumann(idx, size);
 	return imageLoad(R1[level], idx).x;
 }
 
 float LHS(ivec2 idx)
 {
 	ivec2 size = imageSize(in_lhs);
-	idx = neumann(idx, size);
+	//idx = neumann(idx, size);
 	return imageLoad(in_lhs, idx).x;
+}
+
+float jacobi_lhs(vec4 nbr, bvec4 bd, float rhs, float h)
+{
+	float denom = dot(vec4(not(bd)), vec4(1));
+
+	if (denom == 0)
+		return 0;
+
+	return (dot(nbr, vec4(not(bd))) - h*h*rhs)/denom;
 }
 
 float jacobi_it(ivec2 idx, float rhs, float h)
@@ -83,7 +94,12 @@ float jacobi_it(ivec2 idx, float rhs, float h)
 	float t = block[t_idx.x][t_idx.y];
 	float b = block[b_idx.x][b_idx.y];
 
-	return 0.25*(l + r + t + b - h*h*rhs);
+	bool bl = boundary[l_idx.x][l_idx.y];
+	bool br = boundary[r_idx.x][r_idx.y];
+	bool bt = boundary[t_idx.x][t_idx.y];
+	bool bb = boundary[b_idx.x][b_idx.y];
+
+	return jacobi_lhs(vec4(l,r,b,t), bvec4(bl,br,bb,bt), rhs, h);
 }
 
 float residual(ivec2 idx, float rhs, float h)
@@ -98,23 +114,57 @@ float residual(ivec2 idx, float rhs, float h)
 	float t = block[t_idx.x][t_idx.y];
 	float b = block[b_idx.x][b_idx.y];
 
+	bool bl = boundary[l_idx.x][l_idx.y];
+	bool br = boundary[r_idx.x][r_idx.y];
+	bool bt = boundary[t_idx.x][t_idx.y];
+	bool bb = boundary[b_idx.x][b_idx.y];
+
 	float u = block[idx.x][idx.y];
 
-	float lap = (l + r + t + b - 4.*u)/(h*h);
+	float lap = (
+		mix(l,u,float(bl)) + 
+		mix(r,u,float(br)) + 
+		mix(t,u,float(bt)) + 
+		mix(b,u,float(bb)) - 4.*u
+	)/(h*h);
 
 	return rhs - lap;
 }
 
+bool test_boundary(ivec2 idx, uint level)
+{
+	ivec2 size = level > 0 ? 
+		imageSize(R2[level - 1]) : imageSize(in_lhs);
+
+	return 
+		idx.x < 0 || idx.y < 0 ||
+		idx.x > size.x - 1 || idx.y > size.y - 1;
+}
+
 float fetch_lhs(ivec2 grid_idx, float rhs, float h)
 {
+	ivec2 l_idx = grid_idx + ivec2(-1, 0);
+	ivec2 r_idx = grid_idx + ivec2(1, 0);
+	ivec2 t_idx = grid_idx + ivec2(0, 1);
+	ivec2 b_idx = grid_idx + ivec2(0, -1);
+
+	bool bl = test_boundary(l_idx, u_level);
+	bool br = test_boundary(r_idx, u_level);
+	bool bt = test_boundary(t_idx, u_level);
+	bool bb = test_boundary(b_idx, u_level);
+
 	if (u_level == 0) {
-		float l = LHS(grid_idx + ivec2(-1, 0));
-		float r = LHS(grid_idx + ivec2(1, 0));
-		float t = LHS(grid_idx + ivec2(0, 1));
-		float b = LHS(grid_idx + ivec2(0, -1));
+		float l = LHS(l_idx);
+		float r = LHS(r_idx);
+		float t = LHS(t_idx);
+		float b = LHS(b_idx);
+
+		return jacobi_lhs(vec4(l,r,b,t),bvec4(bl,br,bb,bt), rhs,h);
 
 		return 0.25*(l + r + t + b - h*h*rhs);
 	}
+
+	return jacobi_lhs(vec4(0),bvec4(bl,br,bb,bt), rhs,h);
 
 	return -0.25*(h*h*rhs);
 }
@@ -123,11 +173,28 @@ float downsample_rhs(ivec2 idx)
 {
 	// if the sizes don't match, we downsample
 	if (u_level > 0) {
-		return 0.25 * (
-			RHS(2*idx + ivec2(0, 0), u_level - 1) +
-			RHS(2*idx + ivec2(0, 1), u_level - 1) +
-			RHS(2*idx + ivec2(1, 0), u_level - 1) +
-			RHS(2*idx + ivec2(1, 1), u_level - 1));
+		ivec2 l_idx = 2*idx + ivec2(0, 0);
+		ivec2 r_idx = 2*idx + ivec2(0, 1);
+		ivec2 b_idx = 2*idx + ivec2(1, 0);
+		ivec2 t_idx = 2*idx + ivec2(1, 1);
+
+		bvec4 bd = bvec4(
+			test_boundary(l_idx, u_level - 1),
+			test_boundary(r_idx, u_level - 1),
+			test_boundary(t_idx, u_level - 1),
+			test_boundary(b_idx, u_level - 1)
+		);
+
+		vec4 v = vec4(
+			RHS(l_idx, u_level - 1),
+			RHS(r_idx, u_level - 1),
+			RHS(b_idx, u_level - 1),
+			RHS(t_idx, u_level - 1)
+		);
+
+		float denom = dot(vec4(1), vec4(not(bd)));
+
+		return bool(denom) ? dot(v,vec4(not(bd)))/denom : 0;
 	}
 
 	return imageLoad(in_rhs, idx).x;
@@ -154,27 +221,21 @@ void main()
 	ivec2 grid_idx = 
 		ivec2(gl_WorkGroupID.xy) * OUTPUT_W + out_idx;
 
-	ivec2 size = u_level > 0 ? 
-		imageSize(R2[u_level - 1]) : imageSize(in_lhs);
-
 	const float h = 1.f;
 
-	ivec2 corrected_idx = neumann(grid_idx, size);
-	bool oob = grid_idx != corrected_idx;
+	bool is_boundary = test_boundary(grid_idx, u_level);
 
-	grid_idx = corrected_idx;
+	boundary[idx.x][idx.y] = is_boundary; 
 
 	float rhs = downsample_rhs(grid_idx);
-
-	// Load the stuff into shared memory
 	float lhs = fetch_lhs(grid_idx, rhs, h);
+
 	block[idx.x][idx.y] = lhs;  
 
-	for (int i = 0; i < JACOBI_ITERATIONS - 1; ++i) {
+	for (int i = 0; i < JACOBI_ITERATIONS; ++i) {
 		barrier();
 
-		bool noreplace = oob;
-		lhs = noreplace ? lhs : jacobi_it(idx, rhs, h);
+		lhs = jacobi_it(idx, rhs, h);
 
 		barrier();
 

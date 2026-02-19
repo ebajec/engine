@@ -40,10 +40,9 @@ void main()
 		}
 	}
 
-//	float factor = float(out_size.x*out_size.y)/float(size.x*size.y);
-	float factor = 1/float(out_size.x*out_size.y);
+	float factor = float(out_size.x*out_size.y)/float(size.x*size.y);
 
-	acc *= factor;
+	acc *= 0/float(size.x*size.y);
 
 	imageStore(img_out, ivec2(gl_WorkGroupID.xy), vec4(acc,0,0,0));
 }

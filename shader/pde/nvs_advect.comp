@@ -34,87 +34,188 @@ bool within_cursor(vec2 p)
 vec4 get_q(vec2 p)
 {
 	vec2 size = vec2(textureSize(q_in,0));
+
+	bvec2 oob = bvec2( 
+		p.x < 0.5 || p.x > size.x - 0.5, 
+		p.y < 0.5 || p.y > size.y - 0.5);
+
 	vec2 uv = p/size;
 
 	vec2 ll = 0.5/size;
 	vec2 ur = vec2(1) - 0.5/size;
-
 	uv = clamp(uv, ll, ur);
+
 	vec4 q = texture(q_in, uv); 
 
-	bool out_x = (uv.x == ll.x) || (uv.x == ur.x); 
-	bool out_y = (uv.y == ll.y) || (uv.y == ur.y);
-
 	if (within_cursor(p))
-	 return vec4(0,0,0,0);
-
-	if (out_x && out_y)
 		return vec4(0,0,0,0);
 
-	if (out_x) {
-		return vec4(0,0,0,0);
-	}
-
-	if (out_y) {
-		return vec4(0,0,0,0);
-	}
+	if (oob.x) q.y = 0;
+	if (oob.y) q.x = 0;
 
 	return q;
 }
 
+float sample_vx(vec2 p)
+{
+	int Nx = textureSize(q_in,0).x;
+	int Ny = Nx - 1;
+
+	float s = p.x;
+	float t = p.y - 0.5;
+
+	int i0 = int(floor(s));
+	int j0 = int(floor(t));
+
+	int i1 = i0 + 1;
+	int j1 = j0 + 1;
+
+	i0 = clamp(i0, 0, Nx - 1);
+	i1 = clamp(i1, 0, Nx - 1);
+
+	j0 = clamp(j0, 0, Ny - 1);
+	j1 = clamp(j1, 0, Ny - 1);
+
+	float vx00 = texelFetch(q_in, ivec2(i0,j0), 0).x;
+	float vx01 = texelFetch(q_in, ivec2(i0,j1), 0).x;
+	float vx10 = texelFetch(q_in, ivec2(i1,j0), 0).x;
+	float vx11 = texelFetch(q_in, ivec2(i1,j1), 0).x;
+
+	float u = fract(s);
+	float v = fract(t);
+
+	float vx0 = mix(vx00, vx10, u);
+	float vx1 = mix(vx01, vx11, u);
+
+	return mix(vx0, vx1, v);
+}
+
+float sample_vy(vec2 p)
+{
+	int Ny = textureSize(q_in,0).x;
+	int Nx = Ny - 1;
+
+	float s = p.x - 0.5;
+	float t = p.y;
+
+	int i0 = int(floor(s));
+	int j0 = int(floor(t));
+
+	int i1 = i0 + 1;
+	int j1 = j0 + 1;
+
+	i0 = clamp(i0, 0, Nx - 1);
+	i1 = clamp(i1, 0, Nx - 1);
+
+	j0 = clamp(j0, 0, Ny - 1);
+	j1 = clamp(j1, 0, Ny - 1);
+
+	float vy00 = texelFetch(q_in, ivec2(i0,j0), 0).y;
+	float vy01 = texelFetch(q_in, ivec2(i0,j1), 0).y;
+	float vy10 = texelFetch(q_in, ivec2(i1,j0), 0).y;
+	float vy11 = texelFetch(q_in, ivec2(i1,j1), 0).y;
+
+	float u = fract(s);
+	float v = fract(t);
+
+	float vy0 = mix(vy00, vy10, u);
+	float vy1 = mix(vy01, vy11, u);
+
+	return mix(vy0, vy1, v);
+}
+
+vec2 get_v(vec2 p)
+{
+	int N = textureSize(q_in,0).x - 1;
+	bvec2 oob = bvec2( 
+		p.x < 0.5 || p.x > N - 0.5, 
+		p.y < 0.5 || p.y > N - 0.5);
+
+	float vx = sample_vx(p);
+	float vy = sample_vy(p);
+
+	if (within_cursor(p))
+		return vec2(0,0);
+
+	if (oob.x) vx = 0;
+	if (oob.y) vy = 0;
+
+	return vec2(vx,vy);
+}
+
 vec2 RK4(vec2 x0, float dt)
 {
-	vec2 k1 = get_q(x0).xy;
-	vec2 k2 = get_q(x0 - 0.5*dt*k1).xy;
-	vec2 k3 = get_q(x0 - 0.5*dt*k2).xy;
-	vec2 k4 = get_q(x0 - dt*k3).xy;
+	vec2 k1 = get_v(x0);
+	vec2 k2 = get_v(x0 - 0.5*dt*k1);
+	vec2 k3 = get_v(x0 - 0.5*dt*k2);
+	vec2 k4 = get_v(x0 - dt*k3);
 
 	return (1./6.) * dt * (k1 + 2.*k2 + 2.*k3 + k4);
 }
 
-void main()
+vec2 jet(vec2 c, vec2 O)
 {
-    ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
-	ivec2 out_size = imageSize(q_out);
+	ivec2 size = imageSize(q_out);
+	vec2 cursor = u_cursor*size;
 
-	if (idx.x >= out_size.x || idx.y >= out_size.y)
-		return;
+	float S = 1;
+	vec2 V = vec2(1,0);//normalize(cursor - O);
+	vec2 X = vec2(V.y, -V.x);
+	vec2 r = c - O;
 
-	vec2 pos = vec2(idx.xy) + vec2(0.5);
+	if (length(r) < 2*S && abs(dot(r, X)) <= 2)
+		return S * V;
+	return vec2(0);
+}
 
-	vec2 c = pos - RK4(pos, TIMESTEP);
-
-	vec4 q_hat = get_q(c);
+vec4 cursor_jet(vec2 c)
+{
+	ivec2 size = imageSize(q_out);
+	vec2 cursor = u_cursor*size;
+	vec2 vcursor = (u_cursor - u_cursor_prev) * size;
 
 	if (bool(u_cursor_flags)) {
 		float power = 1.5;
 		float sigma = 0.2f;
 
-		vec2 cursor = u_cursor*out_size;
-		vec2 vcursor = (u_cursor - u_cursor_prev) * out_size;
-
 		vec2 r = c - cursor;
-
-		q_hat.xy += 10.*(vcursor)/(1. + 20.*dot(r,r));
-		q_hat.z += 1/(1. + 5.*dot(r,r));
+		return vec4(40.*(vcursor)/(1. + 20.*dot(r,r)),0.1,0);
 	}
+	return vec4(0);
+}
 
-	float S = 5;
+void main()
+{
+    ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 size = imageSize(q_out);
 
-	if (pos.x <= S + 2 && pos.x > 0) {
-		float r = abs(pos.y - out_size.y/2);
+	if (idx.x >= size.x || idx.y >= size.y)
+		return;
 
-		float W = out_size.y/16;
+	vec2 pos_x = vec2(idx.xy) + vec2(0,0.5);
+	vec2 pos_y = vec2(idx.xy) + vec2(0.5,0);
 
-		if (r < W) {
-			r /= W;
-			q_hat.xy = vec2(S,0) * exp(-r*r);
-			//q_hat.z = 0.5;
-		}
-	}
+	vec2 vx = RK4(pos_x, TIMESTEP);
+	vec2 vy = RK4(pos_y, TIMESTEP);
 
-	//q_hat.z *= 0.99;
+	vec2 cx = pos_x - vx;
+	vec2 cy = pos_y - vy;
 
-	imageStore(q_out, idx, q_hat);
+	vec2 v_hat = vec2(get_v(cx).x,get_v(cy).y);
+
+	vec2 O = vec2(2, size.y/2);
+
+	vec4 qx = cursor_jet(pos_x);
+	vec4 qy = cursor_jet(pos_y);
+
+	vec2 f = vec2(
+		jet(pos_x,O).x + qx.x,
+		jet(pos_y,O).y + qy.y
+	);
+
+	v_hat += f;
+
+	vec2 q_hat = get_q(0.5*(cx + cy)).zw;
+	imageStore(q_out, idx, vec4(v_hat,q_hat));
 }
 

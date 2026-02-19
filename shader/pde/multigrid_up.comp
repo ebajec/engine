@@ -28,20 +28,17 @@ layout (r32f, binding = 11) uniform image2D R2[MAX_MIPS];
 layout (local_size_x = GROUPS, local_size_y = GROUPS, local_size_z = 1) in;
 
 shared float block[GROUPS][GROUPS];
+shared bool boundary[GROUPS][GROUPS];
 
-ivec2 neumann(ivec2 idx, ivec2 size)
+bool test_boundary(ivec2 idx, uint level)
 {
-	if (idx.x < 0)
-		idx.x = 0;
-	else if (idx.x > size.x - 1)
-		idx.x = size.x - 1;
-	if (idx.y < 0)
-		idx.y = 0;
-	else if (idx.y > size.y - 1)
-		idx.y = size.y - 1;
-	return idx;
-}
+	ivec2 size = level > 0 ? 
+		imageSize(R2[level - 1]) : imageSize(in_lhs_final);
 
+	return 
+		idx.x < 0 || idx.y < 0 ||
+		idx.x > size.x - 1 || idx.y > size.y - 1;
+}
 
 float jacobi_it(ivec2 idx, float rhs, float h)
 {
@@ -55,7 +52,25 @@ float jacobi_it(ivec2 idx, float rhs, float h)
 	float t = block[t_idx.x][t_idx.y];
 	float b = block[b_idx.x][b_idx.y];
 
-	return 0.25*(l + r + t + b - h*h*rhs);
+	bool bl = boundary[l_idx.x][l_idx.y];
+	bool br = boundary[r_idx.x][r_idx.y];
+	bool bt = boundary[t_idx.x][t_idx.y];
+	bool bb = boundary[b_idx.x][b_idx.y];
+
+	float denom = (
+		float(!bl) + float(!br) + 
+		float(!bb) + float(!bt)
+	);
+
+	if (denom == 0)
+		return 0;
+
+	return (
+		mix(l,0,float(bl)) + 
+		mix(r,0,float(br)) + 
+		mix(b,0,float(bb)) + 
+		mix(t,0,float(bt)) - 
+		h*h*rhs)/denom;
 }
 
 vec4 load_input(ivec2 idx, uint level)
@@ -105,11 +120,6 @@ float upsample_correction(ivec2 idx, uint level)
 float fetch_lhs(ivec2 grid_idx, uint level)
 {
 	ivec2 size = imageSize(R2[level]);
-	grid_idx = neumann(grid_idx, size);
-
-	if (clamp(grid_idx, ivec2(0), size) != grid_idx)
-		return 0;
-
 	return imageLoad(R2[level], grid_idx).x;
 }
 
@@ -136,9 +146,11 @@ void main()
 	ivec2 size = u_level > 0 ? 
 		imageSize(R2[u_level - 1]) : imageSize(out_lhs_final);
 
-	ivec2 corrected_idx = neumann(grid_idx, size);
-	bool oob = grid_idx != corrected_idx;
-	grid_idx = corrected_idx;
+	bool is_boundary = test_boundary(grid_idx, u_level); 
+
+	boundary[idx.x][idx.y] = is_boundary; 
+
+	grid_idx = clamp(grid_idx, ivec2(0), size - ivec2(1));
 
 	float correction = upsample_correction(grid_idx, u_level);
 
@@ -164,7 +176,7 @@ void main()
 
 	for (int i = 0; i < JACOBI_ITERATIONS - 1; ++i) {
 		barrier();
-		lhs = oob ? lhs : jacobi_it(idx, rhs, h);
+		lhs = jacobi_it(idx, rhs, h);
 		barrier();
 		block[idx.x][idx.y] = lhs;
 	}

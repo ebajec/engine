@@ -51,17 +51,6 @@ float div_v(ivec2 p)
 }
 
 
-vec2 pressure_grad(ivec2 p)
-{
-	float pl = get_p(p + ivec2(-1,0));
-	float pr = get_p(p + ivec2(0,0));
-
-	float pb = get_p(p + ivec2(0,-1));
-	float pt = get_p(p + ivec2(0,0));
-
-	return vec2(pr - pl, pt - pb)/(2*DELTA_X); 
-}
-
 float pressure_lap(ivec2 p)
 {
 	float pl = get_p(p + ivec2(-1,0));
@@ -84,6 +73,16 @@ float q_div_v(ivec2 idx)
 		div_v(idx + ivec2(0,-1)) +
 		div_v(idx + ivec2(0,1))
 	);
+}
+
+vec2 pressure_grad(ivec2 p)
+{
+	float pc = get_p(p + ivec2(0,0));
+
+	float pl = get_p(p + ivec2(-1,0));
+	float pb = get_p(p + ivec2(0,-1));
+
+	return vec2(pc - pl, pc - pb)/(2*DELTA_X); 
 }
 
 void main()
