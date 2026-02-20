@@ -145,7 +145,6 @@ std::string AssetTable::get_system_path(const char *path)
 	fs::path child_path (path);
 	fs::path res = root_path / child_path; 
 	return res.string();
-
 }
 
 AssetID AssetTable::find(const char *path) const

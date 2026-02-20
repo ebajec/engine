@@ -5,7 +5,7 @@
 #include "stdint.h"
 
 #define MAKE_HANDLE(name)\
-struct name##ID {uint64_t id;}
+struct name##ID {uint64_t id = 0;}
 
 #define EV2_HANDLE_CAST(ty, val)\
 ev2::ty##ID{.id = (uint64_t)val}

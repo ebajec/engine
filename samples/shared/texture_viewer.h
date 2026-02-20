@@ -16,11 +16,14 @@ struct TextureViewerPanel
 
 	std::unique_ptr<Panel> panel;
 
-	struct RenderData {
-		ev2::TextureID map;
+	std::string pipeline_path;
 
-		ev2::GraphicsPipelineID screen_quad;
-		ev2::DescriptorSetID screen_quad_set;
+	uint32_t panel_idx;
+
+	struct RenderData {
+		ev2::TextureID tex {};
+		ev2::GraphicsPipelineID pipeline {};
+		ev2::DescriptorSetID desc_set {};
 
 		ev2::BindingSlot tex_slot;
 
@@ -34,7 +37,10 @@ struct TextureViewerPanel
 	} rd;
 
 	glm::vec2 world_cursor;
-	TextureViewerPanel(App *app, uint32_t x, uint32_t y, uint32_t w, uint32_t h);
+	TextureViewerPanel(App *app, uint32_t x, uint32_t y, uint32_t w, uint32_t h, 
+					const char * pipeline = "pipelines/screen_quad.yaml");
+
+	int update_pipeline(const char *path);
 
 	int set_texture(ev2::Device *dev, ev2::TextureID tex);
 

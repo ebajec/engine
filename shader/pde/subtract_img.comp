@@ -19,7 +19,7 @@ void main()
 	vec2 uv = (vec2(idx) + vec2(0.5))/vec2(size);
 
 	float a = imageLoad(img_out, idx).x;
-	float b = texelFetch(img_in, ivec2(0),0).x;
+	float b = texelFetch(img_in, ivec2(0),0).x/float(size.x*size.y);
 
 	imageStore(img_out, idx, vec4(a - b,0,0,0));
 }

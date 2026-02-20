@@ -1,6 +1,12 @@
 #include "texture_viewer.h"
 #include "engine/utils/camera.h"
 
+#include "engine/utils/log.h"
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
 glm::vec2 TextureViewerPanel::get_world_cursor_pos()
 {
 	glm::ivec2 panel_size = panel->get_size();
@@ -19,30 +25,60 @@ glm::vec2 TextureViewerPanel::get_world_cursor_pos()
 	return glm::vec2(uv); 
 }
 
-TextureViewerPanel::TextureViewerPanel(App *app, uint32_t x, uint32_t y, uint32_t w, uint32_t h) : 
+TextureViewerPanel::TextureViewerPanel(App *app,
+									   uint32_t x, uint32_t y, uint32_t w, uint32_t h,
+									   const char *pipeline) : 
 	app(app)
 {
 	static uint32_t ctr = 0;
-	std::string name = "Texture" + std::to_string(++ctr);
+
+	panel_idx = ++ctr;
+
+	std::string name = "Texture" + std::to_string(panel_idx);
 	panel.reset(new Panel(app->dev, name.c_str(), x, y, w, h));
+
+
+	pipeline_path = pipeline;
+}
+
+int TextureViewerPanel::update_pipeline(const char *path)
+{
+	ev2::GraphicsPipelineID pipeline = ev2::load_graphics_pipeline(app->dev, path);
+
+	if (!EV2_VALID(pipeline))
+		return EXIT_FAILURE;
+
+	ev2::DescriptorLayoutID layout = 
+		ev2::get_graphics_pipeline_layout(app->dev, pipeline);
+
+	ev2::DescriptorSetID set = ev2::create_descriptor_set(app->dev, layout);
+	ev2::BindingSlot slot = ev2::find_binding(layout, "u_tex");
+
+	ev2::Result res = ev2::bind_texture(app->dev, set, slot, rd.tex);
+
+	if (res != ev2::SUCCESS)
+		return EXIT_FAILURE;
+
+	if (EV2_VALID(rd.desc_set))
+		ev2::destroy_descriptor_set(app->dev, rd.desc_set);
+
+	rd.pipeline = pipeline;
+	rd.desc_set = set;
+	rd.tex_slot = slot;
+	pipeline_path = path;
+
+	return EXIT_SUCCESS;
 }
 
 int TextureViewerPanel::init(ev2::Device *dev, ev2::TextureID tex) 
 {
-	rd.screen_quad = ev2::load_graphics_pipeline(dev, "pipelines/screen_quad.yaml");
-
-	if (!EV2_VALID(rd.screen_quad))
-		return EXIT_FAILURE;
-
 	rd.camera = ev2::create_view(dev, nullptr, nullptr);
+	rd.tex = tex;
 
-	ev2::DescriptorLayoutID screen_quad_layout = 
-		ev2::get_graphics_pipeline_layout(dev, rd.screen_quad);
+	int result = update_pipeline(pipeline_path.c_str());
 
-	rd.screen_quad_set = ev2::create_descriptor_set(dev, screen_quad_layout);
-	rd.tex_slot = ev2::find_binding(screen_quad_layout, "u_tex");
-
-	int result = this->set_texture(dev, tex);
+	if (result)
+		return result;
 
 	if (result)
 		return result;
@@ -52,14 +88,40 @@ int TextureViewerPanel::init(ev2::Device *dev, ev2::TextureID tex)
 
 int TextureViewerPanel::set_texture(ev2::Device *dev, ev2::TextureID tex)
 {
-	ev2::bind_texture(dev, rd.screen_quad_set, rd.tex_slot, tex);
-	rd.map = tex;
+	ev2::Result res = ev2::bind_texture(dev, rd.desc_set, rd.tex_slot, tex);
 
-	return 0;
+	if (res)
+		return EXIT_FAILURE;
+
+	rd.tex = tex;
+
+	return EXIT_SUCCESS;
 }
 
 int TextureViewerPanel::update(ev2::Device *dev)
 {
+	ImGui::Begin("Editor");
+	ImGui::PushID(panel_idx);
+	if (ImGui::CollapsingHeader(panel->get_name().c_str())) {
+		char path[PATH_MAX] {};
+		std::string text = "current: " + pipeline_path;
+
+		ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue; 
+
+		if (ImGui::InputText(text.c_str(), path, sizeof(path), flags)) {
+			if (pipeline_path.compare(path)) {
+				if (update_pipeline(path) != ev2::SUCCESS) {
+					log_warn("%s: Failed to set pipeline to %s", 
+						panel->get_name().c_str(),
+						path
+					);
+				}
+			}
+		}
+	}
+	ImGui::PopID();
+	ImGui::End();
+
 	panel->imgui(); 
 
 	glm::ivec2 panel_size = panel->get_size();
@@ -93,8 +155,8 @@ void TextureViewerPanel::render(ev2::Device *dev)
 	ev2::Rect view_rect = {0,0, (uint32_t)win_size.x, (uint32_t)win_size.y};
 
 	ev2::PassCtx pass = ev2::begin_pass(dev, window_target, rd.camera, view_rect);
-	ev2::cmd_bind_gfx_pipeline(pass.rec, rd.screen_quad);
-	ev2::cmd_bind_descriptor_set(pass.rec, rd.screen_quad_set);
+	ev2::cmd_bind_gfx_pipeline(pass.rec, rd.pipeline);
+	ev2::cmd_bind_descriptor_set(pass.rec, rd.desc_set);
 	ev2::cmd_draw_screen_quad(pass.rec);
 	ev2::SyncID pass_sync = ev2::end_pass(dev, pass);
 
@@ -103,7 +165,7 @@ void TextureViewerPanel::render(ev2::Device *dev)
 
 void TextureViewerPanel::destroy(ev2::Device *dev)
 {
-	ev2::destroy_descriptor_set(dev, rd.screen_quad_set);
+	ev2::destroy_descriptor_set(dev, rd.desc_set);
 	panel.reset();
 }
 

@@ -68,7 +68,7 @@ void destroy_descriptor_set(
 	DescriptorSetID set 
 );
 
-void bind_buffer(
+ev2::Result bind_buffer(
 	Device *dev, 
 	DescriptorSetID set, 
 	BindingSlot slot, 
@@ -77,14 +77,14 @@ void bind_buffer(
 	size_t size
 ); 
 
-void bind_texture(
+ev2::Result bind_texture(
 	Device *dev, 
 	DescriptorSetID set, 
 	BindingSlot slot, 
 	TextureID tex 
 ); 
 
-void bind_image(
+ev2::Result bind_image(
 	Device *dev,
 	DescriptorSetID set, 
 	BindingSlot slot, 

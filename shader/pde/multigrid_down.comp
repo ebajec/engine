@@ -1,16 +1,8 @@
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
+//
 
-#define MAX_MIPS 6
-
-#define JACOBI_ITERATIONS 4
-#define GROUPS 16
-#define OUTPUT_W (GROUPS - 2*JACOBI_ITERATIONS)
-
-layout (binding = 0) uniform ubo {
-	uint N;
-	uint u_level;
-};
+#include "multigrid.glsl"
 
 // solving for H(phi) = f
 // 				[lhs]   [rhs]
@@ -22,84 +14,33 @@ layout (binding = 0) uniform ubo {
 // the previous passes level and use it for f, write the smoothed
 // residuals to R2 for use in later stages
 
-// Initial guess for phi (lhs)
-layout (r32f, binding = 1) readonly uniform image2D in_lhs;
-
-// Layout: f
 // The level 0 iteration fetches directly from f. Subsequent iterations
 // downsample the residuals from the previous pass
-layout (r32f, binding = 2) readonly uniform image2D in_rhs;
-
-layout (r32f, binding = 3) writeonly uniform image2D out_phi;
 
 // Layout [R1_0, R1_1, ... R1_N]
-layout (r32f, binding = 4) uniform image2D R1[MAX_MIPS];
+layout (r32f, binding = 6) uniform image2D R1[MAX_MIPS];
 
 // Layout [R2_1, ... R2_N+1]
 layout (r32f, binding = 12) writeonly uniform image2D R2[MAX_MIPS];
 
-layout (local_size_x = GROUPS, local_size_y = GROUPS, local_size_z = 1) in;
-
-shared float block[GROUPS][GROUPS];
-shared bool boundary[GROUPS][GROUPS];
-
-ivec2 neumann(ivec2 idx, ivec2 size)
-{
-	if (idx.x < 0)
-		idx.x = 0;
-	else if (idx.x > size.x - 1)
-		idx.x = size.x - 1;
-
-	if (idx.y < 0)
-		idx.y = 0;
-	else if (idx.y > size.y - 1)
-		idx.y = size.y - 1;
-
-	return idx;
-}
-
-float RHS(ivec2 idx, uint level)
+float RHS(ivec2 idx, uint level, out float valid)
 {
 	ivec2 size = imageSize(R1[level]);
-	//idx = neumann(idx, size);
-	return imageLoad(R1[level], idx).x;
+
+	bool oob = test_boundary(idx,level);
+	bool outside = (
+		idx.x < 0 || idx.x >= size.x || 
+		idx.y < 0 || idx.y >= size.x);
+
+	valid = float(!oob && !outside);
+
+	return valid > 0 ? imageLoad(R1[level], idx).x : 0;
 }
 
 float LHS(ivec2 idx)
 {
 	ivec2 size = imageSize(in_lhs);
-	//idx = neumann(idx, size);
-	return imageLoad(in_lhs, idx).x;
-}
-
-float jacobi_lhs(vec4 nbr, bvec4 bd, float rhs, float h)
-{
-	float denom = dot(vec4(not(bd)), vec4(1));
-
-	if (denom == 0)
-		return 0;
-
-	return (dot(nbr, vec4(not(bd))) - h*h*rhs)/denom;
-}
-
-float jacobi_it(ivec2 idx, float rhs, float h)
-{
-	ivec2 l_idx = clamp(idx + ivec2(-1,0), ivec2(0), ivec2(GROUPS - 1));
-	ivec2 r_idx = clamp(idx + ivec2(1,0), ivec2(0), ivec2(GROUPS - 1));
-	ivec2 t_idx = clamp(idx + ivec2(0,1), ivec2(0), ivec2(GROUPS - 1));
-	ivec2 b_idx = clamp(idx + ivec2(0,-1), ivec2(0), ivec2(GROUPS - 1));
-
-	float l = block[l_idx.x][l_idx.y];
-	float r = block[r_idx.x][r_idx.y];
-	float t = block[t_idx.x][t_idx.y];
-	float b = block[b_idx.x][b_idx.y];
-
-	bool bl = boundary[l_idx.x][l_idx.y];
-	bool br = boundary[r_idx.x][r_idx.y];
-	bool bt = boundary[t_idx.x][t_idx.y];
-	bool bb = boundary[b_idx.x][b_idx.y];
-
-	return jacobi_lhs(vec4(l,r,b,t), bvec4(bl,br,bb,bt), rhs, h);
+	return imageLoad(in_lhs, clamp(idx, ivec2(0),size)).x;
 }
 
 float residual(ivec2 idx, float rhs, float h)
@@ -131,16 +72,6 @@ float residual(ivec2 idx, float rhs, float h)
 	return rhs - lap;
 }
 
-bool test_boundary(ivec2 idx, uint level)
-{
-	ivec2 size = level > 0 ? 
-		imageSize(R2[level - 1]) : imageSize(in_lhs);
-
-	return 
-		idx.x < 0 || idx.y < 0 ||
-		idx.x > size.x - 1 || idx.y > size.y - 1;
-}
-
 float fetch_lhs(ivec2 grid_idx, float rhs, float h)
 {
 	ivec2 l_idx = grid_idx + ivec2(-1, 0);
@@ -160,41 +91,42 @@ float fetch_lhs(ivec2 grid_idx, float rhs, float h)
 		float b = LHS(b_idx);
 
 		return jacobi_lhs(vec4(l,r,b,t),bvec4(bl,br,bb,bt), rhs,h);
-
-		return 0.25*(l + r + t + b - h*h*rhs);
 	}
 
-	return jacobi_lhs(vec4(0),bvec4(bl,br,bb,bt), rhs,h);
-
-	return -0.25*(h*h*rhs);
+	return 0*jacobi_lhs(vec4(0),bvec4(bl,br,bb,bt), rhs,h);
 }
 
 float downsample_rhs(ivec2 idx)
 {
 	// if the sizes don't match, we downsample
 	if (u_level > 0) {
-		ivec2 l_idx = 2*idx + ivec2(0, 0);
-		ivec2 r_idx = 2*idx + ivec2(0, 1);
-		ivec2 b_idx = 2*idx + ivec2(1, 0);
-		ivec2 t_idx = 2*idx + ivec2(1, 1);
+		ivec2 stencil[9] = {
+			2*idx,
 
-		bvec4 bd = bvec4(
-			test_boundary(l_idx, u_level - 1),
-			test_boundary(r_idx, u_level - 1),
-			test_boundary(t_idx, u_level - 1),
-			test_boundary(b_idx, u_level - 1)
-		);
+			2*idx + ivec2(-1,0),
+			2*idx + ivec2(1,0),
+			2*idx + ivec2(0,-1),
+			2*idx + ivec2(0,1),
 
-		vec4 v = vec4(
-			RHS(l_idx, u_level - 1),
-			RHS(r_idx, u_level - 1),
-			RHS(b_idx, u_level - 1),
-			RHS(t_idx, u_level - 1)
-		);
+			2*idx + ivec2(-1,-1),
+			2*idx + ivec2(-1,1),
+			2*idx + ivec2(1,-1),
+			2*idx + ivec2(1,1),
+		};
 
-		float denom = dot(vec4(1), vec4(not(bd)));
+		uint L = u_level - 1;
 
-		return bool(denom) ? dot(v,vec4(not(bd)))/denom : 0;
+		float wt[9] = {1, 2,2,2,2, 1,1,1,1};
+
+		float num, den;
+		for (int i = 0; i < 9; ++i) {
+			float valid;
+			float value = RHS(stencil[i],L,valid);
+			num += wt[i] * valid * value ;
+			den += wt[i] * valid;
+		}
+
+		return den > 0 ? num/den : 0;
 	}
 
 	return imageLoad(in_rhs, idx).x;
@@ -257,5 +189,5 @@ void main()
 	if (u_level > 0)
 		imageStore(R2[u_level - 1], grid_idx, vec4(lhs,0,0,0));
 	else 
-		imageStore(out_phi, grid_idx, vec4(lhs,0,0,0));
+		imageStore(tmp_lhs, grid_idx, vec4(lhs,0,0,0));
 }

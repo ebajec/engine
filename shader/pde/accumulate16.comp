@@ -39,11 +39,6 @@ void main()
 
 	ivec2 widx = ivec2(gl_WorkGroupID.xy);
 
-	acc /= float(
-		(size.x < GROUPS ? size.x : GROUPS) *
-		(size.y < GROUPS ? size.y : GROUPS)
-	);
-
 	imageStore(img_out, widx, vec4(acc,0,0,0));
 }
 

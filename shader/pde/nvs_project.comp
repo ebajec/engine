@@ -64,17 +64,6 @@ float pressure_lap(ivec2 p)
 	return (pl + pr + pb + pt - 4*pc)/(DELTA_X*DELTA_X); 
 }
 
-// q-centered divergence
-float q_div_v(ivec2 idx)
-{
-	return 0.25*(
-		div_v(idx + ivec2(-1,0)) + 
-		div_v(idx + ivec2(1,0)) + 
-		div_v(idx + ivec2(0,-1)) +
-		div_v(idx + ivec2(0,1))
-	);
-}
-
 vec2 pressure_grad(ivec2 p)
 {
 	float pc = get_p(p + ivec2(0,0));
@@ -106,10 +95,9 @@ void main()
 	// that lap(p) = div(u*). 
 	if (idx.x < size.x - 1 && idx.y < size.y - 1) {
 		float e = abs(pressure_lap(idx) - div_v(idx));
-		//q.z = e > 1e-3 ? e*10 : 0;
+		q.z = 10*e;
 	}
 	//q.z = length(grad_p);
-	//q.z = abs(q_div_v(idx));
 	imageStore(q_out, idx, q);
 }
 

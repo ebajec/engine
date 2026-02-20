@@ -10,6 +10,7 @@ enum Result
 	TIMEOUT = 1,
 	SUCCESS = 0,
 	ELOAD_FAILED = -1,
+	EINVALID_BINDING = -2,
 	EUNKNOWN = -1024
 };
 

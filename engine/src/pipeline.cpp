@@ -663,8 +663,14 @@ static ev2::Result gl_gfx_pipeline_create(
 	GfxPipelineInfo gfx_info;
 	try {
 		result = parse_gfx_pipeline_file(&gfx_info,syspath.c_str());
-	} catch (YAML::Exception e) {
+	} catch (const YAML::Exception& e) {
 		log_error("Error while parsing YAML: %s",e.what());
+		return ev2::ELOAD_FAILED;
+	} catch (const YAML::BadFile& e) {
+		log_error("Error while parsing YAML: %s",e.what());
+		return ev2::ELOAD_FAILED;
+	} catch (...) {
+		log_error("Error while parsing YAML: unknown");
 		return ev2::ELOAD_FAILED;
 	}
 
@@ -830,8 +836,6 @@ GraphicsPipelineID load_graphics_pipeline(Device *dev, const char *path)
 		.destroy = gl_gfx_pipeline_destroy,
 	};
 
-	std::string realpath = dev->assets->get_system_path(path);
-
 	ev2::GraphicsPipeline *pipeline = new ev2::GraphicsPipeline{}; 
 	ev2::Result res = gl_gfx_pipeline_create(dev, pipeline, path);
 
@@ -957,7 +961,7 @@ void destroy_descriptor_set(Device *dev, DescriptorSetID id)
 	delete set;
 }
 
-void bind_buffer(
+ev2::Result bind_buffer(
 	Device *dev, 
 	DescriptorSetID set_id, 
 	BindingSlot slot, 
@@ -974,7 +978,7 @@ void bind_buffer(
 			"Mismatched binding for buffer %d. (set=%d, index=%d)",
 			buf_id, slot.set, slot.id, set->index
 		);
-		return;
+		return ev2::EINVALID_BINDING;
 	}
 
 	auto it = set->bindings.find(slot.id);
@@ -984,7 +988,7 @@ void bind_buffer(
 			"Mismatched binding for buffer %d. (set=%d, index=%d)",
 			buf_id, slot.set, slot.id, set->index
 		);
-		return;
+		return ev2::EINVALID_BINDING;
 	}
 
 	ResourceBinding *binding = &it->second;
@@ -998,7 +1002,7 @@ void bind_buffer(
 			"Mismatched binding type (%d) for buffer %d. (set=%d, index=%d)",
 			binding->type, buf_id, slot.set, slot.id, set->index
 		);
-		return;
+		return ev2::EINVALID_BINDING;
 	}
 
 	binding->buf = BufferBinding{
@@ -1006,9 +1010,10 @@ void bind_buffer(
 		.size = size,
 		.offset = offset,
 	};
+	return ev2::SUCCESS;
 }
 
-void bind_texture(
+ev2::Result bind_texture(
 	Device *dev, 
 	DescriptorSetID set_id, 
 	BindingSlot slot, 
@@ -1023,7 +1028,7 @@ void bind_texture(
 			"Mismatched binding for image %d. (set=%d, index=%d) to set %d",
 			tex->img, slot.set, slot.id, set->index
 		);
-		return;
+		return ev2::EINVALID_BINDING;
 	}
 
 	auto it = set->bindings.find(slot.id);
@@ -1032,7 +1037,7 @@ void bind_texture(
 		log_error(
 			"Attempting to bind image %d to nonexistent index %d in set %d", 
 			tex->img, slot.id, slot.set);
-		return;
+		return ev2::EINVALID_BINDING;
 	}
 
 	ResourceBinding *binding = &it->second;
@@ -1043,13 +1048,14 @@ void bind_texture(
 		log_error(
 			"Attempting to bind invalid resource (id=%d) to texture slot %d",
 			binding->tex.handle, slot.id);
-		return;
+		return ev2::EINVALID_BINDING;
 	}
 
 	binding->tex = TextureBinding{.handle = tex_id};
+	return ev2::SUCCESS;
 }
 
-void bind_image(
+ev2::Result bind_image(
 	Device *dev,
 	DescriptorSetID h_set, 
 	BindingSlot slot, 
@@ -1064,7 +1070,7 @@ void bind_image(
 			"Mismatched binding for image %d. (set=%d, index=%d) to set %d",
 			h_img.id, slot.set, slot.id, set->index
 		);
-		return;
+		return ev2::EINVALID_BINDING;
 	}
 
 	auto it = set->bindings.find(slot.id);
@@ -1073,7 +1079,7 @@ void bind_image(
 		log_error(
 			"Attempting to bind image %d to nonexistent index %d in set %d", 
 			h_img.id, slot.id, slot.set);
-		return;
+		return ev2::EINVALID_BINDING;
 	}
 
 	ResourceBinding *binding = &it->second;
@@ -1082,10 +1088,12 @@ void bind_image(
 		log_error(
 			"Attempting to bind invalid resource (id=%d) to image slot %d",
 			binding->tex.handle, slot.id);
-		return;
+		return ev2::EINVALID_BINDING;
 	}
 
 	binding->img = ImageBinding{.handle = h_img};
+
+	return ev2::SUCCESS;
 }
 
 //------------------------------------------------------------------------------

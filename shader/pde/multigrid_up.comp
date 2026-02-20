@@ -2,86 +2,22 @@
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
 
-#define MAX_MIPS 6
-
-#define JACOBI_ITERATIONS 4
-#define GROUPS 16
-#define OUTPUT_W (GROUPS - 2*JACOBI_ITERATIONS)
-
-layout (binding = 0) uniform ubo {
-	uint N;
-	uint u_level;
-};
+#include "multigrid.glsl"
 
 // solving for H(lhs) = rhs
 
-// phi (lhs)
-layout (r32f, binding = 1) writeonly uniform image2D out_lhs_final;
-layout (r32f, binding = 2) readonly uniform image2D in_lhs_final;
-
 // Layout [R1_0, ... R1_N]
-layout (r32f, binding = 3) uniform image2D R1[MAX_MIPS];
+layout (r32f, binding = 6) uniform image2D R1[MAX_MIPS];
 
 // Layout [R2_1, ... R2_N+1]
-layout (r32f, binding = 11) uniform image2D R2[MAX_MIPS];
-
-layout (local_size_x = GROUPS, local_size_y = GROUPS, local_size_z = 1) in;
-
-
-
-
-shared float block[GROUPS][GROUPS];
-shared bool boundary[GROUPS][GROUPS];
-
-bool test_boundary(ivec2 idx, uint level)
-{
-	ivec2 size = level > 0 ? 
-		imageSize(R2[level - 1]) : imageSize(in_lhs_final);
-
-	return 
-		idx.x < 0 || idx.y < 0 ||
-		idx.x > size.x - 1 || idx.y > size.y - 1;
-}
-
-float jacobi_it(ivec2 idx, float rhs, float h)
-{
-	ivec2 l_idx = clamp(idx + ivec2(-1,0), ivec2(0), ivec2(GROUPS - 1));
-	ivec2 r_idx = clamp(idx + ivec2(1,0), ivec2(0), ivec2(GROUPS - 1));
-	ivec2 t_idx = clamp(idx + ivec2(0,1), ivec2(0), ivec2(GROUPS - 1));
-	ivec2 b_idx = clamp(idx + ivec2(0,-1), ivec2(0), ivec2(GROUPS - 1));
-
-	float l = block[l_idx.x][l_idx.y];
-	float r = block[r_idx.x][r_idx.y];
-	float t = block[t_idx.x][t_idx.y];
-	float b = block[b_idx.x][b_idx.y];
-
-	bool bl = boundary[l_idx.x][l_idx.y];
-	bool br = boundary[r_idx.x][r_idx.y];
-	bool bt = boundary[t_idx.x][t_idx.y];
-	bool bb = boundary[b_idx.x][b_idx.y];
-
-	float denom = (
-		float(!bl) + float(!br) + 
-		float(!bb) + float(!bt)
-	);
-
-	if (denom == 0)
-		return 0;
-
-	return (
-		mix(l,0,float(bl)) + 
-		mix(r,0,float(br)) + 
-		mix(b,0,float(bb)) + 
-		mix(t,0,float(bt)) - 
-		h*h*rhs)/denom;
-}
+layout (r32f, binding = 12) uniform image2D R2[MAX_MIPS];
 
 vec4 load_input(ivec2 idx)
 {
 	uint k = N - 1 - u_level;
 
 	if (k == 0)
-		return imageLoad(R2[N-1], idx);
+		return imageLoad(R2[N-1], clamp(idx, ivec2(0), imageSize(R2[N-1])));
 	return imageLoad(R1[u_level + 1], idx);
 }
 
@@ -116,13 +52,15 @@ float upsample_correction(ivec2 idx)
 
 float fetch_lhs(ivec2 grid_idx)
 {
-	return imageLoad(R2[u_level - 1], grid_idx).x;
+	return imageLoad(R2[u_level - 1], 
+				  clamp(grid_idx, ivec2(0),imageSize(R2[u_level-1]))).x;
 }
 
 void main()
 {
 	// index in local block
 	ivec2 idx = ivec2(gl_LocalInvocationID.xy);
+
 
 	// index relative to output region 
 	// I.e., for groups = 8, j = 2
@@ -140,7 +78,7 @@ void main()
 		ivec2(gl_WorkGroupID.xy) * OUTPUT_W + out_idx;
 
 	ivec2 size = u_level > 0 ? 
-		imageSize(R2[u_level - 1]) : imageSize(out_lhs_final);
+		imageSize(R2[u_level - 1]) : imageSize(out_lhs);
 
 	bool is_boundary = test_boundary(grid_idx, u_level); 
 
@@ -153,14 +91,14 @@ void main()
 	const float h = 1.f;
 
 	if (u_level == 0) {
-		ivec2 size = imageSize(out_lhs_final);
+		ivec2 size = imageSize(out_lhs);
 		if (grid_idx != clamp(grid_idx, ivec2(0), size))
 			return;
 
-		float phi = imageLoad(in_lhs_final, grid_idx).x;
+		float phi = imageLoad(tmp_lhs, grid_idx).x;
 		float value = phi + correction;
 
-		imageStore(out_lhs_final, grid_idx, vec4(value, 0, 0, 0));
+		imageStore(out_lhs, grid_idx, vec4(value, 0, 0, 0));
 		return;
 	}
 

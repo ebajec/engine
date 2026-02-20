@@ -77,13 +77,13 @@ struct PressureSolver
 		ev2::BindingSlot in_rhs;
 		ev2::BindingSlot R1;
 		ev2::BindingSlot R2;
-		ev2::BindingSlot out_phi;
+		ev2::BindingSlot tmp_lhs_id;
 	} down_slots;
 
 	struct {
 		ev2::BindingSlot ubo;
-		ev2::BindingSlot out_lhs_final;
-		ev2::BindingSlot in_lhs_final;
+		ev2::BindingSlot out_lhs;
+		ev2::BindingSlot tmp_lhs_id;
 		ev2::BindingSlot R1;
 		ev2::BindingSlot R2;
 	} up_slots;
@@ -113,7 +113,7 @@ int PressureSolver::init(ev2::Device *dev, uint32_t w, uint32_t h)
 	if (!is_pow2(sim_w) || !is_pow2(sim_h))
 		return EXIT_FAILURE;
 
-	N = std::min((int)ceil(log2((double)w)), 6);
+	N = 6;//std::min((int)ceil(log2((double)w)), 6);
 
 	R1 = ev2::create_image(dev, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, N); 
 	R2 = ev2::create_image(dev, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_32F, N); 
@@ -130,7 +130,7 @@ int PressureSolver::init(ev2::Device *dev, uint32_t w, uint32_t h)
 	down_slots.in_rhs = ev2::find_binding(down_layout, "in_rhs");
 	down_slots.R1 = ev2::find_binding(down_layout, "R1");
 	down_slots.R2 = ev2::find_binding(down_layout, "R2");
-	down_slots.out_phi = ev2::find_binding(down_layout, "out_phi");
+	down_slots.tmp_lhs_id = ev2::find_binding(down_layout, "tmp_lhs");
 
 	multigrid_up = ev2::load_compute_pipeline(dev, "shader/multigrid_up.comp.spv");
 
@@ -138,8 +138,8 @@ int PressureSolver::init(ev2::Device *dev, uint32_t w, uint32_t h)
 		ev2::get_compute_pipeline_layout(dev, multigrid_up);
 
 	up_slots.ubo = ev2::find_binding(up_layout, "ubo");
-	up_slots.out_lhs_final = ev2::find_binding(up_layout, "out_lhs_final");
-	up_slots.in_lhs_final = ev2::find_binding(up_layout, "in_lhs_final");
+	up_slots.out_lhs = ev2::find_binding(up_layout, "out_lhs");
+	up_slots.tmp_lhs_id = ev2::find_binding(up_layout, "tmp_lhs");
 	up_slots.R1 = ev2::find_binding(up_layout, "R1");
 	up_slots.R2 = ev2::find_binding(up_layout, "R2");
 
@@ -176,14 +176,17 @@ void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::Device *dev, ev2::ImageID
 {
 	GLuint phi_final_id = ev2::get_image_gpu_handle(dev, lhs);
 	GLuint f_id = ev2::get_image_gpu_handle(dev, rhs);
-	GLuint phi_mid_id = ev2::get_image_gpu_handle(dev, lhs_tmp);
+	GLuint tmp_lhs_id = ev2::get_image_gpu_handle(dev, lhs_tmp);
 
 	GLuint R1_id = ev2::get_image_gpu_handle(dev, R1);
 	GLuint R2_id = ev2::get_image_gpu_handle(dev, R2);
 
 	GLuint ubo_id = ev2::get_buffer_gpu_handle(dev, ubo);
 
-	const uint32_t output_w = 16 - 8;
+	const uint32_t groups = 32;
+	const uint32_t iterations = 4;
+
+	const uint32_t output_w = groups - 2*iterations;
 
 	//-------------------------------------------------------------------
 	// 'down' stage
@@ -194,7 +197,7 @@ void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::Device *dev, ev2::ImageID
 	glBindImageTexture(down_slots.in_rhs.id, f_id, 
 		0, GL_FALSE, 0, GL_READ_ONLY, GL_R32F
 	);
-	glBindImageTexture(down_slots.out_phi.id, phi_mid_id, 
+	glBindImageTexture(down_slots.tmp_lhs_id.id, tmp_lhs_id, 
 		0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F
 	);
 
@@ -226,10 +229,10 @@ void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::Device *dev, ev2::ImageID
 	//-------------------------------------------------------------------
 	// 'up' stage
 	
-	glBindImageTexture(up_slots.out_lhs_final.id, phi_final_id,
+	glBindImageTexture(up_slots.out_lhs.id, phi_final_id,
 		0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
 
-	glBindImageTexture(up_slots.in_lhs_final.id, phi_mid_id,
+	glBindImageTexture(up_slots.tmp_lhs_id.id, tmp_lhs_id,
 		0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
 
 
@@ -250,7 +253,7 @@ void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::Device *dev, ev2::ImageID
 					(N - 1 - i)*sizeof(Uniforms), sizeof(Uniforms));
 		tw *= 2;
 		th *= 2;
-		ev2::cmd_dispatch(rec, 1 + (tw - 1)/output_w, 1 + (tw - 1)/output_w, 1);
+		ev2::cmd_dispatch(rec, 1 + (tw - 1)/output_w, 1 + (th - 1)/output_w, 1);
 
 		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 	}
@@ -258,36 +261,33 @@ void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::Device *dev, ev2::ImageID
 
 struct MeanSubtractor
 {
-	ev2::ComputePipelineID downsample16;
+	ev2::ComputePipelineID accumulate16;
 	ev2::ComputePipelineID subtract_img;
 
-	ev2::DescriptorSetID downsample_set[4];
+	ev2::DescriptorSetID accumulate_set[4];
 
 	ev2::DescriptorSetID subtract_set;
 
 	ev2::ImageID downsamples[4] = {};
 	ev2::TextureID final_layer;
-	
-	// Size must be <= 65536 x 65536
-	ev2::ImageID img;
 
+	ev2::BindingSlot accumulate_input_slot;
+	ev2::BindingSlot subtract_output_slot;
+	
 	uint32_t levels;
 	uint32_t width, height;
 	
-	int init(ev2::Device *dev, ev2::ImageID in);
+	int init(ev2::Device *dev, uint32_t w, uint32_t h);
 	int destroy(ev2::Device *dev);
 	void record(ev2::RecorderID rec);
+
+	void set_image(ev2::Device *dev, ev2::ImageID img);
 };
 
-int MeanSubtractor::init(ev2::Device *dev, ev2::ImageID in)
+int MeanSubtractor::init(ev2::Device *dev, uint32_t w, uint32_t h)
 {
-	img = in;
-
-	downsample16 = ev2::load_compute_pipeline(dev, "shader/downsample16.comp.spv");
+	accumulate16 = ev2::load_compute_pipeline(dev, "shader/accumulate16.comp.spv");
 	subtract_img = ev2::load_compute_pipeline(dev, "shader/subtract_img.comp.spv");
-
-	uint32_t w, h;
-	ev2::get_image_dims(dev, in, &w, &h, nullptr);
 
 	width = w;
 	height = h;
@@ -299,33 +299,36 @@ int MeanSubtractor::init(ev2::Device *dev, ev2::ImageID in)
 		downsamples[i] = ev2::create_image(dev, w, h, 1, ev2::IMAGE_FORMAT_32F);
 	}
 
+	assert(w == 1 && h == 1);
+
 	final_layer = ev2::create_texture(dev, downsamples[levels - 1], ev2::FILTER_NEAREST);
 
 	{
-		ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(dev, downsample16);
+		ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(dev, accumulate16);
 		ev2::BindingSlot in_slot = ev2::find_binding(layout, "img_in");
 		ev2::BindingSlot out_slot = ev2::find_binding(layout, "img_out");
 
-		downsample_set[0] = ev2::create_descriptor_set(dev, layout);
+		accumulate_set[0] = ev2::create_descriptor_set(dev, layout);
+		accumulate_input_slot = in_slot;
 
-		ev2::bind_image(dev, downsample_set[0], in_slot, img);
-		ev2::bind_image(dev, downsample_set[0], out_slot, downsamples[0]);
+		ev2::bind_image(dev, accumulate_set[0], out_slot, downsamples[0]);
 
 		for (uint32_t i = 1; i < levels; ++i) {
-			downsample_set[i] = ev2::create_descriptor_set(dev, layout);
-			ev2::bind_image(dev, downsample_set[i], in_slot, downsamples[i-1]);
-			ev2::bind_image(dev, downsample_set[i], out_slot, downsamples[i]);
+			accumulate_set[i] = ev2::create_descriptor_set(dev, layout);
+			ev2::bind_image(dev, accumulate_set[i], in_slot, downsamples[i-1]);
+			ev2::bind_image(dev, accumulate_set[i], out_slot, downsamples[i]);
 		}
 	}
 	{
 		ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(dev, subtract_img);
 		ev2::BindingSlot in_slot = ev2::find_binding(layout, "img_in");
-		ev2::BindingSlot out_slot = ev2::find_binding(layout, "img_out");
+
+		subtract_output_slot = ev2::find_binding(layout, "img_out");
 
 		subtract_set = ev2::create_descriptor_set(dev, layout);
 
 		ev2::bind_texture(dev, subtract_set, in_slot, final_layer);
-		ev2::bind_image(dev, subtract_set, out_slot, img);
+
 	}
 
 	return 0;
@@ -334,7 +337,7 @@ int MeanSubtractor::destroy(ev2::Device *dev)
 {
 	for (uint32_t i = 0; i < levels; ++i) {
 		ev2::destroy_image(dev, downsamples[i]);
-		ev2::destroy_descriptor_set(dev, downsample_set[i]);
+		ev2::destroy_descriptor_set(dev, accumulate_set[i]);
 	}
 	ev2::destroy_texture(dev, final_layer);
 	ev2::destroy_descriptor_set(dev, subtract_set);
@@ -342,15 +345,21 @@ int MeanSubtractor::destroy(ev2::Device *dev)
 	return 0;
 }
 
+void MeanSubtractor::set_image(ev2::Device *dev, ev2::ImageID img)
+{
+	ev2::bind_image(dev, accumulate_set[0], accumulate_input_slot, img);
+	ev2::bind_image(dev, subtract_set, subtract_output_slot, img);
+}
+
 void MeanSubtractor::record(ev2::RecorderID rec)
 {
-	ev2::cmd_bind_compute_pipeline(rec, downsample16);
+	ev2::cmd_bind_compute_pipeline(rec, accumulate16);
 
 	uint32_t w = width;
 	uint32_t h = height;
 
 	for (uint32_t i = 0; i < levels; ++i) {
-		ev2::cmd_bind_descriptor_set(rec, downsample_set[i]);
+		ev2::cmd_bind_descriptor_set(rec, accumulate_set[i]);
 
 		uint32_t gx = 1 + (w- 1)/16;
 		uint32_t gy = 1 + (h - 1)/16;
@@ -387,6 +396,9 @@ struct FluidSim
 	ev2::TextureID lap_p_tex; // rhs of lap(phi) = f 
 	ev2::TextureID p_tex; // pressure
 	
+	ev2::ImageID mask_img;
+	ev2::TextureID mask_tex;
+	
 	ev2::BufferID ubo;
 
 	ev2::ComputePipelineID nvs_advect;
@@ -403,7 +415,7 @@ struct FluidSim
 	uint64_t step = 0;
 
 	struct Uniforms {
-		glm::vec2 cursor;
+		glm::vec2 cursor = glm::vec2(1,0.5);
 		glm::vec2 cursor_prev;
 		uint32_t flags;
 	} uniforms;
@@ -431,6 +443,8 @@ int FluidSim::init(ev2::Device *dev, uint32_t w, uint32_t h)
 	lap_p_img = ev2::create_image(dev, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F);
 	p_img = ev2::create_image(dev, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F);
 
+	mask_img = ev2::create_image(dev, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_R8_UNORM);
+
 	q_tex_1 = ev2::create_texture(dev, q_img_1, ev2::FILTER_BILINEAR);
 	q_tex_2 = ev2::create_texture(dev, q_img_2, ev2::FILTER_BILINEAR);
 
@@ -449,7 +463,7 @@ int FluidSim::init(ev2::Device *dev, uint32_t w, uint32_t h)
 
 	mean_subtractor.reset(new MeanSubtractor);
 
-	if ((result = mean_subtractor->init(dev, lap_p_img))) {
+	if ((result = mean_subtractor->init(dev, grid_w, grid_h))) {
 		return result;
 	}
 
@@ -519,6 +533,8 @@ int FluidSim::update(ev2::Device *dev)
 	uint32_t gx = 1 + grid_w/group_size;
 	uint32_t gy = 1 + grid_h/group_size;
 
+	mean_subtractor->set_image(dev, lap_p_img);
+
 	ev2::RecorderID rec = ev2::begin_commands(dev);
 
 	ev2::cmd_bind_compute_pipeline(rec, nvs_advect);
@@ -531,21 +547,23 @@ int FluidSim::update(ev2::Device *dev)
 	ev2::cmd_bind_descriptor_set(rec, pressure_set);
 	ev2::cmd_dispatch(rec, gx, gy, 1);
 
-	mean_subtractor->record(rec);
-
 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+	mean_subtractor->record(rec);
 	
-	for (int i = 0; i < ((step == 0) ? 128 : 16); ++i) 
+	for (int i = 0; i < ((step == 0) ? 128 : 8); ++i) 
 		pressure_solver->v_cycle(rec, dev, p_img, lap_p_img);
 
 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
 
 	ev2::cmd_bind_compute_pipeline(rec, nvs_project);
 	ev2::cmd_bind_descriptor_set(rec, project_set);
 	ev2::cmd_dispatch(rec, gx, gy, 1);
 
 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+	//mean_subtractor->set_image(dev, p_img);
+	//mean_subtractor->record(rec);
 
 	ev2::end_commands(rec);
 
@@ -580,13 +598,13 @@ void FluidSim::destroy(ev2::Device *dev)
 struct FluidApp : public App
 {
 	std::unique_ptr<FluidSim> sim;
-	std::unique_ptr<TextureViewerPanel> f_panel;
-	std::unique_ptr<TextureViewerPanel> phi_panel;
+	std::unique_ptr<TextureViewerPanel> left_panel;
+	std::unique_ptr<TextureViewerPanel> right_panel;
 
 	ev2::TextureID phi_tex;
 	ev2::TextureID f_tex;
 
-	bool m_stopped = true;
+	bool m_stopped = false;
 	uint64_t m_step = 0;
 
 	FluidApp() : App(1200, 500, "fluid") {
@@ -606,21 +624,21 @@ int FluidApp::initialize(int argc, char **argv)
 
 	sim.reset(new FluidSim);
 
-	f_panel.reset(new TextureViewerPanel(this, 200, 0, 500, 500));
-	phi_panel.reset(new TextureViewerPanel(this, 700, 0, 500, 500));
-
+	left_panel.reset(new TextureViewerPanel(this, 200, 0, 500, 500));
+	right_panel.reset(new TextureViewerPanel(this, 700, 0, 500, 500, 
+										  "pipelines/pressure_viz.yaml"));
 	result = sim->init(dev, 256, 256);
 	if (result)
 		return result;
 
-	phi_tex = sim->p_tex;
+	phi_tex = ev2::create_texture(dev, sim->pressure_solver->R1, ev2::FILTER_NEAREST);
 	f_tex = ev2::create_texture(dev, sim->q_img_1, ev2::FILTER_NEAREST);
 
-	result = f_panel->init(dev, f_tex); 
+	result = left_panel->init(dev, f_tex); 
 	if (result)
 		return result;
 
-	result = phi_panel->init(dev, phi_tex); 
+	result = right_panel->init(dev, phi_tex); 
 	if (result)
 		return result;
 
@@ -649,6 +667,8 @@ int FluidApp::update()
 		upload_img_data(dev, sim->p_img, sim->grid_w, sim->grid_h);
 		upload_img_data(dev, sim->q_img_1, 1 + sim->grid_w, 1 + sim->grid_h);
 		upload_img_data(dev, sim->q_img_2, 1 + sim->grid_w, 1 + sim->grid_h);
+
+		sim->uniforms.cursor = sim->uniforms.cursor_prev = glm::vec2(1,0.5);
 	}
 	ImGui::End();
 
@@ -657,29 +677,34 @@ int FluidApp::update()
 			return result;
 	}
 
-	if ((result = f_panel->update(dev)))
+	if ((result = left_panel->update(dev)))
 		return result;
 
-	if ((result = phi_panel->update(dev)))
+	if ((result = right_panel->update(dev)))
 		return result;
 
-	sim->uniforms.cursor_prev = sim->uniforms.cursor;
-	sim->uniforms.cursor = f_panel->get_world_cursor_pos();
-	sim->uniforms.flags = 
-			this->input.right_mouse_pressed && 
-			f_panel->panel->is_content_selected();
+	bool is_panel_clicked = this->input.right_mouse_pressed && 
+			left_panel->panel->is_content_selected();
+
+	if (is_panel_clicked) {
+		sim->uniforms.cursor_prev = sim->uniforms.cursor;
+		sim->uniforms.cursor = left_panel->get_world_cursor_pos();
+		sim->uniforms.flags = true; 
+	} else {
+		sim->uniforms.flags = false; 
+	}
 
 	return result;
 }
 void FluidApp::render()
 {
-	f_panel->render(dev);
-	phi_panel->render(dev);
+	left_panel->render(dev);
+	right_panel->render(dev);
 }
 void FluidApp::destroy()
 {
-	f_panel->destroy(dev);
-	phi_panel->destroy(dev);
+	left_panel->destroy(dev);
+	right_panel->destroy(dev);
 
 	sim->destroy(dev);
 

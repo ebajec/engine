@@ -103,7 +103,7 @@ void main()
 	float curl = (grad.du.w - grad.dv.z);
 	vec4 color = vec4(val.x,val.y,tanh(length(val.zw)),1);
 
-	float f_speed = tanh(length(val.xy/10));
+	float f_speed = tanh(length(val.xy/30));
 
 	f = 1;
 

@@ -34,6 +34,10 @@ public:
 
 	ev2::RenderTargetID get_target();
 
+	const std::string& get_name() {
+		return m_name;
+	}
+
 	glm::ivec2 get_size();
 	glm::ivec2 get_pos();
 
