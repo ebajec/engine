@@ -81,6 +81,10 @@ struct AssetTable
 	AssetID find(const char *path) const;
 
 	AssetEntry *get_entry(AssetID id) {
+		if (!id) {
+			log_error("Invalid asset id %d (this is very bad)",id);
+			return nullptr;
+		}
 		return entries[id - 1].get();
 	}
 

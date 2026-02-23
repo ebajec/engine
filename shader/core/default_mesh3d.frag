@@ -50,9 +50,9 @@ void main()
 
 	float f = 0.2 + 0.8*clamp(dot(n,sun),0,1);
 
-	vec2 vel = c0.zw;
+	vec2 vel = c0.xy;
 
-	float intensity = length(vel) + abs(c0.y); 
+	float intensity = 0.1*length(vel); 
 
 	vec3 base = 0.2*vec3(1);
 	vec3 c = vec3(tanh(intensity),0,0) + base;

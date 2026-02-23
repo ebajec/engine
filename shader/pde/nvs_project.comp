@@ -5,10 +5,9 @@
 
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-layout (binding = 1) uniform sampler2D q_in; // state vector, rgba32f
+layout (rgba32f, binding = 1) uniform image2D q_img; // state vector, rgba32f
 layout (binding = 2) uniform sampler2D p_in; // pressure, r32f
-
-layout (rgba32f, binding = 3) writeonly uniform image2D q_out; // state vector, rgba32f
+layout (binding = 3) uniform sampler2D lap_p_in; // lap_p, r32f
 
 
 ivec2 neumann(ivec2 idx, ivec2 size)
@@ -31,25 +30,6 @@ float get_p(ivec2 idx)
 
 	return texelFetch(p_in, idx, 0).x;
 }
-
-vec4 get_q(ivec2 idx)
-{
-	if (idx != clamp(idx, ivec2(0), textureSize(q_in,0) - ivec2(1)))
-		return vec4(0);
-
-	return texelFetch(q_in, idx, 0);
-}
-
-float div_v(ivec2 p)
-{
-	vec4 ql = get_q(p + ivec2(0,0));
-	vec4 qr = get_q(p + ivec2(1,0));
-	vec4 qb = get_q(p + ivec2(0,0));
-	vec4 qt = get_q(p + ivec2(0,1));
-
-	return ((qr.x - ql.x) + (qt.y - qb.y))/(2*DELTA_X); 
-}
-
 
 float pressure_lap(ivec2 p)
 {
@@ -77,7 +57,7 @@ vec2 pressure_grad(ivec2 p)
 void main()
 {
     ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
-	ivec2 size = textureSize(q_in, 0);
+	ivec2 size = imageSize(q_img);
 
 	if (idx.x >= size.x || idx.y >= size.y)
 		return;
@@ -87,17 +67,18 @@ void main()
 
 	vec2 grad_p = pressure_grad(idx);
 
-	vec4 q = texelFetch(q_in, idx, 0);
+	vec4 q = imageLoad(q_img, idx);
 
 	q.xy += TIMESTEP * -grad_p/RHO;
 
 	// For debugging pressure solver: check to ensure
 	// that lap(p) = div(u*). 
 	if (idx.x < size.x - 1 && idx.y < size.y - 1) {
-		float e = abs(pressure_lap(idx) - div_v(idx));
-		q.z = 10*e;
+		float rhs = texelFetch(lap_p_in,idx,0).x; 
+		float r = rhs - pressure_lap(idx);
+		//q.z = abs(r) > 1e-2 ? 10*r : 0;
 	}
-	//q.z = length(grad_p);
-	imageStore(q_out, idx, q);
+	q.z = length(grad_p);
+	imageStore(q_img, idx, q);
 }
 

@@ -16,8 +16,17 @@ vec4 load_input(ivec2 idx)
 {
 	uint k = N - 1 - u_level;
 
+	ivec2 size = k == 0 ? 
+		imageSize(R2[N-1]) : imageSize(R1[u_level + 1]);
+
+	if (idx.x >= size.x)
+		idx.x = size.x - 2;
+
+	if (idx.y >= size.y)
+		idx.y = size.y - 2;
+
 	if (k == 0)
-		return imageLoad(R2[N-1], clamp(idx, ivec2(0), imageSize(R2[N-1])));
+		return imageLoad(R2[N-1], idx);
 	return imageLoad(R1[u_level + 1], idx);
 }
 
@@ -36,24 +45,37 @@ float upsample_correction(ivec2 idx)
 	}
 
 	uint src_lvl = u_level;
-
 	ivec2 src_size = size/2;
 
 	ivec2 pix = idx/2;
-	vec2 st = fract(0.5*vec2(idx));
+	ivec2 p = idx & 0x1;
 
-	float ll = load_input(clamp(pix + ivec2(0, 0), ivec2(0), src_size)).x;
-	float lr = load_input(clamp(pix + ivec2(1, 0) , ivec2(0), src_size)).x;
-	float ul = load_input(clamp(pix + ivec2(0, 1) , ivec2(0), src_size)).x;
-	float ur = load_input(clamp(pix + ivec2(1, 1), ivec2(0), src_size)).x;
+	float u00 = load_input((idx + ivec2(0, 0))/2).x;
+	float u01 = load_input((idx + ivec2(0, 1))/2).x;
+	float u10 = load_input((idx + ivec2(1, 0))/2).x;
+	float u11 = load_input((idx + ivec2(1, 1))/2).x;
 
-	return mix(mix(ll,lr,st.x),mix(ul, ur, st.x), st.y);
+	float u;
+	if (p.x == 0 && p.y ==0) 
+		u = u00;
+	else if (p.x==1 && p.y==0) 
+		u = 0.5*(u00 + u10);
+	else if (p.x==0 && p.y==1) 
+		u = 0.5*(u00 + u01);
+	else 
+		u = 0.25*(u00 + u10 + u01 + u11);
+
+	return u;
 }
 
-float fetch_lhs(ivec2 grid_idx)
+float fetch_lhs(ivec2 idx)
 {
-	return imageLoad(R2[u_level - 1], 
-				  clamp(grid_idx, ivec2(0),imageSize(R2[u_level-1]))).x;
+	ivec2 size = imageSize(R2[u_level-1]);
+
+	if (idx.x < 0 || idx.x >= size.x || idx.y < 0 || idx.y >= size.y)
+		return 0;
+
+	return imageLoad(R2[u_level - 1], idx).x;
 }
 
 void main()
@@ -72,10 +94,11 @@ void main()
 	// i i o o o o i i                             
 	// i i i i i i i i                             
 	// i i i i i i i i                             
-	ivec2 out_idx = idx - ivec2(JACOBI_ITERATIONS); 
+	ivec2 out_idx = idx - ivec2(u_iterations); 
+	int out_width = GROUPS - 2*int(u_iterations);
 
 	ivec2 grid_idx = 
-		ivec2(gl_WorkGroupID.xy) * OUTPUT_W + out_idx;
+		ivec2(gl_WorkGroupID.xy) * out_width + out_idx;
 
 	ivec2 size = u_level > 0 ? 
 		imageSize(R2[u_level - 1]) : imageSize(out_lhs);
@@ -88,12 +111,16 @@ void main()
 
 	float correction = upsample_correction(grid_idx);
 
-	const float h = 1.f;
+	const float h = DELTA_X;
+
+	bool outside = out_idx.x < 0 && out_idx.y < 0 && 
+		out_idx.x >= out_width  && out_idx.y >= out_width; 
 
 	if (u_level == 0) {
-		ivec2 size = imageSize(out_lhs);
-		if (grid_idx != clamp(grid_idx, ivec2(0), size))
+		if (outside)
 			return;
+
+		ivec2 size = imageSize(out_lhs);
 
 		float phi = imageLoad(tmp_lhs, grid_idx).x;
 		float value = phi + correction;
@@ -102,13 +129,13 @@ void main()
 		return;
 	}
 
-	float rhs = correction;
+	float rhs = -correction;
 
 	// Load the stuff into shared memory
 	float lhs = fetch_lhs(grid_idx) + correction;
 	block[idx.x][idx.y] = lhs;
 
-	for (int i = 0; i < JACOBI_ITERATIONS - 1; ++i) {
+	for (int i = 0; i < u_iterations - 1; ++i) {
 		barrier();
 		lhs = is_boundary ? lhs : jacobi_it(idx, rhs, h);
 		barrier();
@@ -116,9 +143,6 @@ void main()
 	}
 	barrier();
 	
-	bool outside = out_idx.x < 0 && out_idx.y < 0 && 
-		out_idx.x >= OUTPUT_W  && out_idx.y >= OUTPUT_W; 
-
 	if (outside)
 		return;
 

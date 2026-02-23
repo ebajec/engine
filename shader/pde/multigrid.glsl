@@ -1,8 +1,8 @@
-
 #define MAX_MIPS 6
-#define JACOBI_ITERATIONS 4
 #define GROUPS 32
-#define OUTPUT_W (GROUPS - 2*JACOBI_ITERATIONS)
+#define OMEGA 0.67
+
+#define DELTA_X 0.5f
 
 layout (local_size_x = GROUPS, local_size_y = GROUPS, local_size_z = 1) in;
 
@@ -21,6 +21,7 @@ shared bool boundary[GROUPS][GROUPS];
 layout (binding = 0) uniform ubo {
 	uint N;
 	uint u_level;
+	uint u_iterations;
 };
 
 bool test_boundary(ivec2 idx, uint level)
@@ -35,47 +36,41 @@ bool test_boundary(ivec2 idx, uint level)
 }
 
 
-float jacobi_lhs(vec4 nbr, bvec4 bd, float rhs, float h)
-{
-	float denom = dot(vec4(not(bd)), vec4(1));
-
-	if (denom == 0)
-		return 0;
-
-	return (dot(nbr, vec4(not(bd))) - h*h*rhs)/denom;
-}
-
 float jacobi_it(ivec2 idx, float rhs, float h)
 {
-	ivec2 l_idx = clamp(idx + ivec2(-1,0), ivec2(0), ivec2(GROUPS - 1));
-	ivec2 r_idx = clamp(idx + ivec2(1,0), ivec2(0), ivec2(GROUPS - 1));
-	ivec2 t_idx = clamp(idx + ivec2(0,1), ivec2(0), ivec2(GROUPS - 1));
-	ivec2 b_idx = clamp(idx + ivec2(0,-1), ivec2(0), ivec2(GROUPS - 1));
+	ivec2 stencil[4] = {
+		idx + ivec2(-1,0),
+		idx + ivec2(1,0), 
+		idx + ivec2(0,1), 
+		idx + ivec2(0,-1)
+	};
 
-	float l = block[l_idx.x][l_idx.y];
-	float r = block[r_idx.x][r_idx.y];
-	float t = block[t_idx.x][t_idx.y];
-	float b = block[b_idx.x][b_idx.y];
+	// assuming neumann boundary conditions with
+	// zero normal derivative.  
 
-	bool bl = boundary[l_idx.x][l_idx.y];
-	bool br = boundary[r_idx.x][r_idx.y];
-	bool bt = boundary[t_idx.x][t_idx.y];
-	bool bb = boundary[b_idx.x][b_idx.y];
+	float center = block[idx.x][idx.y];
 
-	float denom = (
-		float(!bl) + float(!br) + 
-		float(!bb) + float(!bt)
-	);
+	float sum = 0;
+	float den = 0;
 
-	if (denom == 0)
-		return 0;
+	for (int i = 0; i < 4; ++i) {
+		ivec2 p = stencil[i];
+		bool valid = 
+			p.x >= 0 && p.x < GROUPS &&
+			p.y >= 0 && p.y < GROUPS;
 
-	return (
-		mix(l,0,float(bl)) + 
-		mix(r,0,float(br)) + 
-		mix(b,0,float(bb)) + 
-		mix(t,0,float(bt)) - 
-		h*h*rhs)/denom;
+		if (valid)
+			valid = !boundary[p.x][p.y];
+
+		float mask = float(valid);
+
+		den += float(mask);
+		sum += valid ? block[p.x][p.y] : 0; 
+	}
+
+	float u_next = den > 0 ? (sum - h*h*rhs)/den : 0;
+
+	return mix(center, u_next, OMEGA);
 }
 
 

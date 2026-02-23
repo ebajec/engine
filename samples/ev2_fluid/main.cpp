@@ -91,8 +91,10 @@ struct PressureSolver
 	struct Uniforms {
 		uint32_t N;
 		uint32_t level;
+		uint32_t iterations;
 	};
 
+	std::vector<Uniforms> uniforms;
 
 	int init(ev2::Device *dev, uint32_t w, uint32_t h);
 	void destroy(ev2::Device *dev);
@@ -113,7 +115,7 @@ int PressureSolver::init(ev2::Device *dev, uint32_t w, uint32_t h)
 	if (!is_pow2(sim_w) || !is_pow2(sim_h))
 		return EXIT_FAILURE;
 
-	N = 6;//std::min((int)ceil(log2((double)w)), 6);
+	N = std::min((int)ceil(log2((double)w)), 6);
 
 	R1 = ev2::create_image(dev, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, N); 
 	R2 = ev2::create_image(dev, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_32F, N); 
@@ -145,17 +147,25 @@ int PressureSolver::init(ev2::Device *dev, uint32_t w, uint32_t h)
 
 	//--------------------------------------------------------------------
 	// create ubo
+	
+	uniforms.resize(N + 1);
+	for (uint32_t i = 0; i <= N; ++i) {
+		uint32_t its = 4;
+		uniforms[i] = Uniforms{
+			.N = N,
+			.level = i,
+			.iterations = 4
+		};
+	}
+
+	uniforms[0].iterations = 4;
+
 	size_t ubo_size = (N + 1) * sizeof(Uniforms);
 
 	ubo = ev2::create_buffer(dev, ubo_size);
 
 	ev2::UploadContext uc = ev2::begin_upload(dev, ubo_size, alignof(Uniforms));
-	for (uint32_t i = 0; i <= N; ++i) {
-		((Uniforms*)uc.ptr)[i] = Uniforms{
-			.N = N,
-			.level = i,
-		};
-	}
+	memcpy(uc.ptr, uniforms.data(), uniforms.size()*sizeof(Uniforms));
 	ev2::BufferUpload up = {
 		.size = ubo_size
 	};
@@ -184,9 +194,6 @@ void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::Device *dev, ev2::ImageID
 	GLuint ubo_id = ev2::get_buffer_gpu_handle(dev, ubo);
 
 	const uint32_t groups = 32;
-	const uint32_t iterations = 4;
-
-	const uint32_t output_w = groups - 2*iterations;
 
 	//-------------------------------------------------------------------
 	// 'down' stage
@@ -217,13 +224,17 @@ void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::Device *dev, ev2::ImageID
 	uint32_t tw = sim_w;
 	uint32_t th = sim_h;
 	for (uint32_t i = 0; i <= N; ++i) {
+		uint32_t its = uniforms[i].iterations;
+		uint32_t output_w = groups - 2*its;
+
 		glBindBufferRange(GL_UNIFORM_BUFFER, down_slots.ubo.id, ubo_id, 
 					i*sizeof(Uniforms), sizeof(Uniforms));
+
 		ev2::cmd_dispatch(rec, 1 + (tw - 1)/output_w, 1 + (th - 1)/output_w, 1);
 		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
-		tw /= 2;
-		th /= 2;
+		tw = 1 + (tw - 1)/2;
+		th = 1 + (th - 1)/2;
 	}
 
 	//-------------------------------------------------------------------
@@ -249,6 +260,9 @@ void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::Device *dev, ev2::ImageID
 	th *= 2;
 	// N-1, N-2, ... 0
 	for (uint32_t i = 0; i < N; ++i) {
+		uint32_t its = uniforms[i].iterations;
+		uint32_t output_w = groups - 2*its;
+
 		glBindBufferRange(GL_UNIFORM_BUFFER, up_slots.ubo.id, ubo_id, 
 					(N - 1 - i)*sizeof(Uniforms), sizeof(Uniforms));
 		tw *= 2;
@@ -402,10 +416,12 @@ struct FluidSim
 	ev2::BufferID ubo;
 
 	ev2::ComputePipelineID nvs_advect;
+	ev2::ComputePipelineID nvs_diffuse;
 	ev2::ComputePipelineID nvs_pressure;
 	ev2::ComputePipelineID nvs_project;
 
 	ev2::DescriptorSetID advect_set;
+	ev2::DescriptorSetID diffuse_set;
 	ev2::DescriptorSetID pressure_set;
 	ev2::DescriptorSetID project_set;
 
@@ -418,9 +434,11 @@ struct FluidSim
 		glm::vec2 cursor = glm::vec2(1,0.5);
 		glm::vec2 cursor_prev;
 		uint32_t flags;
+		float gravity = 0;
 	} uniforms;
 
 	int update_advect_set(ev2::Device *dev);
+	int update_diffuse_set(ev2::Device *dev);
 	int update_pressure_set(ev2::Device *dev);
 	int update_project_set(ev2::Device *dev);
 
@@ -468,10 +486,12 @@ int FluidSim::init(ev2::Device *dev, uint32_t w, uint32_t h)
 	}
 
 	nvs_advect = ev2::load_compute_pipeline(dev, "shader/nvs_advect.comp.spv");
+	nvs_diffuse = ev2::load_compute_pipeline(dev, "shader/nvs_diffuse.comp.spv");
 	nvs_pressure = ev2::load_compute_pipeline(dev, "shader/nvs_pressure.comp.spv");
 	nvs_project = ev2::load_compute_pipeline(dev, "shader/nvs_project.comp.spv");
 
 	update_advect_set(dev);
+	update_diffuse_set(dev);
 	update_pressure_set(dev);
 	update_project_set(dev);
 
@@ -491,12 +511,28 @@ int FluidSim::update_advect_set(ev2::Device *dev)
 
 	return 0;
 }
+
+int FluidSim::update_diffuse_set(ev2::Device *dev)
+{
+	ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(dev, nvs_diffuse);
+
+	ev2::DescriptorSetID set = ev2::create_descriptor_set(dev, layout);
+
+	ev2::bind_image(dev, set, ev2::find_binding(layout, "q_in"), q_img_2);
+	ev2::bind_image(dev, set, ev2::find_binding(layout, "q_out"), q_img_1);
+	ev2::bind_buffer(dev, set, ev2::find_binding(layout, "ubo"), ubo, 0, sizeof(Uniforms));
+
+	diffuse_set = set;
+
+	return 0;
+}
+
 int FluidSim::update_pressure_set(ev2::Device *dev)
 {
 	ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(dev, nvs_pressure);
 
 	ev2::DescriptorSetID set = ev2::create_descriptor_set(dev, layout);
-	ev2::bind_texture(dev, set, ev2::find_binding(layout, "q_in"), q_tex_2);
+	ev2::bind_texture(dev, set, ev2::find_binding(layout, "q_in"), q_tex_1);
 	ev2::bind_image(dev, set, ev2::find_binding(layout, "f_out"), lap_p_img);
 	ev2::bind_buffer(dev, set, ev2::find_binding(layout, "ubo"), ubo, 0, sizeof(Uniforms));
 
@@ -509,9 +545,9 @@ int FluidSim::update_project_set(ev2::Device *dev)
 	ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(dev, nvs_project);
 
 	ev2::DescriptorSetID set = ev2::create_descriptor_set(dev, layout);
-	ev2::bind_texture(dev, set, ev2::find_binding(layout, "q_in"), q_tex_2);
+	ev2::bind_image(dev, set, ev2::find_binding(layout, "q_img"), q_img_1);
 	ev2::bind_texture(dev, set, ev2::find_binding(layout, "p_in"), p_tex);
-	ev2::bind_image(dev, set, ev2::find_binding(layout, "q_out"), q_img_1);
+	ev2::bind_texture(dev, set, ev2::find_binding(layout, "lap_p_in"), lap_p_tex);
 	ev2::bind_buffer(dev, set, ev2::find_binding(layout, "ubo"), ubo, 0, sizeof(Uniforms));
 
 	project_set = set;
@@ -543,6 +579,12 @@ int FluidSim::update(ev2::Device *dev)
 
 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
+	ev2::cmd_bind_compute_pipeline(rec, nvs_diffuse);
+	ev2::cmd_bind_descriptor_set(rec, diffuse_set);
+	ev2::cmd_dispatch(rec, gx, gy, 1);
+
+	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
 	ev2::cmd_bind_compute_pipeline(rec, nvs_pressure);
 	ev2::cmd_bind_descriptor_set(rec, pressure_set);
 	ev2::cmd_dispatch(rec, gx, gy, 1);
@@ -551,7 +593,7 @@ int FluidSim::update(ev2::Device *dev)
 
 	mean_subtractor->record(rec);
 	
-	for (int i = 0; i < ((step == 0) ? 128 : 8); ++i) 
+	for (int i = 0; i < ((step == 0) ? 16 : 8); ++i) 
 		pressure_solver->v_cycle(rec, dev, p_img, lap_p_img);
 
 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
@@ -591,6 +633,7 @@ void FluidSim::destroy(ev2::Device *dev)
 	ev2::destroy_buffer(dev, ubo);
 
 	ev2::destroy_descriptor_set(dev, advect_set);
+	ev2::destroy_descriptor_set(dev, diffuse_set);
 	ev2::destroy_descriptor_set(dev, pressure_set);
 	ev2::destroy_descriptor_set(dev, project_set);
 }
@@ -600,6 +643,7 @@ struct FluidApp : public App
 	std::unique_ptr<FluidSim> sim;
 	std::unique_ptr<TextureViewerPanel> left_panel;
 	std::unique_ptr<TextureViewerPanel> right_panel;
+	std::unique_ptr<HeightmapViewerPanel> heightmap_panel;
 
 	ev2::TextureID phi_tex;
 	ev2::TextureID f_tex;
@@ -627,11 +671,13 @@ int FluidApp::initialize(int argc, char **argv)
 	left_panel.reset(new TextureViewerPanel(this, 200, 0, 500, 500));
 	right_panel.reset(new TextureViewerPanel(this, 700, 0, 500, 500, 
 										  "pipelines/pressure_viz.yaml"));
-	result = sim->init(dev, 256, 256);
+	heightmap_panel.reset(new HeightmapViewerPanel());
+
+	result = sim->init(dev, 512, 512);
 	if (result)
 		return result;
 
-	phi_tex = ev2::create_texture(dev, sim->pressure_solver->R1, ev2::FILTER_NEAREST);
+	phi_tex = ev2::create_texture(dev, sim->q_img_1, ev2::FILTER_NEAREST);
 	f_tex = ev2::create_texture(dev, sim->q_img_1, ev2::FILTER_NEAREST);
 
 	result = left_panel->init(dev, f_tex); 
@@ -640,6 +686,10 @@ int FluidApp::initialize(int argc, char **argv)
 
 	result = right_panel->init(dev, phi_tex); 
 	if (result)
+		return result;
+
+	result = heightmap_panel->init(this, dev, sim->q_tex_1); 
+	if(result)
 		return result;
 
 	return result;
@@ -670,6 +720,9 @@ int FluidApp::update()
 
 		sim->uniforms.cursor = sim->uniforms.cursor_prev = glm::vec2(1,0.5);
 	}
+
+	ImGui::SliderFloat("gravity", &sim->uniforms.gravity, -1, 1);
+
 	ImGui::End();
 
 	if (current_step != m_step) {
@@ -681,6 +734,9 @@ int FluidApp::update()
 		return result;
 
 	if ((result = right_panel->update(dev)))
+		return result;
+
+	if ((result = heightmap_panel->update(dev)))
 		return result;
 
 	bool is_panel_clicked = this->input.right_mouse_pressed && 
@@ -700,11 +756,13 @@ void FluidApp::render()
 {
 	left_panel->render(dev);
 	right_panel->render(dev);
+	heightmap_panel->render(dev);
 }
 void FluidApp::destroy()
 {
 	left_panel->destroy(dev);
 	right_panel->destroy(dev);
+	heightmap_panel->destroy(dev);
 
 	sim->destroy(dev);
 

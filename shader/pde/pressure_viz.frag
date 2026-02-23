@@ -13,10 +13,10 @@ void main()
 	ivec2 size = textureSize(u_tex, 0);
 
 	uint L = 0;
-	vec4 tex = textureLod(u_tex, in_uv, L);
+	vec4 tex = textureLod(u_tex, in_uv, 3);
 
-	vec3 rgb = vec3(tex.x,-tex.x,0);
+	vec3 rgb = 10*vec3(tex.z,0,0) + vec3(0.02);
 
-	FragColor = vec4(100*rgb,1); 
+	FragColor = vec4(rgb,1); 
 }
 

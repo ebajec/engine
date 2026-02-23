@@ -30,17 +30,25 @@ float RHS(ivec2 idx, uint level, out float valid)
 	bool oob = test_boundary(idx,level);
 	bool outside = (
 		idx.x < 0 || idx.x >= size.x || 
-		idx.y < 0 || idx.y >= size.x);
+		idx.y < 0 || idx.y >= size.y);
 
 	valid = float(!oob && !outside);
 
 	return valid > 0 ? imageLoad(R1[level], idx).x : 0;
 }
 
-float LHS(ivec2 idx)
+float LHS(ivec2 idx, out float valid)
 {
 	ivec2 size = imageSize(in_lhs);
-	return imageLoad(in_lhs, clamp(idx, ivec2(0),size)).x;
+
+	bool oob = test_boundary(idx,0);
+	bool outside = (
+		idx.x < 0 || idx.x >= size.x || 
+		idx.y < 0 || idx.y >= size.y);
+
+	valid = float(!oob && !outside);
+
+	return valid > 0 ? imageLoad(in_lhs, idx).x : 0;
 }
 
 float residual(ivec2 idx, float rhs, float h)
@@ -72,28 +80,45 @@ float residual(ivec2 idx, float rhs, float h)
 	return rhs - lap;
 }
 
+float jacobi_lhs(vec4 nbr, bvec4 bd, float rhs, float h)
+{
+	float denom = dot(vec4(not(bd)), vec4(1));
+
+	if (denom == 0)
+		return 0;
+
+	return (dot(nbr, vec4(not(bd))) - h*h*rhs)/denom;
+}
+
 float fetch_lhs(ivec2 grid_idx, float rhs, float h)
 {
-	ivec2 l_idx = grid_idx + ivec2(-1, 0);
-	ivec2 r_idx = grid_idx + ivec2(1, 0);
-	ivec2 t_idx = grid_idx + ivec2(0, 1);
-	ivec2 b_idx = grid_idx + ivec2(0, -1);
+	if (u_level > 0)
+		return -h*h*rhs;
 
-	bool bl = test_boundary(l_idx, u_level);
-	bool br = test_boundary(r_idx, u_level);
-	bool bt = test_boundary(t_idx, u_level);
-	bool bb = test_boundary(b_idx, u_level);
+	ivec2 stencil[4] = {
+		grid_idx + ivec2(-1, 0),
+		grid_idx + ivec2(1, 0),
+		grid_idx + ivec2(0, 1),
+		grid_idx + ivec2(0, -1)
+	};
 
-	if (u_level == 0) {
-		float l = LHS(l_idx);
-		float r = LHS(r_idx);
-		float t = LHS(t_idx);
-		float b = LHS(b_idx);
+	float sum = 0;
+	float den = 0;
 
-		return jacobi_lhs(vec4(l,r,b,t),bvec4(bl,br,bb,bt), rhs,h);
+	for (int i = 0; i < 4; ++i) {
+		float valid;
+		float v = LHS(stencil[i], valid);
+
+		den += valid;
+		sum += valid * v;
 	}
 
-	return 0*jacobi_lhs(vec4(0),bvec4(bl,br,bb,bt), rhs,h);
+	float valid = 0;
+	float center = LHS(grid_idx, valid);
+
+	float u_next = den > 0 ? (sum - h*h*rhs)/den : 0;
+
+	return mix(center, u_next, OMEGA); 
 }
 
 float downsample_rhs(ivec2 idx)
@@ -118,12 +143,16 @@ float downsample_rhs(ivec2 idx)
 
 		float wt[9] = {1, 2,2,2,2, 1,1,1,1};
 
-		float num, den;
+		float cvalid;
+		float center = RHS(2*idx, L, cvalid);
+
+		float num = 0;
+		float den = 0;
 		for (int i = 0; i < 9; ++i) {
 			float valid;
 			float value = RHS(stencil[i],L,valid);
-			num += wt[i] * valid * value ;
-			den += wt[i] * valid;
+			num += wt[i] * mix(center,value,valid);
+			den += wt[i];
 		}
 
 		return den > 0 ? num/den : 0;
@@ -148,12 +177,14 @@ void main()
 	// i i o o o o i i                             
 	// i i i i i i i i                             
 	// i i i i i i i i                             
-	ivec2 out_idx = idx - ivec2(JACOBI_ITERATIONS); 
+	ivec2 out_idx = idx - ivec2(u_iterations); 
+
+	int out_width = GROUPS - 2*int(u_iterations);
 
 	ivec2 grid_idx = 
-		ivec2(gl_WorkGroupID.xy) * OUTPUT_W + out_idx;
+		ivec2(gl_WorkGroupID.xy) * out_width + out_idx;
 
-	const float h = 1.f;
+	const float h = DELTA_X;
 
 	bool is_boundary = test_boundary(grid_idx, u_level);
 
@@ -164,7 +195,7 @@ void main()
 
 	block[idx.x][idx.y] = lhs;  
 
-	for (int i = 0; i < JACOBI_ITERATIONS; ++i) {
+	for (int i = 0; i < u_iterations; ++i) {
 		barrier();
 
 		lhs = jacobi_it(idx, rhs, h);
@@ -176,7 +207,7 @@ void main()
 	barrier();
 
 	bool outside = out_idx.x < 0 || out_idx.y < 0 || 
-		out_idx.x >= OUTPUT_W || out_idx.y >= OUTPUT_W; 
+		out_idx.x >= out_width || out_idx.y >= out_width; 
 
 	if (outside)
 		return;
@@ -186,8 +217,9 @@ void main()
 		imageStore(R1[u_level], grid_idx, vec4(res,0,0,0));
 	}
 
-	if (u_level > 0)
+	if (u_level > 0) {
 		imageStore(R2[u_level - 1], grid_idx, vec4(lhs,0,0,0));
-	else 
+	} else { 
 		imageStore(tmp_lhs, grid_idx, vec4(lhs,0,0,0));
+	}
 }

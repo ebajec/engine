@@ -7,9 +7,6 @@ layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 layout (binding = 1) uniform sampler2D q_in;
 layout (rgba32f, binding = 2) writeonly uniform image2D q_out;
-layout (rgba32f, binding = 3) writeonly uniform image2D p_out;
-
-#define EPS 1e-6
 
 bool within_cursor(vec2 p)
 {
@@ -24,7 +21,7 @@ bool within_cursor(vec2 p)
 
 		vec2 r = p - cursor;
 
-		return abs(r.x) < 10 && abs(r.y) < 40;
+		return abs(r.x) < 40 && abs(r.y) < 40;
 
 		//return length(r) < 20;
 	}
@@ -39,10 +36,13 @@ vec4 get_q(vec2 p)
 		p.x < 0.5 || p.x > size.x - 0.5, 
 		p.y < 0.5 || p.y > size.y - 0.5);
 
+	//if (any(oob))
+	//	return vec4(0);
+
 	vec2 uv = p/size;
 
-	vec2 ll = 0.5/size;
-	vec2 ur = vec2(1) - 0.5/size;
+	vec2 ll = vec2(0.5/size);
+	vec2 ur = vec2(1 - 0.5/size);
 	uv = clamp(uv, ll, ur);
 
 	vec4 q = texture(q_in, uv); 
@@ -50,8 +50,8 @@ vec4 get_q(vec2 p)
 	if (within_cursor(p))
 		return vec4(0,0,0,0);
 
-	if (oob.x) q.y = 0;
-	if (oob.y) q.x = 0;
+	if (oob.x) q.x = 0;
+	if (oob.y) q.y = 0;
 
 	return q;
 }
@@ -155,6 +155,8 @@ vec2 RK4(vec2 x0, float dt)
 
 vec4 jet(vec2 c, vec2 O)
 {
+	if (!bool(u_cursor_flags))
+		return vec4(0);
 	ivec2 size = imageSize(q_out);
 	vec2 cursor = u_cursor*size;
 
@@ -162,26 +164,36 @@ vec4 jet(vec2 c, vec2 O)
 	vec2 V = normalize(cursor - O);
 	vec2 X = vec2(V.y, -V.x);
 
-	mat2 frame = mat2(V/S,X/2);
+	mat2 frame = mat2(V/S,X/S);
 	vec2 r = (c - O)*frame;
 
-	return vec4(S * V,length(r)*0.0,0) * exp(-dot(r,r));
+	vec2 rc = vec2(r.x/S, r.y/S);
+
+	return 
+		vec4(S * V,0,0) * exp(-dot(r,r)) + 
+		vec4(0,0,0,0.1) * exp(-dot(rc,rc));
 }
 
 vec4 cursor_jet(vec2 c)
 {
+	if (!bool(u_cursor_flags))
+		return vec4(0);
+
 	ivec2 size = imageSize(q_out);
 	vec2 cursor = u_cursor*size;
 	vec2 vcursor = (u_cursor - u_cursor_prev) * size;
 
-	if (bool(u_cursor_flags)) {
-		float power = 1.5;
-		float sigma = 0.2f;
+	vec2 O = u_cursor*size;
 
-		vec2 r = c - cursor;
-		return vec4(40.*(vcursor),1,0)/(1. + 20.*dot(r,r));
-	}
-	return vec4(0);
+	float S = 10;
+	vec2 V = length(vcursor) > 1e-3 ? normalize(vcursor) : vec2(0);
+	vec2 X = vec2(V.y, -V.x);
+
+	vec2 r = (c - O)/S;
+
+	return 
+		vec4(S * V,0,0.00) * exp(-dot(r,r)) +
+		vec4(0,0,0,1) * exp(-dot(r,r));
 }
 
 void main()
@@ -195,27 +207,45 @@ void main()
 	vec2 pos_x = vec2(idx.xy) + vec2(0,0.5);
 	vec2 pos_y = vec2(idx.xy) + vec2(0.5,0);
 
-	vec2 vx = RK4(pos_x, TIMESTEP);
-	vec2 vy = RK4(pos_y, TIMESTEP);
+	const float dt = TIMESTEP;
 
-	vec2 cx = pos_x - vx;
-	vec2 cy = pos_y - vy;
+	vec2 ox = RK4(pos_x, dt);
+	vec2 oy = RK4(pos_y, dt);
+
+	vec2 cx = pos_x - ox;
+	vec2 cy = pos_y - oy;
 
 	vec2 v_hat = vec2(get_v(cx).x,get_v(cy).y);
 
-	vec2 O = vec2(size.x/4, size.y/2);
-
-	vec2 q_hat = get_q(cx).zw;
+	vec2 O = vec2(size.x/2, size.y/2);
 
 	vec4 qx = jet(pos_x,O);
 	vec4 qy = jet(pos_y,O);
 
+	qx = cursor_jet(pos_x);
+	qy = cursor_jet(pos_y);
+
 	v_hat += vec2(qx.x, qy.y);
 
-	q_hat.x += qx.z;
+	vec2 cpos = vec2(idx.xy) + vec2(0.5); 
+	vec2 c_hat = cpos - RK4(cpos, dt);
 
-	q_hat.x -= 0.01*q_hat.x;
+	vec4 q_hat = get_q(c_hat);
+	
+	float wl = get_q(c_hat + vec2(-1,0)).w;
+	float wr = get_q(c_hat + vec2(1,0)).w;
+	float wb = get_q(c_hat + vec2(0-1)).w;
+	float wt = get_q(c_hat + vec2(0,1)).w;
 
-	imageStore(q_out, idx, vec4(v_hat,q_hat));
+	float lap_w = (wl + wr + wb + wt - 4*q_hat.w)/(DELTA_X*DELTA_X);
+
+	if (idx.y > 0 && idx.y < size.y - 1) {
+		float tmp = sin(cpos.x*0.1)*sin(cpos.y*0.1);
+		v_hat.y += -u_gravity*tmp*q_hat.w;
+	}
+
+	q_hat.w += 0.5*(qx.w + qy.w) + 0.02*lap_w;
+
+	imageStore(q_out, idx, vec4(v_hat,q_hat.zw));
 }
 

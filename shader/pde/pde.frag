@@ -44,7 +44,7 @@ tgrad_t tex_grad2(vec2 uv)
 {
 	ivec2 size = textureSize(u_tex, 0);
 
-	vec2 h = 0.5/vec2(size);
+	vec2 h = 1/vec2(size);
 
 	float u1 = max(uv.x - h.x,h.x);
 	float u2 = min(uv.x + h.x,1.0 - h.x);
@@ -93,21 +93,16 @@ void main()
 
 	vec4 val = texture(u_tex,uv);
 
-	vec2 grad_x = vec2(grad.du.x,grad.dv.x);
+	vec2 grad_x = vec2(grad.du.w,grad.dv.w);
 
 	vec3 sun = normalize(vec3(0.5,0.2,-0.5));
-	vec3 n = normalize(vec3(grad_x.x,grad_x.y,1));
+	vec3 n = normalize(vec3(grad_x.x,grad_x.y,0.1));
 
 	float f = 0.2 + 0.8*clamp(dot(n,sun),0,1);
 
-	float curl = (grad.du.w - grad.dv.z);
-	vec4 color = vec4(val.x,val.y,tanh(length(val.zw)),1);
+	val.xy *= 0.2;
 
-	float f_speed = tanh(length(val.xy/30));
-
-	f = 1;
-
-	color =  vec4(val.z,-val.z,f_speed,1);
+	vec4 color = vec4(abs(val.x), -val.y, abs(val.w), 1);
 
 	ivec2 pix = ivec2(uv*vec2(size));
 	int padding = 5;
@@ -117,6 +112,6 @@ void main()
 		pix.y < padding || pix.y > size.y - padding)) {
 		FragColor = vec4(0.5,0.5,0.5,1);
 	} else {
-		FragColor = 5.*f*vec4(color);
+		FragColor = vec4(f*color.rgb,1) + vec4(0.02);
 	}
 }

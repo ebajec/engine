@@ -1,0 +1,100 @@
+
+#version 430 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "nvs.glsl"
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout (rgba32f, binding = 1) readonly uniform image2D q_in;
+layout (rgba32f, binding = 2) writeonly uniform image2D q_out;
+
+bool is_in_bounds(ivec2 idx)
+{
+	ivec2 size = imageSize(q_in);
+	return idx.x >= 0 && idx.x < size.x && idx.y >= 0 && idx.y < size.y;
+}
+
+bool is_oob_x(ivec2 idx)
+{
+	ivec2 size = imageSize(q_in);
+	return idx.x < 0 || idx.x >= size.x || idx.y >= size.x - 1;
+}
+
+bool is_oob_y(ivec2 idx)
+{
+	ivec2 size = imageSize(q_in);
+	return idx.y < 0 || idx.y >= size.y || idx.x >= size.y - 1;
+}
+
+float fetch_vx(ivec2 idx, out float valid)
+{
+	bool oob = is_oob_x(idx);
+	bool inb = is_in_bounds(idx);
+
+	valid = float(!oob && inb);
+	return (valid > 0) ? imageLoad(q_in, idx).x : 0;
+}
+
+float fetch_vy(ivec2 idx, out float valid)
+{
+	bool oob = is_oob_y(idx);
+	bool inb = is_in_bounds(idx);
+
+	valid = float(!oob && inb);
+	return (valid > 0) ? imageLoad(q_in, idx).y : 0;
+}
+void main()
+{
+    ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 size = imageSize(q_out);
+
+	if (idx.x >= size.x || idx.y >= size.y)
+		return;
+
+	ivec2 stencil[8] = {
+		ivec2(-1,0),
+		ivec2(1,0),
+		ivec2(0,-1),
+		ivec2(0,1),
+
+		ivec2(-1,-1),
+		ivec2(-1,1),
+		ivec2(1,-1),
+		ivec2(1,1),
+	};
+
+	float wt[8] = {4,4,4,4, 1,1,1,1};
+
+	vec2 sum = vec2(0);
+
+	vec4 q = imageLoad(q_in, idx);
+	vec2 v = q.xy;
+
+	for (int i = 0; i < 8; ++i) {
+		ivec2 p = idx + stencil[i];
+
+		float valid_x = 0;
+		float valid_y = 0;
+
+		vec2 vi = vec2(
+			fetch_vx(p, valid_x),
+			fetch_vy(p, valid_y)
+		);
+
+		vec2 ui = mix(v, vi, vec2(valid_x, valid_y));
+
+		sum += wt[i]*vi;
+	}
+
+	vec2 lap_v = (sum - 20*v)/(6*DELTA_X*DELTA_X);
+	
+	v += TIMESTEP * 0.06 * lap_v;
+
+	if (idx.x == 0 || idx.x == size.x - 1 || is_oob_x(idx)) v.x = 0;
+	if (idx.y == 0 || idx.y == size.y - 1 || is_oob_y(idx)) v.y = 0;
+
+	imageStore(q_out, idx, vec4(v,q.zw));
+
+	return;
+}
