@@ -1,0 +1,3 @@
+shaders:
+  vert: shader/vector_field.vert.spv
+  frag: shader/vector_field.frag.spv

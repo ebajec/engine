@@ -155,8 +155,8 @@ vec2 RK4(vec2 x0, float dt)
 
 vec4 jet(vec2 c, vec2 O)
 {
-	if (!bool(u_cursor_flags))
-		return vec4(0);
+	//if (!bool(u_cursor_flags))
+	//	return vec4(0);
 	ivec2 size = imageSize(q_out);
 	vec2 cursor = u_cursor*size;
 
@@ -164,14 +164,14 @@ vec4 jet(vec2 c, vec2 O)
 	vec2 V = normalize(cursor - O);
 	vec2 X = vec2(V.y, -V.x);
 
-	mat2 frame = mat2(V/S,X/S);
+	mat2 frame = mat2(V/(S),X/(S));
 	vec2 r = (c - O)*frame;
 
-	vec2 rc = vec2(r.x/S, r.y/S);
+	vec2 rc = vec2(r.x, r.y)*0.3;
 
 	return 
 		vec4(S * V,0,0) * exp(-dot(r,r)) + 
-		vec4(0,0,0,0.1) * exp(-dot(rc,rc));
+		vec4(0,0,0,0.05) * exp(-dot(rc,rc));
 }
 
 vec4 cursor_jet(vec2 c)
@@ -185,15 +185,18 @@ vec4 cursor_jet(vec2 c)
 
 	vec2 O = u_cursor*size;
 
+	bool valid = length(vcursor) > 1e-3; 
+
 	float S = 10;
-	vec2 V = length(vcursor) > 1e-3 ? normalize(vcursor) : vec2(0);
+	vec2 V = valid ? normalize(vcursor) : vec2(0);
 	vec2 X = vec2(V.y, -V.x);
 
-	vec2 r = (c - O)/S;
+	mat2 frame = valid ? mat2(V/S,4*X/S) : mat2(1/S);
+	vec2 r = (c - O)*frame;
 
 	return 
-		vec4(S * V,0,0.00) * exp(-dot(r,r)) +
-		vec4(0,0,0,1) * exp(-dot(r,r));
+		vec4(S*V,0,0.00) * exp(-dot(r,r)) +
+		vec4(0,0,0,0.5) * exp(-dot(r,r));
 }
 
 void main()
@@ -222,8 +225,8 @@ void main()
 	vec4 qx = jet(pos_x,O);
 	vec4 qy = jet(pos_y,O);
 
-	qx = cursor_jet(pos_x);
-	qy = cursor_jet(pos_y);
+	//qx = cursor_jet(pos_x);
+	//qy = cursor_jet(pos_y);
 
 	v_hat += vec2(qx.x, qy.y);
 
@@ -240,11 +243,13 @@ void main()
 	float lap_w = (wl + wr + wb + wt - 4*q_hat.w)/(DELTA_X*DELTA_X);
 
 	if (idx.y > 0 && idx.y < size.y - 1) {
-		float tmp = sin(cpos.x*0.1)*sin(cpos.y*0.1);
-		v_hat.y += -u_gravity*tmp*q_hat.w;
+		v_hat.y += -0.1*u_gravity*(mix(RHO, 2, q_hat.w) - RHO);
+		//v_hat.x += cos(cpos.y*0.3)*u_gravity*q_hat.w;
+		//v_hat.y += cos(cpos.x*0.3)*u_gravity*q_hat.w;
 	}
 
-	q_hat.w += 0.5*(qx.w + qy.w) + 0.02*lap_w;
+	q_hat.w += 0.5*(qx.w + qy.w) + 0.00*lap_w;
+	q_hat.w = clamp(q_hat.w, 0, 1);
 
 	imageStore(q_out, idx, vec4(v_hat,q_hat.zw));
 }

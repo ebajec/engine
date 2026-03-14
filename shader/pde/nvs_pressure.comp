@@ -35,5 +35,6 @@ void main()
 		return;
 
 	float lap = RHO*div_v(idx)/TIMESTEP;
+
 	imageStore(f_out, idx, vec4(lap, 0, 0, 0));
 }

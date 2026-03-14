@@ -89,7 +89,7 @@ void main()
 
 	vec2 lap_v = (sum - 20*v)/(6*DELTA_X*DELTA_X);
 	
-	v += TIMESTEP * 0.06 * lap_v;
+	v += TIMESTEP * 0.01 * lap_v;
 
 	if (idx.x == 0 || idx.x == size.x - 1 || is_oob_x(idx)) v.x = 0;
 	if (idx.y == 0 || idx.y == size.y - 1 || is_oob_y(idx)) v.y = 0;

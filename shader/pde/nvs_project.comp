@@ -54,6 +54,25 @@ vec2 pressure_grad(ivec2 p)
 	return vec2(pc - pl, pc - pb)/(2*DELTA_X); 
 }
 
+float get_w(vec2 p)
+{
+	ivec2 idx = ivec2(floor(p));
+
+	vec2 uv = fract(p);
+
+	ivec2 size = imageSize(q_img) - ivec2(1);
+
+	float w00 = imageLoad(q_img, clamp(idx + ivec2(0,0),ivec2(0),size)).w; 
+	float w10 = imageLoad(q_img, clamp(idx + ivec2(-1,0),ivec2(0),size)).w; 
+	float w01 = imageLoad(q_img, clamp(idx + ivec2(0,-1),ivec2(0),size)).w; 
+	float w11 = imageLoad(q_img, clamp(idx + ivec2(-1,-1),ivec2(0),size)).w; 
+
+	float w0 = mix(w00,w10,uv.x);
+	float w1 = mix(w01,w11,uv.x);
+
+	return mix(w0, w1, uv.y);
+}
+
 void main()
 {
     ivec2 idx = ivec2(gl_GlobalInvocationID.xy);

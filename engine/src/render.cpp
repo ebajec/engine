@@ -248,7 +248,7 @@ PassCtx begin_pass(Device *dev, RenderTargetID h_target, ViewID h_view,
 		glBindFramebuffer(GL_FRAMEBUFFER,target->fbo);
 	}
 
-	static float rgb[3] = {0.0f,0.0f,0.0f};
+	static float rgb[3] = {0.15f,0.15f,0.15f};
 
 	glEnable(GL_DEPTH_TEST);
 	glViewport(viewport.x0, viewport.y0, viewport.w, viewport.h);

@@ -98,11 +98,15 @@ void main()
 	vec3 sun = normalize(vec3(0.5,0.2,-0.5));
 	vec3 n = normalize(vec3(grad_x.x,grad_x.y,0.1));
 
-	float f = 0.2 + 0.8*clamp(dot(n,sun),0,1);
+	float f = 0.5 + 0.5*clamp(dot(n,sun),0,1);
 
-	val.xy *= 0.2;
+	//val.xy *= 0.2;
 
-	vec4 color = vec4(abs(val.x), -val.y, abs(val.w), 1);
+	float speed = 0.5*length(val.xy);
+
+	vec4 color = vec4(speed,speed, 2*abs(val.w), 1);
+
+	color = vec4(0);
 
 	ivec2 pix = ivec2(uv*vec2(size));
 	int padding = 5;

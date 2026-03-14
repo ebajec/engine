@@ -641,9 +641,12 @@ void FluidSim::destroy(ev2::Device *dev)
 struct FluidApp : public App
 {
 	std::unique_ptr<FluidSim> sim;
-	std::unique_ptr<TextureViewerPanel> left_panel;
+	std::unique_ptr<TextureViewerPanel> main_panel;
 	std::unique_ptr<TextureViewerPanel> right_panel;
 	std::unique_ptr<HeightmapViewerPanel> heightmap_panel;
+
+	ev2::GraphicsPipelineID vector_field_pipe;
+	ev2::DescriptorSetID vector_field_set;
 
 	ev2::TextureID phi_tex;
 	ev2::TextureID f_tex;
@@ -668,7 +671,7 @@ int FluidApp::initialize(int argc, char **argv)
 
 	sim.reset(new FluidSim);
 
-	left_panel.reset(new TextureViewerPanel(this, 200, 0, 500, 500));
+	main_panel.reset(new TextureViewerPanel(this, 200, 0, 500, 500));
 	right_panel.reset(new TextureViewerPanel(this, 700, 0, 500, 500, 
 										  "pipelines/pressure_viz.yaml"));
 	heightmap_panel.reset(new HeightmapViewerPanel());
@@ -677,10 +680,18 @@ int FluidApp::initialize(int argc, char **argv)
 	if (result)
 		return result;
 
-	phi_tex = ev2::create_texture(dev, sim->q_img_1, ev2::FILTER_NEAREST);
+	phi_tex = ev2::create_texture(dev, sim->q_img_1, ev2::FILTER_BILINEAR);
 	f_tex = ev2::create_texture(dev, sim->q_img_1, ev2::FILTER_NEAREST);
 
-	result = left_panel->init(dev, f_tex); 
+	vector_field_pipe = ev2::load_graphics_pipeline(dev, "pipelines/vector_field.yaml");
+	{
+		ev2::DescriptorLayoutID layout = ev2::get_graphics_pipeline_layout(dev, vector_field_pipe);
+		;
+		vector_field_set = ev2::create_descriptor_set(dev, layout);
+		ev2::bind_texture(dev, vector_field_set, ev2::find_binding(layout, "u_tex"), phi_tex);
+	}
+
+	result = main_panel->init(dev, f_tex); 
 	if (result)
 		return result;
 
@@ -730,7 +741,7 @@ int FluidApp::update()
 			return result;
 	}
 
-	if ((result = left_panel->update(dev)))
+	if ((result = main_panel->update(dev)))
 		return result;
 
 	if ((result = right_panel->update(dev)))
@@ -740,11 +751,11 @@ int FluidApp::update()
 		return result;
 
 	bool is_panel_clicked = this->input.right_mouse_pressed && 
-			left_panel->panel->is_content_selected();
+			main_panel->panel->is_content_selected();
 
 	if (is_panel_clicked) {
 		sim->uniforms.cursor_prev = sim->uniforms.cursor;
-		sim->uniforms.cursor = left_panel->get_world_cursor_pos();
+		sim->uniforms.cursor = main_panel->get_world_cursor_pos();
 		sim->uniforms.flags = true; 
 	} else {
 		sim->uniforms.flags = false; 
@@ -754,13 +765,30 @@ int FluidApp::update()
 }
 void FluidApp::render()
 {
-	left_panel->render(dev);
+	main_panel->render(dev);
+
+	ev2::PassCtx pass = main_panel->begin_pass(dev);
+	ev2::cmd_bind_gfx_pipeline(pass.rec, main_panel->rd.pipeline);
+	ev2::cmd_bind_descriptor_set(pass.rec, main_panel->rd.desc_set);
+	ev2::cmd_draw_screen_quad(pass.rec);
+
+	ev2::cmd_bind_gfx_pipeline(pass.rec, vector_field_pipe);
+	ev2::cmd_bind_descriptor_set(pass.rec, vector_field_set);
+
+	glDisable(GL_DEPTH_TEST);
+
+	size_t count = 4*sim->grid_w * sim->grid_h;
+	const uint32_t indices[] = {0, 1};
+	glDrawElementsInstanced(GL_LINES, 2, GL_UNSIGNED_INT, indices, count);
+
+	ev2::SyncID pass_sync = ev2::end_pass(dev, pass);
+
 	right_panel->render(dev);
 	heightmap_panel->render(dev);
 }
 void FluidApp::destroy()
 {
-	left_panel->destroy(dev);
+	main_panel->destroy(dev);
 	right_panel->destroy(dev);
 	heightmap_panel->destroy(dev);
 

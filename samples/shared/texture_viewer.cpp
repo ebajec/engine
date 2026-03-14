@@ -147,14 +147,19 @@ int TextureViewerPanel::update(ev2::Device *dev)
 	return EXIT_SUCCESS;
 }
 
-void TextureViewerPanel::render(ev2::Device *dev)
+ev2::PassCtx TextureViewerPanel::begin_pass(ev2::Device *dev)
 {
 	glm::ivec2 win_size = panel->get_size(); 
 
 	ev2::RenderTargetID window_target = panel->get_target();
 	ev2::Rect view_rect = {0,0, (uint32_t)win_size.x, (uint32_t)win_size.y};
 
-	ev2::PassCtx pass = ev2::begin_pass(dev, window_target, rd.camera, view_rect);
+	return ev2::begin_pass(dev, window_target, rd.camera, view_rect);
+}
+
+void TextureViewerPanel::render(ev2::Device *dev)
+{
+	ev2::PassCtx pass = this->begin_pass(dev);
 	ev2::cmd_bind_gfx_pipeline(pass.rec, rd.pipeline);
 	ev2::cmd_bind_descriptor_set(pass.rec, rd.desc_set);
 	ev2::cmd_draw_screen_quad(pass.rec);
