@@ -46,10 +46,10 @@ Panel::~Panel()
 
 void Panel::imgui()
 {
-	ImGuiWindowFlags flags = ImGuiWindowFlags_NoSavedSettings;
+	ImGuiWindowFlags flags = ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove;
 
-	if (m_content_selected) 
-		flags |= ImGuiWindowFlags_NoMove;
+	if (m_bar_selected) 
+		flags &= ~ImGuiWindowFlags_NoMove;
 
 	if (!EV2_VALID(m_target)) {
 		ImGui::SetNextWindowPos(ImVec2(m_pos.x, m_pos.y));
@@ -83,6 +83,7 @@ void Panel::imgui()
 
 		m_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_None);
 		m_focused = ImGui::IsWindowFocused(); 
+		m_bar_selected = ImGui::IsItemHovered();
 
 		m_content_selected = m_focused && m_hovered && 
 			ImGui::GetMousePos().y >= ImGui::GetCursorScreenPos().y;
@@ -90,9 +91,7 @@ void Panel::imgui()
 		m_pos = glm::ivec2(win_pos.x, win_pos.y);
 		glm::ivec2 size = glm::ivec2(win_size.x,win_size.y);
 
-		if (EV2_IS_NULL(m_target) || 
-			m_size != size
-		) {
+		if ((EV2_IS_NULL(m_target) || m_size != size)) {
 			if (!EV2_IS_NULL(m_target))
 				ev2::destroy_render_target(m_dev, m_target);
 

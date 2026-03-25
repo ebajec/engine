@@ -106,7 +106,10 @@ void main()
 
 	vec4 color = vec4(speed,speed, 2*abs(val.w), 1);
 
-	color = vec4(0);
+	//color = vec4(0);
+	color *= 0.2;
+
+	color.xyz = vec3(1) - color.xyz;
 
 	ivec2 pix = ivec2(uv*vec2(size));
 	int padding = 5;

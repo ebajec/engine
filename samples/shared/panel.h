@@ -30,6 +30,7 @@ class Panel
 	bool m_hovered : 1 = false;
 	bool m_content_selected : 1 = false;
 	bool m_focused : 1 = false;
+	bool m_bar_selected : 1 = false;
 public:
 
 	ev2::RenderTargetID get_target();

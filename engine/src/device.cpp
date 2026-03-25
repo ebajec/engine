@@ -348,6 +348,8 @@ void UploadPool::flush()
 		.sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0),
 	};
 
+	glFlush();
+
 	//log_info(
 	//	"Flushed uploads:\n"
 	//	"	epoch=%lld\n"

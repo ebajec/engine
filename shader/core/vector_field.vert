@@ -7,18 +7,33 @@ layout (location = 1) out vec4 out_color;
 
 layout (binding = 0) uniform sampler2D u_tex;
 
-vec3 palette(float t)
-{
-	t = tanh(t);
-	return mix(vec3(1,0,0), vec3(0,1,1), t);
-}
+vec3 palette(float t) {
+	t = clamp(t,0,1);
+    // Vibrant Jet-style palette
+    // t: 0.0 (blue/violet) → 0.5 (green/yellow) → 1.0 (red/magenta)
+    vec3 col = vec3(0.0);
 
+    // Red channel
+    col.r = clamp(1.5 - abs(4.0 * t - 3.0), 0.0, 1.0);
+
+    // Green channel
+    col.g = clamp(1.5 - abs(4.0 * t - 2.0), 0.0, 1.0);
+
+    // Blue channel
+    col.b = clamp(1.5 - abs(4.0 * t - 1.0), 0.0, 1.0);
+
+    // Boost saturation — push away from grey
+    float lum = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(vec3(lum), col, 1.35);
+
+    return clamp(col, 0.0, 1.0);
+}
 void main()
 {
 	int base = gl_InstanceIndex;
 	bool parity = bool(gl_VertexIndex & 0x1);
 
-	ivec2 size = 2*textureSize(u_tex, 0);
+	ivec2 size = textureSize(u_tex, 0);
 
 	int px = base / size.x;
 	int py = base - size.y * px;
@@ -36,12 +51,10 @@ void main()
 
 	vec2 c = 2*uv - vec2(1);
 
-	float D = 2;
+	float t = norm;
 
-	float t = D*norm;
-
-	vec2 pos = parity ? c : c + D*F*scale; 
-	vec4 color = parity ? vec4(0) : vec4(palette(t),1);
+	vec2 pos = parity ? c : c + F*scale; 
+	vec4 color = parity ? vec4(0) : vec4(palette(norm),0.6);
 
 	out_pos = vec3(pos, 0);
 	out_color = color;

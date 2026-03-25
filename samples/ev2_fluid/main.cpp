@@ -681,7 +681,7 @@ int FluidApp::initialize(int argc, char **argv)
 		return result;
 
 	phi_tex = ev2::create_texture(dev, sim->q_img_1, ev2::FILTER_BILINEAR);
-	f_tex = ev2::create_texture(dev, sim->q_img_1, ev2::FILTER_NEAREST);
+	f_tex = ev2::create_texture(dev, sim->q_img_1, ev2::FILTER_BILINEAR);
 
 	vector_field_pipe = ev2::load_graphics_pipeline(dev, "pipelines/vector_field.yaml");
 	{
@@ -772,14 +772,17 @@ void FluidApp::render()
 	ev2::cmd_bind_descriptor_set(pass.rec, main_panel->rd.desc_set);
 	ev2::cmd_draw_screen_quad(pass.rec);
 
-	ev2::cmd_bind_gfx_pipeline(pass.rec, vector_field_pipe);
-	ev2::cmd_bind_descriptor_set(pass.rec, vector_field_set);
+	//ev2::cmd_bind_gfx_pipeline(pass.rec, vector_field_pipe);
+	//ev2::cmd_bind_descriptor_set(pass.rec, vector_field_set);
 
-	glDisable(GL_DEPTH_TEST);
+	//glDisable(GL_DEPTH_TEST);
+	//glEnable(GL_BLEND);
+	//glBlendEquation(GL_FUNC_ADD);
+	//glBlendFunc(GL_ONE, GL_ONE);	
 
-	size_t count = 4*sim->grid_w * sim->grid_h;
-	const uint32_t indices[] = {0, 1};
-	glDrawElementsInstanced(GL_LINES, 2, GL_UNSIGNED_INT, indices, count);
+	//size_t count = sim->grid_w * sim->grid_h;
+	//const uint32_t indices[] = {0, 1};
+	//glDrawElementsInstanced(GL_LINES, 2, GL_UNSIGNED_INT, indices, count);
 
 	ev2::SyncID pass_sync = ev2::end_pass(dev, pass);
 
