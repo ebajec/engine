@@ -1,8 +1,8 @@
 #ifndef EV2_UPLOAD_POOL_H
 #define EV2_UPLOAD_POOL_H
-#include <engine/renderer/opengl.h>
 
-#include "resource_impl.h"
+#include "ev2/resource.h"
+#include "backends/opengl/def_opengl.h"
 
 #include <queue>
 #include <atomic>

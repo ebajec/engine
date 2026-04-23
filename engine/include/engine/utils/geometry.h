@@ -1,8 +1,6 @@
 #ifndef GEOMETRY_H
 #define GEOMETRY_H
 
-#include "engine/renderer/types.h"
-
 // glm
 #include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
@@ -27,6 +25,26 @@
 #ifndef TWOPIf
 #define TWOPIf (2.0f*3.141592654f)
 #endif
+
+struct Camera
+{
+	glm::mat4 proj;
+	glm::mat4 view;
+};
+
+struct vertex2d
+{
+	glm::vec2 position;
+	glm::vec2 uv;
+};
+
+struct vertex3d
+{
+	glm::vec3 position;
+	glm::vec2 uv;
+	glm::vec3 normal;
+};
+
 
 struct plane_t
 {

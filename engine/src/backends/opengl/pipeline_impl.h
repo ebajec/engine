@@ -1,7 +1,7 @@
 #ifndef EV2_PIPELINE_IMPL_H
 #define EV2_PIPELINE_IMPL_H
 
-#include <engine/renderer/opengl.h>
+#include "backends/opengl/def_opengl.h"
 
 #include "ev2/resource.h"
 #include "ev2/pipeline.h"

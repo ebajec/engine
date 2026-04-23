@@ -1,6 +1,6 @@
 #include <utils/log.h>
 
-#include "backends/opengl/opengl_def.h"
+#include "backends/opengl/def_opengl.h"
 
 #include <vector>
 #include <cstdio>

@@ -1,7 +1,7 @@
 #include <ev2/device.h>
 #include <ev2/render.h>
 
-#include "engine/renderer/types.h"
+#include "utils/geometry.h"
 
 #include <glm/mat4x4.hpp>
 

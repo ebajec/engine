@@ -1,5 +1,5 @@
-#ifndef OPENGL_H
-#define OPENGL_H
+#ifndef DEF_OPENGL_H
+#define DEF_OPENGL_H
 
 #include <glad/glad.h>
 
@@ -40,4 +40,6 @@ static inline int gl_check_err()
 	return error;
 }
 
-#endif
+extern bool gl_check_program(GLuint handle, const char* desc);
+
+#endif // DEF_OPENGL_H

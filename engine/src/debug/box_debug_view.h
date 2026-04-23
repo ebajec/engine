@@ -3,13 +3,7 @@
 
 #include "utils/geometry.h"
 
-#include "engine/renderer/opengl.h"
-
-/*
-#include <resource/resource_table.h>
-#include <resource/model_loader.h>
-#include <resource/material_loader.h>
-*/
+#include "backends/opengl/def_opengl.h"
 
 #include <ev2/device.h>
 #include <ev2/resource.h>

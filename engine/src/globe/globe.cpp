@@ -1,3 +1,5 @@
+#include "ev2/render.h"
+
 #include "engine/globe/globe.h"
 #include "engine/globe/tiling.h"
 
@@ -213,7 +215,7 @@ struct RenderData
 	ev2::GraphicsPipelineID pipeline;
 	ev2::DescriptorSetID bindings;
 
-	std::vector<DrawCommand> cmds;
+	std::vector<ev2::DrawCommand> cmds;
 };
 
 struct Globe
@@ -478,7 +480,7 @@ static ev2::Result create_render_data(ev2::Device *dev, RenderData &data)
 
 	size_t vbo_size = MAX_TILES*TILE_VERT_COUNT*sizeof(GlobeVertex);
 	size_t ibo_size = sizeof(uint32_t)*6*TILE_VERT_COUNT;
-	size_t indirect_size = MAX_TILES*sizeof(DrawCommand);
+	size_t indirect_size = MAX_TILES*sizeof(ev2::DrawCommand);
 	size_t ssbo_size = MAX_TILES*sizeof(TileMetadata);
 
 	data.pipeline = ev2::load_graphics_pipeline(dev, "pipelines/globe_tile.yaml");
@@ -577,17 +579,18 @@ static uint64_t update_draw_cmds(Globe *globe)
 	//-----------------------------------------------------------------------------
 	// Indirect Draw Buffer
 
-	size_t size = count * sizeof(DrawCommand);
+	size_t size = count * sizeof(ev2::DrawCommand);
 
-	ev2::UploadContext uc = ev2::begin_upload(globe->dev, size, alignof(DrawCommand));
+	ev2::UploadContext uc = ev2::begin_upload(globe->dev, size, 
+										   alignof(ev2::DrawCommand));
 
-	DrawCommand * cmds = (DrawCommand*)uc.ptr;
+	ev2::DrawCommand * cmds = (ev2::DrawCommand*)uc.ptr;
 
 	for (size_t i = 0; i < count; ++i) {
 		uint64_t code = globe->selected_tiles[i];
 		size_t slot = globe->tile_allocator->get_idx(code);
 
-		DrawCommand cmd = {
+		ev2::DrawCommand cmd = {
 			.count = 6*TILE_VERT_COUNT,
 			.instanceCount = 1, 
 			.firstIndex = 0,
@@ -990,7 +993,7 @@ void globe_draw(const Globe *globe, const ev2::PassCtx& ctx)
 		GL_UNSIGNED_INT, 
 		nullptr, 
 		(GLsizei)globe->selected_tiles.size(), 
-		sizeof(DrawCommand)	
+		sizeof(ev2::DrawCommand)	
 	);
 
 	glDisable(GL_CULL_FACE);

@@ -1,5 +1,6 @@
 #include "upload_pool.h"
 #include "common.h"
+
 #include "device_impl.h"
 
 #include <cassert>

@@ -1,10 +1,7 @@
 #ifndef TILE_CACHE_H
 #define TILE_CACHE_H
 
-#include "engine/renderer/opengl.h"
-/*
-#include "engine/renderer/renderer.h"
-*/
+#include "backends/opengl/def_opengl.h"
 
 #include "ev2/device.h"
 #include "engine/globe/tiling.h"
