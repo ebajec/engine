@@ -1,7 +1,7 @@
 #include "ev2/defines.h"
 #include "ev2/device.h"
 
-#include "asset_table.h"
+#include "utils/asset_table.h"
 
 #include <algorithm>
 #include <numeric>
