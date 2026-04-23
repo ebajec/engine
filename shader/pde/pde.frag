@@ -65,11 +65,6 @@ tgrad_t tex_grad2(vec2 uv)
 	return tgrad_t(dfdu,dfdv);
 }
 
-vec2 adjust_uv_for_clamp(vec2 uv, float h)
-{
-	return vec2(h) + uv*(1-2.0*h); 
-}
-
 void main()
 {
 	ivec2 size = textureSize(u_tex, 0);
@@ -104,12 +99,13 @@ void main()
 
 	float speed = 0.5*length(val.xy);
 
-	vec4 color = vec4(speed,speed, 2*abs(val.w), 1);
+	vec4 color = vec4(0,0, 2*abs(val.w), 1);
 
 	//color = vec4(0);
-	color *= 0.2;
+	color *= 0.6;
+	color.r = speed*color.b;
 
-	color.xyz = vec3(1) - color.xyz;
+	color.rgb = vec3(1) - color.rgb;
 
 	ivec2 pix = ivec2(uv*vec2(size));
 	int padding = 5;

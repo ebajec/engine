@@ -157,22 +157,26 @@ vec2 RK4(vec2 x0, float dt)
 
 vec4 jet(vec2 c, vec2 O, vec2 P)
 {
-	//if (!bool(u_cursor_flags))
-	//	return vec4(0);
+	if (!bool(u_cursor_flags))
+		return vec4(0);
 	ivec2 size = imageSize(q_out);
 
-	float S = 5;
-	vec2 V = normalize(P - O);
+	vec2 R = P - O;
+
+	bool is_zero = length(R) < 1e-3 ; 
+
+	float S = 2.5;
+	vec2 V = is_zero ? vec2(0) : normalize(R);
 	vec2 X = vec2(V.y, -V.x);
 
-	mat2 frame = mat2(V/(S),2*X/(S));
+	mat2 frame = is_zero ? mat2(1) : mat2(V/(S),2*X/(S));
 	vec2 r = (c - O)*frame;
 
 	vec2 rc = vec2(r.x, r.y)*0.3;
 
 	return 
 		vec4(S * V,0,0) * exp(-dot(r,r)) + 
-		vec4(0,0,0,0.01) * exp(-dot(rc,rc));
+		vec4(0,0,0,0.1) * exp(-dot(rc,rc));
 }
 
 vec4 cursor_jet(vec2 c)
@@ -180,7 +184,7 @@ vec4 cursor_jet(vec2 c)
 	if (!bool(u_cursor_flags))
 		return vec4(0);
 
-	ivec2 size = imageSize(q_out);
+	vec2 size = vec2(imageSize(q_out));
 	vec2 cursor = u_cursor*size;
 	vec2 vcursor = (u_cursor - u_cursor_prev) * size;
 
@@ -188,7 +192,7 @@ vec4 cursor_jet(vec2 c)
 
 	bool valid = length(vcursor) > 1e-3; 
 
-	float S = 5;
+	float S = 3;
 	vec2 V = valid ? normalize(vcursor) : vec2(0);
 	vec2 X = vec2(V.y, -V.x);
 
@@ -221,27 +225,34 @@ void main()
 
 	vec2 v_hat = vec2(get_v(cx).x,get_v(cy).y);
 
-	vec2 O = vec2(size.x/2, size.y/2);
+	vec2 O = u_cursor * size;//vec2(size.x/2, size.y/2);
 
 	vec4 qx = vec4(0); 
 	vec4 qy = vec4(0);
 
-	//const int N = 4;
+	if (false) {
+		const int N = 16;
 
-	//float t = fract(0.05*(u_frame.t_seconds + u_frame.t_fract));
+		float t = fract(0.2*(u_frame.t_seconds + u_frame.t_fract));
 
-	//for (int i = 0;  i < N; ++i) {
-	//	float tht = (float(i)/N - t) * TWOPI;
-	//	vec2 Oi = O + 100*vec2(cos(tht), sin(tht));
-	//	vec2 D = O + 0*u_cursor*size;
+		for (int i = 0;  i < N; ++i) {
+			float tht = (float(i)/N - t) * TWOPI;
+			vec2 R = 30*vec2(cos(tht), sin(tht));
+			vec2 Oi = O + R;
+			vec2 D = u_cursor_prev*size + R;
 
-	//	qx += jet(pos_x,Oi,D);
-	//	qy += jet(pos_y,Oi,D);
-	//}
-	//
-
-	qx += cursor_jet(pos_x);
-	qy += cursor_jet(pos_y);
+			qx += 4*jet(pos_x,Oi,D)/N;
+			qy += 4*jet(pos_y,Oi,D)/N;
+		}
+	}
+	if (true) {
+		qx += cursor_jet(pos_x);
+		qy += cursor_jet(pos_y);
+	}
+	if (false) {
+		qx += jet(pos_x,O,u_cursor*size);
+		qy += jet(pos_y,O,u_cursor*size);
+	}
 
 	v_hat += vec2(qx.x, qy.y);
 
@@ -259,11 +270,11 @@ void main()
 
 	if (idx.y > 0 && idx.y < size.y - 1) {
 		v_hat.y += -0.1*u_gravity*(mix(RHO, 2, q_hat.w) - RHO);
-		//v_hat.x += cos(cpos.y*0.2)*u_gravity*q_hat.w;
-		//v_hat.y += cos(cpos.x*0.2)*u_gravity*q_hat.w;
+		//v_hat.x += cos(cpos.y*0.04)*u_gravity*q_hat.w;
+		//v_hat.y += cos(cpos.x*0.04)*u_gravity*q_hat.w;
 	}
 
-	q_hat.w += 0.5*(qx.w + qy.w) + 0.00*lap_w;
+	q_hat.w += 0.5*(qx.w + qy.w) + 0.00*lap_w - 0.004*q_hat.w;
 	q_hat.w = clamp(q_hat.w, 0, 1);
 
 	imageStore(q_out, idx, vec4(v_hat,q_hat.zw));

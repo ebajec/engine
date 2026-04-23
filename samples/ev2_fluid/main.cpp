@@ -676,7 +676,7 @@ int FluidApp::initialize(int argc, char **argv)
 										  "pipelines/pressure_viz.yaml"));
 	heightmap_panel.reset(new HeightmapViewerPanel());
 
-	result = sim->init(dev, 512, 512);
+	result = sim->init(dev, 256, 256);
 	if (result)
 		return result;
 
@@ -772,17 +772,18 @@ void FluidApp::render()
 	ev2::cmd_bind_descriptor_set(pass.rec, main_panel->rd.desc_set);
 	ev2::cmd_draw_screen_quad(pass.rec);
 
-	//ev2::cmd_bind_gfx_pipeline(pass.rec, vector_field_pipe);
-	//ev2::cmd_bind_descriptor_set(pass.rec, vector_field_set);
+	ev2::cmd_bind_gfx_pipeline(pass.rec, vector_field_pipe);
+	ev2::cmd_bind_descriptor_set(pass.rec, vector_field_set);
 
-	//glDisable(GL_DEPTH_TEST);
-	//glEnable(GL_BLEND);
-	//glBlendEquation(GL_FUNC_ADD);
-	//glBlendFunc(GL_ONE, GL_ONE);	
+	glDisable(GL_DEPTH_TEST);
+	glEnable(GL_BLEND);
+	glBlendEquation(GL_FUNC_ADD);
+	glBlendFunc(GL_ONE, GL_ONE);	
 
-	//size_t count = sim->grid_w * sim->grid_h;
-	//const uint32_t indices[] = {0, 1};
-	//glDrawElementsInstanced(GL_LINES, 2, GL_UNSIGNED_INT, indices, count);
+	size_t count = sim->grid_w * sim->grid_h;
+	const uint32_t indices[] = {0, 1};
+	glDrawElementsInstanced(GL_LINES, 2, GL_UNSIGNED_INT, indices, count);
+	glDisable(GL_BLEND);
 
 	ev2::SyncID pass_sync = ev2::end_pass(dev, pass);
 

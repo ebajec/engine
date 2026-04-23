@@ -47,14 +47,14 @@ void main()
 
 	F = norm > 1e-4 ? F : vec2(0);
 
-	float scale = 4./size.x;
+	float scale = 0./size.x;
 
 	vec2 c = 2*uv - vec2(1);
 
 	float t = norm;
 
-	vec2 pos = parity ? c : c + F*scale; 
-	vec4 color = parity ? vec4(0) : vec4(palette(norm),0.6);
+	vec2 pos = parity ? c : c + scale*normalize(F); 
+	vec4 color = parity ? vec4(0) : norm*vec4(1) + 0*vec4(palette(norm),0.1);
 
 	out_pos = vec3(pos, 0);
 	out_color = color;

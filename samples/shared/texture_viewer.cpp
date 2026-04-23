@@ -104,11 +104,15 @@ int TextureViewerPanel::update(ev2::Device *dev)
 	ImGui::PushID(panel_idx);
 	if (ImGui::CollapsingHeader(panel->get_name().c_str())) {
 		char path[PATH_MAX] {};
-		std::string text = "current: " + pipeline_path;
+		std::string text = "" + pipeline_path;
 
-		ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue; 
+		ImGui::Text("current:\n%s",text.c_str());
 
-		if (ImGui::InputText(text.c_str(), path, sizeof(path), flags)) {
+		ImGuiInputTextFlags flags =
+			ImGuiInputTextFlags_EnterReturnsTrue |
+			ImGuiInputTextFlags_ElideLeft; 
+
+		if (ImGui::InputTextWithHint("","Enter pipeline", path, sizeof(path), flags)) {
 			if (pipeline_path.compare(path)) {
 				if (update_pipeline(path) != ev2::SUCCESS) {
 					log_warn("%s: Failed to set pipeline to %s", 

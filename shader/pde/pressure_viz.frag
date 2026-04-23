@@ -15,7 +15,9 @@ void main()
 	uint L = 0;
 	vec4 tex = textureLod(u_tex, in_uv, 3);
 
-	vec3 rgb = 10*vec3(tex.z,0,0) + vec3(0.02);
+	float k = 2*tanh(tex.z);
+	
+	vec3 rgb = vec3(k,0,-k) + vec3(0.02);
 
 	FragColor = vec4(rgb,1); 
 }

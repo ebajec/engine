@@ -94,10 +94,12 @@ void main()
 	// that lap(p) = div(u*). 
 	if (idx.x < size.x - 1 && idx.y < size.y - 1) {
 		float rhs = texelFetch(lap_p_in,idx,0).x; 
-		float r = rhs - pressure_lap(idx);
-		//q.z = abs(r) > 1e-2 ? 10*r : 0;
+		float lap = pressure_lap(idx);
+		float r = rhs - lap;
+		float p = get_p(idx);
+		q.z = p;
 	}
-	q.z = length(grad_p);
+	//q.z = length(grad_p);
 	imageStore(q_img, idx, q);
 }
 
