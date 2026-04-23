@@ -5,7 +5,6 @@
 
 #include <vector>
 #include <mutex>
-#include <array>
 #include <cassert>
 #include <memory>
 #include <atomic>

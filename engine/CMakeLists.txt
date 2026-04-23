@@ -9,7 +9,7 @@ project(${TARGET})
 
 add_compile_definitions(-DRESOURCE_PATH="${RESOURCE_PATH}")
 
-file(GLOB SOURCES "src/*.cpp" "src/*.c" "src/*/*.cpp" "src/*/*.c")
+file(GLOB SOURCES "src/*.cpp" "src/*.c" "src/*/*.cpp" "src/*/*.c" "src/backends/*/*.cpp")
 
 add_library(${TARGET} STATIC ${SOURCES})
 

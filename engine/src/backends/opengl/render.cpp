@@ -1,7 +1,8 @@
-#include "ev2/defines.h"
-#include "ev2/render.h"
-#include "device_impl.h"
-#include "render_impl.h"
+#include <ev2/defines.h>
+#include <ev2/render.h>
+
+#include "backends/opengl/device_impl.h"
+#include "backends/opengl/render_impl.h"
 
 #include <glm/gtc/type_ptr.hpp>
 
@@ -248,7 +249,8 @@ PassCtx begin_pass(Device *dev, RenderTargetID h_target, ViewID h_view,
 		glBindFramebuffer(GL_FRAMEBUFFER,target->fbo);
 	}
 
-	static float rgb[3] = {0.15f,0.15f,0.15f};
+	//static float rgb[3] = {0.15f,0.15f,0.15f};
+	static float rgb[3] = {0.0f,0.0f,0.0f};
 
 	glEnable(GL_DEPTH_TEST);
 	glViewport(viewport.x0, viewport.y0, viewport.w, viewport.h);

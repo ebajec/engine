@@ -1,11 +1,10 @@
 #include "ev2/pipeline.h"
 #include "vulkan/vulkan_core.h"
 
-#include "device_impl.h"
-#include "pipeline_impl.h"
-#include "resource_impl.h"
-
-#include "gl_utils.h"
+#include "backends/opengl/device_impl.h"
+#include "backends/opengl/pipeline_impl.h"
+#include "backends/opengl/resource_impl.h"
+#include "backends/opengl/opengl_def.h"
 
 #include "utils/ansi_colors.h"
 #include "utils/log.h"

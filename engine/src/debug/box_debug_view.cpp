@@ -1,6 +1,6 @@
 #include "box_debug_view.h"
 
-#include "device_impl.h"
+#include "backends/opengl/device_impl.h"
 
 #include <cstring>
 

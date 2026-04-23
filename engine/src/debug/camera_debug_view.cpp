@@ -1,7 +1,7 @@
 #include "engine/renderer/opengl.h"
 #include "camera_debug_view.h"
 
-#include "device_impl.h"
+#include "backends/opengl/device_impl.h"
 
 #include <glm/gtc/type_ptr.hpp>
 
