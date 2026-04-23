@@ -1,7 +1,7 @@
+#include <ev2/utils/ansi_colors.h>
+
 #include "device_impl.h"
 #include "resource_impl.h"
-
-#include "utils/ansi_colors.h"
 
 #include "stb_image.h"
 

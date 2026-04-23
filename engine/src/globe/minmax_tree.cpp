@@ -1,7 +1,7 @@
 #include "minmax_tree.h"
-#include "engine/globe/tiling.h"
 
-#include "utils/log.h"
+#include <ev2/globe/tiling.h>
+#include <ev2/utils/log.h>
 
 #include <cfloat>
 

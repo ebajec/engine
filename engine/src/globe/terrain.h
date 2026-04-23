@@ -1,7 +1,7 @@
 #ifndef TERRAIN_H
 #define TERRAIN_H
 
-#include <globe/data_source.h>
+#include <ev2/globe/data_source.h>
 
 #include "tile_cache.h"
 #include "minmax_tree.h"

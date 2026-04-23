@@ -1,5 +1,4 @@
 #include "utils/thread_pool.h"
-#include "utils/thread_pool.h"
 
 #include <functional>
 #include <thread>

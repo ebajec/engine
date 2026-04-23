@@ -1,7 +1,7 @@
 #include "texture_viewer.h"
-#include "engine/utils/camera.h"
+#include "ev2/utils/camera.h"
 
-#include "engine/utils/log.h"
+#include "ev2/utils/log.h"
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096

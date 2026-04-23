@@ -1,5 +1,5 @@
-#include "engine/globe/test_source.h"
-#include "engine/utils/functions.h"
+#include <ev2/globe/test_source.h>
+#include <ev2/utils/functions.h>
 
 static float test_elev_fn(glm::dvec2 uv, uint8_t f);
 

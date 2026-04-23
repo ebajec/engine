@@ -1,10 +1,9 @@
 #ifndef EV2_ASSET_TABLE_H
 #define EV2_ASSET_TABLE_H
 
-#include "ev2/device.h"
-
-#include "utils/monitor.h"
-#include "utils/log.h"
+#include <ev2/device.h>
+#include <ev2/utils/monitor.h>
+#include <ev2/utils/log.h>
 
 #include <shared_mutex>
 #include <unordered_map>

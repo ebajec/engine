@@ -1,11 +1,11 @@
-#include <engine/utils/log.h>
+#include <ev2/utils/log.h>
 
 #include <ev2/device.h>
 #include <ev2/render.h>
 #include <ev2/resource.h>
 
-#include <engine/utils/camera.h>
-#include <engine/globe/globe.h>
+#include <ev2/utils/camera.h>
+#include <ev2/globe/globe.h>
 
 #include "app.h"
 

@@ -1,8 +1,8 @@
-#include "utils/thread_pool.h"
-#include "utils/log.h"
+#include <ev2/utils/log.h>
+#include <ev2/globe/tiling.h>
 
-#include "globe/tiling.h"
-#include "globe/tile_cache.h"
+#include "utils/thread_pool.h"
+#include "tile_cache.h"
 
 #include <imgui.h>
 

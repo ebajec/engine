@@ -1,10 +1,9 @@
 #ifndef BOX_DISPLAY_H
 #define BOX_DISPLAY_H
 
-#include "utils/geometry.h"
-
 #include "backends/opengl/def_opengl.h"
 
+#include <ev2/utils/geometry.h>
 #include <ev2/device.h>
 #include <ev2/resource.h>
 #include <ev2/render.h>

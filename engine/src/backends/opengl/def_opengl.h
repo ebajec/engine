@@ -1,9 +1,8 @@
 #ifndef DEF_OPENGL_H
 #define DEF_OPENGL_H
 
+#include <ev2/utils/log.h>
 #include <glad/glad.h>
-
-#include <engine/utils/log.h>
 
 static inline int gl_check_err() 
 {

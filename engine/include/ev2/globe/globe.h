@@ -1,10 +1,9 @@
 #ifndef GLOBE_H
 #define GLOBE_H
 
-#include "engine/globe/data_source.h"
-
-#include "ev2/device.h"
-#include "ev2/render.h"
+#include <ev2/globe/data_source.h>
+#include <ev2/device.h>
+#include <ev2/render.h>
 
 typedef struct Globe Globe;
 

@@ -1,8 +1,8 @@
 #ifndef CPU_CACHE_H
 #define CPU_CACHE_H
 
-#include "engine/globe/tiling.h"
-#include "engine/globe/data_source.h"
+#include <ev2/globe/tiling.h>
+#include <ev2/globe/data_source.h>
 
 #include "globe/async_lru_cache.h"
 

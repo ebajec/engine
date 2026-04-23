@@ -1,9 +1,11 @@
-#include "utils/thread_pool.h"
-#include "utils/log.h"
+#include <ev2/utils/log.h>
 
-#include "globe/gpu_cache.h"
+#include "utils/thread_pool.h"
+#include "gpu_cache.h"
+
 
 #include <cstring>
+#include <cassert>
 
 struct GPUUploadContext
 {

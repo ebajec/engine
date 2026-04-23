@@ -2,11 +2,12 @@
 #define GLOBE_TILING_H
 
 // local
-#include "engine/utils/geometry.h"
+#include <ev2/utils/geometry.h>
 
 // glm
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
+#include <glm/mat3x3.hpp>
 
 // libc
 #include <cstdint>

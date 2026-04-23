@@ -3,14 +3,14 @@
 #include "texture_viewer.h"
 #include "heightmap_viewer.h"
 
-#include <engine/utils/log.h>
+#include <ev2/utils/log.h>
 
 #include <ev2/device.h>
 #include <ev2/render.h>
 #include <ev2/resource.h>
 
-#include <engine/utils/camera.h>
-#include <engine/utils/geometry.h>
+#include <ev2/utils/camera.h>
+#include <ev2/utils/geometry.h>
 
 // glm
 #include <glm/mat4x4.hpp>

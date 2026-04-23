@@ -1,6 +1,5 @@
-#include "utils/log.h"
-
-#include "utils/ansi_colors.h"
+#include <ev2/utils/log.h>
+#include <ev2/utils/ansi_colors.h>
 
 #include <stdarg.h>
 #include <stdio.h>

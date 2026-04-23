@@ -1,6 +1,5 @@
-#include "ev2/resource.h"
-
-#include "utils/log.h"
+#include <ev2/resource.h>
+#include <ev2/utils/log.h>
 
 #include "common.h"
 
