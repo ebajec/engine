@@ -75,7 +75,9 @@ App::App(int width, int height, const char *title)
 
 void App::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
+#ifdef ENABLE_IMGUI
 	ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
+#endif
 	App *app = static_cast<App*>(glfwGetWindowUserPointer(window));
 
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) 
@@ -95,7 +97,9 @@ void App::key_callback(GLFWwindow* window, int key, int scancode, int action, in
 }
 void App::mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
+#ifdef ENABLE_IMGUI
 	ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
+#endif
 	App *app = static_cast<App*>(glfwGetWindowUserPointer(window));
 
 	if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS) {
@@ -113,7 +117,9 @@ void App::mouse_button_callback(GLFWwindow* window, int button, int action, int 
 }
 void App::scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
+#ifdef ENABLE_IMGUI
 	ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
+#endif
 	App *app = static_cast<App*>(glfwGetWindowUserPointer(window));
 
 	app->input.scroll.x += xoffset;
@@ -124,7 +130,9 @@ void App::scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 }
 void App::cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
 {
+#ifdef ENABLE_IMGUI
 	ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
+#endif
 	App *app = static_cast<App*>(glfwGetWindowUserPointer(window));
 
 	glm::dvec2 pos = glm::dvec2(xpos, ypos);
@@ -146,8 +154,10 @@ void App::update_input()
 	std::swap(input.mouse_pos[0], input.mouse_pos[1]);
 	glfwGetCursorPos(win.ptr, &input.mouse_pos[0].x, &input.mouse_pos[0].y);
 
+#ifdef ENABLE_IMGUI
 	ImGuiIO& io = ImGui::GetIO();
 	input.mouse_in_gui = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) || io.WantCaptureMouse;
+#endif
 }
 
 int App::resize(int width, int height)
@@ -184,9 +194,11 @@ int App::update()
 	input.dt = input.t0 - input.t1;
 	input.scroll_delta = glm::vec2(0);
 
+#ifdef ENABLE_IMGUI
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
+#endif
 
 	glfwPollEvents();
 
@@ -199,7 +211,9 @@ int App::update()
 		input.needs_resize = false;
 	}
 
+#ifdef ENABLE_IMGUI
 	imgui();
+#endif
 
 	return result;
 }
@@ -213,9 +227,11 @@ void App::end_frame()
 {
 	ev2::end_frame(dev);
 
+#ifdef ENABLE_IMGUI
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());	
 	ImGui::EndFrame();
+#endif
 
 	glfwSwapBuffers(win.ptr);
 }
@@ -233,6 +249,10 @@ int App::initialize(int argc, char *argv[])
 		log_error("Failed to initialize GLFW!");
 		return EXIT_FAILURE;
 	}
+
+	glfwWindowHint(GLFW_CLIENT_API,GLFW_NO_API);
+	glfwWindowHint(GLFW_RESIZABLE,GLFW_FALSE);
+
 	print_glfw_platform();
 
 	win.ptr = glfwCreateWindow(win.width, win.height, win.title, nullptr, nullptr);
@@ -242,11 +262,52 @@ int App::initialize(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
-	if (init_gl_context(win.ptr) < 0) {
-		log_error("Failed to initialize OpenGL");
+	if (!glfwVulkanSupported()) {
+		log_error("Vulkan not supported by GLFW");
 		return EXIT_FAILURE;
 	}
 
+	std::vector<const char *> validationLayers = {
+		"VK_LAYER_KHRONOS_validation"
+	};
+
+	uint32_t glfwExtensionCount = 0;
+    const char** glfwExtensions;
+
+    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+    std::vector<const char*> extensions(
+		glfwExtensions,glfwExtensions + glfwExtensionCount);
+
+	ev2::InitOptionsVulkan init_opts = {
+		.validationLayers = validationLayers.data(),
+		.validationLayerCount = validationLayers.size(),
+		.instanceExtensions = extensions.data(),
+		.instanceExtensionCount = extensions.size()
+	};
+
+	ev2::Result ev2_res = ev2::init_for_vulkan(init_opts);
+	if (ev2_res != ev2::SUCCESS)
+		return EXIT_FAILURE;
+
+	VkInstance vk_instance = ev2::get_vulkan_instance(); 
+	VkSurfaceKHR surface = VK_NULL_HANDLE;
+
+	VkResult vk_res = glfwCreateWindowSurface(vk_instance, win.ptr, nullptr, &surface); 
+
+	if (vk_res != VK_SUCCESS) {
+        log_error("failed to create window surface!");
+		return EXIT_FAILURE;
+    }
+
+	ev2::DeviceParamsVulkan vulkan_params = {
+		.surface = surface		
+	};
+
+	dev = ev2::create_device_for_vulkan(RESOURCE_PATH, vulkan_params);
+
+	return EXIT_FAILURE;
+
+#ifdef ENABLE_IMGUI
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
@@ -259,6 +320,7 @@ int App::initialize(int argc, char *argv[])
 	ImGui_ImplOpenGL3_Init("#version 450");
 
 	ImPlot::CreateContext();
+#endif
 
 	glfwSetKeyCallback(win.ptr,&App::key_callback);
 	glfwSetMouseButtonCallback(win.ptr,&App::mouse_button_callback);
@@ -266,8 +328,6 @@ int App::initialize(int argc, char *argv[])
 	glfwSetCursorPosCallback(win.ptr,&App::cursor_pos_callback);
 	glfwSetFramebufferSizeCallback(win.ptr, &App::framebuffer_size_callback);
 	glfwSetWindowUserPointer(win.ptr, this);
-
-	dev = ev2::create_device(RESOURCE_PATH);
 
 	std::signal(SIGINT, handle_sigint);
 
@@ -279,11 +339,13 @@ int App::initialize(int argc, char *argv[])
 
 void App::terminate()
 {
+#ifdef ENABLE_IMGUI
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
 
 	ImPlot::DestroyContext();
+#endif
 
 	ev2::destroy_device(dev);
 

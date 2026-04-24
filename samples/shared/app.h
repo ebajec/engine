@@ -3,8 +3,10 @@
 
 #include <ev2/device.h>
 
-// glfw
 #include <glad/glad.h>
+
+// glfw
+#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 // glm

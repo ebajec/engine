@@ -13,7 +13,7 @@ static FILE * _log_files[LOG_LEVEL_MAX_ENUM] = {
 	stderr
 };
 
-void _log_function(log_level_t lvl, const char *file, int, const char *format, ...)
+void _log_function(log_level_t lvl, const char *file, int line, const char *format, ...)
 {
 	FILE *out = _log_files[lvl];
 
@@ -29,8 +29,10 @@ void _log_function(log_level_t lvl, const char *file, int, const char *format, .
 		break;
 
 		case LOG_LEVEL_ERROR:
-		if (_log_flags & LOG_ERROR_BIT)
+		if (_log_flags & LOG_ERROR_BIT) {
 			fprintf(out, ANSI_RED([ERROR])" ");
+			fprintf(out, ANSI_PINK(%s:%d)" ", file, line);
+		}
 		break;
 
 		case LOG_LEVEL_MAX_ENUM:
