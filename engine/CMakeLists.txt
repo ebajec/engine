@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 3.27)
 set(CMAKE_CXX_STANDARD 20)
 
@@ -15,9 +14,7 @@ file(GLOB CORE_SOURCES
 	"src/globe/*.cpp" 
 )
 
-add_library(${TARGET} STATIC 
-	${CORE_SOURCES}
-)
+add_library(${TARGET})
 
 target_compile_definitions(engine PUBLIC -DRESOURCE_PATH="${RESOURCE_PATH}")
 
@@ -27,7 +24,7 @@ target_include_directories(${TARGET} PRIVATE
 	include/engine
 )
 
-add_subdirectory(src/backends/opengl/)
+target_sources(${TARGET} PRIVATE ${CORE_SOURCES})
 
 target_link_libraries(${TARGET} PUBLIC 
     imgui
@@ -36,6 +33,11 @@ target_link_libraries(${TARGET} PUBLIC
 	yaml-cpp::yaml-cpp
     glm::glm
 )
+
+#add_subdirectory(src/backends/opengl)
+add_subdirectory(src/backends/vulkan)
+
+# Sanitizers
 
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)

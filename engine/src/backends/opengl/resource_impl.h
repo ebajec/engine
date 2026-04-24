@@ -12,6 +12,7 @@ namespace ev2 {
 
 struct Buffer
 {
+
 	GLuint id;
 	GLenum flags;
 	size_t size;

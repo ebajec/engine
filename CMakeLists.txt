@@ -59,6 +59,7 @@ else()
 endif()
 
 find_package(OpenGL REQUIRED)
+find_package(Vulkan REQUIRED)
 
 add_compile_options(-g)
 

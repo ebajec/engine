@@ -5,8 +5,6 @@
 
 #include <vector>
 
-namespace ev2 {
-
 template<typename T>
 struct GPUTTable
 {
@@ -17,7 +15,7 @@ struct GPUTTable
 	size_t stride = 0;
 	size_t capacity = 0;
 
-	BufferID buffer = EV2_NULL_HANDLE(Buffer);
+	ev2::BufferID buffer = EV2_NULL_HANDLE(Buffer);
 
 	// A better data structure could be used - this works for now
 	//std::set<uint32_t, std::less<uint32_t>> updates;
@@ -38,14 +36,14 @@ struct GPUTTable
 
 	/// @brief Upload new data to the GPU if anything has changed.
 	/// @return True if buffer was resized, false otherwise
-	bool update(Device *dev);
+	bool update(ev2::Device *dev);
 
 	GPUTTable() = default;
 	
 	// @param alignment - alignment of data in GPU buffer
 	GPUTTable(size_t _alignment);
 
-	void destroy(Device *dev);
+	void destroy(ev2::Device *dev);
 };
 
 //------------------------------------------------------------------------------
@@ -57,7 +55,7 @@ GPUTTable<T>::GPUTTable(size_t _alignment) :
 }
 
 template<typename T>
-void GPUTTable<T>::destroy(Device *dev)
+void GPUTTable<T>::destroy(ev2::Device *dev)
 {
 	if (!EV2_IS_NULL(buffer)) {
 		destroy_buffer(dev, buffer);
@@ -110,7 +108,7 @@ bool GPUTTable<T>::set(uint32_t idx, const T& mat)
 }
 
 template<typename T>
-bool GPUTTable<T>::update(Device *dev)
+bool GPUTTable<T>::update(ev2::Device *dev)
 {
 	bool resized = false;
 
@@ -166,5 +164,3 @@ bool GPUTTable<T>::update(Device *dev)
 
 	return resized;
 }
-
-};
