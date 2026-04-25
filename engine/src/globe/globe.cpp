@@ -11,7 +11,6 @@
 #include <ev2/utils/geometry.h>
 #include <ev2/utils/geometry.h>
 
-
 #include "debug/box_debug_view.h"
 #include "debug/camera_debug_view.h"
 
@@ -221,7 +220,7 @@ struct RenderData
 struct Globe
 {
 	//ResourceTable *rt;
-	ev2::Device *dev;
+	ev2::Context *dev;
 
 	GlobeStats stats;
 	DebugInfo dbg;
@@ -474,7 +473,7 @@ static std::vector<uint32_t> create_tile_indices()
 	return indices;
 }
 
-static ev2::Result create_render_data(ev2::Device *dev, RenderData &data)
+static ev2::Result create_render_data(ev2::Context *dev, RenderData &data)
 {
 	ev2::Result result = ev2::SUCCESS;
 
@@ -684,7 +683,7 @@ static ev2::Result update_render_data(
 	const std::vector<TileGPUIndex> &textures
 )
 {
-	ev2::Device *dev = globe->dev;
+	ev2::Context *dev = globe->dev;
 
 	const std::vector<uint64_t>& tiles = globe->selected_tiles;
 	uint32_t count = (uint32_t)tiles.size();
@@ -820,7 +819,7 @@ static void plot_tile_counts(size_t total, size_t new_tiles)
 //------------------------------------------------------------------------------
 // Interface
 
-Globe *globe_create(ev2::Device *dev)
+Globe *globe_create(ev2::Context *dev)
 {
 	std::unique_ptr<Globe> globe(new Globe{});
 	globe->dev = dev;
@@ -968,13 +967,13 @@ ev2::Result globe_update(Globe *globe, GlobeUpdateInfo *info)
 	return result;
 }
 
-#include "backends/opengl/device_impl.h"
+#include "backends/vulkan/context_impl.h"
 
 void globe_draw(const Globe *globe, const ev2::PassCtx& ctx)
 {
 	const RenderData &data = globe->render_data;
 
-	ev2::Device *dev = globe->dev;
+	ev2::Context *dev = globe->dev;
 
 	const ev2::Buffer* vbo = dev->get_buffer(data.vbo); 
 	const ev2::Buffer* ibo = dev->get_buffer(data.ibo); 
@@ -1001,6 +1000,5 @@ void globe_draw(const Globe *globe, const ev2::PassCtx& ctx)
 	);
 
 	glDisable(GL_CULL_FACE);
-
-	globe_draw_debug(globe, ctx);
 }
+

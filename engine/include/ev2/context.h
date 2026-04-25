@@ -22,7 +22,7 @@ enum Result
 	EUNKNOWN = -1024
 };
 
-struct Device;
+struct Context;
 
 #ifdef EV2_BACKEND_VULKAN
 struct InitOptionsVulkan
@@ -35,7 +35,7 @@ struct InitOptionsVulkan
 	bool enableValidationLayers = true;
 };
 
-struct DeviceParamsVulkan
+struct ContextInfoVulkan
 {
 	VkSurfaceKHR surface;
 };
@@ -43,13 +43,13 @@ struct DeviceParamsVulkan
 ev2::Result init_for_vulkan(const InitOptionsVulkan &opts);
 VkInstance get_vulkan_instance();
 
-Device *create_device_for_vulkan(const char *path, 
-								 const DeviceParamsVulkan &params);
+Context *create_context_for_vulkan(const char *path, 
+								   const ContextInfoVulkan &params);
 #else
 Device *create_device(const char *path);
 #endif
 
-void destroy_device(Device *dev);
+void destroy_context(Context *dev);
 };
 
 #endif // EV2_DEVICE_H

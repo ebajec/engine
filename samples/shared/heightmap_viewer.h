@@ -31,12 +31,12 @@ struct HeightmapViewerPanel
 		ev2::DescriptorSetID descriptors;
 	} rd;
 
-	int set_texture(ev2::Device *dev, ev2::TextureID tex);
+	int set_texture(ev2::Context *dev, ev2::TextureID tex);
 
-	int init(App *app, ev2::Device *dev, ev2::TextureID tex);
-	int update(ev2::Device *dev);
-	void render(ev2::Device *dev);
-	void destroy(ev2::Device *dev);
+	int init(App *app, ev2::Context *dev, ev2::TextureID tex);
+	int update(ev2::Context *dev);
+	void render(ev2::Context *dev);
+	void destroy(ev2::Context *dev);
 };
 
 #endif //HEIGHTMAP_PANEL_H

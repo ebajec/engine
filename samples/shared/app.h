@@ -1,7 +1,7 @@
 #ifndef EV2_APP_H
 #define EV2_APP_H
 
-#include <ev2/device.h>
+#include <ev2/context.h>
 
 #include <glad/glad.h>
 
@@ -70,7 +70,7 @@ struct App
 	InputData input;
 	WindowData win;
 
-	ev2::Device *dev;
+	ev2::Context *dev;
 
 	std::vector<key_callback_t> key_callbacks;
 

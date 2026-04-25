@@ -21,7 +21,7 @@ static std::vector<uint32_t> create_quad_indices(uint32_t n)
 	return indices;
 }
 
-int HeightmapViewerPanel::init(App *app_, ev2::Device *dev, ev2::TextureID tex)
+int HeightmapViewerPanel::init(App *app_, ev2::Context *dev, ev2::TextureID tex)
 {
 	app = app_;
 
@@ -57,7 +57,7 @@ int HeightmapViewerPanel::init(App *app_, ev2::Device *dev, ev2::TextureID tex)
 	return 0;
 }
 
-int HeightmapViewerPanel::set_texture(ev2::Device *dev, ev2::TextureID tex)
+int HeightmapViewerPanel::set_texture(ev2::Context *dev, ev2::TextureID tex)
 {
 	uint32_t h, w;
 	ev2::get_texture_dims(dev, tex, &w, &h, nullptr);
@@ -88,7 +88,7 @@ int HeightmapViewerPanel::set_texture(ev2::Device *dev, ev2::TextureID tex)
 	return 0;
 }
 
-int HeightmapViewerPanel::update(ev2::Device *dev)
+int HeightmapViewerPanel::update(ev2::Context *dev)
 {
 	panel->imgui();
 
@@ -111,7 +111,7 @@ int HeightmapViewerPanel::update(ev2::Device *dev)
 	}
 	return 0;
 }
-void HeightmapViewerPanel::render(ev2::Device *dev)
+void HeightmapViewerPanel::render(ev2::Context *dev)
 {
 	glm::ivec2 panel_size = panel->get_size();
 
@@ -131,7 +131,7 @@ void HeightmapViewerPanel::render(ev2::Device *dev)
 	ev2::SyncID sync = ev2::end_pass(dev, pass);
 }
 
-void HeightmapViewerPanel::destroy(ev2::Device *dev)
+void HeightmapViewerPanel::destroy(ev2::Context *dev)
 {
 	ev2::destroy_descriptor_set(dev, rd.descriptors);
 	ev2::destroy_buffer(dev, rd.ibo);

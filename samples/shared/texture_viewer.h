@@ -42,14 +42,14 @@ struct TextureViewerPanel
 
 	int update_pipeline(const char *path);
 
-	int set_texture(ev2::Device *dev, ev2::TextureID tex);
+	int set_texture(ev2::Context *dev, ev2::TextureID tex);
 
-	ev2::PassCtx begin_pass(ev2::Device *dev);
+	ev2::PassCtx begin_pass(ev2::Context *dev);
 
-	int init(ev2::Device *dev, ev2::TextureID tex);
-	int update(ev2::Device *dev);
-	void render(ev2::Device *dev);
-	void destroy(ev2::Device *dev);
+	int init(ev2::Context *dev, ev2::TextureID tex);
+	int update(ev2::Context *dev);
+	void render(ev2::Context *dev);
+	void destroy(ev2::Context *dev);
 
 	glm::vec2 get_world_cursor_pos();
 };

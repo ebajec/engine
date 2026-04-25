@@ -26,7 +26,7 @@ bool Panel::is_focused() {
 }
 
 Panel::Panel(
-	ev2::Device *dev,
+	ev2::Context *dev,
 	const char *name, 
 	uint32_t x, uint32_t y,
 	uint32_t w, uint32_t h)

@@ -5,7 +5,7 @@
 
 #include <ev2/utils/log.h>
 
-#include <ev2/device.h>
+#include <ev2/context.h>
 #include <ev2/render.h>
 #include <ev2/resource.h>
 
@@ -22,7 +22,7 @@
 #include <cstdlib>
 #include <cmath>
 
-uint64_t upload_img_data(ev2::Device *dev, ev2::ImageID img, 
+uint64_t upload_img_data(ev2::Context *dev, ev2::ImageID img, 
 					 uint32_t w, uint32_t h)
 {
 	size_t size = w * h * sizeof(glm::vec4);
@@ -85,15 +85,15 @@ struct WaveSim
 	ev2::BindingSlot img_in_slot;
 	ev2::BindingSlot img_out_slot; 
 
-	int init(ev2::Device *dev);
-	int update(ev2::Device *dev);
-	void destroy(ev2::Device *dev);
+	int init(ev2::Context *dev);
+	int update(ev2::Context *dev);
+	void destroy(ev2::Context *dev);
 };
 
 //------------------------------------------------------------------------------
 // Simulation
 
-int WaveSim::init(ev2::Device *dev)
+int WaveSim::init(ev2::Context *dev)
 {
 	sim_pipelines[0] = ev2::load_compute_pipeline(dev, 
 		"shader/pde0.comp.spv");
@@ -145,7 +145,7 @@ int WaveSim::init(ev2::Device *dev)
 	return EXIT_SUCCESS;
 }
 
-int WaveSim::update(ev2::Device *dev)
+int WaveSim::update(ev2::Context *dev)
 {
 	uint64_t sync = 0;
 	ImGui::Begin("Editor");
@@ -216,7 +216,7 @@ int WaveSim::update(ev2::Device *dev)
 	return App::OK;
 }
 
-void WaveSim::destroy(ev2::Device *dev)
+void WaveSim::destroy(ev2::Context *dev)
 {
 	ev2::destroy_descriptor_set(dev, sim0_set);
 	ev2::destroy_descriptor_set(dev, sim1_set);

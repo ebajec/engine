@@ -36,14 +36,14 @@ struct GPUTTable
 
 	/// @brief Upload new data to the GPU if anything has changed.
 	/// @return True if buffer was resized, false otherwise
-	bool update(ev2::Device *dev);
+	bool update(ev2::Context *dev);
 
 	GPUTTable() = default;
 	
 	// @param alignment - alignment of data in GPU buffer
 	GPUTTable(size_t _alignment);
 
-	void destroy(ev2::Device *dev);
+	void destroy(ev2::Context *dev);
 };
 
 //------------------------------------------------------------------------------
@@ -55,7 +55,7 @@ GPUTTable<T>::GPUTTable(size_t _alignment) :
 }
 
 template<typename T>
-void GPUTTable<T>::destroy(ev2::Device *dev)
+void GPUTTable<T>::destroy(ev2::Context *dev)
 {
 	if (!EV2_IS_NULL(buffer)) {
 		destroy_buffer(dev, buffer);
@@ -108,7 +108,7 @@ bool GPUTTable<T>::set(uint32_t idx, const T& mat)
 }
 
 template<typename T>
-bool GPUTTable<T>::update(ev2::Device *dev)
+bool GPUTTable<T>::update(ev2::Context *dev)
 {
 	bool resized = false;
 
@@ -156,7 +156,7 @@ bool GPUTTable<T>::update(ev2::Device *dev)
 	}
 
 	uint64_t sync = ev2::commit_buffer_uploads(dev, uc, buffer, 
-											uploads.data(), uploads.size());
+											uploads.data(), (uint32_t)uploads.size());
 	// TODO: bad bad bad bad bad get rid of this asap
 	ev2::wait_complete(dev, sync);
 
