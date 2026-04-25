@@ -1,7 +1,7 @@
 #ifndef MY_PANEL_H
 #define MY_PANEL_H
 
-#include <ev2/device.h>
+#include <ev2/context.h>
 #include <ev2/render.h>
 
 #include <glm/mat2x3.hpp>
@@ -13,7 +13,7 @@
 
 class Panel
 {
-	ev2::Device *m_dev;
+	ev2::Context *m_dev;
 
 	std::string m_name;
 
@@ -46,7 +46,7 @@ public:
 	bool is_hovered();
 	bool is_content_selected();
 
-	Panel(ev2::Device *dev, const char *name, 
+	Panel(ev2::Context *dev, const char *name, 
 		uint32_t x, uint32_t y, uint32_t w, uint32_t h);
 
 	~Panel();

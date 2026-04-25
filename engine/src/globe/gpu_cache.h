@@ -1,7 +1,7 @@
 #ifndef TILE_CACHE_H
 #define TILE_CACHE_H
 
-#include <ev2/device.h>
+#include <ev2/context.h>
 #include <ev2/globe/tiling.h>
 
 #include "backends/opengl/def_opengl.h"
@@ -86,7 +86,7 @@ struct GPUTileCache
 
 	std::vector<std::unique_ptr<TileGPUPage>> m_pages;
 
-	ev2::Device * dev;
+	ev2::Context * dev;
 
 	GLuint m_gl_tex_format = GL_R32F;
 	GLuint m_gl_img_format = GL_RED;

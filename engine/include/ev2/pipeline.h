@@ -1,7 +1,7 @@
 #ifndef EV2_PIPELINE_H
 #define EV2_PIPELINE_H
 
-#include "ev2/device.h"
+#include "ev2/context.h"
 #include "ev2/resource.h"
 
 namespace ev2 {
@@ -41,35 +41,35 @@ struct BindingSlot
 	uint32_t id;
 };
 
-ShaderID load_shader(Device *dev, const char *path);
-void unload_shader(Device *dev, ShaderID id);
+ShaderID load_shader(Context *dev, const char *path);
+void unload_shader(Context *dev, ShaderID id);
 
-GraphicsPipelineID load_graphics_pipeline(Device *dev, const char *path);
-void unload_graphics_pipeline(Device *dev, GraphicsPipelineID pipe);
+GraphicsPipelineID load_graphics_pipeline(Context *dev, const char *path);
+void unload_graphics_pipeline(Context *dev, GraphicsPipelineID pipe);
 
-ComputePipelineID load_compute_pipeline(Device *dev, const char *path);
-void unload_compute_pipeline(Device *dev, ComputePipelineID pipe);
+ComputePipelineID load_compute_pipeline(Context *dev, const char *path);
+void unload_compute_pipeline(Context *dev, ComputePipelineID pipe);
 
 DescriptorLayoutID get_graphics_pipeline_layout(
-	Device *Dev, GraphicsPipelineID pipe);
+	Context *Dev, GraphicsPipelineID pipe);
 DescriptorLayoutID get_compute_pipeline_layout(
-	Device *Dev, ComputePipelineID pipe);
+	Context *Dev, ComputePipelineID pipe);
 
 BindingSlot find_binding(DescriptorLayoutID layout, const char *name);
 
 DescriptorSetID create_descriptor_set(
-	Device *dev, 
+	Context *dev, 
 	DescriptorLayoutID layout,
 	uint16_t index = 0
 );
 
 void destroy_descriptor_set(
-	Device *dev, 
+	Context *dev, 
 	DescriptorSetID set 
 );
 
 ev2::Result bind_buffer(
-	Device *dev, 
+	Context *dev, 
 	DescriptorSetID set, 
 	BindingSlot slot, 
 	BufferID buf, 
@@ -78,14 +78,14 @@ ev2::Result bind_buffer(
 ); 
 
 ev2::Result bind_texture(
-	Device *dev, 
+	Context *dev, 
 	DescriptorSetID set, 
 	BindingSlot slot, 
 	TextureID tex 
 ); 
 
 ev2::Result bind_image(
-	Device *dev,
+	Context *dev,
 	DescriptorSetID set, 
 	BindingSlot slot, 
 	ImageID img
@@ -98,7 +98,7 @@ enum CommandMode {
 	MODE_SECONDARY
 };
 
-RecorderID begin_commands(Device * dev, CommandMode mode = MODE_PRIMARY);
+RecorderID begin_commands(Context * dev, CommandMode mode = MODE_PRIMARY);
 SyncID end_commands(RecorderID recorder);
 
 void submit(SyncID);

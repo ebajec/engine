@@ -1,12 +1,12 @@
 #include "camera_debug_view.h"
 
-#include "backends/opengl/device_impl.h"
+#include "backends/vulkan/context_impl.h"
 
 #include <glm/gtc/type_ptr.hpp>
 
 #include <cstring>
 
-CameraDebugView::CameraDebugView(ev2::Device *_dev) : dev(_dev)
+CameraDebugView::CameraDebugView(ev2::Context *_dev) : dev(_dev)
 {
 	//------------------------------------------------------------------------------
 	// Test Camera

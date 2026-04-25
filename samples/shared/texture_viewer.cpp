@@ -70,7 +70,7 @@ int TextureViewerPanel::update_pipeline(const char *path)
 	return EXIT_SUCCESS;
 }
 
-int TextureViewerPanel::init(ev2::Device *dev, ev2::TextureID tex) 
+int TextureViewerPanel::init(ev2::Context *dev, ev2::TextureID tex) 
 {
 	rd.camera = ev2::create_view(dev, nullptr, nullptr);
 	rd.tex = tex;
@@ -86,7 +86,7 @@ int TextureViewerPanel::init(ev2::Device *dev, ev2::TextureID tex)
 	return 0;
 }
 
-int TextureViewerPanel::set_texture(ev2::Device *dev, ev2::TextureID tex)
+int TextureViewerPanel::set_texture(ev2::Context *dev, ev2::TextureID tex)
 {
 	ev2::Result res = ev2::bind_texture(dev, rd.desc_set, rd.tex_slot, tex);
 
@@ -98,7 +98,7 @@ int TextureViewerPanel::set_texture(ev2::Device *dev, ev2::TextureID tex)
 	return EXIT_SUCCESS;
 }
 
-int TextureViewerPanel::update(ev2::Device *dev)
+int TextureViewerPanel::update(ev2::Context *dev)
 {
 	ImGui::Begin("Editor");
 	ImGui::PushID(panel_idx);
@@ -151,7 +151,7 @@ int TextureViewerPanel::update(ev2::Device *dev)
 	return EXIT_SUCCESS;
 }
 
-ev2::PassCtx TextureViewerPanel::begin_pass(ev2::Device *dev)
+ev2::PassCtx TextureViewerPanel::begin_pass(ev2::Context *dev)
 {
 	glm::ivec2 win_size = panel->get_size(); 
 
@@ -161,7 +161,7 @@ ev2::PassCtx TextureViewerPanel::begin_pass(ev2::Device *dev)
 	return ev2::begin_pass(dev, window_target, rd.camera, view_rect);
 }
 
-void TextureViewerPanel::render(ev2::Device *dev)
+void TextureViewerPanel::render(ev2::Context *dev)
 {
 	ev2::PassCtx pass = this->begin_pass(dev);
 	ev2::cmd_bind_gfx_pipeline(pass.rec, rd.pipeline);
@@ -172,7 +172,7 @@ void TextureViewerPanel::render(ev2::Device *dev)
 	ev2::submit(pass_sync);
 }
 
-void TextureViewerPanel::destroy(ev2::Device *dev)
+void TextureViewerPanel::destroy(ev2::Context *dev)
 {
 	ev2::destroy_descriptor_set(dev, rd.desc_set);
 	panel.reset();

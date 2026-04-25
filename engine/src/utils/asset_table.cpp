@@ -1,5 +1,5 @@
 #include "ev2/defines.h"
-#include "ev2/device.h"
+#include "ev2/context.h"
 
 #include "utils/asset_table.h"
 
@@ -15,7 +15,7 @@
 
 namespace fs = std::filesystem;
 
-AssetTable *AssetTable::create(ev2::Device *dev, const char *root, bool reload)
+AssetTable *AssetTable::create(ev2::Context *dev, const char *root, bool reload)
 {
 	std::unique_ptr<AssetTable> tbl (new AssetTable{});
 	tbl->dev = dev;

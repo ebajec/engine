@@ -5,7 +5,7 @@
 
 #include <ev2/utils/log.h>
 
-#include <ev2/device.h>
+#include <ev2/context.h>
 #include <ev2/render.h>
 #include <ev2/resource.h>
 
@@ -22,7 +22,7 @@
 #include <cstdlib>
 #include <cmath>
 
-uint64_t upload_img_data(ev2::Device *dev, ev2::ImageID img, 
+uint64_t upload_img_data(ev2::Context *dev, ev2::ImageID img, 
 					 uint32_t w, uint32_t h)
 {
 	size_t size = w * h * sizeof(glm::vec4);
@@ -96,10 +96,10 @@ struct PressureSolver
 
 	std::vector<Uniforms> uniforms;
 
-	int init(ev2::Device *dev, uint32_t w, uint32_t h);
-	void destroy(ev2::Device *dev);
+	int init(ev2::Context *dev, uint32_t w, uint32_t h);
+	void destroy(ev2::Context *dev);
 
-	void v_cycle(ev2::RecorderID rec, ev2::Device *dev, ev2::ImageID phi, ev2::ImageID f);
+	void v_cycle(ev2::RecorderID rec, ev2::Context *dev, ev2::ImageID phi, ev2::ImageID f);
 };
 
 static inline constexpr bool is_pow2(size_t x)
@@ -107,7 +107,7 @@ static inline constexpr bool is_pow2(size_t x)
 	return !x || (((x - 1) & x) == 0);
 }
 
-int PressureSolver::init(ev2::Device *dev, uint32_t w, uint32_t h)
+int PressureSolver::init(ev2::Context *dev, uint32_t w, uint32_t h)
 {
 	sim_w = w; 
 	sim_h = h;
@@ -174,7 +174,7 @@ int PressureSolver::init(ev2::Device *dev, uint32_t w, uint32_t h)
 	return EXIT_SUCCESS;
 }
 
-void PressureSolver::destroy(ev2::Device *dev)
+void PressureSolver::destroy(ev2::Context *dev)
 {
 	ev2::destroy_image(dev, R1);
 	ev2::destroy_image(dev, R2);
@@ -182,7 +182,7 @@ void PressureSolver::destroy(ev2::Device *dev)
 	ev2::destroy_buffer(dev, ubo);
 }
 
-void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::Device *dev, ev2::ImageID lhs, ev2::ImageID rhs)
+void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::Context *dev, ev2::ImageID lhs, ev2::ImageID rhs)
 {
 	GLuint phi_final_id = ev2::get_image_gpu_handle(dev, lhs);
 	GLuint f_id = ev2::get_image_gpu_handle(dev, rhs);
@@ -291,14 +291,14 @@ struct MeanSubtractor
 	uint32_t levels;
 	uint32_t width, height;
 	
-	int init(ev2::Device *dev, uint32_t w, uint32_t h);
-	int destroy(ev2::Device *dev);
+	int init(ev2::Context *dev, uint32_t w, uint32_t h);
+	int destroy(ev2::Context *dev);
 	void record(ev2::RecorderID rec);
 
-	void set_image(ev2::Device *dev, ev2::ImageID img);
+	void set_image(ev2::Context *dev, ev2::ImageID img);
 };
 
-int MeanSubtractor::init(ev2::Device *dev, uint32_t w, uint32_t h)
+int MeanSubtractor::init(ev2::Context *dev, uint32_t w, uint32_t h)
 {
 	accumulate16 = ev2::load_compute_pipeline(dev, "shader/accumulate16.comp.spv");
 	subtract_img = ev2::load_compute_pipeline(dev, "shader/subtract_img.comp.spv");
@@ -347,7 +347,7 @@ int MeanSubtractor::init(ev2::Device *dev, uint32_t w, uint32_t h)
 
 	return 0;
 }
-int MeanSubtractor::destroy(ev2::Device *dev)
+int MeanSubtractor::destroy(ev2::Context *dev)
 {
 	for (uint32_t i = 0; i < levels; ++i) {
 		ev2::destroy_image(dev, downsamples[i]);
@@ -359,7 +359,7 @@ int MeanSubtractor::destroy(ev2::Device *dev)
 	return 0;
 }
 
-void MeanSubtractor::set_image(ev2::Device *dev, ev2::ImageID img)
+void MeanSubtractor::set_image(ev2::Context *dev, ev2::ImageID img)
 {
 	ev2::bind_image(dev, accumulate_set[0], accumulate_input_slot, img);
 	ev2::bind_image(dev, subtract_set, subtract_output_slot, img);
@@ -437,17 +437,17 @@ struct FluidSim
 		float gravity = 0;
 	} uniforms;
 
-	int update_advect_set(ev2::Device *dev);
-	int update_diffuse_set(ev2::Device *dev);
-	int update_pressure_set(ev2::Device *dev);
-	int update_project_set(ev2::Device *dev);
+	int update_advect_set(ev2::Context *dev);
+	int update_diffuse_set(ev2::Context *dev);
+	int update_pressure_set(ev2::Context *dev);
+	int update_project_set(ev2::Context *dev);
 
-	int init(ev2::Device *dev, uint32_t w, uint32_t h);
-	int update(ev2::Device *dev);
-	void destroy(ev2::Device *dev);
+	int init(ev2::Context *dev, uint32_t w, uint32_t h);
+	int update(ev2::Context *dev);
+	void destroy(ev2::Context *dev);
 };
 
-int FluidSim::init(ev2::Device *dev, uint32_t w, uint32_t h)
+int FluidSim::init(ev2::Context *dev, uint32_t w, uint32_t h)
 {
 	if (!is_pow2(w) || !is_pow2(h))
 		return EXIT_FAILURE;
@@ -498,7 +498,7 @@ int FluidSim::init(ev2::Device *dev, uint32_t w, uint32_t h)
 	return 0;
 }
 
-int FluidSim::update_advect_set(ev2::Device *dev)
+int FluidSim::update_advect_set(ev2::Context *dev)
 {
 	ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(dev, nvs_advect);
 
@@ -512,7 +512,7 @@ int FluidSim::update_advect_set(ev2::Device *dev)
 	return 0;
 }
 
-int FluidSim::update_diffuse_set(ev2::Device *dev)
+int FluidSim::update_diffuse_set(ev2::Context *dev)
 {
 	ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(dev, nvs_diffuse);
 
@@ -527,7 +527,7 @@ int FluidSim::update_diffuse_set(ev2::Device *dev)
 	return 0;
 }
 
-int FluidSim::update_pressure_set(ev2::Device *dev)
+int FluidSim::update_pressure_set(ev2::Context *dev)
 {
 	ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(dev, nvs_pressure);
 
@@ -540,7 +540,7 @@ int FluidSim::update_pressure_set(ev2::Device *dev)
 
 	return 0;
 }
-int FluidSim::update_project_set(ev2::Device *dev)
+int FluidSim::update_project_set(ev2::Context *dev)
 {
 	ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(dev, nvs_project);
 
@@ -555,7 +555,7 @@ int FluidSim::update_project_set(ev2::Device *dev)
 	return 0;
 }
 
-int FluidSim::update(ev2::Device *dev)
+int FluidSim::update(ev2::Context *dev)
 {
 	ev2::UploadContext uc = ev2::begin_upload(dev, sizeof(Uniforms), alignof(Uniforms));
 	memcpy(uc.ptr, &uniforms, sizeof(Uniforms));
@@ -613,7 +613,7 @@ int FluidSim::update(ev2::Device *dev)
 
 	return 0;
 }
-void FluidSim::destroy(ev2::Device *dev)
+void FluidSim::destroy(ev2::Context *dev)
 {
 	pressure_solver->destroy(dev);
 	mean_subtractor->destroy(dev);

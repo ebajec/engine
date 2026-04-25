@@ -2,7 +2,7 @@
 #define GLOBE_H
 
 #include <ev2/globe/data_source.h>
-#include <ev2/device.h>
+#include <ev2/context.h>
 #include <ev2/render.h>
 
 typedef struct Globe Globe;
@@ -18,7 +18,7 @@ struct GlobeUpdateInfo
 	Camera const *camera;
 };
 
-Globe *globe_create(ev2::Device *dev);
+Globe *globe_create(ev2::Context *dev);
 void globe_destroy(Globe *globe);
 
 void globe_imgui(Globe *globe);

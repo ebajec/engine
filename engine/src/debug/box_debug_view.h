@@ -1,10 +1,10 @@
 #ifndef BOX_DISPLAY_H
 #define BOX_DISPLAY_H
 
-#include "backends/opengl/def_opengl.h"
+#include "backends/vulkan/def_vulkan.h"
 
 #include <ev2/utils/geometry.h>
-#include <ev2/device.h>
+#include <ev2/context.h>
 #include <ev2/resource.h>
 #include <ev2/render.h>
 
@@ -26,13 +26,13 @@ struct BoxDebugView
 	ev2::BufferID ibo = EV2_NULL_HANDLE(Buffer);
 
 	ev2::GraphicsPipelineID pipeline;
-	ev2::Device *dev;
+	ev2::Context *dev;
 
 	GLuint vao;
 
 	uint64_t upload_index;
 
-	BoxDebugView(ev2::Device *_dev) : dev(_dev) {
+	BoxDebugView(ev2::Context *_dev) : dev(_dev) {
 		pipeline = ev2::load_graphics_pipeline(dev, "pipelines/box_debug.yaml");
 
 		vcap = 0;

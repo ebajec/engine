@@ -1,4 +1,4 @@
-#include <ev2/device.h>
+#include <ev2/context.h>
 #include <ev2/render.h>
 #include <ev2/utils/geometry.h>
 
@@ -11,7 +11,7 @@ class CameraDebugView
 		.view = glm::mat4(1.f)
 	};
 
-	ev2::Device *dev;
+	ev2::Context *dev;
 
 	ev2::GraphicsPipelineID pipeline;
 	ev2::DescriptorSetID desc;
@@ -23,7 +23,7 @@ class CameraDebugView
 
 	void *mapped;
 public:
-	CameraDebugView(ev2::Device *dev);
+	CameraDebugView(ev2::Context *dev);
 	~CameraDebugView();
 	void render(const ev2::PassCtx& ctx);
 	void set_camera(const Camera *camera);

@@ -2,7 +2,7 @@
 #define EV2_RESOURCE_H
 
 #include "ev2/defines.h"
-#include "ev2/device.h"
+#include "ev2/context.h"
 
 namespace ev2 {
 
@@ -57,52 +57,52 @@ struct UploadContext
 	uint32_t allocation_index;
 };
 
-UploadContext begin_upload(Device *dev, size_t bytes, size_t align);
-void flush_uploads(Device * dev);
+UploadContext begin_upload(Context *dev, size_t bytes, size_t align);
+void flush_uploads(Context * dev);
 
 // @brief Schedule uploads to be executed on next flush of the corresponding
 // upload pool.
 //
 // @return Counter value reached by pool upon completion of the upload.
-uint64_t commit_buffer_uploads(Device *dev, UploadContext ctx, BufferID buf, 
+uint64_t commit_buffer_uploads(Context *dev, UploadContext ctx, BufferID buf, 
 							   const BufferUpload *uploads, uint32_t count);
-uint64_t commit_image_uploads(Device *dev, UploadContext ctx, ImageID img, 
+uint64_t commit_image_uploads(Context *dev, UploadContext ctx, ImageID img, 
 							  const ImageUpload *uploads, uint32_t count);
 
-ev2::Result wait_complete(Device *dev, uint64_t sync);
+ev2::Result wait_complete(Context *dev, uint64_t sync);
 
 
 //--------------------------------------------------------------------
 // Buffer
 
-BufferID create_buffer(Device *dev, size_t size, BufferFlags flags = 0);
-void destroy_buffer(Device *dev, BufferID buf);
-uint64_t get_buffer_gpu_handle(Device *dev, BufferID h);
+BufferID create_buffer(Context *dev, size_t size, BufferFlags flags = 0);
+void destroy_buffer(Context *dev, BufferID buf);
+uint64_t get_buffer_gpu_handle(Context *dev, BufferID h);
 
 //--------------------------------------------------------------------
 // Image
 
-ImageID create_image(Device *dev, uint32_t w, uint32_t h, uint32_t d, ImageFormat fmt, uint32_t levels = 1);
-void destroy_image(Device *dev, ImageID img);
+ImageID create_image(Context *dev, uint32_t w, uint32_t h, uint32_t d, ImageFormat fmt, uint32_t levels = 1);
+void destroy_image(Context *dev, ImageID img);
 
-void get_image_dims(Device *dev, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d);
-uint64_t get_image_gpu_handle(Device *dev, ImageID img);
+void get_image_dims(Context *dev, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d);
+uint64_t get_image_gpu_handle(Context *dev, ImageID img);
 
 //--------------------------------------------------------------------
 // Texture
 
-TextureID create_texture(Device *dev, ImageID img, TextureFilter filter);
-void destroy_texture(Device *dev, TextureID tex);
-uint64_t get_texture_gpu_handle(Device *dev, TextureID tex);
+TextureID create_texture(Context *dev, ImageID img, TextureFilter filter);
+void destroy_texture(Context *dev, TextureID tex);
+uint64_t get_texture_gpu_handle(Context *dev, TextureID tex);
 
-void get_texture_dims(Device *dev, TextureID tex, uint32_t *w, uint32_t *h, uint32_t*d);
+void get_texture_dims(Context *dev, TextureID tex, uint32_t *w, uint32_t *h, uint32_t*d);
 
 //------------------------------------------------------------------------------
 // Image assets
 
-ImageAssetID load_image_asset(Device *dev, const char *path);
-void unload_image_asset(Device *dev, ImageAssetID id);
-ImageID get_image_resource(Device *dev, ImageAssetID id);
+ImageAssetID load_image_asset(Context *dev, const char *path);
+void unload_image_asset(Context *dev, ImageAssetID id);
+ImageID get_image_resource(Context *dev, ImageAssetID id);
 
 };
 

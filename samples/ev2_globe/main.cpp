@@ -1,6 +1,6 @@
 #include <ev2/utils/log.h>
 
-#include <ev2/device.h>
+#include <ev2/context.h>
 #include <ev2/render.h>
 #include <ev2/resource.h>
 
@@ -24,7 +24,7 @@ struct WaveSim
 	App *app;
 	Globe *globe;
 
-	ev2::Device *dev;
+	ev2::Context *dev;
 
 	struct RenderData {
 		glm::mat4 proj;
@@ -147,7 +147,7 @@ int main(int argc, char *argv[])
 	if (app->initialize(argc, argv) != App::OK)
 		return EXIT_FAILURE;
 
-	ev2::Device *dev = app->dev;
+	ev2::Context *dev = app->dev;
 
 	WaveSim sim = {
 		.app = app.get()

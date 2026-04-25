@@ -2,7 +2,7 @@
 
 #include "ev2/utils/log.h"
 
-#include "ev2/device.h"
+#include "ev2/context.h"
 #include "ev2/render.h"
 
 // imgui
@@ -299,11 +299,11 @@ int App::initialize(int argc, char *argv[])
 		return EXIT_FAILURE;
     }
 
-	ev2::DeviceParamsVulkan vulkan_params = {
+	ev2::ContextInfoVulkan vulkan_params = {
 		.surface = surface		
 	};
 
-	dev = ev2::create_device_for_vulkan(RESOURCE_PATH, vulkan_params);
+	dev = ev2::create_context_for_vulkan(RESOURCE_PATH, vulkan_params);
 
 	return EXIT_FAILURE;
 
@@ -347,7 +347,7 @@ void App::terminate()
 	ImPlot::DestroyContext();
 #endif
 
-	ev2::destroy_device(dev);
+	ev2::destroy_context(dev);
 
 	glfwDestroyWindow(win.ptr);
 	glfwTerminate();

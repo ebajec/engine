@@ -1,7 +1,7 @@
 #ifndef EV2_ASSET_TABLE_H
 #define EV2_ASSET_TABLE_H
 
-#include <ev2/device.h>
+#include <ev2/context.h>
 #include <ev2/utils/monitor.h>
 #include <ev2/utils/log.h>
 
@@ -28,8 +28,8 @@ enum AssetStatus : uint8_t
 
 struct AssetVTable
 {
-	ev2::Result (*reload)(ev2::Device *dev, void** usr, const char *path);
-	void (*destroy)(ev2::Device *dev, void* usr);
+	ev2::Result (*reload)(ev2::Context *dev, void** usr, const char *path);
+	void (*destroy)(ev2::Context *dev, void* usr);
 };
 
 struct AssetEntry
@@ -48,7 +48,7 @@ struct AssetReloader;
 
 struct AssetTable
 {
-	ev2::Device *dev;
+	ev2::Context *dev;
 
 	std::unique_ptr<AssetReloader> reloader;
 
@@ -61,7 +61,7 @@ struct AssetTable
 
 	mutable std::shared_mutex mut;
 
-	static AssetTable *create(ev2::Device *dev, const char *root, bool reload = true);
+	static AssetTable *create(ev2::Context *dev, const char *root, bool reload = true);
 	static void destroy(AssetTable *tbl);
 
 	/// @brief allocate an entry for an initialized asset.  The resulting

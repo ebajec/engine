@@ -2,7 +2,7 @@
 #define EV2_RENDER_H
 
 #include "defines.h"
-#include "device.h"
+#include "context.h"
 #include "resource.h"
 #include "pipeline.h"
 
@@ -33,30 +33,30 @@ struct RenderTargetAttachments
 };
 
 RenderTargetID create_render_target(
-	Device *dev, 
+	Context *dev, 
 	uint32_t w, 
 	uint32_t h, 
 	RenderTargetFlags flags
 );
 void destroy_render_target(
-	Device *dev, 
+	Context *dev, 
 	RenderTargetID id
 );
 
 RenderTargetAttachments get_render_target_attachments(
-	Device *dev,
+	Context *dev,
 	RenderTargetID id
 );
 
-void begin_frame(Device *dev);
-void end_frame(Device *dev);
+void begin_frame(Context *dev);
+void end_frame(Context *dev);
 
 
 MAKE_HANDLE(View);
 
-ViewID create_view(Device *dev, float view[], float proj[]);
-void update_view(Device *dev, ViewID handle, float view[], float proj[]);
-void destroy_view(Device *dev, ViewID handle);
+ViewID create_view(Context *dev, float view[], float proj[]);
+void update_view(Context *dev, ViewID handle, float view[], float proj[]);
+void destroy_view(Context *dev, ViewID handle);
 
 MAKE_HANDLE(Pass);
 
@@ -74,9 +74,9 @@ struct Rect
 
 // @brief Begin a render pass.  Configures bindings for pass-specific data  
 // (view matrices, etc).    
-PassCtx begin_pass(Device *dev, RenderTargetID target, ViewID view,
+PassCtx begin_pass(Context *dev, RenderTargetID target, ViewID view,
 				   Rect viewport, Rect scissor = {});
-SyncID end_pass(Device *dev, PassCtx pass);
+SyncID end_pass(Context *dev, PassCtx pass);
 
 enum DrawMode
 {
