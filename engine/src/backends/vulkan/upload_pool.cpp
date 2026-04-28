@@ -10,7 +10,13 @@ namespace ev2 {
 //------------------------------------------------------------------------------
 // UploadPool
 
-UploadPool *UploadPool::create(Context *dev, size_t capacity, size_t align, size_t max_uploads)
+UploadPool *UploadPool::create(
+	GfxContext *ctx, 
+	uint32_t queue_family_index,
+	size_t capacity,
+	size_t align,
+	size_t max_uploads
+)
 {
 	if (!is_pow2(align)) {
 		log_error("Alignment of upload pool is not power of two: %d", align);
@@ -24,23 +30,70 @@ UploadPool *UploadPool::create(Context *dev, size_t capacity, size_t align, size
 
 	capacity = align_up_pow2(capacity, align);
 
-	BufferID h_buf = create_buffer(dev, capacity, ev2::MAP_WRITE | ev2::MAP_PERSISTENT);
+	VkSemaphoreTypeCreateInfo timelineCreateInfo;
+	timelineCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+	timelineCreateInfo.pNext = NULL;
+	timelineCreateInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+	timelineCreateInfo.initialValue = 0;
 
-	if (EV2_IS_NULL(h_buf)) {
+	VkSemaphoreCreateInfo createInfo;
+	createInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	createInfo.pNext = &timelineCreateInfo;
+	createInfo.flags = 0;
+
+	VkSemaphore timeline;
+	VkResult result = vkCreateSemaphore(ctx->device, &createInfo, NULL, &timeline);
+
+	if (result != VK_SUCCESS) {
 		log_error("Failed to create buffer for upload pool");
 		return nullptr;
 	}
 
-	Buffer *buf = dev->get_buffer(h_buf);
+	VkBuffer buffer;
+	VmaAllocation allocation;
 
-	GLenum access = 
-		GL_MAP_WRITE_BIT | 
-		GL_MAP_PERSISTENT_BIT | 
-		GL_MAP_FLUSH_EXPLICIT_BIT;
+	VkBufferCreateInfo buf_ci = {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.pNext = nullptr,
+		.flags = 0,
+		.size = capacity,
+		.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+	};
 
-	void *mapped = glMapNamedBufferRange(buf->id, 0, capacity, access);
+	VmaAllocationCreateInfo alloc_ci = {
+		.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		.usage = VMA_MEMORY_USAGE_AUTO,
+		.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, 
+		.preferredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+		.pool = nullptr,
+		.minAlignment = align,
+		.memoryTypeBits = UINT32_MAX
+	};
 
-	if (!mapped) {
+	VmaAllocationInfo alloc_info;
+
+	result = vmaCreateBuffer(ctx->allocator, 
+								   &buf_ci, &alloc_ci, &buffer, 
+								   &allocation, &alloc_info); 
+
+	if (result != VK_SUCCESS) {
+		log_error("Failed to create buffer for upload pool");
+		return nullptr;
+	}
+
+	void *mapped = nullptr; 
+
+	result = vkMapMemory(
+		ctx->device, 
+		alloc_info.deviceMemory, 
+		alloc_info.offset, 
+		alloc_info.size,
+		0,
+		&mapped
+	);
+
+	if (!mapped || result != VK_SUCCESS) {
 		log_error("Failed to map buffer for upload pool");
 		return nullptr;
 	}
@@ -51,8 +104,17 @@ UploadPool *UploadPool::create(Context *dev, size_t capacity, size_t align, size
 		.align = align,
 		.mapped = mapped,
 		.entries = new entry_t[max_uploads],
-		.buffer = h_buf,
-		.dev = dev,
+
+		.semaphore = timeline,
+
+		.staging_buf = buffer,
+		.allocation = allocation,
+		.memory = alloc_info.deviceMemory,
+		.memory_offset = alloc_info.offset,
+
+		.queue_family_index = queue_family_index,
+
+		.ctx = ctx,
 	};
 
 	return pool;
@@ -63,73 +125,45 @@ void UploadPool::destroy(UploadPool *pool)
 	if (!pool)
 		return;
 
-	ev2::Context *dev = pool->dev;
+	ev2::GfxContext *ctx = pool->ctx;
 
-	Buffer *buf = dev->get_buffer(pool->buffer);
-	glUnmapNamedBuffer(buf->id);
-
-	ev2::destroy_buffer(dev, pool->buffer);
+	vkUnmapMemory(ctx->device,pool->memory);
+	vmaDestroyBuffer(ctx->allocator, pool->staging_buf, pool->allocation);
+	vkDestroySemaphore(ctx->device, pool->semaphore, nullptr);
 
 	delete[] pool->entries;
 	delete pool;
 }
 
-static inline void record_buffer_copy(Buffer *src, Buffer *dst, 
-						uint32_t count, const BufferUpload *regions)
+static inline void record_buffer_copy(VkCommandBuffer cmds,
+	VkBuffer staging, Buffer *dst, uint32_t count, const VkBufferCopy2 *regions)
 {
-
-	for (uint32_t i = 0; i < count; ++i) {
-		BufferUpload region = regions[i];
-		glCopyNamedBufferSubData(src->id, dst->id, 
-						   region.src_offset, 
-						   region.dst_offset, 
-						   region.size
-						   );
-	}
+	VkCopyBufferInfo2 copy_info = {
+		.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
+		.pNext = nullptr,
+		.srcBuffer = staging,
+		.dstBuffer = dst->buffer,
+		.regionCount = count,
+		.pRegions = regions,
+	};
+	
+	vkCmdCopyBuffer2(cmds, &copy_info);  
 }
 
-static inline void record_image_copy(Buffer *src, Image *img, 
-						uint32_t count, const ImageUpload *regions)
+static inline void record_image_copy(VkCommandBuffer cmds,
+	VkBuffer staging, Image *img, uint32_t count, const VkBufferImageCopy2 *regions)
 {
-	const bool is_3d = img->d > 1;
-	GLenum format, type;
-	image_format_to_gl(img->fmt, &format, &type);
-
-	glBindBuffer(GL_PIXEL_UNPACK_BUFFER,src->id); 
-
-	for (size_t i = 0; i < count; ++i) {
-		ImageUpload reg = regions[i];
-
-		if (is_3d) {
-			glTextureSubImage3D(
-				img->id,
-				reg.level,
-				reg.x,
-				reg.y,
-				reg.z,
-				reg.w,
-				reg.h,
-				reg.d,
-				format,
-				type,
-				(void*)(reg.src_offset)
-			);
-	 	} else {
-			glTextureSubImage2D(
-				img->id,
-				reg.level,
-				reg.x,
-				reg.y,
-				reg.w,
-				reg.h,
-				format,
-				type,
-				(void*)(reg.src_offset)
-			);
-		}
-	}
-
-	glBindBuffer(GL_PIXEL_UNPACK_BUFFER,0);
+	VkCopyBufferToImageInfo2 copy_info = {
+		.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
+		.pNext = nullptr,
+		.srcBuffer = staging,
+		.dstImage = img->image,
+		.dstImageLayout = img->layout,
+		.regionCount = count,
+		.pRegions = regions,
+	};
+	
+	vkCmdCopyBufferToImage2(cmds, &copy_info);  
 }
 
 ev2::Result UploadPool::wait_for(uint64_t value)
@@ -137,16 +171,26 @@ ev2::Result UploadPool::wait_for(uint64_t value)
 	while (!epochs.empty()) {
 		epoch_t epoch = epochs.top();
 
-		if (value < epoch.id)
+		if (value < epoch.done_value)
 			return SUCCESS;
 
 		uint64_t timeout_ns = 1e9;
-		GLenum result = glClientWaitSync(epoch.sync, 0, timeout_ns); 
 
-		if (result == GL_TIMEOUT_EXPIRED) {
-			log_warn("Upload timed out: epoch=%d, size=%d", epoch.id);
+		VkSemaphore wait_semaphore = this->semaphore;
+
+		VkSemaphoreWaitInfo wait_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+			.semaphoreCount = 1,
+			.pSemaphores = &wait_semaphore,
+			.pValues = &value,
+		};
+
+		VkResult result = vkWaitSemaphores(ctx->device, &wait_info, timeout_ns);
+
+		if (result == VK_TIMEOUT) {
+			log_warn("Upload timed out: epoch=%d, size=%d", epoch.done_value);
 			return ev2::TIMEOUT;
-		} else if (result == GL_WAIT_FAILED) {
+		} else if (result != VK_SUCCESS) {
 			log_error("Upload failed, aborting");
 			return ev2::EUNKNOWN;
 		}
@@ -155,8 +199,11 @@ ev2::Result UploadPool::wait_for(uint64_t value)
 	return SUCCESS;
 }
 
-void UploadPool::flush()
+VkResult UploadPool::flush()
 {
+	//-----------------------------------------------------------------------------
+	// Flush the memory ranges in mapped buffer
+	
 	uint32_t flush_tail = flush_idx;
 	uint32_t flush_head = flush_tail;
 
@@ -182,7 +229,7 @@ void UploadPool::flush()
 
 	// If no uploads are commited, return early
 	if (flush_head == flush_tail)
-		return;
+		return VK_SUCCESS;
 
 	std::swap(queues[1],queues[0]);
 
@@ -192,38 +239,85 @@ void UploadPool::flush()
 
 	size_t flush_start = entries[flush_tail].start;
 
-	Buffer *src_buf = dev->get_buffer(buffer);
+	bool is_overflowed = flush_start + flushed_bytes < capacity; 
 
-	if (flush_start + flushed_bytes < capacity) {
-		glFlushMappedNamedBufferRange(src_buf->id, flush_start, flushed_bytes);
-	} else {
-		glFlushMappedNamedBufferRange(src_buf->id, flush_start, capacity - flush_start);
-		glFlushMappedNamedBufferRange(src_buf->id, 0, (flushed_bytes + flush_start) - capacity);
+	uint32_t range_count = is_overflowed ? 2 : 1;
+	VkMappedMemoryRange ranges[2] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+			.pNext = nullptr,
+			.memory = memory,
+			.offset = memory_offset + flush_start,
+			.size = is_overflowed ? capacity - flush_start : flushed_bytes,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+			.pNext = nullptr,
+			.memory = memory,
+			.offset = memory_offset,
+			.size = (flushed_bytes + flush_start) - capacity,
+		}
+	};
+
+	VkResult result = vkFlushMappedMemoryRanges(ctx->device, range_count, ranges);
+
+	if (result != VK_SUCCESS) {
+		log_error("Failed to flush upload staging buffer");
+		return result;
 	}
+
+	//-----------------------------------------------------------------------------
+	// Record and submit the uploads
+
+	// TODO: Want more control in how/when this command buffer is allocated
+	// and/or submitted. E.g., a command buffer which persists across frame 
+	// boundaries, a secondary command buffer, etc. 
+	
+	VkCommandPool command_pool = ctx->get_current_frame_command_pool(queue_family_index);
+
+	VkCommandBufferAllocateInfo alloc_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.commandPool = command_pool,
+		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandBufferCount = 1,
+	};
+
+	VkCommandBuffer command_buffer;
+	vkAllocateCommandBuffers(ctx->device, &alloc_info, &command_buffer); 
+
+	VkCommandBufferBeginInfo begin_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.pNext = nullptr,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+		.pInheritanceInfo = nullptr
+	};
+
+	result = vkBeginCommandBuffer(command_buffer, &begin_info);
+	if (result != VK_SUCCESS)
+		return result;
 
 	size_t buf_idx = 0;
 	size_t img_idx = 0;
 
 	for (uint32_t i = flush_tail; i != flush_head; i = (i + 1) & (max_uploads - 1)) {
 		entry_t *ent = &entries[i];
-
 		uint32_t count = ent->count;
 
 		switch (ent->type) {
 			case UPLOAD_TYPE_BUFFER: {
-				Buffer *dst_buf = dev->get_buffer(ent->resource.buf);
-				const BufferUpload *regions = &queues[1].buffers[buf_idx]; 
+				Buffer *dst_buf = ctx->get_buffer(ent->resource.buf);
+				const VkBufferCopy2 *regions = &queues[1].buffers[buf_idx]; 
 
-				record_buffer_copy(src_buf, dst_buf, count, regions);
+				record_buffer_copy(command_buffer, staging_buf, dst_buf, count, regions);
 
 				buf_idx += count;
 				break;
 			} 
 			case UPLOAD_TYPE_IMAGE: {
-				Image *dst_img = dev->get_image(ent->resource.img);
-				const ImageUpload *regions = &queues[1].images[img_idx]; 
+				Image *dst_img = ctx->get_image(ent->resource.img);
+				const VkBufferImageCopy2 *regions = &queues[1].images[img_idx]; 
 
-				record_image_copy(src_buf, dst_img, count, regions);
+				record_image_copy(command_buffer, staging_buf, dst_img, count, regions);
 
 				img_idx += count;
 				break;
@@ -231,13 +325,55 @@ void UploadPool::flush()
 		}
 	}
 
-	epoch_t epoch = {
-		.id = done_ctr.fetch_add(flushed_bytes, std::memory_order_acquire) + flushed_bytes,
-		.size = flushed_bytes,
-		.sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0),
+	result = vkEndCommandBuffer(command_buffer);
+	if (result != VK_SUCCESS)
+		return result;
+
+	uint64_t done_value = 
+		done_ctr.fetch_add(flushed_bytes, std::memory_order_acquire) + flushed_bytes; 
+
+	VkCommandBufferSubmitInfo cmd_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+		.commandBuffer = command_buffer
 	};
 
-	glFlush();
+	VkSemaphoreSubmitInfo signal_info = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
+		.semaphore = semaphore,
+		.value = done_value,
+		.stageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+		.deviceIndex = 0,
+	};
+
+	VkSubmitInfo2 submit_info = {
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+
+		.flags = 0,
+
+		.waitSemaphoreInfoCount = (uint32_t)queues[1].submit_info.size(),
+		.pWaitSemaphoreInfos = queues[1].submit_info.data(),
+
+		.commandBufferInfoCount = 1,
+		.pCommandBufferInfos = &cmd_info,
+
+		.signalSemaphoreInfoCount = 1,
+		.pSignalSemaphoreInfos = &signal_info,
+	};
+
+	result = ctx->queue_families[queue_family_index].queues[0].submit(
+		1, &submit_info, VK_NULL_HANDLE
+	);
+
+	if (result != VK_SUCCESS)
+		return result;
+
+	epoch_t epoch = {
+		.done_value = done_value,
+		.size = flushed_bytes,
+		.sync = done_value,
+	};
+
+	//glFlush();
 
 	//log_info(
 	//	"Flushed uploads:\n"
@@ -254,6 +390,7 @@ void UploadPool::flush()
 	queues[1].buffers.clear();
 	queues[1].images.clear();
 
+	return result;
 }
 
 uint64_t UploadPool::set_commited(entry_t *ent)
@@ -294,12 +431,32 @@ uint64_t UploadPool::commmit_buffer(uint32_t idx, BufferID buf, const BufferUplo
 
 	std::unique_lock<std::mutex> lock(sync);
 	for (size_t i = 0; i < count; ++i) {
-		BufferUpload region = regions[i];
-		region.src_offset += start;
-		queues[0].buffers.push_back(region);
+		VkBufferCopy2 copy = {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+			.pNext = nullptr,
+			.srcOffset = start + regions[i].src_offset,
+			.dstOffset = regions[i].dst_offset,
+			.size = regions[i].size,
+		};
+		queues[0].buffers.push_back(copy);
 	}
 
-	return set_commited(ent);
+	Buffer *buffer = ctx->get_buffer(buf);
+
+	queues[0].submit_info.push_back(VkSemaphoreSubmitInfo{
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+		.semaphore = buffer->sync.semaphore,
+		.value = buffer->sync.wait_value,
+		.stageMask = buffer->sync.stage,
+		.deviceIndex = 0, 
+	});
+
+	uint64_t done_value = set_commited(ent); 
+
+	buffer->sync.wait_value = done_value;
+	buffer->sync.semaphore = semaphore;
+
+	return done_value;
 }
 
 uint64_t UploadPool::commmit_image(uint32_t idx, ImageID img, const ImageUpload *regions,
@@ -317,12 +474,49 @@ uint64_t UploadPool::commmit_image(uint32_t idx, ImageID img, const ImageUpload 
 
 	std::unique_lock<std::mutex> lock(sync);
 	for (size_t i = 0; i < count; ++i) {
-		ImageUpload region = regions[i];
-		region.src_offset += start;
-		queues[0].images.push_back(region);
+		VkBufferImageCopy2 copy = {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2,
+			.pNext = nullptr,
+			.bufferOffset = regions[i].src_offset + start,
+			.bufferRowLength= 0,
+			.bufferImageHeight = 0,
+			.imageSubresource = VkImageSubresourceLayers{
+				.aspectMask = ctx->get_image(img)->aspect_mask,
+				.mipLevel = regions[i].level,
+				.baseArrayLayer = regions[i].z,
+				.layerCount = regions[i].d,
+			},
+			.imageOffset = VkOffset3D{
+				.x = (int32_t)regions[i].x,
+				.y = (int32_t)regions[i].y,
+				.z = (int32_t)regions[i].z,
+			},
+			.imageExtent = VkExtent3D{
+				.width = regions[i].w,
+				.height = regions[i].h,
+				.depth = regions[i].d,
+			},
+		};
+		queues[0].images.push_back(copy);
 	}
 
-	return set_commited(ent);
+	Image *image = ctx->get_image(img);
+
+	queues[0].submit_info.push_back(VkSemaphoreSubmitInfo{
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+		.semaphore = image->sync.semaphore,
+		.value = image->sync.wait_value,
+		.stageMask = image->sync.stage,
+		.deviceIndex = 0, 
+	});
+
+	uint64_t done_value = set_commited(ent); 
+
+	image->sync.wait_value = done_value;
+	image->sync.semaphore = semaphore;
+
+
+	return done_value;
 }
 
 UploadPool::alloc_result_t UploadPool::alloc(size_t _bytes, size_t _align)
@@ -361,6 +555,9 @@ UploadPool::alloc_result_t UploadPool::alloc(size_t _bytes, size_t _align)
 		if (required < available) 
 			break;
 
+		//----------------------------------------------------------------------------
+		// This is when we run out of space
+
 		if (head_idx == tail_idx) {
 			log_error("This should never happen!");
 			assert(false);
@@ -370,19 +567,28 @@ UploadPool::alloc_result_t UploadPool::alloc(size_t _bytes, size_t _align)
 
 		if(!epochs.empty()) {
 			epoch_t epoch = epochs.top();
+			wait_value = epoch.done_value;
 
-			uint64_t timeout_ns = 1e9;
-			GLenum result = glClientWaitSync(epoch.sync, 0, timeout_ns); 
+			VkSemaphoreWaitInfo wait_info = {
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+				.flags = 0,
+				.semaphoreCount = 1,
+				.pSemaphores = &this->semaphore,
+				.pValues = &wait_value
+			};
 
-			if (result == GL_TIMEOUT_EXPIRED) {
-				log_warn("Upload timed out: epoch=%d, size=%d", epoch.id);
-			} else if (result == GL_WAIT_FAILED) {
+			VkResult result = vkWaitSemaphores(ctx->device, &wait_info, 
+									  EV2_UPLOAD_TIMEOUT);
+
+			if (result == VK_TIMEOUT) {
+				log_warn("Upload timed out: epoch=%d, size=%d", epoch.done_value);
+			} else if (result != VK_SUCCESS) {
 				log_error("Upload failed, aborting");
 				return ALLOC_FAILED;
 			}
 
 			epochs.pop();
-			wait_value = epoch.id;
+			wait_value = epoch.done_value;
 		}
 
 		if (entries[tail_idx].start != tail) {

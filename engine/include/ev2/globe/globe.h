@@ -18,7 +18,7 @@ struct GlobeUpdateInfo
 	Camera const *camera;
 };
 
-Globe *globe_create(ev2::Context *dev);
+Globe *globe_create(ev2::GfxContext *ctx);
 void globe_destroy(Globe *globe);
 
 void globe_imgui(Globe *globe);

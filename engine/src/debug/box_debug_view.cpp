@@ -109,53 +109,53 @@ void BoxDebugView::update()
 	if (sizeof(vertex3d) * verts.size() > vcap) {
 		vcap = verts.size() * sizeof(vertex3d);
 		if (vbo.id)
-			ev2::destroy_buffer(dev, vbo);
-		vbo = ev2::create_buffer(dev, vcap);
+			ev2::destroy_buffer(ctx, vbo);
+		vbo = ev2::create_buffer(ctx, vcap);
 	}
 	vsize = verts.size() * sizeof(vertex3d);
 
 	if (indices.size() * sizeof(uint32_t) > icap) {
 		icap = indices.size() * sizeof(uint32_t);
 		if (ibo.id)
-			ev2::destroy_buffer(dev, ibo);
-		ibo = ev2::create_buffer(dev, icap);
+			ev2::destroy_buffer(ctx, ibo);
+		ibo = ev2::create_buffer(ctx, icap);
 	}
 	isize = indices.size() * sizeof(uint32_t);
 
-	ev2::UploadContext ctx = ev2::begin_upload(dev, vsize, alignof(vertex3d)); 
-	memcpy(ctx.ptr, verts.data(), vsize);
+	ev2::UploadContext uc = ev2::begin_upload(ctx, vsize, alignof(vertex3d)); 
+	memcpy(uc.ptr, verts.data(), vsize);
 	ev2::BufferUpload up = {
 		.src_offset = 0,
 		.dst_offset = 0,
 		.size = vsize,
 	};
-	ev2::commit_buffer_uploads(dev, ctx, vbo, &up, 1);
+	ev2::commit_buffer_uploads(ctx, uc, vbo, &up, 1);
 
-	ctx = ev2::begin_upload(dev, isize, alignof(uint32_t));
-	memcpy(ctx.ptr, indices.data(), isize);
+	uc = ev2::begin_upload(ctx, isize, alignof(uint32_t));
+	memcpy(uc.ptr, indices.data(), isize);
 	up = {
 		.src_offset = 0,
 		.dst_offset = 0,
 		.size = isize,
 	};
-	upload_index = ev2::commit_buffer_uploads(dev, ctx, ibo, &up, 1);
+	upload_index = ev2::commit_buffer_uploads(ctx, uc, ibo, &up, 1);
 
-	ev2::flush_uploads(dev);
+	ev2::flush_uploads(ctx);
 
 	boxes.clear();
 	oboxes.clear();
 }
 
-void BoxDebugView::draw(ev2::PassCtx ctx)
+void BoxDebugView::draw(ev2::PassCtx pass)
 {
-	ev2::wait_complete(dev, upload_index);
+	ev2::wait_complete(ctx, upload_index);
 	if (!vbo.id || !ibo.id)
 		return;
 
-	ev2::cmd_bind_gfx_pipeline(ctx.rec, pipeline);
+	ev2::cmd_bind_gfx_pipeline(pass.rec, pipeline);
 
-	ev2::Buffer *vbo_obj = dev->get_buffer(vbo);
-	ev2::Buffer *ibo_obj = dev->get_buffer(ibo);
+	ev2::Buffer *vbo_obj = ctx->get_buffer(vbo);
+	ev2::Buffer *ibo_obj = ctx->get_buffer(ibo);
 
 	glBindVertexArray(vao);
 	glBindVertexBuffer(0, vbo_obj->id, 0, sizeof(vertex3d));

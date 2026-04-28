@@ -316,9 +316,9 @@ static ev2::Result load_shader_file(const char *path, ev2::Shader* out)
 	return res;
 }
 
-ev2::Result gl_shader_create(ev2::Device *dev, ev2::Shader *p_shader, const char *path)
+ev2::Result gl_shader_create(ev2::Device *ctx, ev2::Shader *p_shader, const char *path)
 {
-	std::string syspath = dev->assets->get_system_path(path);
+	std::string syspath = ctx->assets->get_system_path(path);
 	ev2::Result res = load_shader_file(syspath.c_str(), p_shader);
 
 	if (res != ev2::SUCCESS)
@@ -330,7 +330,7 @@ ev2::Result gl_shader_create(ev2::Device *dev, ev2::Shader *p_shader, const char
 	return res;
 }
 
-void gl_shader_destroy(ev2::Device *dev, void *usr)
+void gl_shader_destroy(ev2::Device *ctx, void *usr)
 {
 	if (!usr) 
 		return;
@@ -343,11 +343,11 @@ void gl_shader_destroy(ev2::Device *dev, void *usr)
 	delete shader;
 }
 
-ev2::Result gl_shader_reload(ev2::Device *dev, void **usr, const char *path)
+ev2::Result gl_shader_reload(ev2::Device *ctx, void **usr, const char *path)
 {
 	ev2::Shader new_shader{};
 
-	ev2::Result res = gl_shader_create(dev, &new_shader, path);
+	ev2::Result res = gl_shader_create(ctx, &new_shader, path);
 
 	if (res != ev2::SUCCESS)
 		return res;
@@ -563,7 +563,7 @@ static GLuint gen_gl_vao_from_vtx_layout(const VertexInputLayout *p_layout)
 }
 
 static ev2::Result init_gfx_pipeline_shaders(
-	ev2::Device *dev, 
+	ev2::Device *ctx, 
 	ev2::GraphicsPipeline *pipe, 
 	const char *vert_path, 
 	const char *frag_path
@@ -571,24 +571,24 @@ static ev2::Result init_gfx_pipeline_shaders(
 {
 	ev2::Result res = ev2::SUCCESS;
 
-	ev2::ShaderID vert_handle = ev2::load_shader(dev, vert_path);
+	ev2::ShaderID vert_handle = ev2::load_shader(ctx, vert_path);
 	if (!vert_handle.id) {
 		res = ev2::EUNKNOWN;
 		return res;
 	}
 
-	ev2::ShaderID frag_handle = ev2::load_shader(dev, frag_path);
+	ev2::ShaderID frag_handle = ev2::load_shader(ctx, frag_path);
 	if (!frag_handle.id) {
 		res = ev2::EUNKNOWN;
 		return res;
 	}
 
-	const ev2::Shader *vert = dev->assets->get<ev2::Shader>(vert_handle.id);
-	const ev2::Shader *frag = dev->assets->get<ev2::Shader>(frag_handle.id);
+	const ev2::Shader *vert = ctx->assets->get<ev2::Shader>(vert_handle.id);
+	const ev2::Shader *frag = ctx->assets->get<ev2::Shader>(frag_handle.id);
 
 	VertexInputLayout vertex_layout {};
 
-	std::string sys_vert_path = dev->assets->get_system_path(vert_path);
+	std::string sys_vert_path = ctx->assets->get_system_path(vert_path);
 	parse_vertex_layout(sys_vert_path.c_str(), &vertex_layout);
 
 	GLuint vao = gen_gl_vao_from_vtx_layout(&vertex_layout);
@@ -629,10 +629,10 @@ static ev2::Result init_gfx_pipeline_shaders(
 	return res;
 }
 
-std::string get_gfx_pipeline_info(ev2::Device *dev, ev2::GraphicsPipeline *p_pipeline)
+std::string get_gfx_pipeline_info(ev2::Device *ctx, ev2::GraphicsPipeline *p_pipeline)
 {
-	const char *vert = dev->assets->get_entry((AssetID)p_pipeline->vert.id)->path;
-	const char *frag = dev->assets->get_entry((AssetID)p_pipeline->frag.id)->path;
+	const char *vert = ctx->assets->get_entry((AssetID)p_pipeline->vert.id)->path;
+	const char *frag = ctx->assets->get_entry((AssetID)p_pipeline->frag.id)->path;
 
 	const char *fmt = 
 		"\tvert: "COLORIZE_PATH(%s)"\n"
@@ -646,13 +646,13 @@ std::string get_gfx_pipeline_info(ev2::Device *dev, ev2::GraphicsPipeline *p_pip
 }
 
 static ev2::Result gl_gfx_pipeline_create(
-	ev2::Device *dev, 
+	ev2::Device *ctx, 
 	ev2::GraphicsPipeline *p_pipeline, 
 	const char *path
 )
 {
 	ev2::Result result = ev2::SUCCESS;
-	std::string syspath = dev->assets->get_system_path(path);
+	std::string syspath = ctx->assets->get_system_path(path);
 
 	if (!fs::exists(syspath)) {
 		log_error("File does not exist: %s", syspath.c_str());
@@ -677,7 +677,7 @@ static ev2::Result gl_gfx_pipeline_create(
 		return result;
 
 	result = init_gfx_pipeline_shaders(
-		dev, 
+		ctx, 
 		p_pipeline, 
 		gfx_info.vert.c_str(), 
 		gfx_info.frag.c_str()
@@ -688,29 +688,29 @@ static ev2::Result gl_gfx_pipeline_create(
 		return result;
 	}
 
-	std::string info = get_gfx_pipeline_info(dev, p_pipeline);
+	std::string info = get_gfx_pipeline_info(ctx, p_pipeline);
 	log_info("Graphics pipeline : "COLORIZE_PATH(%s)"\n%s", path, info.c_str());
 
 	return result;
 }
 
-static void gl_gfx_pipeline_destroy(ev2::Device *dev, void* usr) 
+static void gl_gfx_pipeline_destroy(ev2::Device *ctx, void* usr) 
 {
 	ev2::GraphicsPipeline *pipeline = static_cast<ev2::GraphicsPipeline*>(usr);
 
 	if (pipeline->program)
 		glDeleteProgram(pipeline->program);
 
-	ev2::unload_shader(dev, pipeline->vert);
-	ev2::unload_shader(dev, pipeline->frag);
+	ev2::unload_shader(ctx, pipeline->vert);
+	ev2::unload_shader(ctx, pipeline->frag);
 
 	delete pipeline;
 }
 
-static ev2::Result gl_gfx_pipeline_reload(ev2::Device *dev, void** usr, const char *path)
+static ev2::Result gl_gfx_pipeline_reload(ev2::Device *ctx, void** usr, const char *path)
 {
 	ev2::GraphicsPipeline new_pipeline{};
-	ev2::Result res = gl_gfx_pipeline_create(dev, &new_pipeline, path);
+	ev2::Result res = gl_gfx_pipeline_create(ctx, &new_pipeline, path);
 
 	if (res != ev2::SUCCESS)
 		return res;
@@ -728,19 +728,19 @@ static ev2::Result gl_gfx_pipeline_reload(ev2::Device *dev, void** usr, const ch
 // Compute shaders
 
 static ev2::Result gl_compute_pipeline_create(
-	ev2::Device *dev, 
+	ev2::Device *ctx, 
 	ev2::ComputePipeline *p_pipeline, 
 	const char *path
 )
 {
 	ev2::Shader *p_shader = &p_pipeline->shader;
-	ev2::Result result = gl_shader_create(dev, p_shader, path);
+	ev2::Result result = gl_shader_create(ctx, p_shader, path);
 
 	if (result)
 		return result;
 
 	if (p_shader->stage != ev2::STAGE_COMPUTE) {
-		gl_shader_destroy(dev, p_shader);
+		gl_shader_destroy(ctx, p_shader);
 		return ev2::ELOAD_FAILED;
 	}
 
@@ -758,7 +758,7 @@ static ev2::Result gl_compute_pipeline_create(
 	return result;
 }
 
-static void gl_compute_pipeline_destroy(ev2::Device *dev, void* usr) 
+static void gl_compute_pipeline_destroy(ev2::Device *ctx, void* usr) 
 {
 	ev2::ComputePipeline *pipeline = static_cast<ev2::ComputePipeline*>(usr);
 
@@ -770,11 +770,11 @@ static void gl_compute_pipeline_destroy(ev2::Device *dev, void* usr)
 	delete pipeline;
 }
 
-static ev2::Result gl_compute_pipeline_reload(ev2::Device *dev, void** usr, const char *path)
+static ev2::Result gl_compute_pipeline_reload(ev2::Device *ctx, void** usr, const char *path)
 {
 	ev2::ComputePipeline new_pipeline{};
 
-	ev2::Result res = gl_compute_pipeline_create(dev, &new_pipeline, path);
+	ev2::Result res = gl_compute_pipeline_create(ctx, &new_pipeline, path);
 
 	if (res != ev2::SUCCESS)
 		return res;
@@ -792,9 +792,9 @@ namespace ev2 {
 //------------------------------------------------------------------------------
 // Shaders
 
-ShaderID load_shader(Device *dev, const char *path)
+ShaderID load_shader(Device *ctx, const char *path)
 {
-	AssetID id = dev->assets->load(path);
+	AssetID id = ctx->assets->load(path);
 	if (id)
 		return ShaderID{id};
 
@@ -805,10 +805,10 @@ ShaderID load_shader(Device *dev, const char *path)
 
 	ev2::Shader *shader = new ev2::Shader{}; 
 
-	ev2::Result res = gl_shader_create(dev, shader, path);
+	ev2::Result res = gl_shader_create(ctx, shader, path);
 
 	if (res == ev2::SUCCESS) {
-		id = dev->assets->allocate(&vtbl, shader, path); 
+		id = ctx->assets->allocate(&vtbl, shader, path); 
 		return ShaderID{id};
 	}
 
@@ -817,18 +817,18 @@ ShaderID load_shader(Device *dev, const char *path)
 	return EV2_NULL_HANDLE(Shader);
 }
 
-void unload_shader(Device *dev, ShaderID shader)
+void unload_shader(Device *ctx, ShaderID shader)
 {
 }
 
 //------------------------------------------------------------------------------
 
-GraphicsPipelineID load_graphics_pipeline(Device *dev, const char *path)
+GfxPipelineID load_graphics_pipeline(Device *ctx, const char *path)
 {
-	AssetID id = dev->assets->load(path);
+	AssetID id = ctx->assets->load(path);
 
 	if (id)
-		return GraphicsPipelineID{id};
+		return GfxPipelineID{id};
 
 	static AssetVTable vtbl = {
 		.reload = gl_gfx_pipeline_reload,
@@ -836,32 +836,32 @@ GraphicsPipelineID load_graphics_pipeline(Device *dev, const char *path)
 	};
 
 	ev2::GraphicsPipeline *pipeline = new ev2::GraphicsPipeline{}; 
-	ev2::Result res = gl_gfx_pipeline_create(dev, pipeline, path);
+	ev2::Result res = gl_gfx_pipeline_create(ctx, pipeline, path);
 
 	if (res == ev2::SUCCESS) {
-		id = dev->assets->allocate(&vtbl, pipeline, path);
+		id = ctx->assets->allocate(&vtbl, pipeline, path);
 
-		if (dev->assets->reloader) {
-			dev->assets->reloader->add_dependency(pipeline->vert.id, id);
-			dev->assets->reloader->add_dependency(pipeline->frag.id, id);
+		if (ctx->assets->reloader) {
+			ctx->assets->reloader->add_dependency(pipeline->vert.id, id);
+			ctx->assets->reloader->add_dependency(pipeline->frag.id, id);
 		}
 
-		return GraphicsPipelineID{id};
+		return GfxPipelineID{id};
 	}
 
 	delete pipeline;
 	return EV2_NULL_HANDLE(GraphicsPipeline);
 }
 
-void unload_graphics_pipeline(Device *dev, GraphicsPipelineID pipe)
+void unload_graphics_pipeline(Device *ctx, GfxPipelineID pipe)
 {
 }
 
 //------------------------------------------------------------------------------
 
-ComputePipelineID load_compute_pipeline(Device *dev, const char *path)
+ComputePipelineID load_compute_pipeline(Device *ctx, const char *path)
 {
-	AssetID id = dev->assets->load(path);
+	AssetID id = ctx->assets->load(path);
 
 	if (id)
 		return ComputePipelineID{id};
@@ -872,10 +872,10 @@ ComputePipelineID load_compute_pipeline(Device *dev, const char *path)
 	};
 
 	ev2::ComputePipeline *pipeline = new ev2::ComputePipeline{}; 
-	ev2::Result res = gl_compute_pipeline_create(dev, pipeline, path);
+	ev2::Result res = gl_compute_pipeline_create(ctx, pipeline, path);
 
 	if (res == ev2::SUCCESS) {
-		id = dev->assets->allocate(&vtbl, pipeline, path);
+		id = ctx->assets->allocate(&vtbl, pipeline, path);
 		return ComputePipelineID{id};
 	}
 
@@ -883,15 +883,15 @@ ComputePipelineID load_compute_pipeline(Device *dev, const char *path)
 	return EV2_NULL_HANDLE(ComputePipeline);
 }
 
-void unload_compute_pipeline(Device *dev, ComputePipelineID pipe)
+void unload_compute_pipeline(Device *ctx, ComputePipelineID pipe)
 {
 }
 
 //------------------------------------------------------------------------------
 
-DescriptorLayoutID get_graphics_pipeline_layout(Device *dev, GraphicsPipelineID pipe)
+DescriptorLayoutID get_graphics_pipeline_layout(Device *ctx, GfxPipelineID pipe)
 {
-	const ev2::GraphicsPipeline * res = dev->assets->get<ev2::GraphicsPipeline>(pipe.id);
+	const ev2::GraphicsPipeline * res = ctx->assets->get<ev2::GraphicsPipeline>(pipe.id);
 
 	if (!res)
 		return EV2_NULL_HANDLE(DescriptorLayout);
@@ -900,12 +900,12 @@ DescriptorLayoutID get_graphics_pipeline_layout(Device *dev, GraphicsPipelineID 
 	return DescriptorLayoutID{.id = reinterpret_cast<uint64_t>(&res->layout)};
 }
 
-DescriptorLayoutID get_compute_pipeline_layout(Device *dev, ComputePipelineID pipe)
+DescriptorLayoutID get_compute_pipeline_layout(Device *ctx, ComputePipelineID pipe)
 {
 	if (!pipe.id)
 		return EV2_NULL_HANDLE(DescriptorLayout);
 
-	const ev2::ComputePipeline * res = dev->assets->get<ev2::ComputePipeline>(pipe.id);
+	const ev2::ComputePipeline * res = ctx->assets->get<ev2::ComputePipeline>(pipe.id);
 	const DescriptorLayout *p_layout = res->shader.layout.get();
 
 	return DescriptorLayoutID{.id = reinterpret_cast<uint64_t>(p_layout)};
@@ -926,7 +926,7 @@ BindingSlot find_binding(DescriptorLayoutID id, const char *name)
 }
 
 DescriptorSetID create_descriptor_set(
-	Device *dev, 
+	Device *ctx, 
 	DescriptorLayoutID layout_id, 
 	uint16_t index
 )
@@ -953,7 +953,7 @@ DescriptorSetID create_descriptor_set(
 	return EV2_HANDLE_CAST(DescriptorSet, set);
 }
 
-void destroy_descriptor_set(Device *dev, DescriptorSetID id)
+void destroy_descriptor_set(Device *ctx, DescriptorSetID id)
 {
 	DescriptorSet *set = EV2_TYPE_PTR_CAST(DescriptorSet, id);
 
@@ -961,7 +961,7 @@ void destroy_descriptor_set(Device *dev, DescriptorSetID id)
 }
 
 ev2::Result bind_buffer(
-	Device *dev, 
+	Device *ctx, 
 	DescriptorSetID set_id, 
 	BindingSlot slot, 
 	BufferID buf_id, 
@@ -970,7 +970,7 @@ ev2::Result bind_buffer(
 ) 
 {
 	DescriptorSet *set = EV2_TYPE_PTR_CAST(DescriptorSet, set_id);
-	//ev2::Buffer *buf = dev->rt->get<ev2::Buffer>(buf_id);
+	//ev2::Buffer *buf = ctx->rt->get<ev2::Buffer>(buf_id);
 
 	if (set->index != slot.set) {
 		log_error(
@@ -1013,14 +1013,14 @@ ev2::Result bind_buffer(
 }
 
 ev2::Result bind_texture(
-	Device *dev, 
+	Device *ctx, 
 	DescriptorSetID set_id, 
 	BindingSlot slot, 
 	TextureID tex_id  
 ) 
 {
 	DescriptorSet *set = EV2_TYPE_PTR_CAST(DescriptorSet, set_id);
-	Texture *tex = dev->get_texture(tex_id);
+	Texture *tex = ctx->get_texture(tex_id);
 
 	if (set->index != slot.set) {
 		log_error(
@@ -1055,14 +1055,14 @@ ev2::Result bind_texture(
 }
 
 ev2::Result bind_image(
-	Device *dev,
+	Device *ctx,
 	DescriptorSetID h_set, 
 	BindingSlot slot, 
 	ImageID h_img
 )
 {
 	DescriptorSet *set = EV2_TYPE_PTR_CAST(DescriptorSet, h_set);
-	Image *img = dev->get_image(h_img);
+	Image *img = ctx->get_image(h_img);
 
 	if (set->index != slot.set) {
 		log_error(
@@ -1097,9 +1097,9 @@ ev2::Result bind_image(
 
 //------------------------------------------------------------------------------
 
-RecorderID begin_commands(Device * dev, CommandMode mode)
+RecorderID begin_commands(Device * ctx, CommandMode mode)
 {
-	return EV2_HANDLE_CAST(Recorder, dev);
+	return EV2_HANDLE_CAST(Recorder, ctx);
 	return EV2_NULL_HANDLE(Recorder);
 }
 
@@ -1114,7 +1114,7 @@ void submit(SyncID)
 
 void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 {
-	Device *dev = EV2_TYPE_PTR_CAST(Device, rec);
+	Device *ctx = EV2_TYPE_PTR_CAST(Device, rec);
 	DescriptorSet *set = EV2_TYPE_PTR_CAST(DescriptorSet, set_id);
 
 	for (auto [index, binding] : set->bindings) {
@@ -1125,8 +1125,8 @@ void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 				if (EV2_IS_NULL(binding.tex.handle))
 					continue;
 
-				Texture *tex = dev->get_texture(binding.tex.handle);
-				Image *img = dev->get_image(tex->img);
+				Texture *tex = ctx->get_texture(binding.tex.handle);
+				Image *img = ctx->get_image(tex->img);
 
 				GLenum filter = tex->filter == ev2::FILTER_BILINEAR ? GL_LINEAR : GL_NEAREST;
 
@@ -1141,7 +1141,7 @@ void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 			case ev2::DESCRIPTOR_TYPE_STORAGE_IMAGE: {
 				if (EV2_IS_NULL(binding.img.handle))
 					continue;
-				Image *img = dev->get_image(binding.img.handle);
+				Image *img = ctx->get_image(binding.img.handle);
 
 				GLenum format = image_format_to_gl_internal(img->fmt);
 
@@ -1161,7 +1161,7 @@ void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 				if (EV2_IS_NULL(binding.buf.handle))
 					continue;
 
-				Buffer *buf = dev->get_buffer(binding.buf.handle);
+				Buffer *buf = ctx->get_buffer(binding.buf.handle);
 				glBindBufferRange(GL_SHADER_STORAGE_BUFFER, index, buf->id, 
 					  binding.buf.offset, binding.buf.size); 
 
@@ -1173,7 +1173,7 @@ void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 				if (EV2_IS_NULL(binding.buf.handle))
 					continue;
 
-				Buffer *buf = dev->get_buffer(binding.buf.handle);
+				Buffer *buf = ctx->get_buffer(binding.buf.handle);
 				glBindBufferRange(GL_UNIFORM_BUFFER, index, buf->id, 
 					  binding.buf.offset, binding.buf.size); 
 				break;
@@ -1184,8 +1184,8 @@ void cmd_bind_descriptor_set(RecorderID rec, DescriptorSetID set_id)
 
 void cmd_bind_compute_pipeline(RecorderID rec, ComputePipelineID h)
 {
-	ev2::Device *dev = EV2_TYPE_PTR_CAST(Device, rec);
-	ComputePipeline *pipeline = dev->get_compute_pipeline(h);
+	ev2::Device *ctx = EV2_TYPE_PTR_CAST(Device, rec);
+	ComputePipeline *pipeline = ctx->get_compute_pipeline(h);
 	glUseProgram(pipeline->program);
 }
 
@@ -1196,7 +1196,7 @@ void cmd_dispatch(
 	uint32_t countz
 )
 {
-	ev2::Device *dev = EV2_TYPE_PTR_CAST(Device, rec);
+	ev2::Device *ctx = EV2_TYPE_PTR_CAST(Device, rec);
 	glDispatchCompute(countx, county, countz);
 }
 
@@ -1312,7 +1312,7 @@ static ev2::Result parse_material_file(
 /*
 
 static ev2::DescriptorSetID initialize_material(
-	ev2::Device *dev,
+	ev2::Device *ctx,
 	ev2::DescriptorLayoutID layout, 
 	const PreMaterialInfo *info)
 {
@@ -1327,7 +1327,7 @@ static ev2::DescriptorSetID initialize_material(
 			const Binding *bind = &info->bindings[i];
 
 			ev2::ImageAssetID texID = bind->path.empty() ? 
-				EV2_NULL_HANDLE : ev2::load_texture_asset(dev, bind->path.c_str());
+				EV2_NULL_HANDLE : ev2::load_texture_asset(ctx, bind->path.c_str());
 
 			if (!bind->path.empty() && texID == RESOURCE_HANDLE_NULL) {
 				log_error(
@@ -1342,7 +1342,7 @@ static ev2::DescriptorSetID initialize_material(
 		}
 
 		ev2::DescriptorSetID set = ev2::create_descriptor_set(
-			dev, EV2_HANDLE_CAST(DescriptorLayout, layout));
+			ctx, EV2_HANDLE_CAST(DescriptorLayout, layout));
 
 		for (size_t i = 0; i < bind_count; ++i) {
 			ev2::TextureID texID = textures[i];
@@ -1350,7 +1350,7 @@ static ev2::DescriptorSetID initialize_material(
 			const Binding *bind = &info->bindings[i];
 
 			ev2::DescriptorSlot slot = ev2::find_descriptor(layout, bind->name.c_str());
-			ev2::bind_set_texture(dev, set, slot, texID);
+			ev2::bind_set_texture(ctx, set, slot, texID);
 		}
 
 		return set;

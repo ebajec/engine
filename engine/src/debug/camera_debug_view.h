@@ -11,9 +11,9 @@ class CameraDebugView
 		.view = glm::mat4(1.f)
 	};
 
-	ev2::Context *dev;
+	ev2::GfxContext *ctx;
 
-	ev2::GraphicsPipelineID pipeline;
+	ev2::GfxPipelineID pipeline;
 	ev2::DescriptorSetID desc;
 
 	ev2::BufferID ssbo;
@@ -23,7 +23,7 @@ class CameraDebugView
 
 	void *mapped;
 public:
-	CameraDebugView(ev2::Context *dev);
+	CameraDebugView(ev2::GfxContext *ctx);
 	~CameraDebugView();
 	void render(const ev2::PassCtx& ctx);
 	void set_camera(const Camera *camera);

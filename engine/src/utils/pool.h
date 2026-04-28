@@ -96,7 +96,7 @@ struct ResourcePool {
 	// atomic counters
 	mutable std::mutex sync;
 
-	ResourceID allocate(T* ptr = nullptr);
+	ResourceID allocate(T&& val);
 	void deallocate(ResourceID id);
 	T* get(ResourceID id) const;
 
@@ -126,7 +126,7 @@ ResourcePool<T> *ResourcePool<T>::create()
 }
 
 template<typename T>
-ResourceID ResourcePool<T>::allocate(T* ptr)
+ResourceID ResourcePool<T>::allocate(T&& val)
 {
 	std::unique_lock<std::mutex> lock(sync);
 	uint32_t slot = 0;
@@ -145,8 +145,7 @@ ResourceID ResourcePool<T>::allocate(T* ptr)
 
 	entry_t *ent = get_entry(slot);
 
-	if (ptr)
-		ent->val = *ptr; 
+	ent->val = std::move(val); 
 
 	assert(slot);
 

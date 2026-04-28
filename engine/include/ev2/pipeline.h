@@ -6,7 +6,7 @@
 
 namespace ev2 {
 
-MAKE_HANDLE(GraphicsPipeline);
+MAKE_HANDLE(GfxPipeline);
 MAKE_HANDLE(ComputePipeline);
 MAKE_HANDLE(DescriptorSet);
 MAKE_HANDLE(DescriptorLayout);
@@ -41,35 +41,35 @@ struct BindingSlot
 	uint32_t id;
 };
 
-ShaderID load_shader(Context *dev, const char *path);
-void unload_shader(Context *dev, ShaderID id);
+ShaderID load_shader(GfxContext *ctx, const char *path);
+void unload_shader(GfxContext *ctx, ShaderID id);
 
-GraphicsPipelineID load_graphics_pipeline(Context *dev, const char *path);
-void unload_graphics_pipeline(Context *dev, GraphicsPipelineID pipe);
+GfxPipelineID load_graphics_pipeline(GfxContext *ctx, const char *path);
+void unload_graphics_pipeline(GfxContext *ctx, GfxPipelineID pipe);
 
-ComputePipelineID load_compute_pipeline(Context *dev, const char *path);
-void unload_compute_pipeline(Context *dev, ComputePipelineID pipe);
+ComputePipelineID load_compute_pipeline(GfxContext *ctx, const char *path);
+void unload_compute_pipeline(GfxContext *ctx, ComputePipelineID pipe);
 
 DescriptorLayoutID get_graphics_pipeline_layout(
-	Context *Dev, GraphicsPipelineID pipe);
+	GfxContext *Dev, GfxPipelineID pipe);
 DescriptorLayoutID get_compute_pipeline_layout(
-	Context *Dev, ComputePipelineID pipe);
+	GfxContext *Dev, ComputePipelineID pipe);
 
 BindingSlot find_binding(DescriptorLayoutID layout, const char *name);
 
 DescriptorSetID create_descriptor_set(
-	Context *dev, 
+	GfxContext *ctx, 
 	DescriptorLayoutID layout,
 	uint16_t index = 0
 );
 
 void destroy_descriptor_set(
-	Context *dev, 
+	GfxContext *ctx, 
 	DescriptorSetID set 
 );
 
 ev2::Result bind_buffer(
-	Context *dev, 
+	GfxContext *ctx, 
 	DescriptorSetID set, 
 	BindingSlot slot, 
 	BufferID buf, 
@@ -78,14 +78,14 @@ ev2::Result bind_buffer(
 ); 
 
 ev2::Result bind_texture(
-	Context *dev, 
+	GfxContext *ctx, 
 	DescriptorSetID set, 
 	BindingSlot slot, 
 	TextureID tex 
 ); 
 
 ev2::Result bind_image(
-	Context *dev,
+	GfxContext *ctx,
 	DescriptorSetID set, 
 	BindingSlot slot, 
 	ImageID img
@@ -98,7 +98,7 @@ enum CommandMode {
 	MODE_SECONDARY
 };
 
-RecorderID begin_commands(Context * dev, CommandMode mode = MODE_PRIMARY);
+RecorderID begin_commands(GfxContext * ctx, CommandMode mode = MODE_PRIMARY);
 SyncID end_commands(RecorderID recorder);
 
 void submit(SyncID);

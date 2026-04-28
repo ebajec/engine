@@ -13,7 +13,7 @@
 
 class Panel
 {
-	ev2::Context *m_dev;
+	ev2::GfxContext *m_ctx;
 
 	std::string m_name;
 
@@ -46,7 +46,7 @@ public:
 	bool is_hovered();
 	bool is_content_selected();
 
-	Panel(ev2::Context *dev, const char *name, 
+	Panel(ev2::GfxContext *ctx, const char *name, 
 		uint32_t x, uint32_t y, uint32_t w, uint32_t h);
 
 	~Panel();

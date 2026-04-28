@@ -20,20 +20,39 @@ enum ImageFormat
 	IMAGE_FORMAT_R8_UNORM
 };
 
+enum ImageUsage
+{
+	// These are the vulkan flag bits
+    IMAGE_USAGE_TRANSFER_SRC_BIT = 0x00000001,
+    IMAGE_USAGE_TRANSFER_DST_BIT = 0x00000002,
+    IMAGE_USAGE_SAMPLED_BIT = 0x00000004,
+    IMAGE_USAGE_STORAGE_BIT = 0x00000008,
+    IMAGE_USAGE_COLOR_ATTACHMENT_BIT = 0x00000010,
+    IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT = 0x00000020,
+    IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT = 0x00000040,
+    IMAGE_USAGE_INPUT_ATTACHMENT_BIT = 0x00000080,
+    IMAGE_USAGE_HOST_TRANSFER_BIT = 0x00400000,
+};
+typedef uint32_t ImageUsageFlags;
+
 enum TextureFilter
 {
 	FILTER_NEAREST,
 	FILTER_BILINEAR,
 };
 
-enum BufferFlagBits
+enum BufferUsageFlagBits
 {
-	MAP_READ = 0x1,
-	MAP_WRITE = 0x2,
-	MAP_PERSISTENT = 0x4,
-	MAP_COHERENT = 0x8,
+	// These are the vulkan flag bits
+    BUFFER_USAGE_TRANSFER_SRC_BIT = 0x00000001,
+    BUFFER_USAGE_TRANSFER_DST_BIT = 0x00000002,
+    BUFFER_USAGE_UNIFORM_BUFFER_BIT = 0x00000010,
+    BUFFER_USAGE_STORAGE_BUFFER_BIT = 0x00000020,
+    BUFFER_USAGE_INDEX_BUFFER_BIT = 0x00000040,
+    BUFFER_USAGE_VERTEX_BUFFER_BIT = 0x00000080,
+    BUFFER_USAGE_INDIRECT_BUFFER_BIT = 0x00000100,
 };
-typedef uint32_t BufferFlags;
+typedef uint32_t BufferUsageFlags;
 
 struct ImageUpload
 {
@@ -57,52 +76,54 @@ struct UploadContext
 	uint32_t allocation_index;
 };
 
-UploadContext begin_upload(Context *dev, size_t bytes, size_t align);
-void flush_uploads(Context * dev);
+UploadContext begin_upload(GfxContext *ctx, size_t bytes, size_t align);
+void flush_uploads(GfxContext * ctx);
 
 // @brief Schedule uploads to be executed on next flush of the corresponding
 // upload pool.
 //
 // @return Counter value reached by pool upon completion of the upload.
-uint64_t commit_buffer_uploads(Context *dev, UploadContext ctx, BufferID buf, 
+uint64_t commit_buffer_uploads(GfxContext *ctx, UploadContext uc, BufferID buf, 
 							   const BufferUpload *uploads, uint32_t count);
-uint64_t commit_image_uploads(Context *dev, UploadContext ctx, ImageID img, 
+uint64_t commit_image_uploads(GfxContext *ctx, UploadContext uc, ImageID img, 
 							  const ImageUpload *uploads, uint32_t count);
 
-ev2::Result wait_complete(Context *dev, uint64_t sync);
+ev2::Result wait_complete(GfxContext *ctx, uint64_t sync);
 
 
 //--------------------------------------------------------------------
 // Buffer
 
-BufferID create_buffer(Context *dev, size_t size, BufferFlags flags = 0);
-void destroy_buffer(Context *dev, BufferID buf);
-uint64_t get_buffer_gpu_handle(Context *dev, BufferID h);
+BufferID create_buffer(GfxContext *ctx, size_t size, BufferUsageFlags usage = 0, 
+					   size_t align = 0);
+void destroy_buffer(GfxContext *ctx, BufferID buf);
+uint64_t get_buffer_gpu_handle(GfxContext *ctx, BufferID h);
 
 //--------------------------------------------------------------------
 // Image
 
-ImageID create_image(Context *dev, uint32_t w, uint32_t h, uint32_t d, ImageFormat fmt, uint32_t levels = 1);
-void destroy_image(Context *dev, ImageID img);
+ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, 
+					 ImageFormat fmt, uint32_t levels = 1, ImageUsageFlags usage = 0);
+void destroy_image(GfxContext *ctx, ImageID img);
 
-void get_image_dims(Context *dev, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d);
-uint64_t get_image_gpu_handle(Context *dev, ImageID img);
+void get_image_dims(GfxContext *ctx, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d);
+uint64_t get_image_gpu_handle(GfxContext *ctx, ImageID img);
 
 //--------------------------------------------------------------------
 // Texture
 
-TextureID create_texture(Context *dev, ImageID img, TextureFilter filter);
-void destroy_texture(Context *dev, TextureID tex);
-uint64_t get_texture_gpu_handle(Context *dev, TextureID tex);
+TextureID create_texture(GfxContext *ctx, ImageID img, TextureFilter filter);
+void destroy_texture(GfxContext *ctx, TextureID tex);
+uint64_t get_texture_gpu_handle(GfxContext *ctx, TextureID tex);
 
-void get_texture_dims(Context *dev, TextureID tex, uint32_t *w, uint32_t *h, uint32_t*d);
+void get_texture_dims(GfxContext *ctx, TextureID tex, uint32_t *w, uint32_t *h, uint32_t*d);
 
 //------------------------------------------------------------------------------
 // Image assets
 
-ImageAssetID load_image_asset(Context *dev, const char *path);
-void unload_image_asset(Context *dev, ImageAssetID id);
-ImageID get_image_resource(Context *dev, ImageAssetID id);
+ImageAssetID load_image_asset(GfxContext *ctx, const char *path);
+void unload_image_asset(GfxContext *ctx, ImageAssetID id);
+ImageID get_image_resource(GfxContext *ctx, ImageAssetID id);
 
 };
 

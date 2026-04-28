@@ -93,12 +93,12 @@ struct UploadPool
 
 	mutable std::mutex sync{};
 
-	BufferID buffer;
-	Device *dev;
+	BufferID staging_buf;
+	Device *ctx;
 
 	//------------------------------------------------------------------------------ 
 	//
-	static UploadPool *create(Device *dev, size_t capacity, size_t align, size_t max_uploads);
+	static UploadPool *create(Device *ctx, size_t capacity, size_t align, size_t max_uploads);
 	static void destroy(UploadPool *pool);
 
 	alloc_result_t alloc(size_t _bytes, size_t _align);

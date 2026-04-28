@@ -27,16 +27,16 @@ struct HeightmapViewerPanel
 
 		ev2::ViewID camera;
 		ev2::BufferID ibo; 
-		ev2::GraphicsPipelineID pipeline;
+		ev2::GfxPipelineID pipeline;
 		ev2::DescriptorSetID descriptors;
 	} rd;
 
-	int set_texture(ev2::Context *dev, ev2::TextureID tex);
+	int set_texture(ev2::GfxContext *ctx, ev2::TextureID tex);
 
-	int init(App *app, ev2::Context *dev, ev2::TextureID tex);
-	int update(ev2::Context *dev);
-	void render(ev2::Context *dev);
-	void destroy(ev2::Context *dev);
+	int init(App *app, ev2::GfxContext *ctx, ev2::TextureID tex);
+	int update(ev2::GfxContext *ctx);
+	void render(ev2::GfxContext *ctx);
+	void destroy(ev2::GfxContext *ctx);
 };
 
 #endif //HEIGHTMAP_PANEL_H

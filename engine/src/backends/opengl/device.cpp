@@ -8,7 +8,7 @@
 
 #include "stb_image.h"
 	
-static void init_gl(ev2::Device *dev)
+static void init_gl(ev2::Device *ctx)
 {
 	glEnable(GL_DEBUG_OUTPUT);
 	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);       // makes callback synchronous
@@ -65,18 +65,18 @@ Device *create_device(const char *path)
 {
 	stbi_set_flip_vertically_on_load(true);
 
-	Device *dev = new Device{};
+	Device *ctx = new Device{};
 
-	init_gl(dev);
+	init_gl(ctx);
 
-	dev->buffer_pool.reset(ResourcePool<Buffer>::create());
-	dev->image_pool.reset(ResourcePool<Image>::create());
-	dev->texture_pool.reset(ResourcePool<Texture>::create());
+	ctx->buffer_pool.reset(ResourcePool<Buffer>::create());
+	ctx->image_pool.reset(ResourcePool<Image>::create());
+	ctx->texture_pool.reset(ResourcePool<Texture>::create());
 
 	size_t upload_capacity = (1 << 9) * (1 << 20);
 	size_t upload_alignment = 512;
 
-	dev->pool.reset(UploadPool::create(dev, 
+	ctx->pool.reset(UploadPool::create(ctx, 
 		upload_capacity, 
 		upload_alignment, 
 		(1 << 14)
@@ -85,14 +85,14 @@ Device *create_device(const char *path)
 	GLint64 ubo_offset_alignment;
 	glGetInteger64v(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &ubo_offset_alignment);
 
-	dev->transforms = GPUTTable<glm::mat4>((size_t)ubo_offset_alignment);
-	dev->view_data = GPUTTable<ViewData>((size_t)ubo_offset_alignment);
+	ctx->transforms = GPUTTable<glm::mat4>((size_t)ubo_offset_alignment);
+	ctx->view_data = GPUTTable<ViewData>((size_t)ubo_offset_alignment);
 
-	dev->assets.reset(AssetTable::create(dev, path));
+	ctx->assets.reset(AssetTable::create(ctx, path));
 
-	dev->frame.ubo = ev2::create_buffer(dev, sizeof(GPUFramedata), ev2::MAP_WRITE);
+	ctx->frame.ubo = ev2::create_buffer(ctx, sizeof(GPUFramedata), ev2::MAP_WRITE);
 
-	dev->start_time_ns = 
+	ctx->start_time_ns = 
 		std::chrono::high_resolution_clock::now().time_since_epoch().count();
 
 	glm::mat4 proj_def = glm::mat4(1.f);
@@ -101,20 +101,20 @@ Device *create_device(const char *path)
 	ViewData viewdata = view_data_from_matrices(
 		glm::value_ptr(proj_def), glm::value_ptr(view_def));
 
-	dev->default_view = EV2_HANDLE_CAST(View,dev->view_data.add(viewdata));
+	ctx->default_view = EV2_HANDLE_CAST(View,ctx->view_data.add(viewdata));
 
-	return dev;
+	return ctx;
 }
 
-void destroy_device(Device *dev)
+void destroy_device(Device *ctx)
 {
-	dev->assets.reset();
-	dev->pool.reset();
+	ctx->assets.reset();
+	ctx->pool.reset();
 
-	dev->transforms.destroy(dev);
-	dev->view_data.destroy(dev);
+	ctx->transforms.destroy(ctx);
+	ctx->view_data.destroy(ctx);
 
-	delete dev;
+	delete ctx;
 }
 
 };

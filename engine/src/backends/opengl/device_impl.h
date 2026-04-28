@@ -72,7 +72,7 @@ struct Device
 		return texture_pool->get(rid);
 	}
 
-	inline GraphicsPipeline *get_gfx_pipeline(GraphicsPipelineID h) {
+	inline GraphicsPipeline *get_gfx_pipeline(GfxPipelineID h) {
 		AssetID id = static_cast<uint32_t>(h.id);
 		AssetEntry *ent = assets->get_entry(id);
 		return (GraphicsPipeline*)ent->usr;

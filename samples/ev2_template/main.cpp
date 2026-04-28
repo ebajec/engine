@@ -25,44 +25,44 @@ struct MyStuff
 		ev2::ViewID camera;
 	} rd;
 
-	int init(ev2::Device *dev);
-	int update(ev2::Device *dev);
+	int init(ev2::Device *ctx);
+	int update(ev2::Device *ctx);
 
-	void render(ev2::Device *dev);
-	void destroy(ev2::Device *dev);
+	void render(ev2::Device *ctx);
+	void destroy(ev2::Device *ctx);
 };
 
-int MyStuff::init(ev2::Device *dev)
+int MyStuff::init(ev2::Device *ctx)
 {
-	rd.camera = ev2::create_view(dev, nullptr, nullptr);
+	rd.camera = ev2::create_view(ctx, nullptr, nullptr);
 
 	return EXIT_SUCCESS;
 }
 
-int MyStuff::update(ev2::Device *dev)
+int MyStuff::update(ev2::Device *ctx)
 {
 	rd.proj = camera_proj_2d((float)app->win.height/(float)app->win.width, 1.f);
 	rd.view = glm::mat4(1.f);
 
-	ev2::update_view(dev, rd.camera, glm::value_ptr(rd.view), glm::value_ptr(rd.proj));
+	ev2::update_view(ctx, rd.camera, glm::value_ptr(rd.view), glm::value_ptr(rd.proj));
 
 	return App::OK;
 }
 
-void MyStuff::render(ev2::Device *dev)
+void MyStuff::render(ev2::Device *ctx)
 {
 	ev2::Rect view_rect = { .x0 = 0, .y0 = 0,
 		.w = (uint32_t)app->win.width,
 		.h = (uint32_t)app->win.height
 	};
 
-	ev2::PassCtx pass = ev2::begin_pass(dev, {}, rd.camera, view_rect);
-	ev2::SyncID pass_sync = ev2::end_pass(dev, pass);
+	ev2::PassCtx pass = ev2::begin_pass(ctx, {}, rd.camera, view_rect);
+	ev2::SyncID pass_sync = ev2::end_pass(ctx, pass);
 
 	ev2::submit(pass_sync);
 }
 
-void MyStuff::destroy(ev2::Device *dev)
+void MyStuff::destroy(ev2::Device *ctx)
 {
 }
 
@@ -79,25 +79,25 @@ int main(int argc, char *argv[])
 	if (app->initialize(argc,argv) != App::OK)
 		return EXIT_FAILURE;
 
-	ev2::Device *dev = app->dev;
+	ev2::Device *ctx = app->ctx;
 
 	MyStuff data = {
 		.app = app.get()
 	};
 
-	if (data.init(dev) != EXIT_SUCCESS)
+	if (data.init(ctx) != EXIT_SUCCESS)
 		return EXIT_FAILURE;
 
 	while (
 		app->update() == App::OK &&
-		data.update(dev) == App::OK
+		data.update(ctx) == App::OK
 	) {
 		app->begin_frame();
-		data.render(dev);
+		data.render(ctx);
 		app->end_frame();
 	}
 
-	data.destroy(dev);
+	data.destroy(ctx);
 	app->terminate();
 
 	return EXIT_SUCCESS;

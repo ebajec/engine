@@ -3,7 +3,7 @@
 
 namespace ev2 {
 
-BufferID create_buffer(Device *dev, size_t size, BufferFlags flags)
+BufferID create_buffer(Device *ctx, size_t size, BufferFlags flags)
 {
 	GLenum gl_flags = GL_DYNAMIC_STORAGE_BIT;
 
@@ -29,31 +29,31 @@ BufferID create_buffer(Device *dev, size_t size, BufferFlags flags)
 		return EV2_NULL_HANDLE(Buffer);
 	}
 
-	ResourceID id = dev->buffer_pool->allocate(&buf);
+	ResourceID id = ctx->buffer_pool->allocate(&buf);
 
 	return EV2_HANDLE_CAST(Buffer, id.u64);
 }
 
-void destroy_buffer(Device *dev, BufferID h)
+void destroy_buffer(Device *ctx, BufferID h)
 {
 	ResourceID id = ResourceID{h.id};
-	Buffer* buf = dev->buffer_pool->get(id);
+	Buffer* buf = ctx->buffer_pool->get(id);
 
 	glDeleteBuffers(1, &buf->id);
 
-	dev->buffer_pool->deallocate(id);
+	ctx->buffer_pool->deallocate(id);
 }
 
-uint64_t get_buffer_gpu_handle(Device *dev, BufferID h)
+uint64_t get_buffer_gpu_handle(Device *ctx, BufferID h)
 {
-	Buffer *buf = dev->get_buffer(h);
+	Buffer *buf = ctx->get_buffer(h);
 	return buf->id;
 }
 
 
 //------------------------------------------------------------------------------
 
-ImageID create_image(Device *dev, uint32_t w, uint32_t h, uint32_t d, ImageFormat fmt, 
+ImageID create_image(Device *ctx, uint32_t w, uint32_t h, uint32_t d, ImageFormat fmt, 
 					 uint32_t levels)
 {
 	Image img {};
@@ -80,42 +80,42 @@ ImageID create_image(Device *dev, uint32_t w, uint32_t h, uint32_t d, ImageForma
 		return EV2_NULL_HANDLE(Image);
 	}
 
-	ResourceID id = dev->image_pool->allocate(&img);
+	ResourceID id = ctx->image_pool->allocate(&img);
 
 	return EV2_HANDLE_CAST(Image, id.u64);
 }
 
-void get_image_dims(Device *dev, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d)
+void get_image_dims(Device *ctx, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d)
 {
-	Image *img = dev->get_image(h_img);
+	Image *img = ctx->get_image(h_img);
 
 	if (w) *w = img->w;
 	if (h) *h = img->h;
 	if (d) *d = img->d;
 }
 
-void destroy_image(Device *dev, ImageID h)
+void destroy_image(Device *ctx, ImageID h)
 {
 	ResourceID id = ResourceID{h.id};
-	Image *img = dev->image_pool->get(id);
+	Image *img = ctx->image_pool->get(id);
 
 	glDeleteTextures(1, &img->id);
 
-	dev->image_pool->deallocate(id);
+	ctx->image_pool->deallocate(id);
 }
 
-uint64_t get_image_gpu_handle(Device *dev, ImageID h)
+uint64_t get_image_gpu_handle(Device *ctx, ImageID h)
 {
-	Image *img = dev->get_image(h);
+	Image *img = ctx->get_image(h);
 	return img->id;
 }
 
 //------------------------------------------------------------------------------
 // Uploads
 
-UploadContext begin_upload(Device *dev, size_t bytes, size_t align)
+UploadContext begin_upload(Device *ctx, size_t bytes, size_t align)
 {
-	UploadPool *pool = dev->pool.get();
+	UploadPool *pool = ctx->pool.get();
 
 	UploadPool::alloc_result_t allocation = pool->alloc(bytes, align);
 
@@ -126,67 +126,67 @@ UploadContext begin_upload(Device *dev, size_t bytes, size_t align)
 	};
 }
 
-uint64_t commit_buffer_uploads(Device *dev, UploadContext ctx, BufferID buf, 
+uint64_t commit_buffer_uploads(Device *ctx, UploadContext ctx, BufferID buf, 
 							   const BufferUpload *regions, uint32_t count)
 {
-	if (!dev->buffer_pool->check_handle(ResourceID{buf.id}))
+	if (!ctx->buffer_pool->check_handle(ResourceID{buf.id}))
 		return 0;
 
-	UploadPool *pool = dev->pool.get();
+	UploadPool *pool = ctx->pool.get();
 
 	return pool->commmit_buffer(ctx.allocation_index, buf, regions, count);
 }
 
-uint64_t commit_image_uploads(Device *dev, UploadContext ctx, ImageID img, 
+uint64_t commit_image_uploads(Device *ctx, UploadContext ctx, ImageID img, 
 							  const ImageUpload *regions, uint32_t count)
 {
-	UploadPool *pool = dev->pool.get();
+	UploadPool *pool = ctx->pool.get();
 
 	return pool->commmit_image(ctx.allocation_index, img, regions, count);
 }
 
-void flush_uploads(Device *dev) 
+void flush_uploads(Device *ctx) 
 {
-	UploadPool *pool = dev->pool.get();
+	UploadPool *pool = ctx->pool.get();
 
 	pool->flush();
 }
 
-ev2::Result wait_complete(Device *dev, uint64_t sync)
+ev2::Result wait_complete(Device *ctx, uint64_t sync)
 {
-	return dev->pool->wait_for(sync);
+	return ctx->pool->wait_for(sync);
 }
 
 //------------------------------------------------------------------------------
 // Textures
 
-TextureID create_texture(Device *dev, ImageID img, TextureFilter filter)
+TextureID create_texture(Device *ctx, ImageID img, TextureFilter filter)
 {
 	Texture tex {};
 	tex.img = img;
 	tex.filter = filter;
 
-	ResourceID id = dev->texture_pool->allocate(&tex);
+	ResourceID id = ctx->texture_pool->allocate(&tex);
 	return EV2_HANDLE_CAST(Texture, id.u64);
 }
 
-void destroy_texture(Device *dev, TextureID h)
+void destroy_texture(Device *ctx, TextureID h)
 {
 	ResourceID id = {.u64 = h.id};
-	dev->texture_pool->deallocate(id);
+	ctx->texture_pool->deallocate(id);
 }
 
-uint64_t get_texture_gpu_handle(Device *dev, TextureID h)
+uint64_t get_texture_gpu_handle(Device *ctx, TextureID h)
 {
-	Texture *tex = dev->get_texture(h);
-	Image *img = dev->get_image(tex->img);
+	Texture *tex = ctx->get_texture(h);
+	Image *img = ctx->get_image(tex->img);
 	return img->id;
 }
 
-void get_texture_dims(Device *dev, TextureID h_tex, uint32_t *w, uint32_t *h, uint32_t*d)
+void get_texture_dims(Device *ctx, TextureID h_tex, uint32_t *w, uint32_t *h, uint32_t*d)
 {
-	Texture *tex = dev->get_texture(h_tex);
-	get_image_dims(dev, tex->img, w, h, d);
+	Texture *tex = ctx->get_texture(h_tex);
+	get_image_dims(ctx, tex->img, w, h, d);
 }
 
 };

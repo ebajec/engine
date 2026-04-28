@@ -49,7 +49,7 @@ struct Shader
 	std::unique_ptr<DescriptorLayout> layout;
 };
 
-struct GraphicsPipeline
+struct GfxPipeline
 {
 	ev2::ShaderID vert;
 	ev2::ShaderID frag;
