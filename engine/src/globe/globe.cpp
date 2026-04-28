@@ -211,7 +211,7 @@ struct RenderData
 	// texture array indices
 	ev2::BufferID ssbo;
 
-	ev2::GraphicsPipelineID pipeline;
+	ev2::GfxPipelineID pipeline;
 	ev2::DescriptorSetID bindings;
 
 	std::vector<ev2::DrawCommand> cmds;
@@ -220,7 +220,7 @@ struct RenderData
 struct Globe
 {
 	//ResourceTable *rt;
-	ev2::Context *dev;
+	ev2::GfxContext *ctx;
 
 	GlobeStats stats;
 	DebugInfo dbg;
@@ -248,8 +248,8 @@ struct select_tiles_params
 };
 
 static void globe_init_debug(Globe *globe) {
-	globe->dbg.boxes.reset(new BoxDebugView(globe->dev));
-	globe->dbg.camera.reset(new CameraDebugView(globe->dev));
+	globe->dbg.boxes.reset(new BoxDebugView(globe->ctx));
+	globe->dbg.camera.reset(new CameraDebugView(globe->ctx));
 	globe->dbg.enable_boxes = false;
 }
 
@@ -473,7 +473,7 @@ static std::vector<uint32_t> create_tile_indices()
 	return indices;
 }
 
-static ev2::Result create_render_data(ev2::Context *dev, RenderData &data)
+static ev2::Result create_render_data(ev2::GfxContext *ctx, RenderData &data)
 {
 	ev2::Result result = ev2::SUCCESS;
 
@@ -482,34 +482,34 @@ static ev2::Result create_render_data(ev2::Context *dev, RenderData &data)
 	size_t indirect_size = MAX_TILES*sizeof(ev2::DrawCommand);
 	size_t ssbo_size = MAX_TILES*sizeof(TileMetadata);
 
-	data.pipeline = ev2::load_graphics_pipeline(dev, "pipelines/globe_tile.yaml");
+	data.pipeline = ev2::load_graphics_pipeline(ctx, "pipelines/globe_tile.yaml");
 
 	if (!data.pipeline.id)
 		goto load_failed;
 
-	data.vbo = ev2::create_buffer(dev, vbo_size);
+	data.vbo = ev2::create_buffer(ctx, vbo_size);
 
 	if (!data.vbo.id)
 		goto load_failed;
 
-	data.indirect = ev2::create_buffer(dev, indirect_size);
+	data.indirect = ev2::create_buffer(ctx, indirect_size);
 
 	if (!data.indirect.id)
 		goto load_failed;
 
-	data.ssbo = ev2::create_buffer(dev, ssbo_size);
+	data.ssbo = ev2::create_buffer(ctx, ssbo_size);
 
 	if (!data.ssbo.id)
 		goto load_failed;
 
-	data.ibo = ev2::create_buffer(dev, ibo_size);
+	data.ibo = ev2::create_buffer(ctx, ibo_size);
 
 	if (!data.ibo.id)
 		goto load_failed;
 
 	{
 		std::vector<uint32_t> tile_indices = create_tile_indices();
-		ev2::UploadContext uc = ev2::begin_upload(dev, ibo_size, 4);
+		ev2::UploadContext uc = ev2::begin_upload(ctx, ibo_size, 4);
 
 		memcpy(uc.ptr, tile_indices.data(), ibo_size); 
 
@@ -518,15 +518,15 @@ static ev2::Result create_render_data(ev2::Context *dev, RenderData &data)
 			.dst_offset = 0,
 			.size = ibo_size
 		};
-		ev2::commit_buffer_uploads(dev, uc, data.ibo, &upload, 1);
-		ev2::flush_uploads(dev);
+		ev2::commit_buffer_uploads(ctx, uc, data.ibo, &upload, 1);
+		ev2::flush_uploads(ctx);
 	}
 	{
-		ev2::DescriptorLayoutID layout = ev2::get_graphics_pipeline_layout(dev, data.pipeline);
+		ev2::DescriptorLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, data.pipeline);
 		ev2::BindingSlot slot = ev2::find_binding(layout, "Metadata");
 
-		data.bindings = ev2::create_descriptor_set(dev, layout);
-		ev2::bind_buffer(dev, data.bindings, slot, data.ssbo, 0, ssbo_size);
+		data.bindings = ev2::create_descriptor_set(ctx, layout);
+		ev2::bind_buffer(ctx, data.bindings, slot, data.ssbo, 0, ssbo_size);
 	}
 
 
@@ -535,10 +535,10 @@ static ev2::Result create_render_data(ev2::Context *dev, RenderData &data)
 
 	return result;
 load_failed:
-	if (data.vbo.id) ev2::destroy_buffer(dev, data.vbo);
-	if (data.ibo.id) ev2::destroy_buffer(dev, data.ibo);
-	if (data.ssbo.id) ev2::destroy_buffer(dev, data.ssbo);
-	if (data.indirect.id) ev2::destroy_buffer(dev, data.indirect);
+	if (data.vbo.id) ev2::destroy_buffer(ctx, data.vbo);
+	if (data.ibo.id) ev2::destroy_buffer(ctx, data.ibo);
+	if (data.ssbo.id) ev2::destroy_buffer(ctx, data.ssbo);
+	if (data.indirect.id) ev2::destroy_buffer(ctx, data.indirect);
 	return result;
 }
 
@@ -580,7 +580,7 @@ static uint64_t update_draw_cmds(Globe *globe)
 
 	size_t size = count * sizeof(ev2::DrawCommand);
 
-	ev2::UploadContext uc = ev2::begin_upload(globe->dev, size, 
+	ev2::UploadContext uc = ev2::begin_upload(globe->ctx, size, 
 										   alignof(ev2::DrawCommand));
 
 	ev2::DrawCommand * cmds = (ev2::DrawCommand*)uc.ptr;
@@ -606,7 +606,7 @@ static uint64_t update_draw_cmds(Globe *globe)
 		.size = size,
 	};
 
-	return ev2::commit_buffer_uploads(globe->dev, uc, globe->render_data.indirect, &upload, 1);
+	return ev2::commit_buffer_uploads(globe->ctx, uc, globe->render_data.indirect, &upload, 1);
 }
 
 static uint64_t update_vbo(Globe *globe)
@@ -620,7 +620,7 @@ static uint64_t update_vbo(Globe *globe)
 	
 	size_t total_size = new_count * TILE_VERT_COUNT * sizeof(GlobeVertex);
 
-	ev2::UploadContext uc = ev2::begin_upload(globe->dev, total_size, alignof(GlobeVertex));
+	ev2::UploadContext uc = ev2::begin_upload(globe->ctx, total_size, alignof(GlobeVertex));
 
 	size_t batch_size = std::max(2*new_count/(std::thread::hardware_concurrency()),1LU);
 
@@ -668,7 +668,7 @@ static uint64_t update_vbo(Globe *globe)
 		};
 	}
 
-	uint64_t value = ev2::commit_buffer_uploads(globe->dev, uc, 
+	uint64_t value = ev2::commit_buffer_uploads(globe->ctx, uc, 
 							globe->render_data.vbo, 
 							uploads.data(), 
 							(uint32_t)uploads.size());
@@ -683,7 +683,7 @@ static ev2::Result update_render_data(
 	const std::vector<TileGPUIndex> &textures
 )
 {
-	ev2::Context *dev = globe->dev;
+	ev2::GfxContext *ctx = globe->ctx;
 
 	const std::vector<uint64_t>& tiles = globe->selected_tiles;
 	uint32_t count = (uint32_t)tiles.size();
@@ -695,14 +695,14 @@ static ev2::Result update_render_data(
 	
 	uint64_t vbo_sync = update_vbo(globe);
 
-	ev2::flush_uploads(dev);
+	ev2::flush_uploads(ctx);
 
 	//-----------------------------------------------------------------------------
 	// tex indices
 	
 	size_t ssbo_size = count * sizeof(TileMetadata);
 
-	ev2::UploadContext uc = ev2::begin_upload(dev, ssbo_size, alignof(TileMetadata));
+	ev2::UploadContext uc = ev2::begin_upload(ctx, ssbo_size, alignof(TileMetadata));
 
 	TileMetadata *metadata = static_cast<TileMetadata*>(uc.ptr);
 
@@ -742,7 +742,7 @@ static ev2::Result update_render_data(
 		};
 	}
 
-	uint64_t ssbo_sync = ev2::commit_buffer_uploads(dev, uc, 
+	uint64_t ssbo_sync = ev2::commit_buffer_uploads(ctx, uc, 
 												 globe->render_data.ssbo, 
 												 uploads.data(), 
 												 (uint32_t)uploads.size()
@@ -753,9 +753,9 @@ static ev2::Result update_render_data(
 	
 	uint64_t indirect_sync = update_draw_cmds(globe);
 
-	ev2::flush_uploads(dev);
+	ev2::flush_uploads(ctx);
 
-	ev2::wait_complete(dev, std::max(std::max(vbo_sync, ssbo_sync), indirect_sync));
+	ev2::wait_complete(ctx, std::max(std::max(vbo_sync, ssbo_sync), indirect_sync));
 
 	return ev2::SUCCESS;
 };
@@ -819,12 +819,12 @@ static void plot_tile_counts(size_t total, size_t new_tiles)
 //------------------------------------------------------------------------------
 // Interface
 
-Globe *globe_create(ev2::Context *dev)
+Globe *globe_create(ev2::GfxContext *ctx)
 {
 	std::unique_ptr<Globe> globe(new Globe{});
-	globe->dev = dev;
+	globe->ctx = ctx;
 
-	ev2::Result result = create_render_data(dev, globe->render_data);
+	ev2::Result result = create_render_data(ctx, globe->render_data);
 
 	if (result != ev2::SUCCESS)
 		return nullptr;
@@ -969,22 +969,22 @@ ev2::Result globe_update(Globe *globe, GlobeUpdateInfo *info)
 
 #include "backends/vulkan/context_impl.h"
 
-void globe_draw(const Globe *globe, const ev2::PassCtx& ctx)
+void globe_draw(const Globe *globe, const ev2::PassCtx& pass)
 {
 	const RenderData &data = globe->render_data;
 
-	ev2::Context *dev = globe->dev;
+	ev2::GfxContext *ctx = globe->ctx;
 
-	const ev2::Buffer* vbo = dev->get_buffer(data.vbo); 
-	const ev2::Buffer* ibo = dev->get_buffer(data.ibo); 
-	const ev2::Buffer* indirect = dev->get_buffer(data.indirect); 
+	const ev2::Buffer* vbo = ctx->get_buffer(data.vbo); 
+	const ev2::Buffer* ibo = ctx->get_buffer(data.ibo); 
+	const ev2::Buffer* indirect = ctx->get_buffer(data.indirect); 
 
-	ev2::cmd_bind_gfx_pipeline(ctx.rec, globe->render_data.pipeline);
+	ev2::cmd_bind_gfx_pipeline(pass.rec, globe->render_data.pipeline);
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
 	glFrontFace(GL_CCW);
 
-	ev2::cmd_bind_descriptor_set(ctx.rec, globe->render_data.bindings);
+	ev2::cmd_bind_descriptor_set(pass.rec, globe->render_data.bindings);
 	globe->gpu_cache->bind_textures(1);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo->id);

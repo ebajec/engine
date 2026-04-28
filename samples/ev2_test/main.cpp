@@ -22,11 +22,11 @@
 #include <cstdlib>
 #include <cmath>
 
-uint64_t upload_img_data(ev2::Context *dev, ev2::ImageID img, 
+uint64_t upload_img_data(ev2::GfxContext *ctx, ev2::ImageID img, 
 					 uint32_t w, uint32_t h)
 {
 	size_t size = w * h * sizeof(glm::vec4);
-	ev2::UploadContext uc = ev2::begin_upload(dev, size, alignof(glm::vec4));
+	ev2::UploadContext uc = ev2::begin_upload(ctx, size, alignof(glm::vec4));
 
 	glm::vec4 *pix = (glm::vec4*)uc.ptr;
 
@@ -50,7 +50,7 @@ uint64_t upload_img_data(ev2::Context *dev, ev2::ImageID img,
 		.h = h,
 	};
 
-	return ev2::commit_image_uploads(dev, uc, img, &upload, 1);
+	return ev2::commit_image_uploads(ctx, uc, img, &upload, 1);
 }
 
 struct WaveSim
@@ -85,23 +85,23 @@ struct WaveSim
 	ev2::BindingSlot img_in_slot;
 	ev2::BindingSlot img_out_slot; 
 
-	int init(ev2::Context *dev);
-	int update(ev2::Context *dev);
-	void destroy(ev2::Context *dev);
+	int init(ev2::GfxContext *ctx);
+	int update(ev2::GfxContext *ctx);
+	void destroy(ev2::GfxContext *ctx);
 };
 
 //------------------------------------------------------------------------------
 // Simulation
 
-int WaveSim::init(ev2::Context *dev)
+int WaveSim::init(ev2::GfxContext *ctx)
 {
-	sim_pipelines[0] = ev2::load_compute_pipeline(dev, 
+	sim_pipelines[0] = ev2::load_compute_pipeline(ctx, 
 		"shader/pde0.comp.spv");
 
 	if (!EV2_VALID(sim_pipelines[0]))
 		return EXIT_FAILURE;
 
-	sim_pipelines[1] = ev2::load_compute_pipeline(dev, 
+	sim_pipelines[1] = ev2::load_compute_pipeline(ctx, 
 		"shader/pde1.comp.spv");
 
 	if (!EV2_VALID(sim_pipelines[1]))
@@ -109,43 +109,43 @@ int WaveSim::init(ev2::Context *dev)
 
 	grid_w = 512, grid_h = grid_w;
 
-	swap_img[0] = ev2::create_image(dev, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_RGBA32F);
-	swap_img[1] = ev2::create_image(dev, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_RGBA32F);
+	swap_img[0] = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_RGBA32F);
+	swap_img[1] = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_RGBA32F);
 
-	swap_tex[0] = ev2::create_texture(dev, swap_img[0],ev2::FILTER_BILINEAR);
-	swap_tex[1] = ev2::create_texture(dev, swap_img[1],ev2::FILTER_BILINEAR);
+	swap_tex[0] = ev2::create_texture(ctx, swap_img[0],ev2::FILTER_BILINEAR);
+	swap_tex[1] = ev2::create_texture(ctx, swap_img[1],ev2::FILTER_BILINEAR);
 
-	ubo = ev2::create_buffer(dev, sizeof(uniforms));
+	ubo = ev2::create_buffer(ctx, sizeof(uniforms));
 
 	//------------------------------------------------------------------------------
 	// Get shader resource locations and create descriptor sets
 
 	ev2::DescriptorLayoutID layout = 
-		ev2::get_compute_pipeline_layout(dev, sim_pipelines[0]);
+		ev2::get_compute_pipeline_layout(ctx, sim_pipelines[0]);
 
-	sim0_set = ev2::create_descriptor_set(dev, layout);
+	sim0_set = ev2::create_descriptor_set(ctx, layout);
 
-	sim1_set = ev2::create_descriptor_set(dev, layout);
+	sim1_set = ev2::create_descriptor_set(ctx, layout);
 
 	img_in_slot = ev2::find_binding(layout, "img_in");
 	img_out_slot = ev2::find_binding(layout, "img_out");
 
 	ev2::BindingSlot ubo_slot = ev2::find_binding(layout, "Uniforms");
-	ev2::bind_buffer(dev, sim0_set, ubo_slot, ubo, 0, sizeof(uniforms));
-	ev2::bind_buffer(dev, sim1_set, ubo_slot, ubo, 0, sizeof(uniforms));
+	ev2::bind_buffer(ctx, sim0_set, ubo_slot, ubo, 0, sizeof(uniforms));
+	ev2::bind_buffer(ctx, sim1_set, ubo_slot, ubo, 0, sizeof(uniforms));
 
 	//------------------------------------------------------------------------------
 	// Upload some stuff
 
-	uint64_t sync = upload_img_data(dev,swap_img[0], grid_w, grid_h);
-	ev2::flush_uploads(dev);
+	uint64_t sync = upload_img_data(ctx,swap_img[0], grid_w, grid_h);
+	ev2::flush_uploads(ctx);
 
-	ev2::wait_complete(dev, sync);
+	ev2::wait_complete(ctx, sync);
 
 	return EXIT_SUCCESS;
 }
 
-int WaveSim::update(ev2::Context *dev)
+int WaveSim::update(ev2::GfxContext *ctx)
 {
 	uint64_t sync = 0;
 	ImGui::Begin("Editor");
@@ -159,12 +159,12 @@ int WaveSim::update(ev2::Context *dev)
 		ImGui::SliderFloat("wave_speed", &uniforms.c, 0.f, 12.f);
 
 		if (ImGui::Button("reset")) {
-			sync = upload_img_data(dev,swap_img[0], grid_w, grid_h);
+			sync = upload_img_data(ctx,swap_img[0], grid_w, grid_h);
 		}
 	}
 
 	ImGui::End();
-	ev2::UploadContext uc = ev2::begin_upload(dev,
+	ev2::UploadContext uc = ev2::begin_upload(ctx,
 		sizeof(uniforms), alignof(decltype(uniforms)));
 
 	memcpy(uc.ptr, &uniforms, sizeof(uniforms));
@@ -174,10 +174,10 @@ int WaveSim::update(ev2::Context *dev)
 		.size = sizeof(uniforms),
 	};
 
-	sync = ev2::commit_buffer_uploads(dev, uc, ubo, &upload, 1);
-	ev2::flush_uploads(dev);
+	sync = ev2::commit_buffer_uploads(ctx, uc, ubo, &upload, 1);
+	ev2::flush_uploads(ctx);
 
-	ev2::wait_complete(dev, sync);
+	ev2::wait_complete(ctx, sync);
 
 	int img_A = 0;
 	int img_B = 1;
@@ -187,13 +187,13 @@ int WaveSim::update(ev2::Context *dev)
 
 	uint32_t grps_x = grid_w/32, grps_y = grid_h/32, grps_z = 1;
 
-	ev2::bind_texture(dev, sim0_set, img_in_slot, swap_tex[img_A]);
-	ev2::bind_texture(dev, sim0_set, img_out_slot, swap_tex[img_B]);
+	ev2::bind_texture(ctx, sim0_set, img_in_slot, swap_tex[img_A]);
+	ev2::bind_texture(ctx, sim0_set, img_out_slot, swap_tex[img_B]);
 
-	ev2::bind_texture(dev, sim1_set, img_in_slot, swap_tex[img_B]);
-	ev2::bind_texture(dev, sim1_set, img_out_slot, swap_tex[img_A]);
+	ev2::bind_texture(ctx, sim1_set, img_in_slot, swap_tex[img_B]);
+	ev2::bind_texture(ctx, sim1_set, img_out_slot, swap_tex[img_A]);
 
-	ev2::RecorderID rec = ev2::begin_commands(dev);
+	ev2::RecorderID rec = ev2::begin_commands(ctx);
 	ev2::cmd_use_texture(rec, swap_tex[img_A], ev2::USAGE_STORAGE_READ_COMPUTE);
 	ev2::cmd_use_texture(rec, swap_tex[img_B], ev2::USAGE_STORAGE_RW_COMPUTE);
 
@@ -216,16 +216,16 @@ int WaveSim::update(ev2::Context *dev)
 	return App::OK;
 }
 
-void WaveSim::destroy(ev2::Context *dev)
+void WaveSim::destroy(ev2::GfxContext *ctx)
 {
-	ev2::destroy_descriptor_set(dev, sim0_set);
-	ev2::destroy_descriptor_set(dev, sim1_set);
+	ev2::destroy_descriptor_set(ctx, sim0_set);
+	ev2::destroy_descriptor_set(ctx, sim1_set);
 
-	ev2::destroy_texture(dev, swap_tex[0]);
-	ev2::destroy_texture(dev, swap_tex[1]);
+	ev2::destroy_texture(ctx, swap_tex[0]);
+	ev2::destroy_texture(ctx, swap_tex[1]);
 
-	ev2::destroy_image(dev, swap_img[0]);
-	ev2::destroy_image(dev, swap_img[1]);
+	ev2::destroy_image(ctx, swap_img[0]);
+	ev2::destroy_image(ctx, swap_img[1]);
 }
 
 struct FluidApp : public App
@@ -266,15 +266,15 @@ int FluidApp::initialize(int argc, char **argv)
 	main_panel.reset(new TextureViewerPanel(this, 0, 0, 500, 500));
 	heightmap_panel.reset(new HeightmapViewerPanel);
 
-	result = sim->init(dev);
+	result = sim->init(ctx);
 	if (result)
 		return result;
 
-	result = main_panel->init(dev, sim->swap_tex[1]); 
+	result = main_panel->init(ctx, sim->swap_tex[1]); 
 	if (result)
 		return result;
 
-	result = heightmap_panel->init(this, dev, sim->swap_tex[1]); 
+	result = heightmap_panel->init(this, ctx, sim->swap_tex[1]); 
 	if (result)
 		return result;
 
@@ -288,13 +288,13 @@ int FluidApp::update()
 	if ((result = App::update()))
 		return result;
 
-	if ((result = main_panel->update(dev)))
+	if ((result = main_panel->update(ctx)))
 		return result;
 
-	if ((result = heightmap_panel->update(dev)))
+	if ((result = heightmap_panel->update(ctx)))
 		return result;
 
-	if ((result = sim->update(dev)))
+	if ((result = sim->update(ctx)))
 		return result;
 
 	sim->uniforms.cursor1 = sim->uniforms.cursor2;
@@ -307,14 +307,14 @@ int FluidApp::update()
 }
 void FluidApp::render()
 {
-	main_panel->render(dev);
-	heightmap_panel->render(dev);
+	main_panel->render(ctx);
+	heightmap_panel->render(ctx);
 }
 void FluidApp::destroy()
 {
-	heightmap_panel->destroy(dev);
-	main_panel->destroy(dev);
-	sim->destroy(dev);
+	heightmap_panel->destroy(ctx);
+	main_panel->destroy(ctx);
+	sim->destroy(ctx);
 
 	App::terminate();
 }

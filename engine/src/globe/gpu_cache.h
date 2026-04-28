@@ -86,7 +86,7 @@ struct GPUTileCache
 
 	std::vector<std::unique_ptr<TileGPUPage>> m_pages;
 
-	ev2::Context * dev;
+	ev2::GfxContext * ctx;
 
 	GLuint m_gl_tex_format = GL_R32F;
 	GLuint m_gl_img_format = GL_RED;

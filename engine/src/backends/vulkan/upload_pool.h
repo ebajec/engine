@@ -2,7 +2,10 @@
 #define EV2_UPLOAD_POOL_H
 
 #include "ev2/resource.h"
-#include "backends/vulkan/def_vulkan.h"
+#include "def_vulkan.h"
+#include "resource_impl.h"
+
+#include "vk_mem_alloc.h"
 
 #include <queue>
 #include <atomic>
@@ -11,9 +14,13 @@
 #include <vector>
 #include <cassert>
 
+#define EV2_UPLOAD_TIMEOUT ((uint64_t)1e9)
+
 namespace ev2 {
 
-typedef struct Context Context;
+struct FlushOptions
+{
+};
 
 struct UploadPool
 {
@@ -30,15 +37,15 @@ struct UploadPool
 	};
 
 	struct epoch_t {
-		uint64_t id;
+		uint64_t done_value;
 		size_t size;
-		GLsync sync;
+		uint64_t sync;
 
 		constexpr bool operator == (epoch_t other) const {
-			return id == other.id;
+			return done_value == other.done_value;
 		}
 		constexpr bool operator > (epoch_t other) const {
-			return id > other.id;
+			return done_value > other.done_value;
 		}
 	};
 
@@ -77,7 +84,12 @@ struct UploadPool
 
 	entry_t *entries;
 
+	VkSemaphore semaphore;
+
 	std::atomic_uint64_t done_ctr {};
+
+	// updated when committing uploads; gives the 
+	// value of done_ctr required for when uploads are complete
 	std::atomic_uint64_t timeline_ctr {};
 
 	std::priority_queue<
@@ -87,18 +99,31 @@ struct UploadPool
 	> epochs {};
 
 	struct {
-		std::vector<BufferUpload> buffers;
-		std::vector<ImageUpload> images;
+		std::vector<VkBufferCopy2> buffers;
+		std::vector<VkBufferImageCopy2> images;
+		std::vector<VkSemaphoreSubmitInfo> submit_info;
 	} queues[2] {};
 
 	mutable std::mutex sync{};
 
-	BufferID buffer;
-	Context *dev;
+	VkBuffer staging_buf;
+	VmaAllocation allocation;
+	VkDeviceMemory memory;
+	VkDeviceSize memory_offset;
+
+	uint32_t queue_family_index;
+	GfxContext *ctx;
 
 	//------------------------------------------------------------------------------ 
 	//
-	static UploadPool *create(Context *dev, size_t capacity, size_t align, size_t max_uploads);
+	static UploadPool *create(
+		GfxContext *ctx, 
+		uint32_t queue_family_index,
+		size_t capacity, 
+		size_t align,
+		size_t max_uploads
+	);
+
 	static void destroy(UploadPool *pool);
 
 	alloc_result_t alloc(size_t _bytes, size_t _align);
@@ -110,7 +135,7 @@ struct UploadPool
 	uint64_t commmit_buffer(uint32_t idx, BufferID buf, const BufferUpload *regions, uint32_t count);
 	uint64_t commmit_image(uint32_t idx, ImageID buf, const ImageUpload *regions, uint32_t count);
 
-	void flush();
+	VkResult flush();
 
 	ev2::Result wait_for(uint64_t value);
 };

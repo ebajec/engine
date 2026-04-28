@@ -3,58 +3,63 @@
 
 namespace ev2 {
 
-BufferID create_buffer(Context *dev, size_t size, BufferFlags flags)
+BufferID create_buffer(GfxContext *ctx, size_t size, BufferUsageFlags flags, size_t align)
 {
-	GLenum gl_flags = GL_DYNAMIC_STORAGE_BIT;
+	Buffer buf {};
 
-	if (flags & MAP_READ)
-		gl_flags |= GL_MAP_READ_BIT;
-	if (flags & MAP_WRITE)
-		gl_flags |= GL_MAP_WRITE_BIT;
-	if (flags & MAP_PERSISTENT)
-		gl_flags |= GL_MAP_PERSISTENT_BIT;
-	if (flags & MAP_COHERENT)
-		gl_flags |= GL_MAP_COHERENT_BIT;
-
-	Buffer buf {
-		.id = 0,
-		.flags = gl_flags,
+	VkBufferCreateInfo buffer_ci = {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.pNext = nullptr,
+		.flags = 0,
 		.size = size,
+		.usage = flags, 
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.queueFamilyIndexCount = 0,
+		.pQueueFamilyIndices = nullptr
 	};
 
-	glCreateBuffers(1, &buf.id);
-	glNamedBufferStorage(buf.id, size, nullptr, gl_flags);
+	VmaAllocationCreateInfo alloc_ci= {
+		.flags = 0,
+		.usage = VMA_MEMORY_USAGE_AUTO,
+		.requiredFlags = 0,
+		.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		.minAlignment = align,
+	};
 
-	if (gl_check_err()) {
+	VmaAllocationInfo alloc_info;
+
+	VkResult result = vmaCreateBuffer(
+		ctx->allocator, &buffer_ci, &alloc_ci, &buf.buffer, &buf.allocation, &alloc_info);  
+
+	if (result != VK_SUCCESS) {
 		return EV2_NULL_HANDLE(Buffer);
 	}
 
-	ResourceID id = dev->buffer_pool->allocate(&buf);
+	buf.size = size;
 
-	return EV2_HANDLE_CAST(Buffer, id.u64);
+	return ctx->emplace_buffer(std::move(buf));
 }
 
-void destroy_buffer(Context *dev, BufferID h)
+void destroy_buffer(GfxContext *ctx, BufferID h)
 {
 	ResourceID id = ResourceID{h.id};
-	Buffer* buf = dev->buffer_pool->get(id);
+	Buffer* buf = ctx->buffer_pool->get(id);
 
-	glDeleteBuffers(1, &buf->id);
+	vmaDestroyBuffer(ctx->allocator, buf->buffer, buf->allocation);
 
-	dev->buffer_pool->deallocate(id);
+	ctx->buffer_pool->deallocate(id);
 }
 
-uint64_t get_buffer_gpu_handle(Context *dev, BufferID h)
+uint64_t get_buffer_gpu_handle(GfxContext *ctx, BufferID h)
 {
-	Buffer *buf = dev->get_buffer(h);
-	return buf->id;
+	Buffer *buf = ctx->get_buffer(h);
+	return (uint64_t)buf->buffer;
 }
-
 
 //------------------------------------------------------------------------------
 
-ImageID create_image(Context *dev, uint32_t w, uint32_t h, uint32_t d, ImageFormat fmt, 
-					 uint32_t levels)
+ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, ImageFormat fmt, 
+					 uint32_t levels, ImageUsageFlags usage)
 {
 	Image img {};
 
@@ -63,59 +68,102 @@ ImageID create_image(Context *dev, uint32_t w, uint32_t h, uint32_t d, ImageForm
 	img.d = d;
 	img.fmt = fmt;
 
-	GLenum format, type;
-	image_format_to_gl(fmt, &format, &type);
+	VkImageType type = d <= 1 ?  
+		VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_3D;
 
-	GLenum internal_format = image_format_to_gl_internal(fmt);
+	VkImageCreateInfo img_ci = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+		.pNext = nullptr,
+		.flags = 0,
+		.imageType = type,
+		.format = image_format_to_vk(fmt),
+		.extent = {
+			.width = w,
+			.height = h,
+			.depth = d,
+		},
+		.mipLevels = levels,
+		.arrayLayers = 1,
+		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.tiling = VK_IMAGE_TILING_OPTIMAL,
+		.usage = usage,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.queueFamilyIndexCount = 0,
+		.pQueueFamilyIndices = nullptr,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+	};
 
-	if (d <= 1) {
-		glCreateTextures(GL_TEXTURE_2D, 1, &img.id);
-		glTextureStorage2D(img.id, levels, internal_format, w, h);
-	} else {
-		glCreateTextures(GL_TEXTURE_3D, 1, &img.id);
-		glTextureStorage3D(img.id, levels, internal_format, w, h, d);
-	}
+	VmaAllocationCreateInfo alloc_ci= {
+		.flags = 0,
+		.usage = VMA_MEMORY_USAGE_AUTO,
+		.requiredFlags = 0,
+		.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+	};
 
-	if (gl_check_err()) {
+	VkResult result = vmaCreateImage(ctx->allocator, 
+		&img_ci, &alloc_ci, &img.image, &img.allocation, nullptr);
+
+	if (result != VK_SUCCESS)
+		return EV2_NULL_HANDLE(Image);
+
+	VkImageViewCreateInfo viewInfo = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+		.pNext = nullptr,
+		.flags = 0,
+		.image = img.image,
+		.viewType = (VkImageViewType)img_ci.imageType,
+		.format = img_ci.format,
+		.components = {},
+		.subresourceRange = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.baseMipLevel = 0,
+			.levelCount = levels,
+			.baseArrayLayer = 0,
+			.layerCount = d,
+		},
+	};
+
+	result = vkCreateImageView(ctx->device, &viewInfo, nullptr, &img.base_view);
+
+	if (result != VK_SUCCESS) {
+		vmaDestroyImage(ctx->allocator, img.image, img.allocation);
 		return EV2_NULL_HANDLE(Image);
 	}
 
-	ResourceID id = dev->image_pool->allocate(&img);
-
-	return EV2_HANDLE_CAST(Image, id.u64);
+	return ctx->emplace_image(std::move(img));
 }
 
-void get_image_dims(Context *dev, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d)
+void get_image_dims(GfxContext *ctx, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d)
 {
-	Image *img = dev->get_image(h_img);
+	Image *img = ctx->get_image(h_img);
 
 	if (w) *w = img->w;
 	if (h) *h = img->h;
 	if (d) *d = img->d;
 }
 
-void destroy_image(Context *dev, ImageID h)
+void destroy_image(GfxContext *ctx, ImageID h)
 {
 	ResourceID id = ResourceID{h.id};
-	Image *img = dev->image_pool->get(id);
+	Image *img = ctx->image_pool->get(id);
 
-	glDeleteTextures(1, &img->id);
+	vmaDestroyImage(ctx->allocator, img->image, img->allocation);
 
-	dev->image_pool->deallocate(id);
+	ctx->image_pool->deallocate(id);
 }
 
-uint64_t get_image_gpu_handle(Context *dev, ImageID h)
+uint64_t get_image_gpu_handle(GfxContext *ctx, ImageID h)
 {
-	Image *img = dev->get_image(h);
-	return img->id;
+	Image *img = ctx->get_image(h);
+	return (uint64_t)img->image;
 }
 
 //------------------------------------------------------------------------------
 // Uploads
 
-UploadContext begin_upload(Context *dev, size_t bytes, size_t align)
+UploadContext begin_upload(GfxContext *ctx, size_t bytes, size_t align)
 {
-	UploadPool *pool = dev->pool.get();
+	UploadPool *pool = ctx->pool.get();
 
 	UploadPool::alloc_result_t allocation = pool->alloc(bytes, align);
 
@@ -126,67 +174,66 @@ UploadContext begin_upload(Context *dev, size_t bytes, size_t align)
 	};
 }
 
-uint64_t commit_buffer_uploads(Context *dev, UploadContext ctx, BufferID buf, 
+uint64_t commit_buffer_uploads(GfxContext *ctx, UploadContext uc, BufferID buf, 
 							   const BufferUpload *regions, uint32_t count)
 {
-	if (!dev->buffer_pool->check_handle(ResourceID{buf.id}))
+	if (!ctx->buffer_pool->check_handle(ResourceID{buf.id}))
 		return 0;
 
-	UploadPool *pool = dev->pool.get();
+	UploadPool *pool = ctx->pool.get();
 
-	return pool->commmit_buffer(ctx.allocation_index, buf, regions, count);
+	return pool->commmit_buffer(uc.allocation_index, buf, regions, count);
 }
 
-uint64_t commit_image_uploads(Context *dev, UploadContext ctx, ImageID img, 
+uint64_t commit_image_uploads(GfxContext *ctx, UploadContext uc, ImageID img, 
 							  const ImageUpload *regions, uint32_t count)
 {
-	UploadPool *pool = dev->pool.get();
+	UploadPool *pool = ctx->pool.get();
 
-	return pool->commmit_image(ctx.allocation_index, img, regions, count);
+	return pool->commmit_image(uc.allocation_index, img, regions, count);
 }
 
-void flush_uploads(Context *dev) 
+void flush_uploads(GfxContext *ctx) 
 {
-	UploadPool *pool = dev->pool.get();
+	UploadPool *pool = ctx->pool.get();
 
 	pool->flush();
 }
 
-ev2::Result wait_complete(Context *dev, uint64_t sync)
+ev2::Result wait_complete(GfxContext *ctx, uint64_t sync)
 {
-	return dev->pool->wait_for(sync);
+	return ctx->pool->wait_for(sync);
 }
 
 //------------------------------------------------------------------------------
 // Textures
 
-TextureID create_texture(Context *dev, ImageID img, TextureFilter filter)
+TextureID create_texture(GfxContext *ctx, ImageID img, TextureFilter filter)
 {
 	Texture tex {};
 	tex.img = img;
 	tex.filter = filter;
 
-	ResourceID id = dev->texture_pool->allocate(&tex);
-	return EV2_HANDLE_CAST(Texture, id.u64);
+	return ctx->emplace_texture(std::move(tex));
 }
 
-void destroy_texture(Context *dev, TextureID h)
+void destroy_texture(GfxContext *ctx, TextureID h)
 {
 	ResourceID id = {.u64 = h.id};
-	dev->texture_pool->deallocate(id);
+	ctx->texture_pool->deallocate(id);
 }
 
-uint64_t get_texture_gpu_handle(Context *dev, TextureID h)
+uint64_t get_texture_gpu_handle(GfxContext *ctx, TextureID h)
 {
-	Texture *tex = dev->get_texture(h);
-	Image *img = dev->get_image(tex->img);
-	return img->id;
+	Texture *tex = ctx->get_texture(h);
+	Image *img = ctx->get_image(tex->img);
+	return (uint64_t)img->base_view;
 }
 
-void get_texture_dims(Context *dev, TextureID h_tex, uint32_t *w, uint32_t *h, uint32_t*d)
+void get_texture_dims(GfxContext *ctx, TextureID h_tex, uint32_t *w, uint32_t *h, uint32_t*d)
 {
-	Texture *tex = dev->get_texture(h_tex);
-	get_image_dims(dev, tex->img, w, h, d);
+	Texture *tex = ctx->get_texture(h_tex);
+	get_image_dims(ctx, tex->img, w, h, d);
 }
 
 };

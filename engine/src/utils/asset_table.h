@@ -28,8 +28,8 @@ enum AssetStatus : uint8_t
 
 struct AssetVTable
 {
-	ev2::Result (*reload)(ev2::Context *dev, void** usr, const char *path);
-	void (*destroy)(ev2::Context *dev, void* usr);
+	ev2::Result (*reload)(ev2::GfxContext *ctx, void** usr, const char *path);
+	void (*destroy)(ev2::GfxContext *ctx, void* usr);
 };
 
 struct AssetEntry
@@ -48,7 +48,7 @@ struct AssetReloader;
 
 struct AssetTable
 {
-	ev2::Context *dev;
+	ev2::GfxContext *ctx;
 
 	std::unique_ptr<AssetReloader> reloader;
 
@@ -61,7 +61,7 @@ struct AssetTable
 
 	mutable std::shared_mutex mut;
 
-	static AssetTable *create(ev2::Context *dev, const char *root, bool reload = true);
+	static AssetTable *create(ev2::GfxContext *ctx, const char *root, bool reload = true);
 	static void destroy(AssetTable *tbl);
 
 	/// @brief allocate an entry for an initialized asset.  The resulting

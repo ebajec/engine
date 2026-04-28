@@ -26,12 +26,12 @@ bool Panel::is_focused() {
 }
 
 Panel::Panel(
-	ev2::Context *dev,
+	ev2::GfxContext *ctx,
 	const char *name, 
 	uint32_t x, uint32_t y,
 	uint32_t w, uint32_t h)
 {
-	m_dev = dev;
+	m_ctx = ctx;
 
 	m_pos = glm::ivec2(x,y);
 	m_size = glm::ivec2(w,h);
@@ -41,7 +41,7 @@ Panel::Panel(
 Panel::~Panel()
 {
 	if (EV2_VALID(m_target))
-		ev2::destroy_render_target(m_dev, m_target);
+		ev2::destroy_render_target(m_ctx, m_target);
 }
 
 void Panel::imgui()
@@ -93,17 +93,17 @@ void Panel::imgui()
 
 		if ((EV2_IS_NULL(m_target) || m_size != size)) {
 			if (!EV2_IS_NULL(m_target))
-				ev2::destroy_render_target(m_dev, m_target);
+				ev2::destroy_render_target(m_ctx, m_target);
 
-			m_target = ev2::create_render_target(m_dev, (uint32_t)size.x, (uint32_t)size.y,
+			m_target = ev2::create_render_target(m_ctx, (uint32_t)size.x, (uint32_t)size.y,
 							 m_target_flags);
 			m_size = size;
 		}
 
 		ev2::RenderTargetAttachments attachments = 
-			ev2::get_render_target_attachments(m_dev, m_target);
+			ev2::get_render_target_attachments(m_ctx, m_target);
 		GLuint gl_tex_handle = ev2::get_texture_gpu_handle(
-			m_dev, attachments.color);
+			m_ctx, attachments.color);
 
 		ImVec2 content = ImGui::GetContentRegionAvail();
 		ImGui::Image((ImTextureID)(intptr_t)gl_tex_handle, content, ImVec2(0,1), ImVec2(1,0));

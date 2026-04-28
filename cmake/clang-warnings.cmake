@@ -7,6 +7,7 @@ function(enable_clang_warnings target)
 			-Wall                  # all the important warnings
 			-Wextra                # extra, useful warnings
 			-Wpedantic             # ISO-compliance
+			-Wreorder-init-list
 			# Conversion and sign
 			-Wconversion           # detect implicit conversions
 			# Code correctness
@@ -32,6 +33,8 @@ function(enable_clang_warnings target)
 			-Wno-gnu-anonymous-struct
 			-Wno-nested-anon-types
 			-Wno-sign-conversion
+			-Wno-nullability-extension
+			-Wno-missing-field-initializers
     	)
   	endif()
 endfunction()

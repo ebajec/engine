@@ -11,24 +11,24 @@ namespace fs = std::filesystem;
 
 namespace ev2 {
 
-static ev2::Result create(Context *dev, ImageAsset * asset, const char *path);
+static ev2::Result create(GfxContext *ctx, ImageAsset * asset, const char *path);
 
-static void destroy(Context *dev, void *usr)
+static void destroy(GfxContext *ctx, void *usr)
 {
 	ImageAsset * asset = reinterpret_cast<ImageAsset*>(usr);
 
 	if (asset->img.id) {
-		ev2::destroy_image(dev, asset->img);
+		ev2::destroy_image(ctx, asset->img);
 	}
 
 	delete asset;
 }
 
-static ev2::Result reload(Context *dev, void **usr, const char *path)
+static ev2::Result reload(GfxContext *ctx, void **usr, const char *path)
 {
 	std::unique_ptr<ImageAsset> asset (new ImageAsset{});
 	
-	ev2::Result res = create(dev, asset.get(), path);
+	ev2::Result res = create(ctx, asset.get(), path);
 
 	if (res != ev2::SUCCESS)
 		return res;
@@ -36,16 +36,16 @@ static ev2::Result reload(Context *dev, void **usr, const char *path)
 	ImageAsset *old = reinterpret_cast<ImageAsset*>(*usr);
 
 	if (old)
-		destroy(dev, old);
+		destroy(ctx, old);
 
 	*usr = asset.release();
 
 	return res;
 }
 
-static void image_upload_gl(Context *dev, ImageID h, void *data, size_t size)
+static void image_upload_gl(GfxContext *ctx, ImageID h, void *data, size_t size)
 {
-	Image *image = dev->image_pool->get(ResourceID{h.id});
+	Image *image = ctx->image_pool->get(ResourceID{h.id});
 	GLenum fmt, type;
 
 	image_format_to_gl(image->fmt, &fmt, &type);
@@ -59,10 +59,10 @@ static void image_upload_gl(Context *dev, ImageID h, void *data, size_t size)
 	);
 }
 
-static ev2::Result create(Context *dev, ImageAsset * asset, const char *path)
+static ev2::Result create(GfxContext *ctx, ImageAsset * asset, const char *path)
 {
 	std::string syspath = 
-		dev->assets->get_system_path(path);
+		ctx->assets->get_system_path(path);
 
 
 	if (!fs::exists(syspath)) {
@@ -85,10 +85,10 @@ static ev2::Result create(Context *dev, ImageAsset * asset, const char *path)
 		return ev2::ELOAD_FAILED;
 	}
 
-	ImageID img = create_image(dev, 
+	ImageID img = create_image(ctx, 
 		(uint32_t)width, (uint32_t)height, 1, IMAGE_FORMAT_RGBA8);
 
-	image_upload_gl(dev, img, rgba, sizeof(uint32_t)*width*height);
+	image_upload_gl(ctx, img, rgba, sizeof(uint32_t)*width*height);
 
 	asset->img = img;
 
@@ -106,7 +106,7 @@ static ev2::Result create(Context *dev, ImageAsset * asset, const char *path)
 //------------------------------------------------------------------------------
 // Interface
 
-ImageAssetID load_image_asset(Context *dev, const char *path)
+ImageAssetID load_image_asset(GfxContext *ctx, const char *path)
 {
 	static AssetVTable vtbl = {
 		.reload = reload,
@@ -114,23 +114,23 @@ ImageAssetID load_image_asset(Context *dev, const char *path)
 	};
 
 	std::unique_ptr<ImageAsset> asset (new ImageAsset{}); 
-	ev2::Result res = create(dev, asset.get(), path);
+	ev2::Result res = create(ctx, asset.get(), path);
 
 	if (res != ev2::SUCCESS)
 		return EV2_NULL_HANDLE(ImageAsset);
 
-	AssetID id = dev->assets->allocate(&vtbl, asset.release(), path);
+	AssetID id = ctx->assets->allocate(&vtbl, asset.release(), path);
 
 	return EV2_HANDLE_CAST(ImageAsset, id);
 }
 
-void unload_image_asset(Context *dev, ImageAssetID h)
+void unload_image_asset(GfxContext *ctx, ImageAssetID h)
 {
 }
 
-ImageID get_image_resource(Context *dev, ImageAssetID h)
+ImageID get_image_resource(GfxContext *ctx, ImageAssetID h)
 {
-	ImageAsset *asset = dev->assets->get<ImageAsset>((uint32_t)h.id);
+	ImageAsset *asset = ctx->assets->get<ImageAsset>((uint32_t)h.id);
 	return asset->img;
 }
 

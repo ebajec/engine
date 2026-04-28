@@ -16,6 +16,7 @@ struct GPUTTable
 	size_t capacity = 0;
 
 	ev2::BufferID buffer = EV2_NULL_HANDLE(Buffer);
+	ev2::BufferUsageFlags usage = 0;
 
 	// A better data structure could be used - this works for now
 	//std::set<uint32_t, std::less<uint32_t>> updates;
@@ -36,29 +37,29 @@ struct GPUTTable
 
 	/// @brief Upload new data to the GPU if anything has changed.
 	/// @return True if buffer was resized, false otherwise
-	bool update(ev2::Context *dev);
+	bool update(ev2::GfxContext *ctx);
 
 	GPUTTable() = default;
 	
 	// @param alignment - alignment of data in GPU buffer
-	GPUTTable(size_t _alignment);
+	GPUTTable(size_t _alignment, ev2::BufferUsageFlags usage);
 
-	void destroy(ev2::Context *dev);
+	void destroy(ev2::GfxContext *ctx);
 };
 
 //------------------------------------------------------------------------------
 // GPUTTable
 
 template<typename T>
-GPUTTable<T>::GPUTTable(size_t _alignment) : 
-	stride(align_up(sizeof(T), _alignment)) {
+GPUTTable<T>::GPUTTable(size_t _alignment, ev2::BufferUsageFlags _usage) : 
+	stride(align_up(sizeof(T), _alignment)), usage(_usage) {
 }
 
 template<typename T>
-void GPUTTable<T>::destroy(ev2::Context *dev)
+void GPUTTable<T>::destroy(ev2::GfxContext *ctx)
 {
 	if (!EV2_IS_NULL(buffer)) {
-		destroy_buffer(dev, buffer);
+		destroy_buffer(ctx, buffer);
 	}
 }
 
@@ -108,7 +109,7 @@ bool GPUTTable<T>::set(uint32_t idx, const T& mat)
 }
 
 template<typename T>
-bool GPUTTable<T>::update(ev2::Context *dev)
+bool GPUTTable<T>::update(ev2::GfxContext *ctx)
 {
 	bool resized = false;
 
@@ -124,11 +125,11 @@ bool GPUTTable<T>::update(ev2::Context *dev)
 		capacity = ((min_cap + growth - 1)/growth) * growth;
 
 		if (buffer.id)
-			destroy_buffer(dev, buffer);
+			destroy_buffer(ctx, buffer);
 
-		buffer = create_buffer(dev, 
+		buffer = create_buffer(ctx, 
 						 capacity * stride, 
-						 ev2::MAP_WRITE
+						 usage
 						 );
 
 		resized = true;
@@ -140,7 +141,7 @@ bool GPUTTable<T>::update(ev2::Context *dev)
 
 	size_t upload_size = count * sizeof(T);
 
-	ev2::UploadContext uc = ev2::begin_upload(dev, upload_size, stride);
+	ev2::UploadContext uc = ev2::begin_upload(ctx, upload_size, stride);
 	std::vector<ev2::BufferUpload> uploads(count);
 
 	// TODO: Consolidate...
@@ -155,10 +156,10 @@ bool GPUTTable<T>::update(ev2::Context *dev)
 		};
 	}
 
-	uint64_t sync = ev2::commit_buffer_uploads(dev, uc, buffer, 
+	uint64_t sync = ev2::commit_buffer_uploads(ctx, uc, buffer, 
 											uploads.data(), (uint32_t)uploads.size());
 	// TODO: bad bad bad bad bad get rid of this asap
-	ev2::wait_complete(dev, sync);
+	ev2::wait_complete(ctx, sync);
 
 	updates.clear();
 

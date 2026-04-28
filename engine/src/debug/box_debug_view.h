@@ -25,15 +25,15 @@ struct BoxDebugView
 	size_t isize;
 	ev2::BufferID ibo = EV2_NULL_HANDLE(Buffer);
 
-	ev2::GraphicsPipelineID pipeline;
-	ev2::Context *dev;
+	ev2::GfxPipelineID pipeline;
+	ev2::GfxContext *ctx;
 
 	GLuint vao;
 
 	uint64_t upload_index;
 
-	BoxDebugView(ev2::Context *_dev) : dev(_dev) {
-		pipeline = ev2::load_graphics_pipeline(dev, "pipelines/box_debug.yaml");
+	BoxDebugView(ev2::GfxContext *_ctx) : ctx(_ctx) {
+		pipeline = ev2::load_graphics_pipeline(ctx, "pipelines/box_debug.yaml");
 
 		vcap = 0;
 		icap = 0;

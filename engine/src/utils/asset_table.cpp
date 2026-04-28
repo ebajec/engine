@@ -15,10 +15,10 @@
 
 namespace fs = std::filesystem;
 
-AssetTable *AssetTable::create(ev2::Context *dev, const char *root, bool reload)
+AssetTable *AssetTable::create(ev2::GfxContext *ctx, const char *root, bool reload)
 {
 	std::unique_ptr<AssetTable> tbl (new AssetTable{});
-	tbl->dev = dev;
+	tbl->ctx = ctx;
 	tbl->root = root;
 
 	if (reload)
@@ -98,7 +98,7 @@ void AssetTable::deallocate(AssetID id)
 	}
 
 	if (ent->usr)
-		ent->vtbl->destroy(dev, ent->usr); 
+		ent->vtbl->destroy(ctx, ent->usr); 
 
 	char * path = ent->path;
 
@@ -176,7 +176,7 @@ ev2::Result AssetTable::reload(AssetID id)
 {
 	AssetEntry *ent = entries[id - 1].get();
 
-	ev2::Result res = ent->vtbl->reload(dev, &ent->usr, ent->path);
+	ev2::Result res = ent->vtbl->reload(ctx, &ent->usr, ent->path);
 
 	if (res == ev2::SUCCESS) {
 		log_info("Reloaded asset %s", ent->path);

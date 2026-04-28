@@ -9,7 +9,7 @@
 #include <cstring>
 
 static ev2::Result create_render_target_gl(
-	ev2::Context *dev, 
+	ev2::GfxContext *ctx, 
 	ev2::RenderTarget *p_target, 
 	uint32_t w,
 	uint32_t h,
@@ -23,9 +23,9 @@ static ev2::Result create_render_target_gl(
 	ev2::ImageID color {};
 	if (flags & ev2::RENDER_TARGET_COLOR_BIT)
 	{
-		color = ev2::create_image(dev, w, h, 0, ev2::IMAGE_FORMAT_RGBA8);
+		color = ev2::create_image(ctx, w, h, 0, ev2::IMAGE_FORMAT_RGBA8);
 
-		ev2::Image *img = dev->get_image(color);
+		ev2::Image *img = ctx->get_image(color);
 
 		//glGenTextures(1,&color);
 		//glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,(int)w,(int)h,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
@@ -85,28 +85,48 @@ GL_RENDER_TARGET_CREATE_CLEANUP:
 	return ev2::EUNKNOWN;
 }
 
-static void destroy_render_target_gl(ev2::Context *dev, ev2::RenderTarget *p_target)
+static void destroy_render_target_gl(ev2::GfxContext *ctx, ev2::RenderTarget *p_target)
 {
 	if (p_target->fbo) glDeleteFramebuffers(1,&p_target->fbo);
 	if (p_target->depth) glDeleteRenderbuffers(1,&p_target->depth);
 
-	if (EV2_VALID(p_target->color)) ev2::destroy_image(dev, p_target->color);
+	if (EV2_VALID(p_target->color)) ev2::destroy_image(ctx, p_target->color);
 }
+
+static ev2::Result cleanup_frame_context(ev2::GfxContext *ctx, FrameContext *frame)
+{
+	if (ctx->current_frame_index < ctx->max_frames_in_flight)
+		return ev2::SUCCESS;
+
+	VkResult result = VK_SUCCESS;
+
+	for (const VkCommandPool &command_pool : frame->command_pools) {
+		result = vkResetCommandPool(ctx->device, command_pool, 0);
+
+		if (result)
+			return ev2::EUNKNOWN;
+	}
+
+	return ev2::SUCCESS;
+}
+
+//------------------------------------------------------------------------------
+// Interface
 
 namespace ev2 {
 
 RenderTargetID create_render_target(
-	Context *dev, 
+	GfxContext *ctx, 
 	uint32_t w, 
 	uint32_t h, 
 	RenderTargetFlags flags
 )
 {
 	RenderTarget *target = new RenderTarget{};
-	create_render_target_gl(dev, target, w, h, flags);
+	create_render_target_gl(ctx, target, w, h, flags);
 
 	target->attachments = {
-		.color = ev2::create_texture(dev, target->color, ev2::FILTER_BILINEAR),
+		.color = ev2::create_texture(ctx, target->color, ev2::FILTER_BILINEAR),
 		.depth = EV2_NULL_HANDLE(Texture),
 	};
 
@@ -114,19 +134,19 @@ RenderTargetID create_render_target(
 }
 
 void destroy_render_target(
-	Context *dev, 
+	GfxContext *ctx, 
 	RenderTargetID h
 )
 {
 	RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget, h);
-	destroy_render_target_gl(dev, target);
+	destroy_render_target_gl(ctx, target);
 
-	ev2::destroy_texture(dev, target->attachments.color);
+	ev2::destroy_texture(ctx, target->attachments.color);
 	delete target;
 }
 
 RenderTargetAttachments get_render_target_attachments(
-	Context *dev,
+	GfxContext *ctx,
 	RenderTargetID id
 )
 {
@@ -134,68 +154,89 @@ RenderTargetAttachments get_render_target_attachments(
 	return target->attachments;
 }
 
-ViewID create_view(Context *dev, float view[], float proj[])
+ViewID create_view(GfxContext *ctx, float view[], float proj[])
 {
 	ViewData data = view_data_from_matrices(view, proj);
-	uint32_t id = dev->view_data.add(data);
+	uint32_t id = ctx->view_data.add(data);
 
 	return EV2_HANDLE_CAST(View, id);
 }
 
-void update_view(Context *dev, ViewID handle, float view[], float proj[])
+void update_view(GfxContext *ctx, ViewID handle, float view[], float proj[])
 {
 	ViewData data = view_data_from_matrices(view, proj);
 
 	uint32_t id = static_cast<uint32_t>(handle.id);
 
-	if (!dev->view_data.set(id, data))
+	if (!ctx->view_data.set(id, data))
 		log_error("ViewID %d is invalid",id);
 }
 
-void destroy_view(Context *dev, ViewID handle)
+void destroy_view(GfxContext *ctx, ViewID handle)
 {
 	uint32_t id = static_cast<uint32_t>(handle.id);
-	dev->view_data.remove(id);
+	ctx->view_data.remove(id);
 }
 
-void begin_frame(Context *dev)
+ev2::Result begin_frame(GfxContext *ctx)
 {
+	FrameContext *frame = ctx->get_current_frame();
+
 	if (gl_check_err()) {
 	}
 
+	//------------------------------------------------------------------------------
+	// Wait until commands on oldest frame have completing before resetting it.
+	ev2::Result result = ctx->wait_for_frame_completion(frame);
+
+	if (result != ev2::SUCCESS)
+		return result;
+
+	//------------------------------------------------------------------------------
+	// Cleanup frame context if previously used
+	
+	result = cleanup_frame_context(ctx, frame);
+
+	if (result != ev2::SUCCESS)
+		return result;
+
+	//------------------------------------------------------------------------------
+	// Update stuff
+	
 	uint64_t time_ns = 
 		std::chrono::high_resolution_clock::now().time_since_epoch().count();
 
-	double time_seconds = (double)(time_ns - dev->start_time_ns)/1e9;
+	double time_seconds = (double)(time_ns - ctx->start_time_ns)/1e9;
 
-	dev->frame.dt = time_seconds - dev->frame.t;
-	dev->frame.t = time_seconds;
+	frame->dt = time_seconds - ctx->get_previous_frame()->t;
+	frame->t = time_seconds;
 
-	if (dev->assets->reloader) {
-		dev->assets->reloader->update();
+	if (ctx->assets->reloader) {
+		ctx->assets->reloader->update();
 	}
-	dev->transforms.update(dev);
-	dev->view_data.update(dev);
+	ctx->transforms.update(ctx);
+	ctx->view_data.update(ctx);
 
 	GPUFramedata gpu_data = {
-		.t_seconds = (uint32_t)dev->frame.t,
-		.t_fract = (float)fmod(dev->frame.t, 1.),
-		.dt = (float)dev->frame.dt
+		.t_seconds = (uint32_t)frame->t,
+		.t_fract = (float)fmod(frame->t, 1.),
+		.dt = (float)frame->dt
 	};
 
-	UploadContext uc = begin_upload(dev, sizeof(GPUFramedata), alignof(GPUFramedata));
+	UploadContext uc = begin_upload(ctx, sizeof(GPUFramedata), alignof(GPUFramedata));
 	memcpy(uc.ptr, &gpu_data, sizeof(GPUFramedata));
 	BufferUpload up = {
 		.src_offset = 0,
 		.dst_offset = 0,
 		.size = sizeof(GPUFramedata),
 	};
-	uint64_t sync = commit_buffer_uploads(dev, uc, dev->frame.ubo, &up, 1);
+	uint64_t sync = commit_buffer_uploads(ctx, uc, frame->ubo, &up, 1);
 
-	ev2::flush_uploads(dev);
-	ev2::wait_complete(dev, sync);
+	ev2::flush_uploads(ctx);
+	ev2::wait_complete(ctx, sync);
 
-	Buffer *ubo = dev->get_buffer(dev->frame.ubo);
+	Buffer *ubo = ctx->get_buffer(frame->ubo);
+
 	glBindBufferRange(
 		GL_UNIFORM_BUFFER, 
 		FRAMEDATA_BINDING,
@@ -210,8 +251,10 @@ void begin_frame(Context *dev)
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
-void end_frame(Context *dev)
+void end_frame(GfxContext *ctx)
 {
+	// next_frame
+	++ctx->current_frame_index;
 }
 
 struct RenderPass
@@ -220,25 +263,25 @@ struct RenderPass
 	ViewID view;
 };
 
-PassCtx begin_pass(Context *dev, RenderTargetID h_target, ViewID h_view,
+PassCtx begin_pass(GfxContext *ctx, RenderTargetID h_target, ViewID h_view,
 					Rect viewport, Rect scissor)
 {
-	if (EV2_IS_NULL(dev->view_data.buffer))
+	if (EV2_IS_NULL(ctx->view_data.buffer))
 		log_error("No views created.  Did you remember to call begin_frame()?"); 
 
 	if (h_view.id == 0) {
-		h_view = dev->default_view;
+		h_view = ctx->default_view;
 	}
 
-	Buffer * buf = dev->get_buffer(dev->view_data.buffer);
+	Buffer * buf = ctx->get_buffer(ctx->view_data.buffer);
 	uint32_t view_id = static_cast<uint32_t>(h_view.id);
 
 	glBindBufferRange(
 		GL_UNIFORM_BUFFER, 
 		VIEWDATA_BINDING, 
 		buf->id,
-		view_id * dev->view_data.stride,
-		dev->view_data.stride
+		view_id * ctx->view_data.stride,
+		ctx->view_data.stride
 	);
 
 	RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget, h_target);
@@ -271,14 +314,14 @@ PassCtx begin_pass(Context *dev, RenderTargetID h_target, ViewID h_view,
 	};
 
 	return PassCtx{
-		.rec = EV2_HANDLE_CAST(Recorder, dev),
+		.rec = EV2_HANDLE_CAST(Recorder, ctx),
 		.pass = EV2_HANDLE_CAST(Pass, pass),
 	};
 }
 
-SyncID end_pass(Context *dev, PassCtx ctx)
+SyncID end_pass(GfxContext *ctx, PassCtx pc)
 {
-	RenderPass *pass = EV2_TYPE_PTR_CAST(RenderPass, ctx.pass);
+	RenderPass *pass = EV2_TYPE_PTR_CAST(RenderPass, pc.pass);
 	delete pass;
 
 	glBindFramebuffer(GL_FRAMEBUFFER,0);
@@ -288,10 +331,10 @@ SyncID end_pass(Context *dev, PassCtx ctx)
 	return EV2_NULL_HANDLE(Sync);
 }
 
-void cmd_bind_gfx_pipeline(RecorderID rec, GraphicsPipelineID h)
+void cmd_bind_gfx_pipeline(RecorderID rec, GfxPipelineID h)
 {
-	Context *dev = EV2_TYPE_PTR_CAST(Context, rec);
-	GraphicsPipeline *pipeline = dev->get_gfx_pipeline(h);
+	GfxContext *ctx = EV2_TYPE_PTR_CAST(GfxContext, rec);
+	GfxPipeline *pipeline = ctx->get_gfx_pipeline(h);
 
 	if (!pipeline) {
 		log_error("Invalid pipeline handle %lld", (unsigned long long)h.id);
@@ -304,9 +347,9 @@ void cmd_bind_gfx_pipeline(RecorderID rec, GraphicsPipelineID h)
 
 void cmd_bind_index_buffer(RecorderID rec, BufferID h_buf)
 {
-	Context *dev = EV2_TYPE_PTR_CAST(Context, rec);
+	GfxContext *ctx = EV2_TYPE_PTR_CAST(GfxContext, rec);
 
-	Buffer *buf = dev->get_buffer(h_buf);
+	Buffer *buf = ctx->get_buffer(h_buf);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf->id); 
 }
 

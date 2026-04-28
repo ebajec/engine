@@ -35,7 +35,7 @@ TextureViewerPanel::TextureViewerPanel(App *app,
 	panel_idx = ++ctr;
 
 	std::string name = "Texture" + std::to_string(panel_idx);
-	panel.reset(new Panel(app->dev, name.c_str(), x, y, w, h));
+	panel.reset(new Panel(app->ctx, name.c_str(), x, y, w, h));
 
 
 	pipeline_path = pipeline;
@@ -43,24 +43,24 @@ TextureViewerPanel::TextureViewerPanel(App *app,
 
 int TextureViewerPanel::update_pipeline(const char *path)
 {
-	ev2::GraphicsPipelineID pipeline = ev2::load_graphics_pipeline(app->dev, path);
+	ev2::GfxPipelineID pipeline = ev2::load_graphics_pipeline(app->ctx, path);
 
 	if (!EV2_VALID(pipeline))
 		return EXIT_FAILURE;
 
 	ev2::DescriptorLayoutID layout = 
-		ev2::get_graphics_pipeline_layout(app->dev, pipeline);
+		ev2::get_graphics_pipeline_layout(app->ctx, pipeline);
 
-	ev2::DescriptorSetID set = ev2::create_descriptor_set(app->dev, layout);
+	ev2::DescriptorSetID set = ev2::create_descriptor_set(app->ctx, layout);
 	ev2::BindingSlot slot = ev2::find_binding(layout, "u_tex");
 
-	ev2::Result res = ev2::bind_texture(app->dev, set, slot, rd.tex);
+	ev2::Result res = ev2::bind_texture(app->ctx, set, slot, rd.tex);
 
 	if (res != ev2::SUCCESS)
 		return EXIT_FAILURE;
 
 	if (EV2_VALID(rd.desc_set))
-		ev2::destroy_descriptor_set(app->dev, rd.desc_set);
+		ev2::destroy_descriptor_set(app->ctx, rd.desc_set);
 
 	rd.pipeline = pipeline;
 	rd.desc_set = set;
@@ -70,9 +70,9 @@ int TextureViewerPanel::update_pipeline(const char *path)
 	return EXIT_SUCCESS;
 }
 
-int TextureViewerPanel::init(ev2::Context *dev, ev2::TextureID tex) 
+int TextureViewerPanel::init(ev2::GfxContext *ctx, ev2::TextureID tex) 
 {
-	rd.camera = ev2::create_view(dev, nullptr, nullptr);
+	rd.camera = ev2::create_view(ctx, nullptr, nullptr);
 	rd.tex = tex;
 
 	int result = update_pipeline(pipeline_path.c_str());
@@ -86,9 +86,9 @@ int TextureViewerPanel::init(ev2::Context *dev, ev2::TextureID tex)
 	return 0;
 }
 
-int TextureViewerPanel::set_texture(ev2::Context *dev, ev2::TextureID tex)
+int TextureViewerPanel::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
 {
-	ev2::Result res = ev2::bind_texture(dev, rd.desc_set, rd.tex_slot, tex);
+	ev2::Result res = ev2::bind_texture(ctx, rd.desc_set, rd.tex_slot, tex);
 
 	if (res)
 		return EXIT_FAILURE;
@@ -98,7 +98,7 @@ int TextureViewerPanel::set_texture(ev2::Context *dev, ev2::TextureID tex)
 	return EXIT_SUCCESS;
 }
 
-int TextureViewerPanel::update(ev2::Context *dev)
+int TextureViewerPanel::update(ev2::GfxContext *ctx)
 {
 	ImGui::Begin("Editor");
 	ImGui::PushID(panel_idx);
@@ -146,35 +146,35 @@ int TextureViewerPanel::update(ev2::Context *dev)
 		}
 
 		rd.view[3] = glm::vec4(glm::inverse(glm::mat2(rd.view))*rd.center,0,1);
-		ev2::update_view(dev, rd.camera, glm::value_ptr(rd.view), glm::value_ptr(rd.proj));
+		ev2::update_view(ctx, rd.camera, glm::value_ptr(rd.view), glm::value_ptr(rd.proj));
 	}
 	return EXIT_SUCCESS;
 }
 
-ev2::PassCtx TextureViewerPanel::begin_pass(ev2::Context *dev)
+ev2::PassCtx TextureViewerPanel::begin_pass(ev2::GfxContext *ctx)
 {
 	glm::ivec2 win_size = panel->get_size(); 
 
 	ev2::RenderTargetID window_target = panel->get_target();
 	ev2::Rect view_rect = {0,0, (uint32_t)win_size.x, (uint32_t)win_size.y};
 
-	return ev2::begin_pass(dev, window_target, rd.camera, view_rect);
+	return ev2::begin_pass(ctx, window_target, rd.camera, view_rect);
 }
 
-void TextureViewerPanel::render(ev2::Context *dev)
+void TextureViewerPanel::render(ev2::GfxContext *ctx)
 {
-	ev2::PassCtx pass = this->begin_pass(dev);
+	ev2::PassCtx pass = this->begin_pass(ctx);
 	ev2::cmd_bind_gfx_pipeline(pass.rec, rd.pipeline);
 	ev2::cmd_bind_descriptor_set(pass.rec, rd.desc_set);
 	ev2::cmd_draw_screen_quad(pass.rec);
-	ev2::SyncID pass_sync = ev2::end_pass(dev, pass);
+	ev2::SyncID pass_sync = ev2::end_pass(ctx, pass);
 
 	ev2::submit(pass_sync);
 }
 
-void TextureViewerPanel::destroy(ev2::Context *dev)
+void TextureViewerPanel::destroy(ev2::GfxContext *ctx)
 {
-	ev2::destroy_descriptor_set(dev, rd.desc_set);
+	ev2::destroy_descriptor_set(ctx, rd.desc_set);
 	panel.reset();
 }
 

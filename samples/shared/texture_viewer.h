@@ -22,7 +22,7 @@ struct TextureViewerPanel
 
 	struct RenderData {
 		ev2::TextureID tex {};
-		ev2::GraphicsPipelineID pipeline {};
+		ev2::GfxPipelineID pipeline {};
 		ev2::DescriptorSetID desc_set {};
 
 		ev2::BindingSlot tex_slot;
@@ -42,14 +42,14 @@ struct TextureViewerPanel
 
 	int update_pipeline(const char *path);
 
-	int set_texture(ev2::Context *dev, ev2::TextureID tex);
+	int set_texture(ev2::GfxContext *ctx, ev2::TextureID tex);
 
-	ev2::PassCtx begin_pass(ev2::Context *dev);
+	ev2::PassCtx begin_pass(ev2::GfxContext *ctx);
 
-	int init(ev2::Context *dev, ev2::TextureID tex);
-	int update(ev2::Context *dev);
-	void render(ev2::Context *dev);
-	void destroy(ev2::Context *dev);
+	int init(ev2::GfxContext *ctx, ev2::TextureID tex);
+	int update(ev2::GfxContext *ctx);
+	void render(ev2::GfxContext *ctx);
+	void destroy(ev2::GfxContext *ctx);
 
 	glm::vec2 get_world_cursor_pos();
 };

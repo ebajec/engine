@@ -70,7 +70,7 @@ struct App
 	InputData input;
 	WindowData win;
 
-	ev2::Context *dev;
+	ev2::GfxContext *ctx;
 
 	std::vector<key_callback_t> key_callbacks;
 

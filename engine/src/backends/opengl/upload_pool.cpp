@@ -10,7 +10,7 @@ namespace ev2 {
 //------------------------------------------------------------------------------
 // UploadPool
 
-UploadPool *UploadPool::create(Device *dev, size_t capacity, size_t align, size_t max_uploads)
+UploadPool *UploadPool::create(Device *ctx, size_t capacity, size_t align, size_t max_uploads)
 {
 	if (!is_pow2(align)) {
 		log_error("Alignment of upload pool is not power of two: %d", align);
@@ -24,14 +24,14 @@ UploadPool *UploadPool::create(Device *dev, size_t capacity, size_t align, size_
 
 	capacity = align_up_pow2(capacity, align);
 
-	BufferID h_buf = create_buffer(dev, capacity, ev2::MAP_WRITE | ev2::MAP_PERSISTENT);
+	BufferID h_buf = create_buffer(ctx, capacity, ev2::MAP_WRITE | ev2::MAP_PERSISTENT);
 
 	if (EV2_IS_NULL(h_buf)) {
 		log_error("Failed to create buffer for upload pool");
 		return nullptr;
 	}
 
-	Buffer *buf = dev->get_buffer(h_buf);
+	Buffer *buf = ctx->get_buffer(h_buf);
 
 	GLenum access = 
 		GL_MAP_WRITE_BIT | 
@@ -52,7 +52,7 @@ UploadPool *UploadPool::create(Device *dev, size_t capacity, size_t align, size_
 		.mapped = mapped,
 		.entries = new entry_t[max_uploads],
 		.buffer = h_buf,
-		.dev = dev,
+		.ctx = ctx,
 	};
 
 	return pool;
@@ -63,12 +63,12 @@ void UploadPool::destroy(UploadPool *pool)
 	if (!pool)
 		return;
 
-	ev2::Device *dev = pool->dev;
+	ev2::Device *ctx = pool->ctx;
 
-	Buffer *buf = dev->get_buffer(pool->buffer);
+	Buffer *buf = ctx->get_buffer(pool->buffer);
 	glUnmapNamedBuffer(buf->id);
 
-	ev2::destroy_buffer(dev, pool->buffer);
+	ev2::destroy_buffer(ctx, pool->buffer);
 
 	delete[] pool->entries;
 	delete pool;
@@ -192,7 +192,7 @@ void UploadPool::flush()
 
 	size_t flush_start = entries[flush_tail].start;
 
-	Buffer *src_buf = dev->get_buffer(buffer);
+	Buffer *src_buf = ctx->get_buffer(buffer);
 
 	if (flush_start + flushed_bytes < capacity) {
 		glFlushMappedNamedBufferRange(src_buf->id, flush_start, flushed_bytes);
@@ -211,7 +211,7 @@ void UploadPool::flush()
 
 		switch (ent->type) {
 			case UPLOAD_TYPE_BUFFER: {
-				Buffer *dst_buf = dev->get_buffer(ent->resource.buf);
+				Buffer *dst_buf = ctx->get_buffer(ent->resource.buf);
 				const BufferUpload *regions = &queues[1].buffers[buf_idx]; 
 
 				record_buffer_copy(src_buf, dst_buf, count, regions);
@@ -220,7 +220,7 @@ void UploadPool::flush()
 				break;
 			} 
 			case UPLOAD_TYPE_IMAGE: {
-				Image *dst_img = dev->get_image(ent->resource.img);
+				Image *dst_img = ctx->get_image(ent->resource.img);
 				const ImageUpload *regions = &queues[1].images[img_idx]; 
 
 				record_image_copy(src_buf, dst_img, count, regions);

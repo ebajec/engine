@@ -33,30 +33,30 @@ struct RenderTargetAttachments
 };
 
 RenderTargetID create_render_target(
-	Context *dev, 
+	GfxContext *ctx, 
 	uint32_t w, 
 	uint32_t h, 
 	RenderTargetFlags flags
 );
 void destroy_render_target(
-	Context *dev, 
+	GfxContext *ctx, 
 	RenderTargetID id
 );
 
 RenderTargetAttachments get_render_target_attachments(
-	Context *dev,
+	GfxContext *ctx,
 	RenderTargetID id
 );
 
-void begin_frame(Context *dev);
-void end_frame(Context *dev);
+ev2::Result begin_frame(GfxContext *ctx);
+void end_frame(GfxContext *ctx);
 
 
 MAKE_HANDLE(View);
 
-ViewID create_view(Context *dev, float view[], float proj[]);
-void update_view(Context *dev, ViewID handle, float view[], float proj[]);
-void destroy_view(Context *dev, ViewID handle);
+ViewID create_view(GfxContext *ctx, float view[], float proj[]);
+void update_view(GfxContext *ctx, ViewID handle, float view[], float proj[]);
+void destroy_view(GfxContext *ctx, ViewID handle);
 
 MAKE_HANDLE(Pass);
 
@@ -74,16 +74,16 @@ struct Rect
 
 // @brief Begin a render pass.  Configures bindings for pass-specific data  
 // (view matrices, etc).    
-PassCtx begin_pass(Context *dev, RenderTargetID target, ViewID view,
+PassCtx begin_pass(GfxContext *ctx, RenderTargetID target, ViewID view,
 				   Rect viewport, Rect scissor = {});
-SyncID end_pass(Context *dev, PassCtx pass);
+SyncID end_pass(GfxContext *ctx, PassCtx pass);
 
 enum DrawMode
 {
 	MODE_TRIANGLES
 };
 
-void cmd_bind_gfx_pipeline(RecorderID rec, GraphicsPipelineID h);
+void cmd_bind_gfx_pipeline(RecorderID rec, GfxPipelineID h);
 void cmd_bind_index_buffer(RecorderID rec, BufferID buf);
 
 void cmd_draw_screen_quad(RecorderID rec); 

@@ -24,7 +24,7 @@ struct WaveSim
 	App *app;
 	Globe *globe;
 
-	ev2::Context *dev;
+	ev2::GfxContext *ctx;
 
 	struct RenderData {
 		glm::mat4 proj;
@@ -46,9 +46,9 @@ struct WaveSim
 
 int WaveSim::init()
 {
-	dev = app->dev;
+	ctx = app->ctx;
 
-	rd.camera = ev2::create_view(dev, nullptr, nullptr);
+	rd.camera = ev2::create_view(ctx, nullptr, nullptr);
 
 	ImPlot::CreateContext();
 
@@ -56,7 +56,7 @@ int WaveSim::init()
 		glfw_wasd_to_motion(this->keydir, key, action);
 	});
 
-	globe = globe_create(dev);
+	globe = globe_create(ctx);
 
 	if (!globe)
 		return App::ERROR;
@@ -105,7 +105,7 @@ int WaveSim::update()
 	rd.proj = camera_proj_3d(fov, aspect, far, near);
 	rd.view = control.get_view();
 
-	ev2::update_view(dev, rd.camera, glm::value_ptr(rd.view), glm::value_ptr(rd.proj));
+	ev2::update_view(ctx, rd.camera, glm::value_ptr(rd.view), glm::value_ptr(rd.proj));
 
 	if (app->input.mouse_mode == GLFW_CURSOR_DISABLED) 
 		control.rotate(-delta.y,delta.x);
@@ -123,9 +123,9 @@ void WaveSim::render()
 		.h = (uint32_t)app->win.height
 	};
 
-	ev2::PassCtx pass = ev2::begin_pass(dev, {}, rd.camera, view_rect);
+	ev2::PassCtx pass = ev2::begin_pass(ctx, {}, rd.camera, view_rect);
 	globe_draw(globe,pass);
-	ev2::SyncID pass_sync = ev2::end_pass(dev, pass);
+	ev2::SyncID pass_sync = ev2::end_pass(ctx, pass);
 
 	ev2::submit(pass_sync);
 }
@@ -147,7 +147,7 @@ int main(int argc, char *argv[])
 	if (app->initialize(argc, argv) != App::OK)
 		return EXIT_FAILURE;
 
-	ev2::Context *dev = app->dev;
+	ev2::GfxContext *ctx = app->ctx;
 
 	WaveSim sim = {
 		.app = app.get()

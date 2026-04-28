@@ -21,10 +21,13 @@ VkInstance g_vk_instance = VK_NULL_HANDLE;
 
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
+    std::optional<uint32_t> computeFamily;
+    std::optional<uint32_t> transferFamily;
     std::optional<uint32_t> presentFamily;
 
     bool isComplete() {
-        return graphicsFamily.has_value() && presentFamily.has_value();
+        return 
+			graphicsFamily.has_value() && presentFamily.has_value();
     }
 };
 
@@ -60,7 +63,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     return VK_FALSE;
 }
 
-static void init_gl(ev2::Context *dev)
+static void init_gl(ev2::GfxContext *ctx)
 {
 	glEnable(GL_DEBUG_OUTPUT);
 	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);       // makes callback synchronous
@@ -195,11 +198,15 @@ static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device,
         if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             indices.graphicsFamily = i;
         }   
+        if (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) {
+            indices.computeFamily = i;
+        }   
+        if (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT) {
+            indices.transferFamily = i;
+        }   
         if (presentSupport) {
             indices.presentFamily = i;
         }
-
-        if (indices.isComplete()) break;
 
         i++;
     }
@@ -319,10 +326,23 @@ static VkExtent2D chooseSwapExtent(uint32_t w, uint32_t h,
     }
 }
 
+static void create_queue_family(VkDevice dev, 
+						   const VkQueueFamilyProperties &props, 
+						   uint32_t index, QueueFamily *family)
+{
+	family->queue_count = props.queueCount;
+	family->queues.reset(new QueueSubmitter[props.queueCount]);
+	family->index = index;
+
+	for (uint32_t i = 0; i < props.queueCount; ++i) {
+    	vkGetDeviceQueue(dev, index, i, &family->queues[i].queue);
+	}
+}
+
 //------------------------------------------------------------------------------
 // Vulkan initialization
 
-static ev2::Result pick_physical_device(ev2::Context *dev, 
+static ev2::Result pick_physical_device(ev2::GfxContext *ctx, 
 										const VulkanOptions &opts)
 {
 	uint32_t deviceCount = 0;
@@ -337,19 +357,19 @@ static ev2::Result pick_physical_device(ev2::Context *dev,
     vkEnumeratePhysicalDevices(g_vk_instance, &deviceCount, devices.data());
 
     for (const VkPhysicalDevice& device : devices) {
-        if (isDeviceSuitable(dev->surface, device, opts)) {
-            dev->physicalDevice = device;
+        if (isDeviceSuitable(ctx->surface, device, opts)) {
+            ctx->physicalDevice = device;
             break;
         }
     }
 
-    if (dev->physicalDevice == VK_NULL_HANDLE) {
+    if (ctx->physicalDevice == VK_NULL_HANDLE) {
         log_error("failed to find a suitable GPU!");
 		return ev2::EINIT_FAILED;
     }
 
 	VkPhysicalDeviceProperties properties;
-	vkGetPhysicalDeviceProperties(dev->physicalDevice, &properties);
+	vkGetPhysicalDeviceProperties(ctx->physicalDevice, &properties);
 
 	std::stringstream msg;
 
@@ -364,16 +384,23 @@ static ev2::Result pick_physical_device(ev2::Context *dev,
 	return ev2::SUCCESS;
 }
 
-static ev2::Result pick_logical_device(ev2::Context *dev, 
+static ev2::Result pick_logical_device(ev2::GfxContext *ctx, 
 									   const VulkanOptions &opts)
 {
-	QueueFamilyIndices indices = findQueueFamilies(dev->physicalDevice, 
-												dev->surface);
+	QueueFamilyIndices indices = findQueueFamilies(ctx->physicalDevice, 
+												ctx->surface);
+
+    std::set<uint32_t> uniqueQueueFamilies = {
+		indices.graphicsFamily.value(), 
+		indices.presentFamily.value()
+	};
+
+	if (indices.computeFamily.has_value())
+		uniqueQueueFamilies.insert(*indices.computeFamily);
+	if (indices.transferFamily.has_value())
+		uniqueQueueFamilies.insert(*indices.transferFamily);
 
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-    std::set<uint32_t> uniqueQueueFamilies = {
-		indices.graphicsFamily.value(), indices.presentFamily.value()};
-
     float queuePriority = 1.0f;
     for (uint32_t queueFamily : uniqueQueueFamilies) {
         VkDeviceQueueCreateInfo queueCreateInfo = {
@@ -399,31 +426,50 @@ static ev2::Result pick_logical_device(ev2::Context *dev,
 		.pEnabledFeatures = &deviceFeatures,
 	};
 
-	VkResult result = vkCreateDevice(dev->physicalDevice, 
-								  &createInfo, nullptr, &dev->device); 
+	VkResult result = vkCreateDevice(ctx->physicalDevice, 
+								  &createInfo, nullptr, &ctx->device); 
     if (result != VK_SUCCESS) {
         log_error("failed to create logical device!");
 		return ev2::EINIT_FAILED;
     }
 
-    vkGetDeviceQueue(dev->device, indices.graphicsFamily.value(), 0, 
-					 &dev->graphicsQueue);
-    vkGetDeviceQueue(dev->device, indices.presentFamily.value(), 0,
-					 &dev->presentQueue);
+	std::vector<VkQueueFamilyProperties> queue_props;
+	uint32_t queue_count;
+	vkGetPhysicalDeviceQueueFamilyProperties(ctx->physicalDevice, &queue_count, nullptr);
+	queue_props.resize(queue_count);
+	vkGetPhysicalDeviceQueueFamilyProperties(ctx->physicalDevice, &queue_count, queue_props.data());
+
+	create_queue_family(ctx->device, 
+					   queue_props[*indices.graphicsFamily], 
+					   *indices.graphicsFamily, 
+					   &ctx->graphics_family);
+
+	create_queue_family(ctx->device, 
+					   queue_props[*indices.transferFamily], 
+					   *indices.transferFamily, 
+					   &ctx->transfer_family);
+
+	create_queue_family(ctx->device, 
+					   queue_props[*indices.computeFamily], 
+					   *indices.computeFamily, 
+					   &ctx->compute_family);
+
+    vkGetDeviceQueue(ctx->device, indices.presentFamily.value(), 0,
+					 &ctx->presentQueue);
 
 	return ev2::SUCCESS;
 }
 
-static VkResult create_swap_chain_views(ev2::Context *dev)
+static VkResult create_swap_chain_views(ev2::GfxContext *ctx)
 {
-	dev->swapChainImageViews.resize(dev->swapChainImages.size());
+	ctx->swapChain.image_views.resize(ctx->swapChain.images.size());
 
-    for (size_t i = 0; i < dev->swapChainImages.size(); ++i) {
+    for (size_t i = 0; i < ctx->swapChain.images.size(); ++i) {
         VkImageViewCreateInfo createInfo = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-			.image = dev->swapChainImages[i],
+			.image = ctx->swapChain.images[i],
 			.viewType = VK_IMAGE_VIEW_TYPE_2D,
-			.format = dev->swapChainImageFormat,
+			.format = ctx->swapChain.image_format,
 			.components = {
 				.r = VK_COMPONENT_SWIZZLE_IDENTITY,
 				.g = VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -439,9 +485,9 @@ static VkResult create_swap_chain_views(ev2::Context *dev)
 			}
 		};
 
-		VkResult res = vkCreateImageView(dev->device, 
+		VkResult res = vkCreateImageView(ctx->device, 
 								   &createInfo, nullptr, 
-								   &dev->swapChainImageViews[i]);
+								   &ctx->swapChain.image_views[i]);
         if (res != VK_SUCCESS) {
             log_error("failed to create swap chain image views!");
 			return res;
@@ -450,10 +496,10 @@ static VkResult create_swap_chain_views(ev2::Context *dev)
 	return VK_SUCCESS;
 }
 
-static ev2::Result create_swap_chain(ev2::Context *dev, uint32_t w, uint32_t h)
+static ev2::Result create_swap_chain(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 {
 	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(
-		dev->physicalDevice, dev->surface);
+		ctx->physicalDevice, ctx->surface);
 
     VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
     VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
@@ -467,7 +513,7 @@ static ev2::Result create_swap_chain(ev2::Context *dev, uint32_t w, uint32_t h)
 
     VkSwapchainCreateInfoKHR createInfo = {
 		.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-		.surface = dev->surface,
+		.surface = ctx->surface,
 		.minImageCount = imageCount,
 		.imageFormat = surfaceFormat.format,
 		.imageColorSpace = surfaceFormat.colorSpace,
@@ -476,8 +522,8 @@ static ev2::Result create_swap_chain(ev2::Context *dev, uint32_t w, uint32_t h)
 		.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
 	};
 
-    QueueFamilyIndices indices = findQueueFamilies(dev->physicalDevice, 
-												   dev->surface);
+    QueueFamilyIndices indices = findQueueFamilies(ctx->physicalDevice, 
+												   ctx->surface);
     uint32_t queueFamilyIndices[] = {
 		indices.graphicsFamily.value(), indices.presentFamily.value()};
 
@@ -499,28 +545,30 @@ static ev2::Result create_swap_chain(ev2::Context *dev, uint32_t w, uint32_t h)
 
 	VkResult result = VK_SUCCESS;
 
-	result = vkCreateSwapchainKHR(dev->device, &createInfo, nullptr, &dev->swapChain); 
+	result = vkCreateSwapchainKHR(ctx->device, &createInfo, nullptr, 
+							   &ctx->swapChain.swapchain); 
 
     if (result) {
         log_error("failed to create swap chain!");
 		return ev2::ERESIZE_FAILED;
     }
 
-    result = vkGetSwapchainImagesKHR(dev->device, dev->swapChain, &imageCount, nullptr);
+    result = vkGetSwapchainImagesKHR(ctx->device, 
+									 ctx->swapChain.swapchain, &imageCount, nullptr);
     if (result)
 		return ev2::ERESIZE_FAILED;
 
-    dev->swapChainImages.resize(imageCount);
+    ctx->swapChain.images.resize(imageCount);
     
-	result = vkGetSwapchainImagesKHR(dev->device, dev->swapChain, &imageCount, 
-							dev->swapChainImages.data());
+	result = vkGetSwapchainImagesKHR(ctx->device, ctx->swapChain.swapchain, &imageCount, 
+							ctx->swapChain.images.data());
 	if (result)
 		return ev2::ERESIZE_FAILED;
 
-    dev->swapChainImageFormat = surfaceFormat.format;
-    dev->swapChainExtent = extent;
+    ctx->swapChain.image_format = surfaceFormat.format;
+    ctx->swapChain.extent = extent;
 
-	result = create_swap_chain_views(dev);
+	result = create_swap_chain_views(ctx);
 
 	if (result)
 		return ev2::ERESIZE_FAILED;
@@ -528,17 +576,23 @@ static ev2::Result create_swap_chain(ev2::Context *dev, uint32_t w, uint32_t h)
 	return ev2::SUCCESS;
 }
 
-static ev2::Result create_allocator(ev2::Context *dev)
+static ev2::Result create_allocator(ev2::GfxContext *ctx)
 {
 	VmaAllocatorCreateInfo create_info = {
 		.flags = 0,
-		.physicalDevice = dev->physicalDevice,
-		.device = dev->device,
+		.physicalDevice = ctx->physicalDevice,
+		.device = ctx->device,
+		.preferredLargeHeapBlockSize = 0,
+		.pAllocationCallbacks = nullptr,
+		.pDeviceMemoryCallbacks = nullptr,
+		.pHeapSizeLimit = 0,
+		.pVulkanFunctions = 0,
 		.instance = g_vk_instance,
-		.vulkanApiVersion = VK_API_VERSION
+		.vulkanApiVersion = VK_API_VERSION,
+		.pTypeExternalMemoryHandleTypes = nullptr, 
 	};
 
-	VkResult res = vmaCreateAllocator(&create_info, &dev->allocator);
+	VkResult res = vmaCreateAllocator(&create_info, &ctx->allocator);
 
 	if (res != VK_SUCCESS) {
 		log_error("Failed to create Vulkan memory allocator");
@@ -547,33 +601,70 @@ static ev2::Result create_allocator(ev2::Context *dev)
 	return ev2::SUCCESS;
 }
 
-static ev2::Result init_device_resources(const char * path, ev2::Context *dev)
+static ev2::Result init_frame_context(ev2::GfxContext *ctx,
+									   FrameContext *frame)
 {
-	dev->buffer_pool.reset(ResourcePool<ev2::Buffer>::create());
-	dev->image_pool.reset(ResourcePool<ev2::Image>::create());
-	dev->texture_pool.reset(ResourcePool<ev2::Texture>::create());
+	frame->ubo = ev2::create_buffer(ctx, sizeof(GPUFramedata), 
+									ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT | 
+									ev2::BUFFER_USAGE_TRANSFER_DST_BIT);
 
-	size_t upload_capacity = (1 << 9) * (1 << 20);
-	size_t upload_alignment = 512;
+	uint32_t pool_count = 1 + ctx->max_workers;
+	frame->command_pools.resize(pool_count);
 
-	dev->pool.reset(ev2::UploadPool::create(dev, 
-		upload_capacity, 
-		upload_alignment, 
-		(1 << 14)
-	));
+	VkCommandPoolCreateInfo pool_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+		.flags = 0,
+		.queueFamilyIndex = ctx->graphics_family.index,
+	};
 
+	for (uint32_t i = 0; i < pool_count; ++i) {
+		vkCreateCommandPool(ctx->device, &pool_info, nullptr, &frame->command_pools[i]);
+	}
+
+	return ev2::SUCCESS;
+}
+
+static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx)
+{
+	//-----------------------------------------------------------------------------
+	// important things
+	
+	ctx->max_frames_in_flight = 1;
+	ctx->max_workers = std::max(std::thread::hardware_concurrency() - 1, 1U);
+
+	ctx->worker_pool.reset(new ThreadPool(ctx->max_workers, "gfx_worker"));
+	ctx->start_time_ns = 
+		std::chrono::high_resolution_clock::now().time_since_epoch().count();
+
+
+	// Resource pools
+	ctx->buffer_pool.reset(ResourcePool<ev2::Buffer>::create());
+	ctx->image_pool.reset(ResourcePool<ev2::Image>::create());
+	ctx->texture_pool.reset(ResourcePool<ev2::Texture>::create());
+
+	// Per-frame updated uniforms
 	GLint64 ubo_offset_alignment;
 	glGetInteger64v(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &ubo_offset_alignment);
 
-	dev->transforms = GPUTTable<glm::mat4>((size_t)ubo_offset_alignment);
-	dev->view_data = GPUTTable<ev2::ViewData>((size_t)ubo_offset_alignment);
+	ctx->transforms = GPUTTable<glm::mat4>(
+		(size_t)ubo_offset_alignment,
+		ev2::BUFFER_USAGE_TRANSFER_DST_BIT | 
+		ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT
+	);
+	ctx->view_data = GPUTTable<ev2::ViewData>(
+		(size_t)ubo_offset_alignment,
+		ev2::BUFFER_USAGE_TRANSFER_DST_BIT | 
+		ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT
+	);
 
-	dev->assets.reset(AssetTable::create(dev, path));
+	ev2::Result result = ev2::SUCCESS;
 
-	dev->frame.ubo = ev2::create_buffer(dev, sizeof(ev2::GPUFramedata), ev2::MAP_WRITE);
+	for (uint32_t i = 0; i < ctx->max_frames_in_flight; ++i) {
+		result = init_frame_context(ctx, &ctx->frames[i]);
 
-	dev->start_time_ns = 
-		std::chrono::high_resolution_clock::now().time_since_epoch().count();
+		if (result)
+			return result;
+	}
 
 	glm::mat4 proj_def = glm::mat4(1.f);
 	glm::mat4 view_def = glm::mat4(1.f);
@@ -581,18 +672,86 @@ static ev2::Result init_device_resources(const char * path, ev2::Context *dev)
 	ev2::ViewData viewdata = ev2::view_data_from_matrices(
 		glm::value_ptr(proj_def), glm::value_ptr(view_def));
 
-	dev->default_view = EV2_HANDLE_CAST(View,dev->view_data.add(viewdata));
+	ctx->default_view = EV2_HANDLE_CAST(View,ctx->view_data.add(viewdata));
+
+	// Assets
+	ctx->assets.reset(AssetTable::create(ctx, path));
+
+	// Upload pools
+	size_t upload_capacity = (1 << 9) * (1 << 20);
+	size_t upload_alignment = 512;
+
+	ctx->pool.reset(ev2::UploadPool::create(ctx, 
+		0,
+		upload_capacity, 
+		upload_alignment, 
+		(1 << 14)
+	));
 
 	return ev2::SUCCESS;
 }
 
-//------------------------------------------------------------------------------
-// Interface
 
 namespace ev2 {
 
-Context *create_context_for_vulkan(const char *path, 
-								 const ContextInfoVulkan &params)
+VkCommandPool GfxContext::get_command_pool(
+	uint32_t frame, 
+	uint32_t worker,
+	uint32_t queue
+)
+{
+	assert(frame < this->max_frames_in_flight);
+	assert(worker < this->max_workers);
+	assert(queue == 0);
+
+	return frames[frame].command_pools[worker];
+}
+
+VkCommandPool GfxContext::get_current_frame_command_pool(
+	uint32_t queue_family_index
+)
+{
+	FrameContext *frame = this->get_current_frame();
+	std::thread::id tid = std::this_thread::get_id();
+	uint32_t worker = this->worker_pool->get_pool_index(tid);
+
+	if (worker == UINT32_MAX) {
+		log_error("Command pool only available on main thread or graphics worker");
+		return VK_NULL_HANDLE;
+	}
+
+	return frame->command_pools[worker];
+}
+
+ev2::Result GfxContext::wait_for_frame_completion(FrameContext *frame)
+{
+	VkSemaphore wait_semaphore = get_graphics_timeline_semaphore();
+
+	VkSemaphoreWaitInfo wait_info = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+		.semaphoreCount = 1,
+		.pSemaphores = &wait_semaphore,
+		.pValues = &frame->wait_value,
+	};
+
+	VkResult result = vkWaitSemaphores(device, &wait_info, EV2_FRAME_TIMEOUT);
+
+	if (result == VK_TIMEOUT) {
+		log_warn("Frame %d timed out", current_frame_index);
+		return ev2::TIMEOUT;
+	} else if (result != VK_SUCCESS) {
+		return ev2::EUNKNOWN;
+	}
+
+	return ev2::SUCCESS;  
+}
+
+
+//------------------------------------------------------------------------------
+// Interface
+
+GfxContext *create_context_for_vulkan(const char *path, 
+								 const GfxContextInfoVulkan &params)
 {
 	if (!g_vk_instance) {
 		log_error(
@@ -609,12 +768,12 @@ Context *create_context_for_vulkan(const char *path,
 
 	stbi_set_flip_vertically_on_load(true);
 
-	Context *dev = new Context{};
-	dev->surface = params.surface;
+	GfxContext *ctx = new GfxContext{};
+	ctx->surface = params.surface;
+
+	ctx->main_thread_id = std::this_thread::get_id();
 
 	ev2::Result result = ev2::SUCCESS;
-
-	//init_gl(dev);
 
 	VulkanOptions opts = {
 		.deviceExtensions = {
@@ -622,28 +781,28 @@ Context *create_context_for_vulkan(const char *path,
 		}
 	};
 
-	result = pick_physical_device(dev, opts);
+	result = pick_physical_device(ctx, opts);
 	if (result)
 		goto error;
 
-	result = pick_logical_device(dev, opts);
+	result = pick_logical_device(ctx, opts);
 	if (result)
 		goto error;
 
-	result = create_allocator(dev);
+	result = create_allocator(ctx);
 	if (result)
 		goto error;
 
 	log_info("initialized vulkan");
 
-	result = init_device_resources(path, dev);
+	result = init_device_resources(path, ctx);
 	if (result)
 		goto error;
 	
-	return dev;
+	return ctx;
 
 error:
-	delete dev;
+	delete ctx;
 	return nullptr;
 }
 
@@ -654,22 +813,23 @@ ev2::Result init_for_vulkan(const ev2::InitOptionsVulkan &opts)
 		return ev2::EINIT_FAILED;
     }
 
-    VkApplicationInfo appInfo{};
+    VkApplicationInfo appInfo = {
+    	.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+    	.pApplicationName = "Hello Triangle",
+    	.applicationVersion = VK_API_VERSION,
+    	.pEngineName = "No Engine",
+    	.engineVersion = VK_API_VERSION,
+    	.apiVersion = VK_API_VERSION,
+	};
     
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "Hello Triangle";
-    appInfo.applicationVersion = VK_API_VERSION;
-    appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_API_VERSION;
-    appInfo.apiVersion = VK_API_VERSION;
-    
-    VkInstanceCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createInfo.pApplicationInfo = &appInfo;
-
     auto extensions = getRequiredExtensions(opts);
-    createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-    createInfo.ppEnabledExtensionNames = extensions.data();
+
+    VkInstanceCreateInfo createInfo = {
+    	.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+    	.pApplicationInfo = &appInfo,
+    	.enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
+    	.ppEnabledExtensionNames = extensions.data(),
+	};
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
 
@@ -687,7 +847,7 @@ ev2::Result init_for_vulkan(const ev2::InitOptionsVulkan &opts)
     }
     
     if (vkCreateInstance(&createInfo, nullptr, &g_vk_instance) != VK_SUCCESS) {
-        log_error(" failed to create Vulkan instance!");
+        log_error("failed to create Vulkan instance!");
 		return ev2::EINIT_FAILED;
     }
 
@@ -716,15 +876,15 @@ VkInstance get_vulkan_instance()
 	return g_vk_instance;
 }
 
-void destroy_context(Context *dev)
+void destroy_context(GfxContext *ctx)
 {
-	dev->assets.reset();
-	dev->pool.reset();
+	ctx->assets.reset();
+	ctx->pool.reset();
 
-	dev->transforms.destroy(dev);
-	dev->view_data.destroy(dev);
+	ctx->transforms.destroy(ctx);
+	ctx->view_data.destroy(ctx);
 
-	delete dev;
+	delete ctx;
 }
 
 };

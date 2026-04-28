@@ -220,12 +220,12 @@ int App::update()
 
 void App::begin_frame()
 {
-	ev2::begin_frame(dev);
+	ev2::begin_frame(ctx);
 }
 
 void App::end_frame()
 {
-	ev2::end_frame(dev);
+	ev2::end_frame(ctx);
 
 #ifdef ENABLE_IMGUI
 	ImGui::Render();
@@ -303,7 +303,7 @@ int App::initialize(int argc, char *argv[])
 		.surface = surface		
 	};
 
-	dev = ev2::create_context_for_vulkan(RESOURCE_PATH, vulkan_params);
+	ctx = ev2::create_context_for_vulkan(RESOURCE_PATH, vulkan_params);
 
 	return EXIT_FAILURE;
 
@@ -331,7 +331,7 @@ int App::initialize(int argc, char *argv[])
 
 	std::signal(SIGINT, handle_sigint);
 
-	if (!dev)
+	if (!ctx)
 		return EXIT_FAILURE;
 
 	return EXIT_SUCCESS;
@@ -347,7 +347,7 @@ void App::terminate()
 	ImPlot::DestroyContext();
 #endif
 
-	ev2::destroy_context(dev);
+	ev2::destroy_context(ctx);
 
 	glfwDestroyWindow(win.ptr);
 	glfwTerminate();
