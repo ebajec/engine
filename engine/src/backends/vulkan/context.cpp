@@ -326,16 +326,19 @@ static VkExtent2D chooseSwapExtent(uint32_t w, uint32_t h,
     }
 }
 
-static void create_queue_family(VkDevice dev, 
-						   const VkQueueFamilyProperties &props, 
-						   uint32_t index, QueueFamily *family)
+static void create_queue_family(
+	ev2::GfxContext * ctx,
+	uint32_t index,
+	const VkQueueFamilyProperties &props)
 {
+	QueueFamily *family = &ctx->queue_families[index];
+
 	family->queue_count = props.queueCount;
 	family->queues.reset(new QueueSubmitter[props.queueCount]);
 	family->index = index;
 
 	for (uint32_t i = 0; i < props.queueCount; ++i) {
-    	vkGetDeviceQueue(dev, index, i, &family->queues[i].queue);
+    	vkGetDeviceQueue(ctx->device, index, i, &family->queues[i].queue);
 	}
 }
 
@@ -433,29 +436,48 @@ static ev2::Result pick_logical_device(ev2::GfxContext *ctx,
 		return ev2::EINIT_FAILED;
     }
 
-	std::vector<VkQueueFamilyProperties> queue_props;
-	uint32_t queue_count;
-	vkGetPhysicalDeviceQueueFamilyProperties(ctx->physicalDevice, &queue_count, nullptr);
-	queue_props.resize(queue_count);
-	vkGetPhysicalDeviceQueueFamilyProperties(ctx->physicalDevice, &queue_count, queue_props.data());
-
-	create_queue_family(ctx->device, 
-					   queue_props[*indices.graphicsFamily], 
-					   *indices.graphicsFamily, 
-					   &ctx->graphics_family);
-
-	create_queue_family(ctx->device, 
-					   queue_props[*indices.transferFamily], 
-					   *indices.transferFamily, 
-					   &ctx->transfer_family);
-
-	create_queue_family(ctx->device, 
-					   queue_props[*indices.computeFamily], 
-					   *indices.computeFamily, 
-					   &ctx->compute_family);
-
     vkGetDeviceQueue(ctx->device, indices.presentFamily.value(), 0,
 					 &ctx->presentQueue);
+
+	uint32_t family_count;
+	std::vector<VkQueueFamilyProperties> queue_props;
+
+	vkGetPhysicalDeviceQueueFamilyProperties(ctx->physicalDevice, 
+										  &family_count, nullptr);
+	queue_props.resize(family_count);
+	vkGetPhysicalDeviceQueueFamilyProperties(ctx->physicalDevice, 
+										  &family_count, queue_props.data());
+
+	ctx->queue_families.resize(family_count);
+
+	//-----------------------------------------------------------------------------
+	// Always initialize the graphics queue family
+	
+	uint32_t graphics_index = *indices.graphicsFamily;
+	create_queue_family(ctx, *indices.graphicsFamily, 
+					   queue_props[*indices.graphicsFamily]);
+	ctx->graphics_family = &ctx->queue_families[graphics_index];
+
+	//-----------------------------------------------------------------------------
+	// Initialize dedicated compute and/or transfer if available
+	
+	if (indices.transferFamily.has_value()) {
+		uint32_t transfer_index = *indices.transferFamily;
+		create_queue_family(ctx, *indices.transferFamily, 
+						   queue_props[*indices.transferFamily]);
+		ctx->transfer_family = &ctx->queue_families[transfer_index];
+	} else {
+		ctx->transfer_family = ctx->graphics_family;
+	}
+
+	if (indices.computeFamily.has_value()) {
+		uint32_t compute_index = *indices.transferFamily;
+		create_queue_family(ctx, *indices.computeFamily, 
+						   queue_props[*indices.computeFamily]);
+		ctx->compute_family = &ctx->queue_families[compute_index];
+	} else {
+		ctx->compute_family = ctx->graphics_family;
+	}
 
 	return ev2::SUCCESS;
 }
@@ -614,7 +636,7 @@ static ev2::Result init_frame_context(ev2::GfxContext *ctx,
 	VkCommandPoolCreateInfo pool_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 		.flags = 0,
-		.queueFamilyIndex = ctx->graphics_family.index,
+		.queueFamilyIndex = ctx->graphics_family->index,
 	};
 
 	for (uint32_t i = 0; i < pool_count; ++i) {

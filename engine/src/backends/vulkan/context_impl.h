@@ -182,7 +182,7 @@ struct GfxContext
 	}
 
 	inline VkSemaphore get_graphics_timeline_semaphore() {
-		return graphics_family.queues[0].semaphore;
+		return graphics_family->queues[0].semaphore;
 	}
 
 	// convenience (emplace)
