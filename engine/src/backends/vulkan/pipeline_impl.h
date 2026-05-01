@@ -8,94 +8,65 @@
 
 #include <unordered_map>
 #include <string>
+#include <vector>
 #include <memory>
 
 #include <cstdint>
 
+template<typename T>
+class static_flat_map {
+	size_t count;
+	void *data;
+};
+
 namespace ev2 {
 
-enum DescriptorType : uint32_t
-{
-  	DESCRIPTOR_TYPE_SAMPLER                    =  0,        
-  	DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER     =  1,       
-  	DESCRIPTOR_TYPE_SAMPLED_IMAGE              =  2,      
-  	DESCRIPTOR_TYPE_STORAGE_IMAGE              =  3,     
-  	DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER       =  4,    
-  	DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER       =  5,   
-  	DESCRIPTOR_TYPE_UNIFORM_BUFFER             =  6,  
-  	DESCRIPTOR_TYPE_STORAGE_BUFFER             =  7, 
-  	DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC     =  8,
-  	DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC     =  9, 
-  	DESCRIPTOR_TYPE_INPUT_ATTACHMENT           = 10,
-  	DESCRIPTOR_TYPE_MAX_ENUM           = UINT32_MAX,
+enum ReservedDescriptorSet {
+	EV2_RESERVED_DESCRIPTOR_SET_PER_FRAME = 0,
+	EV2_RESERVED_DESCRIPTOR_SET_PER_PASS = 1,
+	EV2_RESERVED_DESCRIPTOR_SET_BINDLESS = 2,
+	EV2_RESERVED_DESCRIPTOR_SET_MAX
 };
 
-struct DescriptorBinding
+struct ShaderLayout
 {
-	DescriptorType type;
-	uint32_t set;
-	uint32_t id;
-};
-
-struct DescriptorLayout
-{
-	std::unordered_map<std::string, DescriptorBinding> bindings;
+	struct BindingEntry {
+		uint32_t set;
+		uint32_t idx;
+	};
+	std::unordered_map<std::string, BindingEntry> binding_names;
+	std::unordered_map<uint32_t, 
+		std::vector<VkDescriptorSetLayoutBinding>
+	> bindings;
 };
 
 struct Shader
 {
-	GLuint id;
+	VkShaderModule 	shader_module;
 	ShaderStage stage;
-	std::unique_ptr<DescriptorLayout> layout;
+	ShaderLayout layout;
 };
 
 struct GfxPipeline
 {
 	ev2::ShaderID vert;
 	ev2::ShaderID frag;
-	GLuint program;
-	GLuint vao;
-	DescriptorLayout layout;
+
+	std::unordered_map<uint32_t, VkDescriptorSetLayout> layouts;
+
+	VkPipelineLayout layout;
+	VkPipeline pipeline;
 };
 
 struct ComputePipeline
 {
 	Shader shader;
-	GLuint program;
+	VkPipeline pipeline;
 };
 
-struct BufferBinding
-{
-	ev2::BufferID handle;
-	size_t offset;
-	size_t size;
-};
-
-struct TextureBinding
-{
-	ev2::TextureID handle;
-};
-
-struct ImageBinding
-{
-	ev2::ImageID handle;
-};
-
-struct ResourceBinding
-{
-	DescriptorType type;
-	union {
-		BufferBinding buf {};
-		TextureBinding tex;
-		ImageBinding img;
-	};
-};
-
-struct DescriptorSet
-{
-	uint16_t index;
-	std::unordered_map<uint16_t, ResourceBinding> bindings;
-};
+extern VkDescriptorSetLayout generate_per_frame_descriptor_set_layout(ev2::GfxContext *ctx);
+extern VkDescriptorSetLayout generate_per_pass_descriptor_set_layout(ev2::GfxContext *ctx);
+extern VkDescriptorSetLayout generate_bindless_descriptor_set_layout(ev2::GfxContext *ctx);
 
 };
 
