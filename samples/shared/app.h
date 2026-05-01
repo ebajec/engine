@@ -164,8 +164,13 @@ static inline void plot_frame_times(float delta)
 		ImPlot::SetupAxesLimits(times[scroll], 
 		   times[scroll  ? scroll - 1 : samples - 1], 
 		   0, 2*avg,ImPlotCond_Always);
+
+		ImPlotSpec spec;
+		spec.Offset = scroll;
+		spec.Flags = ImPlotCond_Always;
+
 		ImPlot::PlotLine("time", times.data(), 
-			deltas.data(), samples, ImPlotCond_Always, scroll);
+			deltas.data(), samples, spec);
 		ImPlot::EndPlot();
 	}
 }

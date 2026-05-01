@@ -19,11 +19,8 @@ file(GLOB CORE_SOURCES
 	"src/globe/*.cpp" 
 )
 
-file(GLOB BACKEND_SOURCES "src/backends/${BACKEND}/*.cpp")
-
 add_library(${TARGET} STATIC 
 	${CORE_SOURCES}
-	${BACKEND_SOURCES}
 )
 
 target_include_directories(${TARGET} PUBLIC include)
@@ -32,17 +29,7 @@ target_include_directories(${TARGET} PRIVATE
 	include/engine
 )
 
-if (${BACKEND} STREQUAL "opengl")
-	target_link_libraries(${TARGET} PUBLIC 
-		glad
-		OpenGL::GL
-	)
-elseif( ${BACKEND} STREQUAL "vulkan")
-	target_link_libraries(${TARGET} PUBLIC 
-		glad
-		OpenGL::GL
-	)
-endif()
+add_subdirectory(src/backends/opengl/)
 
 target_link_libraries(${TARGET} PUBLIC 
     imgui

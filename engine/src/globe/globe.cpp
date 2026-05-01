@@ -805,10 +805,14 @@ static void plot_tile_counts(size_t total, size_t new_tiles)
 			ImPlot::SetupAxesLimits((double)times[scroll], 
 			   (double)times[scroll  ? scroll - 1 : samples - 1], 
 			   0, 2*(double)avg,ImPlotCond_Always);
+			ImPlotSpec spec;
+			spec.Flags = ImPlotCond_Always;
+			spec.Offset = (int)scroll;
+
 			ImPlot::PlotLine("Tile count", times.data(), 
-				tile_counts.data(), (int)samples, ImPlotCond_Always, (int)scroll);
+				tile_counts.data(), (int)samples, spec);
 			ImPlot::PlotLine("New count", times.data(), 
-				new_counts.data(), (int)samples, ImPlotCond_Always, (int)scroll);
+				new_counts.data(), (int)samples, spec);
 			ImPlot::EndPlot();
 		}
 }
