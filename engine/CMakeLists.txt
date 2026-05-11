@@ -7,8 +7,6 @@ include(clang-warnings)
 set(TARGET "engine")
 project(${TARGET})
 
-add_compile_definitions(-DRESOURCE_PATH="${RESOURCE_PATH}")
-
 file(GLOB CORE_SOURCES 
 	"src/*.cpp" 
 	"src/*.c" 
@@ -20,6 +18,8 @@ file(GLOB CORE_SOURCES
 add_library(${TARGET} STATIC 
 	${CORE_SOURCES}
 )
+
+target_compile_definitions(engine PUBLIC -DRESOURCE_PATH="${RESOURCE_PATH}")
 
 target_include_directories(${TARGET} PUBLIC include)
 target_include_directories(${TARGET} PRIVATE 

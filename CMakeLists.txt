@@ -14,10 +14,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(OpenGL_GL_PREFERENCE GLVND)  
 
-set(RESOURCE_PATH "${CMAKE_SOURCE_DIR}/res")
+set(RESOURCE_PATH "${CMAKE_SOURCE_DIR}/resource")
 
 if(RESOURCE_PATH)
-	add_definitions(-DRESOURCE_PATH="${RESOURCE_PATH}")
 	message(STATUS "Default resource path : ${RESOURCE_PATH}") 
 endif()
 
