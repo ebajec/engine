@@ -192,7 +192,7 @@ vec4 cursor_jet(vec2 c)
 
 	bool valid = length(vcursor) > 1e-3; 
 
-	float S = 3;
+	float S = 5;
 	vec2 V = valid ? normalize(vcursor) : vec2(0);
 	vec2 X = vec2(V.y, -V.x);
 

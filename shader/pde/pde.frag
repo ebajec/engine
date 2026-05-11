@@ -99,7 +99,9 @@ void main()
 
 	float speed = 0.5*length(val.xy);
 
-	vec4 color = vec4(0,0, 2*abs(val.w), 1);
+	float color_val = 2*abs(val.w);
+
+	vec4 color = vec4(color_val,color_val, 0, 1);
 
 	//color = vec4(0);
 	color *= 0.6;

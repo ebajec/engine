@@ -1,9 +1,9 @@
 #!/bin/bash
 
-git clone git@github.com:KhronosGroup/SPIRV-Reflect.git ./deps/spirv-reflect/spirv-reflect &
-git clone git@github.com:ocornut/imgui.git ./deps/imgui/imgui &
-git clone git@github.com:epezent/implot.git ./deps/imgui/implot &
-git clone git@github.com:nothings/stb.git ./deps/stb/stb & 
+git clone git@github.com:KhronosGroup/SPIRV-Reflect.git ./external/spirv-reflect/spirv-reflect &
+git clone git@github.com:ocornut/imgui.git ./external/imgui/imgui &
+git clone git@github.com:epezent/implot.git ./external/imgui/implot &
+git clone git@github.com:nothings/stb.git ./external/stb/stb & 
 
 wait
 

@@ -30,6 +30,7 @@ void handle_sigint(int sig)
 }
 #endif
 
+#ifdef EV2_BACKEND_OPENGL
 int init_gl_context(GLFWwindow *window)
 {
 	glfwMakeContextCurrent(window);
@@ -50,6 +51,7 @@ int init_gl_context(GLFWwindow *window)
 
 	return EXIT_SUCCESS;
 }
+#endif
 
 void print_glfw_platform()
 {

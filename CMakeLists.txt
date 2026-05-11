@@ -66,7 +66,7 @@ add_compile_options(-g)
 set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -mavx2")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
 
-add_subdirectory(deps)
+add_subdirectory(external)
 add_subdirectory(engine)
 add_subdirectory(samples)
 

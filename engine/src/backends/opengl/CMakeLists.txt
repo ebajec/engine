@@ -14,3 +14,6 @@ target_link_libraries(engine PUBLIC
 	glad
 	OpenGL::GL
 )
+target_compile_definitions(engine PUBLIC 
+	EV2_BACKEND_OPENGL
+)

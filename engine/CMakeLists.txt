@@ -4,8 +4,6 @@ set(CMAKE_CXX_STANDARD 20)
 
 include(clang-warnings)
 
-set(BACKEND "vulkan")
-
 set(TARGET "engine")
 project(${TARGET})
 
