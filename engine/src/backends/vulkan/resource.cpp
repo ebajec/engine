@@ -66,7 +66,7 @@ ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, ImageF
 	img.w = w;
 	img.h = h;
 	img.d = d;
-	img.fmt = fmt;
+	img.format = fmt;
 
 	VkImageType type = d <= 1 ?  
 		VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_3D;
@@ -189,8 +189,7 @@ uint64_t commit_image_uploads(GfxContext *ctx, UploadContext uc, ImageID img,
 							  const ImageUpload *regions, uint32_t count)
 {
 	UploadPool *pool = ctx->pool.get();
-
-	return pool->commmit_image(uc.allocation_index, img, regions, count);
+	return pool->commmit_image(uc.allocation_index, img, regions, count); 
 }
 
 void flush_uploads(GfxContext *ctx) 

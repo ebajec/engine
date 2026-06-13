@@ -6,7 +6,6 @@
 #include <ev2/utils/geometry.h>
 #include <ev2/context.h>
 #include <ev2/resource.h>
-#include <ev2/render.h>
 
 #include <glm/vec3.hpp>
 #include <glm/mat3x3.hpp>
@@ -61,7 +60,7 @@ struct BoxDebugView
 	void add(const aabb3_t &box){boxes.push_back(box);}
 	void add(const obb_t &box){oboxes.push_back(box);}
 	void update();
-	void draw(ev2::PassCtx ctx);
+	void draw(ev2::PassContext ctx);
 };
 
 #endif

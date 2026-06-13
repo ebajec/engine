@@ -1,6 +1,6 @@
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
-#include "framedata.glsl"
+#include "frame.glsl"
 
 layout (location = 0) out vec3 out_pos;
 layout (location = 1) out vec2 out_uv;

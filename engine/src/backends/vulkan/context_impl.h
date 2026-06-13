@@ -10,7 +10,6 @@
 #include "utils/thread_pool.h"
 
 #include "backends/vulkan/resource_impl.h"
-#include "backends/vulkan/render_impl.h"
 #include "backends/vulkan/pipeline_impl.h"
 #include "backends/vulkan/upload_pool.h"
 
@@ -33,21 +32,16 @@ struct SwapChain
     VkExtent2D                  extent;
     std::vector<VkImage>        images;
     std::vector<VkImageView>    image_views;
-    std::vector<VkFramebuffer>  framebuffers;
 };
 
 struct QueueSubmitter
 {
 	std::mutex 	sync;
 
-	uint64_t 	submit_counter;
-	VkSemaphore semaphore;
-
 	VkQueue 	queue;
 
 	VkResult submit(uint32_t count, const VkSubmitInfo2 *info, VkFence fence) {
 		std::unique_lock<std::mutex> lock(sync);
-		++submit_counter;
 		return vkQueueSubmit2(queue, count, info, fence);
 	}
 };
@@ -77,8 +71,27 @@ struct FrameContext
 	// frame's work
 	uint64_t wait_value;
 
+	std::vector<ev2::Pass*> passes;
+	std::vector<ev2::Pass> new_passes;
+
 	// count = num workers
 	std::vector<VkCommandPool> command_pools;
+
+	VkSemaphore image_available_sempahore;
+
+	VkDescriptorPool descriptor_pool;
+
+	VkDescriptorSet descriptor_set;
+
+	// render target for current swapchain image
+	const ev2::RenderTarget *screen_target;
+
+	VkSemaphore semaphore;
+	std::atomic_uint64_t timeline;
+
+	uint64_t advance_timeline(){
+		return timeline.fetch_add(1, std::memory_order_relaxed);
+	}
 
 	VkCommandPool get_worker_pool(uint32_t worker_idx) {
 		assert(worker_idx + 1 < command_pools.size());
@@ -88,7 +101,12 @@ struct FrameContext
 	VkCommandPool get_main_pool() {
 		return command_pools[0];
 	}
+
+	void add_pass(ev2::Pass *pass) {
+		root_passes.emplace_back(pass);
+	}
 };
+
 namespace ev2 {
 
 struct GfxContext
@@ -103,10 +121,11 @@ struct GfxContext
     VkDevice                    device;
 
 	std::vector<QueueFamily> 	queue_families;
-
 	const QueueFamily * 		graphics_family;
 	const QueueFamily * 		transfer_family;
 	const QueueFamily * 		compute_family;
+
+	const QueueSubmitter * 		graphics_queue;
 
     VkQueue                     presentQueue;
 
@@ -114,7 +133,12 @@ struct GfxContext
 
 	VmaAllocator 				allocator;
 
-	SwapChain 					swapChain;
+	SwapChain 					swap_chain;
+	std::vector<RenderTarget*>	swap_chain_targets;
+
+	VkDescriptorSetLayout 		base_descriptor_set_layouts[EV2_BASE_SET_COUNT];
+	VkPipelineLayout 			base_pipeline_layouts[EV2_BASE_SET_COUNT];
+
 
 	//-----------------------------------------------------------------------------
 	// Important things 
@@ -127,17 +151,22 @@ struct GfxContext
 
 	uint64_t start_time_ns;
 	uint64_t current_frame_index;
+	uint32_t current_swap_chain_index;
 
+	uint32_t desired_surface_width;
+	uint32_t desired_surface_height;
+
+	bool is_swap_chain_valid;
+
+	// Workers
 	std::unique_ptr<ThreadPool> worker_pool;
 
-	//------------------------------------------------------------------------------
 	// Per-frame data
-	
 	FrameContext frames[EV2_MAX_FRAMES_IN_FLIGHT];
-	
-	//-----------------------------------------------------------------------------
-	// Resource Pools 
 
+	VkDescriptorPool static_descriptor_pool;
+	
+	// Upload pools 
 	std::unique_ptr<UploadPool, void(*)(UploadPool*)> pool = {
 		nullptr, UploadPool::destroy
 	};
@@ -159,6 +188,8 @@ struct GfxContext
 	// defaults to identity matrix
 	ViewID default_view;
 
+	//------------------------------------------------------------------------------
+
 	VkCommandPool get_command_pool(
 		uint32_t frame, 
 		uint32_t worker,
@@ -171,6 +202,11 @@ struct GfxContext
 		uint32_t queue_famlily_index = 0
 	);
 
+	VkDescriptorSetLayout get_base_descriptor_set_layout(uint32_t level);
+	VkPipelineLayout get_base_pipeline_layout(uint32_t level);
+
+	ev2::Result reset_swap_chain();
+
 	ev2::Result wait_for_frame_completion(FrameContext *frame);
 
 	inline FrameContext *get_current_frame() {
@@ -182,7 +218,7 @@ struct GfxContext
 	}
 
 	inline VkSemaphore get_graphics_timeline_semaphore() {
-		return graphics_family->queues[0].semaphore;
+		return graphics_queue->semaphore;
 	}
 
 	// convenience (emplace)

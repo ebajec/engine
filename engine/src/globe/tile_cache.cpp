@@ -274,7 +274,7 @@ tc_error tc_acquire(const tc_cache *tc, tile_code_t id, tc_ref *p_ref)
 	alc_index idx = *it->second;
 	alc_entry *ent = alc_entry_get(tc->alc,idx);
 
-	if (!alc_state_inc_ref(&ent->state))
+	if (!alc_state_ref(&ent->state))
 		return TC_ENULL;
 
 	//log_info("Acquired tile %d from CPU cache");
@@ -292,7 +292,7 @@ tc_error tc_acquire(const tc_cache *tc, tile_code_t id, tc_ref *p_ref)
 
 void tc_release(tc_ref ref)
 {
-	alc_state_dec_ref(ref.p_state);
+	alc_state_deref(ref.p_state);
 
 	//log_info("Released tile %d from CPU cache");
 }

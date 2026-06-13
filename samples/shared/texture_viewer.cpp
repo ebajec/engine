@@ -48,7 +48,7 @@ int TextureViewerPanel::update_pipeline(const char *path)
 	if (!EV2_VALID(pipeline))
 		return EXIT_FAILURE;
 
-	ev2::DescriptorLayoutID layout = 
+	ev2::ShaderLayoutID layout = 
 		ev2::get_graphics_pipeline_layout(app->ctx, pipeline);
 
 	ev2::DescriptorSetID set = ev2::create_descriptor_set(app->ctx, layout);
@@ -151,7 +151,7 @@ int TextureViewerPanel::update(ev2::GfxContext *ctx)
 	return EXIT_SUCCESS;
 }
 
-ev2::PassCtx TextureViewerPanel::begin_pass(ev2::GfxContext *ctx)
+ev2::PassContext TextureViewerPanel::begin_pass(ev2::GfxContext *ctx)
 {
 	glm::ivec2 win_size = panel->get_size(); 
 
@@ -163,10 +163,10 @@ ev2::PassCtx TextureViewerPanel::begin_pass(ev2::GfxContext *ctx)
 
 void TextureViewerPanel::render(ev2::GfxContext *ctx)
 {
-	ev2::PassCtx pass = this->begin_pass(ctx);
-	ev2::cmd_bind_gfx_pipeline(pass.rec, rd.pipeline);
+	ev2::PassContext pass = this->begin_pass(ctx);
+	ev2::cmd_bind_gfx_pipeline(pass, rd.pipeline);
 	ev2::cmd_bind_descriptor_set(pass.rec, rd.desc_set);
-	ev2::cmd_draw_screen_quad(pass.rec);
+	ev2::cmd_draw_screen_quad(pass);
 	ev2::SyncID pass_sync = ev2::end_pass(ctx, pass);
 
 	ev2::submit(pass_sync);

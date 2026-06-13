@@ -1,5 +1,4 @@
 #include <ev2/defines.h>
-#include <ev2/render.h>
 
 #include "backends/opengl/device_impl.h"
 #include "backends/opengl/render_impl.h"
@@ -21,7 +20,7 @@ static ev2::Result create_render_target_gl(
 
 	// color attachment is optional
 	ev2::ImageID color {};
-	if (flags & ev2::RENDER_TARGET_COLOR_BIT)
+	if (flags & ev2::RENDER_TARGET_CREATE_COLOR_BIT)
 	{
 		color = ev2::create_image(ctx, w, h, 0, ev2::IMAGE_FORMAT_RGBA8);
 
@@ -42,7 +41,7 @@ static ev2::Result create_render_target_gl(
 	// depth attachment is optional
 	GLuint depth {};
 
-	if (flags & ev2::RENDER_TARGET_DEPTH_BIT)
+	if (flags & ev2::RENDER_TARGET_CREATE_DEPTH_BIT)
 	{
 		glGenRenderbuffers(1,&depth);
 		glBindRenderbuffer(GL_RENDERBUFFER, depth);
@@ -54,7 +53,7 @@ static ev2::Result create_render_target_gl(
 
 	GLenum drawBuffers[1] = {};
 
-	if (flags & ev2::RENDER_TARGET_COLOR_BIT)
+	if (flags & ev2::RENDER_TARGET_CREATE_COLOR_BIT)
 		drawBuffers[0] = GL_COLOR_ATTACHMENT0;
 
 	glDrawBuffers(1, drawBuffers);

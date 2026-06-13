@@ -4,7 +4,7 @@
 #include "backends/opengl/def_opengl.h"
 
 #include <ev2/resource.h>
-#include <ev2/render.h>
+#include <ev2/pipeline.h>
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/mat4x4.hpp>
@@ -27,6 +27,9 @@ struct ViewData
 	glm::mat4 v;
 	glm::mat4 pv;
 	glm::vec3 center;
+};
+
+struct RenderTargetAttachments {
 };
 
 struct RenderTarget

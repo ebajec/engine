@@ -3,7 +3,6 @@
 #include "gpu_cache.h"
 #include "utils/thread_pool.h"
 
-#include <ev2/render.h>
 #include <ev2/globe/globe.h>
 #include <ev2/globe/tiling.h>
 
@@ -253,7 +252,7 @@ static void globe_init_debug(Globe *globe) {
 	globe->dbg.enable_boxes = false;
 }
 
-static void globe_draw_debug(Globe const *globe, ev2::PassCtx const &ctx)
+static void globe_draw_debug(Globe const *globe, ev2::PassContext const &ctx)
 {
 	if (globe->dbg.enable_boxes) {
 		globe->dbg.boxes->draw(ctx);
@@ -522,7 +521,7 @@ static ev2::Result create_render_data(ev2::GfxContext *ctx, RenderData &data)
 		ev2::flush_uploads(ctx);
 	}
 	{
-		ev2::DescriptorLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, data.pipeline);
+		ev2::ShaderLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, data.pipeline);
 		ev2::BindingSlot slot = ev2::find_binding(layout, "Metadata");
 
 		data.bindings = ev2::create_descriptor_set(ctx, layout);
@@ -969,7 +968,7 @@ ev2::Result globe_update(Globe *globe, GlobeUpdateInfo *info)
 
 #include "backends/vulkan/context_impl.h"
 
-void globe_draw(const Globe *globe, const ev2::PassCtx& pass)
+void globe_draw(const Globe *globe, const ev2::PassContext& pass)
 {
 	const RenderData &data = globe->render_data;
 

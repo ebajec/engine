@@ -2,7 +2,7 @@
 #define MY_PANEL_H
 
 #include <ev2/context.h>
-#include <ev2/render.h>
+#include <ev2/pipeline.h>
 
 #include <glm/mat2x3.hpp>
 #include <glm/vec2.hpp>
@@ -24,8 +24,8 @@ class Panel
 		EV2_NULL_HANDLE(RenderTarget);
 
 	ev2::RenderTargetFlags m_target_flags = 
-		ev2::RENDER_TARGET_COLOR_BIT | 
-		ev2::RENDER_TARGET_DEPTH_BIT;
+		ev2::RENDER_TARGET_CREATE_COLOR_BIT | 
+		ev2::RENDER_TARGET_CREATE_DEPTH_BIT;
 
 	bool m_hovered : 1 = false;
 	bool m_content_selected : 1 = false;

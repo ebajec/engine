@@ -88,7 +88,7 @@ uint64_t commit_buffer_uploads(GfxContext *ctx, UploadContext uc, BufferID buf,
 uint64_t commit_image_uploads(GfxContext *ctx, UploadContext uc, ImageID img, 
 							  const ImageUpload *uploads, uint32_t count);
 
-ev2::Result wait_complete(GfxContext *ctx, uint64_t sync);
+//ev2::Result wait_complete(GfxContext *ctx, uint64_t sync);
 
 
 //--------------------------------------------------------------------

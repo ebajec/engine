@@ -37,7 +37,7 @@ struct DescriptorBinding
 	uint32_t id;
 };
 
-struct DescriptorLayout
+struct ShaderLayout
 {
 	std::unordered_map<std::string, DescriptorBinding> bindings;
 };
@@ -46,7 +46,7 @@ struct Shader
 {
 	GLuint id;
 	ShaderStage stage;
-	std::unique_ptr<DescriptorLayout> layout;
+	std::unique_ptr<ShaderLayout> layout;
 };
 
 struct GfxPipeline
@@ -55,7 +55,7 @@ struct GfxPipeline
 	ev2::ShaderID frag;
 	GLuint program;
 	GLuint vao;
-	DescriptorLayout layout;
+	ShaderLayout layout;
 };
 
 struct ComputePipeline

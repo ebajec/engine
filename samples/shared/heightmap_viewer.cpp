@@ -46,7 +46,7 @@ int HeightmapViewerPanel::init(App *app_, ev2::GfxContext *ctx, ev2::TextureID t
 	if (!EV2_VALID(rd.pipeline))
 		return EXIT_FAILURE;
 
-	ev2::DescriptorLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, rd.pipeline);
+	ev2::ShaderLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, rd.pipeline);
 	rd.descriptors = ev2::create_descriptor_set(ctx, layout);
 
 	int result = this->set_texture(ctx, tex);
@@ -78,7 +78,7 @@ int HeightmapViewerPanel::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
 		ev2::wait_complete(ctx, sync);
 	}
 
-	ev2::DescriptorLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, rd.pipeline);
+	ev2::ShaderLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, rd.pipeline);
 	ev2::BindingSlot tex_slot = ev2::find_binding(layout, "u_tex");
 	ev2::bind_texture(ctx, rd.descriptors, tex_slot, tex);
 
@@ -119,7 +119,7 @@ void HeightmapViewerPanel::render(ev2::GfxContext *ctx)
 		.x0 = 0, .y0 = 0,
 		.w = (uint32_t)panel_size.x, .h = (uint32_t)panel_size.y
 	};
-	ev2::PassCtx pass = ev2::begin_pass(ctx, panel->get_target(), rd.camera, rect);
+	ev2::PassContext pass = ev2::begin_pass(ctx, panel->get_target(), rd.camera, rect);
 	ev2::cmd_bind_gfx_pipeline(pass.rec, rd.pipeline);
 	ev2::cmd_bind_descriptor_set(pass.rec, rd.descriptors);
 	ev2::cmd_bind_index_buffer(pass.rec, rd.ibo);

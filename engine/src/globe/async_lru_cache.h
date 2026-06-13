@@ -234,7 +234,7 @@ static inline bool alc_state_set_ready(alc_atomic_state *p_state)
 }
 
 // @return true if refcount was incremented, false otherwise
-static inline bool alc_state_inc_ref(alc_atomic_state *p_state)
+static inline bool alc_state_ref(alc_atomic_state *p_state)
 {
 	uint64_t state = p_state->load(std::memory_order_relaxed);
 	alc_state desired;
@@ -253,7 +253,7 @@ static inline bool alc_state_inc_ref(alc_atomic_state *p_state)
 
 // @return true if refcount was decremented, false otherwise
 // TODO : Handle other states
-static inline bool alc_state_dec_ref(alc_atomic_state *p_state)
+static inline bool alc_state_deref(alc_atomic_state *p_state)
 {
 	uint64_t state = p_state->load();
 	uint64_t desired;

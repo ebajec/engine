@@ -443,11 +443,16 @@ uint64_t UploadPool::commmit_buffer(uint32_t idx, BufferID buf, const BufferUplo
 
 	Buffer *buffer = ctx->get_buffer(buf);
 
+	ResourceStateFlags old_state = buffer->state.set_write(
+		VK_PIPELINE_STAGE_2_COPY_BIT,
+		VK_ACCESS_2_TRANSFER_WRITE_BIT
+	);
+
 	queues[0].submit_info.push_back(VkSemaphoreSubmitInfo{
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
 		.semaphore = buffer->sync.semaphore,
 		.value = buffer->sync.wait_value,
-		.stageMask = buffer->sync.stage,
+		.stageMask = old_state.stage,
 		.deviceIndex = 0, 
 	});
 
@@ -514,6 +519,7 @@ uint64_t UploadPool::commmit_image(uint32_t idx, ImageID img, const ImageUpload 
 
 	image->sync.wait_value = done_value;
 	image->sync.semaphore = semaphore;
+	image->sync.stage = VK_PIPELINE_STAGE_2_COPY_BIT;
 
 
 	return done_value;

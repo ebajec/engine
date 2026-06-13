@@ -3,7 +3,6 @@
 
 #include <ev2/globe/data_source.h>
 #include <ev2/context.h>
-#include <ev2/render.h>
 
 typedef struct Globe Globe;
 
@@ -26,6 +25,6 @@ void globe_imgui(Globe *globe);
 float globe_sample_elevation(const Globe *globe, const glm::dvec3& p);
 
 ev2::Result globe_update(Globe *globe, GlobeUpdateInfo *info);
-void globe_draw(const Globe *globe, const ev2::PassCtx& pass);
+void globe_draw(const Globe *globe, const ev2::PassContext& pass);
 
 #endif

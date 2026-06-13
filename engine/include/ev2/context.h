@@ -4,12 +4,11 @@
 #define EV2_BACKEND_VULKAN
 
 #include "ev2/defines.h"
-
-#ifdef EV2_BACKEND_VULKAN
 #include "vulkan/vulkan.h"
-#endif
 
 namespace ev2 { 
+
+MAKE_HANDLE(Sync);
 
 enum Result
 {
@@ -25,7 +24,6 @@ enum Result
 
 struct GfxContext;
 
-#ifdef EV2_BACKEND_VULKAN
 struct InitOptionsVulkan
 {
 	const char ** validationLayers;
@@ -39,6 +37,8 @@ struct InitOptionsVulkan
 struct GfxContextInfoVulkan
 {
 	VkSurfaceKHR surface;
+	uint32_t surface_width;
+	uint32_t surface_height;
 };
 
 ev2::Result init_for_vulkan(const InitOptionsVulkan &opts);
@@ -46,11 +46,11 @@ VkInstance get_vulkan_instance();
 
 GfxContext *create_context_for_vulkan(const char *path, 
 								   const GfxContextInfoVulkan &params);
-#else
-Device *create_device(const char *path);
-#endif
-
 void destroy_context(GfxContext *ctx);
+
+ev2::Result on_resize(GfxContext *ctx, uint32_t width, uint32_t height);
+ev2::Result wait_complete(GfxContext *ctx, uint64_t sync);
+
 };
 
 #endif // EV2_DEVICE_H

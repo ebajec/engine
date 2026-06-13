@@ -2,6 +2,7 @@
 
 #include "def_vulkan.h"
 #include "context_impl.h"
+#include "pipeline_impl.h"
 
 #include "utils/asset_table.h"
 #include "utils/pool.h"
@@ -342,6 +343,48 @@ static void create_queue_family(
 	}
 }
 
+static void destroy_swap_chain_targets(ev2::GfxContext *ctx)
+{
+	for (ev2::RenderTarget *target : ctx->swap_chain_targets)
+		if (target)
+			ev2::destroy_render_target_internal(ctx, target);
+}
+
+static ev2::Result create_swap_chain_targets(ev2::GfxContext *ctx)
+{
+
+	const SwapChain &swap_chain = ctx->swap_chain;
+
+	uint32_t image_count = (uint32_t)swap_chain.image_views.size();
+	const uint32_t w = swap_chain.extent.width;
+	const uint32_t h = swap_chain.extent.height;
+
+	ev2::Result result = ev2::SUCCESS;
+
+	ctx->swap_chain_targets.resize(image_count, nullptr);
+
+	for (uint32_t i = 0; i < image_count; ++i) {
+		ev2::RenderTarget *target = ev2::create_render_target_internal(ctx,
+			w, h, 
+			swap_chain.image_views[i],
+			VK_NULL_HANDLE, 
+	  		ev2::RENDER_TARGET_CREATE_DEPTH_BIT
+	  	);
+
+		if (!target) {
+			result = ev2::EUNKNOWN;
+			break;
+		}
+
+		ctx->swap_chain_targets[i] = target;
+	}
+
+	if (result != ev2::SUCCESS)
+		destroy_swap_chain_targets(ctx);
+
+	return result;
+}
+
 //------------------------------------------------------------------------------
 // Vulkan initialization
 
@@ -457,6 +500,7 @@ static ev2::Result pick_logical_device(ev2::GfxContext *ctx,
 	create_queue_family(ctx, *indices.graphicsFamily, 
 					   queue_props[*indices.graphicsFamily]);
 	ctx->graphics_family = &ctx->queue_families[graphics_index];
+	ctx->graphics_queue = &ctx->graphics_family->queues[0];
 
 	//-----------------------------------------------------------------------------
 	// Initialize dedicated compute and/or transfer if available
@@ -484,14 +528,14 @@ static ev2::Result pick_logical_device(ev2::GfxContext *ctx,
 
 static VkResult create_swap_chain_views(ev2::GfxContext *ctx)
 {
-	ctx->swapChain.image_views.resize(ctx->swapChain.images.size());
+	ctx->swap_chain.image_views.resize(ctx->swap_chain.images.size());
 
-    for (size_t i = 0; i < ctx->swapChain.images.size(); ++i) {
+    for (size_t i = 0; i < ctx->swap_chain.images.size(); ++i) {
         VkImageViewCreateInfo createInfo = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-			.image = ctx->swapChain.images[i],
+			.image = ctx->swap_chain.images[i],
 			.viewType = VK_IMAGE_VIEW_TYPE_2D,
-			.format = ctx->swapChain.image_format,
+			.format = ctx->swap_chain.image_format,
 			.components = {
 				.r = VK_COMPONENT_SWIZZLE_IDENTITY,
 				.g = VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -509,7 +553,7 @@ static VkResult create_swap_chain_views(ev2::GfxContext *ctx)
 
 		VkResult res = vkCreateImageView(ctx->device, 
 								   &createInfo, nullptr, 
-								   &ctx->swapChain.image_views[i]);
+								   &ctx->swap_chain.image_views[i]);
         if (res != VK_SUCCESS) {
             log_error("failed to create swap chain image views!");
 			return res;
@@ -568,7 +612,7 @@ static ev2::Result create_swap_chain(ev2::GfxContext *ctx, uint32_t w, uint32_t 
 	VkResult result = VK_SUCCESS;
 
 	result = vkCreateSwapchainKHR(ctx->device, &createInfo, nullptr, 
-							   &ctx->swapChain.swapchain); 
+							   &ctx->swap_chain.swapchain); 
 
     if (result) {
         log_error("failed to create swap chain!");
@@ -576,19 +620,19 @@ static ev2::Result create_swap_chain(ev2::GfxContext *ctx, uint32_t w, uint32_t 
     }
 
     result = vkGetSwapchainImagesKHR(ctx->device, 
-									 ctx->swapChain.swapchain, &imageCount, nullptr);
+									 ctx->swap_chain.swapchain, &imageCount, nullptr);
     if (result)
 		return ev2::ERESIZE_FAILED;
 
-    ctx->swapChain.images.resize(imageCount);
+    ctx->swap_chain.images.resize(imageCount);
     
-	result = vkGetSwapchainImagesKHR(ctx->device, ctx->swapChain.swapchain, &imageCount, 
-							ctx->swapChain.images.data());
+	result = vkGetSwapchainImagesKHR(ctx->device, ctx->swap_chain.swapchain, &imageCount, 
+							ctx->swap_chain.images.data());
 	if (result)
 		return ev2::ERESIZE_FAILED;
 
-    ctx->swapChain.image_format = surfaceFormat.format;
-    ctx->swapChain.extent = extent;
+    ctx->swap_chain.image_format = surfaceFormat.format;
+    ctx->swap_chain.extent = extent;
 
 	result = create_swap_chain_views(ctx);
 
@@ -596,6 +640,19 @@ static ev2::Result create_swap_chain(ev2::GfxContext *ctx, uint32_t w, uint32_t 
 		return ev2::ERESIZE_FAILED;
 
 	return ev2::SUCCESS;
+}
+
+static void destroy_swap_chain(VkDevice device, SwapChain &swap_chain)
+{
+    for (size_t i = 0; i < swap_chain.image_views.size(); i++) {
+        vkDestroyImageView(device, swap_chain.image_views[i], nullptr);
+    }
+    
+	if (swap_chain.swapchain)
+    	vkDestroySwapchainKHR(device, swap_chain.swapchain, nullptr);
+
+	swap_chain.images.clear();
+	swap_chain.image_views.clear();
 }
 
 static ev2::Result create_allocator(ev2::GfxContext *ctx)
@@ -623,7 +680,87 @@ static ev2::Result create_allocator(ev2::GfxContext *ctx)
 	return ev2::SUCCESS;
 }
 
-static ev2::Result init_frame_context(ev2::GfxContext *ctx,
+static ev2::Result create_default_descriptor_pool(ev2::GfxContext *ctx, VkDescriptorPool *pool)
+{
+	VkDescriptorPoolSize pool_sizes[] = {
+		VkDescriptorPoolSize{
+			.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+			.descriptorCount = 64,
+		},
+		VkDescriptorPoolSize{
+			.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 128,
+		},
+		VkDescriptorPoolSize{
+			.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorCount = 64,
+		},
+	};
+
+	VkDescriptorPoolCreateInfo create_info = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+		.flags = 0,
+		.maxSets = 64,
+		.poolSizeCount = sizeof(pool_sizes)/sizeof(pool_sizes[0]),
+		.pPoolSizes = pool_sizes,
+	};
+	VkResult result = vkCreateDescriptorPool(ctx->device, &create_info, 
+						nullptr, pool);
+
+	if (result != VK_SUCCESS)
+		return ev2::EINIT_FAILED;
+	return ev2::SUCCESS;
+}
+
+static ev2::Result init_frame_descriptor_set(ev2::GfxContext *ctx, FrameContext *frame)
+{
+
+	VkDescriptorSetLayout layout = 
+		ctx->get_base_descriptor_set_layout(EV2_BASE_SET_PER_FRAME); 
+
+	VkDescriptorSetAllocateInfo alloc_info = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.descriptorPool = ctx->static_descriptor_pool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = &layout 
+	};
+
+	VkResult vk_result = 
+		vkAllocateDescriptorSets(ctx->device, &alloc_info, &frame->descriptor_set);
+
+	if (vk_result != VK_SUCCESS)
+		return ev2::EINIT_FAILED;
+
+	ev2::Buffer *ubo = ctx->get_buffer(frame->ubo);
+
+	VkDescriptorBufferInfo ubo_info = {
+		.buffer = ubo->buffer,
+		.offset = 0,
+		.range = ubo->size
+	};
+
+	VkWriteDescriptorSet writes[] = {
+		VkWriteDescriptorSet{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = frame->descriptor_set,
+			.dstBinding = EV2_FRAME_UBO_BINDING,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.pBufferInfo = &ubo_info,
+		}
+	};
+
+	vkUpdateDescriptorSets(
+		ctx->device, 
+		sizeof(writes)/sizeof(writes[0]), writes, 
+		0, nullptr
+	);
+
+	return ev2::SUCCESS;
+}
+
+static ev2::Result create_frame_context(ev2::GfxContext *ctx,
 									   FrameContext *frame)
 {
 	frame->ubo = ev2::create_buffer(ctx, sizeof(GPUFramedata), 
@@ -633,21 +770,50 @@ static ev2::Result init_frame_context(ev2::GfxContext *ctx,
 	uint32_t pool_count = 1 + ctx->max_workers;
 	frame->command_pools.resize(pool_count);
 
-	VkCommandPoolCreateInfo pool_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-		.flags = 0,
-		.queueFamilyIndex = ctx->graphics_family->index,
-	};
+	{
+		VkCommandPoolCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+			.flags = 0,
+			.queueFamilyIndex = ctx->graphics_family->index,
+		};
 
-	for (uint32_t i = 0; i < pool_count; ++i) {
-		vkCreateCommandPool(ctx->device, &pool_info, nullptr, &frame->command_pools[i]);
+		for (uint32_t i = 0; i < pool_count; ++i) {
+			vkCreateCommandPool(ctx->device, &create_info, nullptr, &frame->command_pools[i]);
+		}
 	}
+
+
+	VkSemaphoreTypeCreateInfo timeline_info;
+	timeline_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+	timeline_info.pNext = NULL;
+	timeline_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+	timeline_info.initialValue = 0;
+
+	VkSemaphoreCreateInfo semaphore_info;
+	semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	semaphore_info.pNext = &timeline_info;
+	semaphore_info.flags = 0;
+	VkResult vk_result = vkCreateSemaphore(ctx->device, &semaphore_info, nullptr, &frame->semaphore);
+	if (vk_result)
+		return ev2::EINIT_FAILED;
+
+	ev2::Result result = create_default_descriptor_pool(ctx, &frame->descriptor_pool);
+
+	if (result != ev2::SUCCESS)
+		return ev2::EINIT_FAILED;
+
+	result = init_frame_descriptor_set(ctx, frame);
+
+	if (result != ev2::SUCCESS)
+		return ev2::EINIT_FAILED;
 
 	return ev2::SUCCESS;
 }
 
 static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx)
 {
+	ev2::Result result = ev2::SUCCESS;
+
 	//-----------------------------------------------------------------------------
 	// important things
 	
@@ -658,6 +824,47 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 	ctx->start_time_ns = 
 		std::chrono::high_resolution_clock::now().time_since_epoch().count();
 
+	result = create_default_descriptor_pool(ctx, &ctx->static_descriptor_pool);
+
+	if (result)
+		return result;
+
+	ctx->base_descriptor_set_layouts[EV2_BASE_SET_PER_FRAME] = 
+		ev2::generate_per_frame_descriptor_set_layout(ctx);
+	ctx->base_descriptor_set_layouts[EV2_BASE_SET_PER_PASS] = 
+		ev2::generate_per_pass_descriptor_set_layout(ctx);
+	ctx->base_descriptor_set_layouts[EV2_BASE_SET_BINDLESS] = 
+		ev2::generate_bindless_descriptor_set_layout(ctx);
+
+	for (uint32_t i = 0; i < EV2_BASE_SET_COUNT; ++i) {
+		if (ctx->base_descriptor_set_layouts[i] == VK_NULL_HANDLE)
+			return ev2::EINIT_FAILED;
+	}
+
+	for (uint32_t i = 0; i < EV2_BASE_SET_COUNT; ++i) {
+		VkPipelineLayoutCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			.flags = 0,
+			.setLayoutCount = i, 
+			.pSetLayouts = ctx->base_descriptor_set_layouts,
+			.pushConstantRangeCount = 0,
+			.pPushConstantRanges = nullptr,
+		};
+
+		VkResult vk_result = vkCreatePipelineLayout(
+			ctx->device, 
+			&create_info, 
+			nullptr, 
+			&ctx->base_pipeline_layouts[i]);
+		
+		if (vk_result != VK_SUCCESS) {
+			result = ev2::EINIT_FAILED;
+			break;
+		}
+	}
+
+	if (result)
+		return result;
 
 	// Resource pools
 	ctx->buffer_pool.reset(ResourcePool<ev2::Buffer>::create());
@@ -679,10 +886,9 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 		ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT
 	);
 
-	ev2::Result result = ev2::SUCCESS;
 
 	for (uint32_t i = 0; i < ctx->max_frames_in_flight; ++i) {
-		result = init_frame_context(ctx, &ctx->frames[i]);
+		result = create_frame_context(ctx, &ctx->frames[i]);
 
 		if (result)
 			return result;
@@ -743,6 +949,43 @@ VkCommandPool GfxContext::get_current_frame_command_pool(
 	}
 
 	return frame->command_pools[worker];
+}
+
+VkDescriptorSetLayout GfxContext::get_base_descriptor_set_layout(uint32_t set)
+{
+	return set < EV2_BASE_SET_COUNT ? base_descriptor_set_layouts[set] : VK_NULL_HANDLE;
+}
+
+VkPipelineLayout GfxContext::get_base_pipeline_layout(uint32_t set)
+{
+	return set < EV2_BASE_SET_COUNT ? base_pipeline_layouts[set] : VK_NULL_HANDLE;
+}
+
+ev2::Result GfxContext::reset_swap_chain()
+{
+	vkDeviceWaitIdle(this->device);
+
+	destroy_swap_chain(this->device, this->swap_chain);
+
+	ev2::Result result = 
+		create_swap_chain(this, desired_surface_width, desired_surface_height);
+
+	if (result != ev2::SUCCESS)
+		goto failure;
+
+	result = create_swap_chain_targets(this);
+
+	if (result != ev2::SUCCESS)
+		goto failure;
+
+	this->is_swap_chain_valid = true;
+
+	return result;
+
+failure:
+	destroy_swap_chain_targets(this);
+	destroy_swap_chain(this->device, this->swap_chain);
+	return result;
 }
 
 ev2::Result GfxContext::wait_for_frame_completion(FrameContext *frame)
@@ -826,6 +1069,13 @@ GfxContext *create_context_for_vulkan(const char *path,
 error:
 	delete ctx;
 	return nullptr;
+}
+
+ev2::Result on_resize(GfxContext *ctx, uint32_t width, uint32_t height)
+{
+	ctx->desired_surface_width = width;
+	ctx->desired_surface_height = height;
+	ctx->is_swap_chain_valid = true;
 }
 
 ev2::Result init_for_vulkan(const ev2::InitOptionsVulkan &opts)

@@ -1,5 +1,4 @@
 #include <ev2/context.h>
-#include <ev2/render.h>
 #include <ev2/utils/geometry.h>
 
 #include <glm/mat4x4.hpp>
@@ -25,7 +24,7 @@ class CameraDebugView
 public:
 	CameraDebugView(ev2::GfxContext *ctx);
 	~CameraDebugView();
-	void render(const ev2::PassCtx& ctx);
+	void render(const ev2::PassContext& ctx);
 	void set_camera(const Camera *camera);
 	const Camera *get_camera();
 };

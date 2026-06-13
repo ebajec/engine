@@ -39,6 +39,12 @@ struct GPUTTable
 	/// @return True if buffer was resized, false otherwise
 	bool update(ev2::GfxContext *ctx);
 
+	/// @brief Get the offset in the buffer for a given element.
+	size_t get_offset(uint32_t idx)
+	{
+		return (size_t)idx * (size_t)stride;
+	}
+
 	GPUTTable() = default;
 	
 	// @param alignment - alignment of data in GPU buffer

@@ -146,7 +146,7 @@ void BoxDebugView::update()
 	oboxes.clear();
 }
 
-void BoxDebugView::draw(ev2::PassCtx pass)
+void BoxDebugView::draw(ev2::PassContext pass)
 {
 	ev2::wait_complete(ctx, upload_index);
 	if (!vbo.id || !ibo.id)

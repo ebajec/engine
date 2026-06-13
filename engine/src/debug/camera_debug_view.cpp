@@ -27,7 +27,7 @@ CameraDebugView::CameraDebugView(ev2::GfxContext *_ctx) : ctx(_ctx)
 
 	pipeline = ev2::load_graphics_pipeline(ctx, "pipelines/frustum.yaml");
 
-	ev2::DescriptorLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, pipeline);
+	ev2::ShaderLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, pipeline);
 	desc = ev2::create_descriptor_set(ctx, layout);
 
 	ev2::BindingSlot slot = ev2::find_binding(layout, "Cameras");
@@ -68,7 +68,7 @@ const Camera *CameraDebugView::get_camera() {
 	return &m_camera;
 }
 
-void CameraDebugView::render(const ev2::PassCtx& pass)
+void CameraDebugView::render(const ev2::PassContext& pass)
 { 
 	glm::mat4 pv = m_camera.proj*m_camera.view;
 

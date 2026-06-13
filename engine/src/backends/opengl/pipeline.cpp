@@ -111,7 +111,7 @@ ev2::DescriptorType spv_reflect_binding_type_to_internal(SpvReflectDescriptorTyp
 	}
 }
 
-static ev2::Result get_spv_module_layout(ev2::DescriptorLayout *layout, 
+static ev2::Result get_spv_module_layout(ev2::ShaderLayout *layout, 
 									  const void* code, size_t size)
 {
 	SpvReflectShaderModule module;
@@ -196,7 +196,7 @@ ev2::ShaderStage gl_stage_to_ev2(GLenum stage)
 	};
 }
 
-std::string get_layout_string(const ev2::DescriptorLayout& layout)
+std::string get_layout_string(const ev2::ShaderLayout& layout)
 {
 	std::string info;
 	for (const auto [name, binding] : layout.bindings) {
@@ -287,7 +287,7 @@ static ev2::Result load_shader_file(const char *path, ev2::Shader* out)
 	if (read_spv_file(file,code) < 0) 
 		return ev2::ELOAD_FAILED;
 
-	auto layout = std::make_unique<ev2::DescriptorLayout>();
+	auto layout = std::make_unique<ev2::ShaderLayout>();
 
 	ev2::Result res = get_spv_module_layout(
 		layout.get(), code.data(), code.size()*sizeof(uint32_t));
@@ -889,31 +889,31 @@ void unload_compute_pipeline(Device *ctx, ComputePipelineID pipe)
 
 //------------------------------------------------------------------------------
 
-DescriptorLayoutID get_graphics_pipeline_layout(Device *ctx, GfxPipelineID pipe)
+ShaderLayoutID get_graphics_pipeline_layout(Device *ctx, GfxPipelineID pipe)
 {
 	const ev2::GraphicsPipeline * res = ctx->assets->get<ev2::GraphicsPipeline>(pipe.id);
 
 	if (!res)
-		return EV2_NULL_HANDLE(DescriptorLayout);
+		return EV2_NULL_HANDLE(ShaderLayout);
 
-	const DescriptorLayout *p_layout = &res->layout;
-	return DescriptorLayoutID{.id = reinterpret_cast<uint64_t>(&res->layout)};
+	const ShaderLayout *p_layout = &res->layout;
+	return ShaderLayoutID{.id = reinterpret_cast<uint64_t>(&res->layout)};
 }
 
-DescriptorLayoutID get_compute_pipeline_layout(Device *ctx, ComputePipelineID pipe)
+ShaderLayoutID get_compute_pipeline_layout(Device *ctx, ComputePipelineID pipe)
 {
 	if (!pipe.id)
-		return EV2_NULL_HANDLE(DescriptorLayout);
+		return EV2_NULL_HANDLE(ShaderLayout);
 
 	const ev2::ComputePipeline * res = ctx->assets->get<ev2::ComputePipeline>(pipe.id);
-	const DescriptorLayout *p_layout = res->shader.layout.get();
+	const ShaderLayout *p_layout = res->shader.layout.get();
 
-	return DescriptorLayoutID{.id = reinterpret_cast<uint64_t>(p_layout)};
+	return ShaderLayoutID{.id = reinterpret_cast<uint64_t>(p_layout)};
 }
 
-BindingSlot find_binding(DescriptorLayoutID id, const char *name)
+BindingSlot find_binding(ShaderLayoutID id, const char *name)
 {
-	DescriptorLayout *layout = EV2_TYPE_PTR_CAST(DescriptorLayout, id);
+	ShaderLayout *layout = EV2_TYPE_PTR_CAST(ShaderLayout, id);
 
 	auto it = layout->bindings.find(name);
 
@@ -927,11 +927,11 @@ BindingSlot find_binding(DescriptorLayoutID id, const char *name)
 
 DescriptorSetID create_descriptor_set(
 	Device *ctx, 
-	DescriptorLayoutID layout_id, 
+	ShaderLayoutID layout_id, 
 	uint16_t index
 )
 {
-	DescriptorLayout * layout = EV2_TYPE_PTR_CAST(DescriptorLayout, layout_id);
+	ShaderLayout * layout = EV2_TYPE_PTR_CAST(ShaderLayout, layout_id);
 
 	if (!layout)
 		return EV2_NULL_HANDLE(DescriptorSet);
@@ -1313,7 +1313,7 @@ static ev2::Result parse_material_file(
 
 static ev2::DescriptorSetID initialize_material(
 	ev2::Device *ctx,
-	ev2::DescriptorLayoutID layout, 
+	ev2::ShaderLayoutID layout, 
 	const PreMaterialInfo *info)
 {
 	size_t bind_count = info->bindings.size();
@@ -1342,7 +1342,7 @@ static ev2::DescriptorSetID initialize_material(
 		}
 
 		ev2::DescriptorSetID set = ev2::create_descriptor_set(
-			ctx, EV2_HANDLE_CAST(DescriptorLayout, layout));
+			ctx, EV2_HANDLE_CAST(ShaderLayout, layout));
 
 		for (size_t i = 0; i < bind_count; ++i) {
 			ev2::TextureID texID = textures[i];

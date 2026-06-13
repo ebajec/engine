@@ -1,7 +1,6 @@
 #include <ev2/utils/log.h>
 
 #include <ev2/context.h>
-#include <ev2/render.h>
 #include <ev2/resource.h>
 
 #include <ev2/utils/camera.h>
@@ -123,7 +122,7 @@ void WaveSim::render()
 		.h = (uint32_t)app->win.height
 	};
 
-	ev2::PassCtx pass = ev2::begin_pass(ctx, {}, rd.camera, view_rect);
+	ev2::PassContext pass = ev2::begin_pass(ctx, {}, rd.camera, view_rect);
 	globe_draw(globe,pass);
 	ev2::SyncID pass_sync = ev2::end_pass(ctx, pass);
 

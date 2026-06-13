@@ -9,13 +9,49 @@
 #include <cstdint>
 #include <cstddef>
 
-struct ResourceSyncInfo {
+struct ResourceSync {
 	uint64_t 				wait_value;
 	VkSemaphore 			semaphore;
+};
 
+struct ResourceStateFlags {
 	VkAccessFlags2			access;
 	VkPipelineStageFlags2 	stage;
 	uint32_t 				queue_family_index;
+};
+
+struct ResourceState {
+	ResourceStateFlags read;
+	ResourceStateFlags write;
+
+	inline ResourceStateFlags get_current() {
+		return read.stage ? read : write;
+	}
+
+	inline ResourceStateFlags set_read(VkAccessFlags2 access, VkPipelineStageFlags2 stage, 
+									uint32_t queue_family)
+	{
+		read.access |= access;
+		read.stage |= stage;
+		read.queue_family_index = queue_family;
+
+		return write;
+	}
+
+	inline ResourceStateFlags set_write(VkAccessFlags2 access, VkPipelineStageFlags2 stage,
+									 uint32_t queue_family)
+	{
+		ResourceStateFlags old = get_current();
+
+		read.access = 0;
+		read.stage = 0;
+
+		write.access = access;
+		write.stage = stage;
+		write.queue_family_index = queue_family;
+
+		return old;
+	}
 };
 
 namespace ev2 {
@@ -26,7 +62,8 @@ struct Buffer
 	VmaAllocation allocation;
 	size_t size;
 
-	ResourceSyncInfo sync;
+	ResourceSync sync;
+	ResourceState state;
 };
 
 struct Image
@@ -37,7 +74,8 @@ struct Image
 	// optional
 	VkImageView base_view = VK_NULL_HANDLE;
 
-	ResourceSyncInfo sync;
+	ResourceSync sync;
+	ResourceState state;
 	VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
 	VkImageAspectFlags aspect_mask;
@@ -45,72 +83,72 @@ struct Image
 	uint32_t h;
 	uint32_t d;
 	uint32_t levels;
-	ev2::ImageFormat fmt;
+	ev2::ImageFormat format;
 };
 
-static VkBufferMemoryBarrier2 use_buffer(Buffer *buffer, 
-								 VkAccessFlags2 access,
-								 VkPipelineStageFlags2 stage,
-								 uint32_t src_queue_family_index = VK_QUEUE_FAMILY_IGNORED,
-								 uint32_t dst_queue_family_index = VK_QUEUE_FAMILY_IGNORED
-								 )
-{
-	VkBufferMemoryBarrier2 barrier = {
-		.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-		.pNext = nullptr, 
-		.srcStageMask = buffer->sync.stage,
-		.srcAccessMask = buffer->sync.access,
-		.dstStageMask = stage,
-		.dstAccessMask = access,
-		.srcQueueFamilyIndex = src_queue_family_index,
-		.dstQueueFamilyIndex = dst_queue_family_index,
-		.buffer = buffer->buffer,
-		.offset = 0,
-		.size = buffer->size,
-	};
-
-	buffer->sync.stage = stage;
-	buffer->sync.access = access;
-
-	if (dst_queue_family_index != VK_QUEUE_FAMILY_IGNORED)
-		buffer->sync.queue_family_index = dst_queue_family_index;
-
-	return barrier;
-}
-
-static VkImageMemoryBarrier2 use_image(Image *img,
-								 VkAccessFlags2 access,
-								 VkPipelineStageFlags2 stage,
-								 VkImageSubresourceRange subresource,
-								 VkImageLayout layout = VK_IMAGE_LAYOUT_GENERAL,
-								 uint32_t src_queue_family_index = VK_QUEUE_FAMILY_IGNORED,
-								 uint32_t dst_queue_family_index = VK_QUEUE_FAMILY_IGNORED
-								 )
-{
-	VkImageMemoryBarrier2 barrier = {
-		.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-		.pNext = nullptr, 
-		.srcStageMask = img->sync.stage,
-		.srcAccessMask = img->sync.access,
-		.dstStageMask = stage,
-		.dstAccessMask = access,
-		.oldLayout = img->layout,
-		.newLayout = layout,
-		.srcQueueFamilyIndex = src_queue_family_index,
-		.dstQueueFamilyIndex = dst_queue_family_index,
-		.image = img->image,
-		.subresourceRange = subresource,
-	};
-
-	img->sync.stage = stage;
-	img->sync.access = access;
-	img->layout = layout;
-
-	if (dst_queue_family_index != VK_QUEUE_FAMILY_IGNORED)
-		img->sync.queue_family_index = dst_queue_family_index;
-
-	return barrier;
-}
+//static VkBufferMemoryBarrier2 use_buffer(Buffer *buffer, 
+//								 VkAccessFlags2 access,
+//								 VkPipelineStageFlags2 stage,
+//								 uint32_t src_queue_family_index = VK_QUEUE_FAMILY_IGNORED,
+//								 uint32_t dst_queue_family_index = VK_QUEUE_FAMILY_IGNORED
+//								 )
+//{
+//	VkBufferMemoryBarrier2 barrier = {
+//		.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+//		.pNext = nullptr, 
+//		.srcStageMask = buffer->sync.stage,
+//		.srcAccessMask = buffer->sync.access,
+//		.dstStageMask = stage,
+//		.dstAccessMask = access,
+//		.srcQueueFamilyIndex = src_queue_family_index,
+//		.dstQueueFamilyIndex = dst_queue_family_index,
+//		.buffer = buffer->buffer,
+//		.offset = 0,
+//		.size = buffer->size,
+//	};
+//
+//	buffer->sync.stage = stage;
+//	buffer->sync.access = access;
+//
+//	if (dst_queue_family_index != VK_QUEUE_FAMILY_IGNORED)
+//		buffer->sync.queue_family_index = dst_queue_family_index;
+//
+//	return barrier;
+//}
+//
+//static VkImageMemoryBarrier2 use_image(Image *img,
+//								 VkAccessFlags2 access,
+//								 VkPipelineStageFlags2 stage,
+//								 VkImageSubresourceRange subresource,
+//								 VkImageLayout layout = VK_IMAGE_LAYOUT_GENERAL,
+//								 uint32_t src_queue_family_index = VK_QUEUE_FAMILY_IGNORED,
+//								 uint32_t dst_queue_family_index = VK_QUEUE_FAMILY_IGNORED
+//								 )
+//{
+//	VkImageMemoryBarrier2 barrier = {
+//		.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+//		.pNext = nullptr, 
+//		.srcStageMask = img->sync.stage,
+//		.srcAccessMask = img->sync.access,
+//		.dstStageMask = stage,
+//		.dstAccessMask = access,
+//		.oldLayout = img->layout,
+//		.newLayout = layout,
+//		.srcQueueFamilyIndex = src_queue_family_index,
+//		.dstQueueFamilyIndex = dst_queue_family_index,
+//		.image = img->image,
+//		.subresourceRange = subresource,
+//	};
+//
+//	img->sync.stage = stage;
+//	img->sync.access = access;
+//	img->layout = layout;
+//
+//	if (dst_queue_family_index != VK_QUEUE_FAMILY_IGNORED)
+//		img->sync.queue_family_index = dst_queue_family_index;
+//
+//	return barrier;
+//}
 
 struct Texture
 {

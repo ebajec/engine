@@ -1,7 +1,7 @@
 #ifndef LINE_GLSL
 #define LINE_GLSL
 
-#include "framedata.glsl"
+#include "frame.glsl"
 
 layout (std140, binding = 0) uniform LineUniforms
 {

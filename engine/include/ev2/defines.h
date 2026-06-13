@@ -5,7 +5,10 @@
 #include "stdint.h"
 
 #define MAKE_HANDLE(name)\
-struct name##ID {uint64_t id = 0;}
+struct name##ID {\
+	uint64_t id = 0;\
+	inline bool is_valid() const{return id;}\
+}
 
 #define EV2_HANDLE_CAST(ty, val)\
 ev2::ty##ID{.id = (uint64_t)val}

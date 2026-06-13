@@ -6,7 +6,6 @@
 
 #include <ev2/utils/camera.h>
 
-#include <ev2/render.h>
 
 #include <memory>
 

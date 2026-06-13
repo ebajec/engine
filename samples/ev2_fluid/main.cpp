@@ -6,7 +6,6 @@
 #include <ev2/utils/log.h>
 
 #include <ev2/context.h>
-#include <ev2/render.h>
 #include <ev2/resource.h>
 
 #include <ev2/utils/camera.h>
@@ -124,7 +123,7 @@ int PressureSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 
 	multigrid_down = ev2::load_compute_pipeline(ctx, "shader/multigrid_down.comp.spv");
 
-	ev2::DescriptorLayoutID down_layout = 
+	ev2::ShaderLayoutID down_layout = 
 		ev2::get_compute_pipeline_layout(ctx, multigrid_down);
 
 	down_slots.ubo = ev2::find_binding(down_layout, "ubo");
@@ -136,7 +135,7 @@ int PressureSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 
 	multigrid_up = ev2::load_compute_pipeline(ctx, "shader/multigrid_up.comp.spv");
 
-	ev2::DescriptorLayoutID up_layout = 
+	ev2::ShaderLayoutID up_layout = 
 		ev2::get_compute_pipeline_layout(ctx, multigrid_up);
 
 	up_slots.ubo = ev2::find_binding(up_layout, "ubo");
@@ -318,7 +317,7 @@ int MeanSubtractor::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 	final_layer = ev2::create_texture(ctx, downsamples[levels - 1], ev2::FILTER_NEAREST);
 
 	{
-		ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(ctx, accumulate16);
+		ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, accumulate16);
 		ev2::BindingSlot in_slot = ev2::find_binding(layout, "img_in");
 		ev2::BindingSlot out_slot = ev2::find_binding(layout, "img_out");
 
@@ -334,7 +333,7 @@ int MeanSubtractor::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 		}
 	}
 	{
-		ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(ctx, subtract_img);
+		ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, subtract_img);
 		ev2::BindingSlot in_slot = ev2::find_binding(layout, "img_in");
 
 		subtract_output_slot = ev2::find_binding(layout, "img_out");
@@ -500,7 +499,7 @@ int FluidSim::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 
 int FluidSim::update_advect_set(ev2::GfxContext *ctx)
 {
-	ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_advect);
+	ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_advect);
 
 	ev2::DescriptorSetID set = ev2::create_descriptor_set(ctx, layout);
 	ev2::bind_texture(ctx, set, ev2::find_binding(layout, "q_in"), q_tex_1);
@@ -514,7 +513,7 @@ int FluidSim::update_advect_set(ev2::GfxContext *ctx)
 
 int FluidSim::update_diffuse_set(ev2::GfxContext *ctx)
 {
-	ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_diffuse);
+	ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_diffuse);
 
 	ev2::DescriptorSetID set = ev2::create_descriptor_set(ctx, layout);
 
@@ -529,7 +528,7 @@ int FluidSim::update_diffuse_set(ev2::GfxContext *ctx)
 
 int FluidSim::update_pressure_set(ev2::GfxContext *ctx)
 {
-	ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_pressure);
+	ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_pressure);
 
 	ev2::DescriptorSetID set = ev2::create_descriptor_set(ctx, layout);
 	ev2::bind_texture(ctx, set, ev2::find_binding(layout, "q_in"), q_tex_1);
@@ -542,7 +541,7 @@ int FluidSim::update_pressure_set(ev2::GfxContext *ctx)
 }
 int FluidSim::update_project_set(ev2::GfxContext *ctx)
 {
-	ev2::DescriptorLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_project);
+	ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_project);
 
 	ev2::DescriptorSetID set = ev2::create_descriptor_set(ctx, layout);
 	ev2::bind_image(ctx, set, ev2::find_binding(layout, "q_img"), q_img_1);
@@ -685,7 +684,7 @@ int FluidApp::initialize(int argc, char **argv)
 
 	vector_field_pipe = ev2::load_graphics_pipeline(ctx, "pipelines/vector_field.yaml");
 	{
-		ev2::DescriptorLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, vector_field_pipe);
+		ev2::ShaderLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, vector_field_pipe);
 		;
 		vector_field_set = ev2::create_descriptor_set(ctx, layout);
 		ev2::bind_texture(ctx, vector_field_set, ev2::find_binding(layout, "u_tex"), phi_tex);
@@ -767,7 +766,7 @@ void FluidApp::render()
 {
 	main_panel->render(ctx);
 
-	ev2::PassCtx pass = main_panel->begin_pass(ctx);
+	ev2::PassContext pass = main_panel->begin_pass(ctx);
 	ev2::cmd_bind_gfx_pipeline(pass.rec, main_panel->rd.pipeline);
 	ev2::cmd_bind_descriptor_set(pass.rec, main_panel->rd.desc_set);
 	ev2::cmd_draw_screen_quad(pass.rec);

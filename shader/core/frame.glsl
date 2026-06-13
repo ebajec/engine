@@ -11,6 +11,16 @@ struct framedata_t
 	float dt;
 };
 
+layout (std140, binding = FRAMEDATA_BINDING) uniform FrameData
+{
+	framedata_t u_frame;
+};
+
+float ftime()
+{
+	return float(u_frame.t_seconds) + u_frame.t_fract;
+}
+
 struct viewdata_t
 {
 	mat4 p;
@@ -21,20 +31,10 @@ struct viewdata_t
 	ivec2 resolution; 
 };
 
-layout (std140, binding = FRAMEDATA_BINDING) uniform FrameData
-{
-	framedata_t u_frame;
-};
-
 layout (std140, binding = VIEWDATA_BINDING) uniform ViewData
 {
 	viewdata_t u_view;
 };
-
-float ftime()
-{
-	return float(u_frame.t_seconds) + u_frame.t_fract;
-}
 
 vec3 view_dir()
 {

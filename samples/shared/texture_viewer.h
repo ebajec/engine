@@ -4,7 +4,6 @@
 #include "app.h"
 #include "panel.h"
 
-#include <ev2/render.h>
 #include <ev2/pipeline.h>
 #include <ev2/resource.h>
 
@@ -44,7 +43,7 @@ struct TextureViewerPanel
 
 	int set_texture(ev2::GfxContext *ctx, ev2::TextureID tex);
 
-	ev2::PassCtx begin_pass(ev2::GfxContext *ctx);
+	ev2::PassContext begin_pass(ev2::GfxContext *ctx);
 
 	int init(ev2::GfxContext *ctx, ev2::TextureID tex);
 	int update(ev2::GfxContext *ctx);

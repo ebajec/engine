@@ -1,7 +1,7 @@
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
 
-#include "framedata.glsl"
+#include "frame.glsl"
 
 layout (std140, binding = 0) uniform Camera {
     mat4 view;

@@ -6,7 +6,6 @@
 #include <ev2/utils/log.h>
 
 #include <ev2/context.h>
-#include <ev2/render.h>
 #include <ev2/resource.h>
 
 #include <ev2/utils/camera.h>
@@ -120,7 +119,7 @@ int WaveSim::init(ev2::GfxContext *ctx)
 	//------------------------------------------------------------------------------
 	// Get shader resource locations and create descriptor sets
 
-	ev2::DescriptorLayoutID layout = 
+	ev2::ShaderLayoutID layout = 
 		ev2::get_compute_pipeline_layout(ctx, sim_pipelines[0]);
 
 	sim0_set = ev2::create_descriptor_set(ctx, layout);
