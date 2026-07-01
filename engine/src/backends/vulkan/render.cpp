@@ -7,8 +7,16 @@
 
 #include <cstring>
 
-static ev2::Result reset_frame_context(ev2::GfxContext *ctx, FrameContext *frame)
+#define DEFAULT_DEVICE_INDEX 0
+
+constexpr uint32_t INDEX_NONE = (uint32_t)-1;
+
+namespace ev2 {
+
+static Result reset_frame_context(GfxContext *ctx, FrameContext *frame)
 {
+	Result result = ev2::SUCCESS;
+
 	VkAcquireNextImageInfoKHR acquire_info = {
 		.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
 		.swapchain = ctx->swap_chain.swapchain,
@@ -21,23 +29,26 @@ static ev2::Result reset_frame_context(ev2::GfxContext *ctx, FrameContext *frame
 	uint32_t image_index;
     VkResult vk_result = vkAcquireNextImage2KHR(ctx->device, &acquire_info, &image_index);
 
-	ev2::Result result = ev2::SUCCESS;
-	
 	if (vk_result == VK_ERROR_OUT_OF_DATE_KHR) {
         result = ctx->reset_swap_chain();
     } else if (vk_result != VK_SUCCESS && vk_result != VK_SUBOPTIMAL_KHR) {
         throw std::runtime_error("failed to acquire swap chain image!");
     }
 
-	if (result != ev2::SUCCESS)
+	frame->swap_image_use_count = 0;
+
+	if (result != SUCCESS)
 		return result;
 
 	frame->screen_target = ctx->swap_chain_targets[image_index];
+	frame->swap_chain_image_index = image_index;
 
 	// Skip cleanup if not used yet
 	
-	if (ctx->current_frame_index < ctx->max_frames_in_flight)
-		return ev2::SUCCESS;
+	if (frame->index < ctx->max_frames_in_flight)
+		return SUCCESS;
+
+	frame->render_graph.reset();
 
 	//------------------------------------------------------------------------------
 	// cleaup previous state
@@ -46,19 +57,19 @@ static ev2::Result reset_frame_context(ev2::GfxContext *ctx, FrameContext *frame
 		vk_result = vkResetCommandPool(ctx->device, command_pool, 0);
 
 		if (result)
-			return ev2::EUNKNOWN;
+			return EUNKNOWN;
 	}
 
 	vk_result = vkResetDescriptorPool(ctx->device, frame->descriptor_pool, 0);
 
 	if (vk_result != VK_SUCCESS)
-		return ev2::EUNKNOWN;
+		return EUNKNOWN;
 
-	return ev2::SUCCESS;
+	return SUCCESS;
 }
 
-static VkResult create_depth_image(ev2::GfxContext *ctx, uint32_t w, uint32_t h,
-									  ev2::ImageID* out_image, VkImageView *out_view)
+static VkResult create_depth_image(GfxContext *ctx, uint32_t w, uint32_t h,
+									  ImageID* out_image, VkImageView *out_view)
 {
 	VkImageCreateInfo create_info  = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -98,7 +109,7 @@ static VkResult create_depth_image(ev2::GfxContext *ctx, uint32_t w, uint32_t h,
 		return result;
 
 	VkImageViewCreateInfo view_info {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 		.flags = 0, 
 		.image = vk_image,
 		.viewType = VK_IMAGE_VIEW_TYPE_2D,
@@ -117,7 +128,7 @@ static VkResult create_depth_image(ev2::GfxContext *ctx, uint32_t w, uint32_t h,
 
 	result = vkCreateImageView(ctx->device, &view_info, nullptr, &view);
 
-	ev2::Image image = {
+	Image image = {
 		.image = vk_image,
 		.allocation = allocation,
 		.base_view = VK_NULL_HANDLE,
@@ -127,10 +138,10 @@ static VkResult create_depth_image(ev2::GfxContext *ctx, uint32_t w, uint32_t h,
 		.h = h,
 		.d = 1,
 		.levels = 1,
-		.format = ev2::IMAGE_FORMAT_32F
+		.format = IMAGE_FORMAT_32F
 	};
 
-	ev2::ImageID handle = ctx->emplace_image(std::move(image));
+	ImageID handle = ctx->emplace_image(std::move(image));
 
 	*out_image = handle;
 	*out_view = view;
@@ -138,8 +149,8 @@ static VkResult create_depth_image(ev2::GfxContext *ctx, uint32_t w, uint32_t h,
 	return result;
 }
 
-static VkResult create_color_image(ev2::GfxContext *ctx, uint32_t w, uint32_t h,
-									  ev2::ImageID* out_image, VkImageView *out_view)
+static VkResult create_color_image(GfxContext *ctx, uint32_t w, uint32_t h,
+									  ImageID* out_image, VkImageView *out_view)
 {
 	VkImageCreateInfo create_info  = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -198,7 +209,7 @@ static VkResult create_color_image(ev2::GfxContext *ctx, uint32_t w, uint32_t h,
 
 	result = vkCreateImageView(ctx->device, &view_info, nullptr, &view);
 
-	ev2::Image image = {
+	Image image = {
 		.image = vk_image,
 		.allocation = allocation,
 		.base_view = VK_NULL_HANDLE,
@@ -208,10 +219,10 @@ static VkResult create_color_image(ev2::GfxContext *ctx, uint32_t w, uint32_t h,
 		.h = h,
 		.d = 1,
 		.levels = 1,
-		.format = ev2::IMAGE_FORMAT_32F
+		.format = IMAGE_FORMAT_32F
 	};
 
-	ev2::ImageID handle = ctx->emplace_image(std::move(image));
+	ImageID handle = ctx->emplace_image(std::move(image));
 
 	*out_image = handle;
 	*out_view = view;
@@ -222,8 +233,6 @@ static VkResult create_color_image(ev2::GfxContext *ctx, uint32_t w, uint32_t h,
 //------------------------------------------------------------------------------
 // Interface
 
-namespace ev2 {
-
 RenderTarget *create_render_target_internal(
 	GfxContext *ctx,
 	uint32_t w, uint32_t h,
@@ -232,9 +241,6 @@ RenderTarget *create_render_target_internal(
 	RenderTargetFlags flags
 )
 {
-	if ((flags & RENDER_TARGET_CREATE_COLOR_BIT))
-		return nullptr;
-
 	RenderTarget *target = new RenderTarget{};
 
 	target->w = w;
@@ -244,15 +250,29 @@ RenderTarget *create_render_target_internal(
 	VkResult result = VK_SUCCESS; 
 
 	if (flags & RENDER_TARGET_CREATE_DEPTH_BIT) {
+		if (depth_view) {
+			log_error(
+				"RENDER_TARGET_CREATE_DEPTH_BIT set while depth_view is not VK_NULL_HANDLE"); 
+			return nullptr;
+		}
 		result = create_depth_image(ctx, w, h, &target->depth_img, &target->depth_view);
 		if (result)
 			goto cleanup;
+	} else {
+		target->depth_view = depth_view;
 	}
 
 	if (flags & RENDER_TARGET_CREATE_COLOR_BIT) {
+		if (color_view) {
+			log_error(
+				"RENDER_TARGET_CREATE_COLOR_BIT set while and color_view is not VK_NULL_HANDLE"); 
+			return nullptr;
+		}
 		result = create_color_image(ctx, w, h, &target->color_img, &target->color_view);
 		if (result)
 			goto cleanup;
+	} else {
+		target->depth_view = depth_view;
 	}
 
 	return nullptr;
@@ -267,12 +287,12 @@ void destroy_render_target_internal(
 )
 {
 	if (target->flags & RENDER_TARGET_CREATE_DEPTH_BIT) {
-		ev2::destroy_image(ctx, target->depth_img);
+		destroy_image(ctx, target->depth_img);
 		vkDestroyImageView(ctx->device, target->depth_view, nullptr);
 	}
 
 	if (target->flags & RENDER_TARGET_CREATE_COLOR_BIT) {
-		ev2::destroy_image(ctx, target->color_img);
+		destroy_image(ctx, target->color_img);
 		vkDestroyImageView(ctx->device, target->color_view, nullptr);
 	}
 
@@ -471,44 +491,6 @@ static void populate_rendering_info(
 	};
 }
 
-static void record_base_gfx_pass_cmds(const Pass *pass, VkCommandBuffer cmds)
-{
-	const FrameContext *frame = pass->ctx->get_current_frame(); 
-
-	VkViewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = (float)pass->gfx->viewport.w;
-    viewport.height = (float)pass->gfx->viewport.h;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(cmds, 0, 1, &viewport);
-
-    VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = VkExtent2D{
-		.width = pass->gfx->scissor.w,
-		.height = pass->gfx->scissor.h
-	};
-    vkCmdSetScissor(cmds, 0, 1, &scissor);
-
-	std::array<VkDescriptorSet,2> base_sets = {
-		frame->descriptor_set,
-		pass->gfx->descriptor_set,
-	};
-
-	VkPipelineLayout base_layout = pass->ctx->get_base_pipeline_layout(EV2_BASE_SET_PER_PASS);
-
-	vkCmdBindDescriptorSets(
-		cmds, 
-		VK_PIPELINE_BIND_POINT_GRAPHICS,
-		base_layout, 
-		EV2_BASE_SET_PER_FRAME, 
-		(uint32_t)base_sets.size(), base_sets.data(),
-		0, nullptr
-	);
-}
-
 PassID begin_pass(
 	GfxContext *ctx, 
 	RenderTargetID target_handle, ViewID view_handle,
@@ -525,9 +507,6 @@ PassID begin_pass(
 	Pass *pass = new Pass{
 		.ctx = ctx,
 	};
-	pass->sync = {
-		.pass = pass
-	};
 
 	RenderPass *gfx = create_gfx_pass(
 		ctx, 
@@ -541,7 +520,6 @@ PassID begin_pass(
 		return EV2_NULL_HANDLE(Pass);
 
 	pass->gfx = gfx;
-
 
 	VkCommandBuffer cmds = create_pass_commands(ctx); 
 	if (!cmds)
@@ -558,42 +536,15 @@ PassID begin_pass(
 	if (result)
 		return EV2_NULL_HANDLE(Pass);
 
-	const FrameContext *frame = ctx->get_current_frame(); 
-
-	//------------------------------------------------------------------------------
-	// Can record commands now
-
-	// if the handle passed in null, use the target for the current swapchain image
-	const RenderTarget *target = target_handle.is_valid() ? 
-		EV2_TYPE_PTR_CAST(RenderTarget, target_handle) : 
-		frame->screen_target; 
-
-	VkRenderingAttachmentInfo color_info, depth_info, stencil_info;
-	VkRenderingInfo rendering_info;
-
-	populate_rendering_info(target, &rendering_info, &color_info, &depth_info, &stencil_info);
-
-	vkCmdBeginRendering(cmds, &rendering_info);
-
-	record_base_gfx_pass_cmds(pass, cmds);
-
 	return EV2_HANDLE_CAST(Pass, pass); 
 }
 
-SyncID end_pass(GfxContext *ctx, PassID pass_handle)
+void end_pass(GfxContext *ctx, PassID pass_handle)
 {
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_handle);
 
 	FrameContext *frame = ctx->get_current_frame();
 	frame->add_pass(pass);
-
-	//vkCmdEndRendering(pass->cmds);
-	//VkResult result = vkEndCommandBuffer(pass->cmds);
-
-	//if (result != VK_SUCCESS)
-	//	return EV2_NULL_HANDLE(Sync);
-
-	return EV2_HANDLE_CAST(Sync, &pass->sync);
 }
 
 static ResourceStateFlags usage_to_state_flags(Usage usage)
@@ -649,7 +600,7 @@ enum PassReadWrite{
 	PASS_RW = 0x3,
 };
 
-static uint8_t usage_to_rw_flags(ev2::Usage usage)
+static uint8_t usage_to_rw_flags(Usage usage)
 {
 	switch(usage) {
 		case USAGE_TRANSFER_SRC:
@@ -688,28 +639,6 @@ static ResourceStateFlags update_resource_state(ResourceState *state, Usage usag
 	}
 
 	return {};
-
-	//switch(usage) {
-	//	case USAGE_TRANSFER_SRC:
-	//		return state->set_read(flags.access, flags.stage);
-	//	case USAGE_TRANSFER_DST:
-	//		return state->set_write(flags.access, flags.stage);
-	//	case USAGE_SAMPLED_GRAPHICS:
-	//		return state->set_read(flags.access, flags.stage);
-	//	case USAGE_COLOR_ATTACHMENT:
-	//		return state->set_write(flags.access, flags.stage);
-	//	case USAGE_DEPTH_ATTACHMENT:
-	//		return state->set_write(flags.access, flags.stage);
-	//	case USAGE_STORAGE_READ_COMPUTE:
-	//		return state->set_read(flags.access, flags.stage);
-	//	case USAGE_STORAGE_RW_COMPUTE:
-	//		return state->set_write(flags.access, flags.stage);
-	//	case USAGE_MAX_ENUM:
-	//	case USAGE_UNDEFINED:
-	//	default:
-	//		return {};
-	//}
-	//return {};
 }
 
 void cmd_use_buffer(
@@ -725,28 +654,8 @@ void cmd_use_buffer(
 			.buffer = buf_id,
 			.usage = usage
 		},
-		.type = ev2::UseBuffer,
+		.type = UseBuffer,
 	});
-
-	//return;
-
-	//Buffer *buf = pass->ctx->get_buffer(buf_id);
-
-	//ResourceStateFlags old_flags = update_resource_state(&buf->state, usage);
-	//ResourceStateFlags curr_flags = buf->state.get_current();
-
-	//VkBufferMemoryBarrier2 barrier = {
-	//	.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-	//	.srcStageMask = old_flags.stage,
-	//	.srcAccessMask = old_flags.access,
-	//	.dstStageMask = curr_flags.stage,
-	//	.dstAccessMask = curr_flags.access,
-	//	.buffer = buf->buffer,
-	//	.offset = 0,
-	//	.size = buf->size,
-	//	.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-	//	.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-	//};
 }
 
 void cmd_use_image(
@@ -762,34 +671,8 @@ void cmd_use_image(
 			.image = img_id,
 			.usage = usage
 		},
-		.type = ev2::UseImage,
+		.type = UseImage,
 	});
-	//return;
-
-	//Image *img = pass->ctx->get_image(img_id);
-
-	//ResourceStateFlags old_flags = update_resource_state(&img->state, usage);
-	//ResourceStateFlags curr_flags = img->state.get_current();
-
-	//VkImageMemoryBarrier2 barrier = {
-	//	.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-	//	.srcStageMask = old_flags.stage,
-	//	.srcAccessMask = old_flags.access,
-	//	.dstStageMask = curr_flags.stage,
-	//	.dstAccessMask = curr_flags.access,
-	//	.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-	//	.newLayout = VK_IMAGE_LAYOUT_GENERAL,
-	//	.image = img->image,
-	//	.subresourceRange = VkImageSubresourceRange{
-	//		.aspectMask = img->aspect_mask,
-	//		.baseMipLevel = 0,
-	//		.levelCount = 1,
-	//		.baseArrayLayer = 0,
-	//		.layerCount = 1,
-	//	},
-	//	.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-	//	.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-	//};
 }
 
 void cmd_bind_resources(PassID pass_id, ShaderBindingsID bindings_id)
@@ -800,7 +683,7 @@ void cmd_bind_resources(PassID pass_id, ShaderBindingsID bindings_id)
 		.bind_resources = {
 			.bindings = bindings_id
 		},
-		.type = ev2::BindResources,
+		.type = BindResources,
 	});
 }
 
@@ -818,7 +701,7 @@ void cmd_bind_compute_pipeline(PassID pass_id, ComputePipelineID pipeline_id)
 		.bind_compute_pipeline = {
 			.pipeline = pipeline_id
 		},
-		.type = ev2::BindComputePipeline,
+		.type = BindComputePipeline,
 	});
 }
 
@@ -837,8 +720,24 @@ void cmd_dispatch(
 				countx, county, countz
 			}
 		},
-		.type = ev2::Dispatch,
+		.type = Dispatch,
 	});
+}
+
+void cmd_custom(
+	PassID pass_id,
+	std::function<void(VkCommandBuffer)>&& callback
+) 
+{
+	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
+
+	pass->cmds.push_back(Command{
+		.custom = CmdCustom{
+			.callback_id = (uint32_t)pass->custom_callbacks.size()
+		},
+		.type = Custom,
+	});
+	pass->custom_callbacks.push_back(std::move(callback));
 }
 
 void cmd_bind_gfx_pipeline(PassID pass_id, GfxPipelineID pipeline_id)
@@ -855,51 +754,62 @@ void cmd_bind_gfx_pipeline(PassID pass_id, GfxPipelineID pipeline_id)
 		.bind_gfx_pipeline = {
 			.pipeline = pipeline_id
 		},
-		.type = ev2::BindGfxPipeline,
+		.type = BindGfxPipeline,
 	});
 }
 
 void cmd_bind_index_buffer(PassID pass_id, BufferID buf_id)
 {
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
-
-	Buffer *buf = pass->ctx->get_buffer(buf_id);
+	pass->cmds.push_back(Command{
+		.bind_index_buffer = CmdBindIndexBuffer{
+			.buffer = buf_id
+		},
+		.type = BindIndexBuffer,
+	});
 }
 
-void cmd_draw_screen_quad(PassID pass_id)
+void cmd_bind_vertex_buffer(PassID pass_id, BufferID buf_id)
 {
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
+	pass->cmds.push_back(Command{
+		.bind_vertex_buffer = CmdBindVertexBuffer{
+			.buffer = buf_id
+		},
+		.type = BindVertexBuffer,
+	});
 }
 
 //------------------------------------------------------------------------------
 // Render graph compilation
 
-ev2::Result begin_frame(GfxContext *ctx)
+Result begin_frame(GfxContext *ctx)
 {
 	if (!ctx->is_swap_chain_valid)
 		ctx->reset_swap_chain();
 
 	FrameContext *frame = ctx->get_current_frame();
-	++ctx->current_frame_index;
 
 	//------------------------------------------------------------------------------
-	// Wait until commands on oldest frame have completing before resetting it.
-	ev2::Result result = ctx->wait_for_frame_completion(frame);
+	// Wait until frame at this index is complete before resetting it.
+	Result result = ctx->wait_for_frame_completion(frame);
 
-	if (result != ev2::SUCCESS)
+	if (result != SUCCESS)
 		return result;
+
+	frame->index = ctx->frame_counter++;
 
 	//------------------------------------------------------------------------------
 	// Cleanup frame context if previously used
 	
 	result = reset_frame_context(ctx, frame);
 
-	if (result != ev2::SUCCESS)
+	if (result != SUCCESS)
 		return result;
 
 	//------------------------------------------------------------------------------
 	// Update stuff
-	
+
 	uint64_t time_ns = 
 		std::chrono::high_resolution_clock::now().time_since_epoch().count();
 
@@ -928,237 +838,729 @@ ev2::Result begin_frame(GfxContext *ctx)
 		.size = sizeof(GPUFramedata),
 	};
 	uint64_t sync = commit_buffer_uploads(ctx, uc, frame->ubo, &up, 1);
-	ev2::flush_uploads(ctx);
-	ev2::wait_complete(ctx, sync);
+	flush_uploads(ctx);
+	wait_complete(ctx, sync);
 
-	return ev2::SUCCESS;
+	return SUCCESS;
 }
-
-enum ResourceType : uint8_t {
-	PASS_EDGE_BUFFER,
-	PASS_EDGE_IMAGE
-};
-
-struct PassBarrier 
-{
-	union {
-		ImageID image;
-		BufferID buffer;
-	};
-	ResourceStateFlags src_state;
-	ResourceStateFlags dst_state;
-	ResourceType type;
-};
-
-struct PassEdge
-{
-	uint32_t src_pass;
-	uint32_t dst_pass;
-
-	uint64_t use_count;
-
-	PassBarrier barrier;
-};
-
-struct PassCommand
-{
-	ev2::Command base;
-	uint32_t barrier_count;
-};
-
-struct PassSync
-{
-	VkSemaphore semaphore;
-	uint64_t wait_value;
-};
-
-struct PassParse
-{
-	std::vector<PassCommand> commands;
-	std::vector<PassBarrier> barriers;
-
-	std::vector<PassSync> wait;
-	std::vector<PassSync> signal;
-
-	uint32_t barrier_offset;
-};
-
-struct RenderGraph
-{
-	GfxContext *ctx;
-
-	const ev2::Pass *passes;
-
-	std::vector<VkCommandBuffer> command_buffers;
-	std::vector<PassParse> parses;
-	std::vector<PassEdge> edges;
-
-	std::unordered_map<uint64_t, uint32_t> buffer_passes;
-	std::unordered_map<uint64_t, uint32_t> image_passes;
-};
 
 static void rg_use_buffer(RenderGraph &rg, GfxContext *ctx, uint32_t pass_idx, const CmdUseBuffer &cmd);
 static void rg_use_image(RenderGraph &rg, GfxContext *ctx, uint32_t pass_idx, const CmdUseImage &cmd);
 
+static PassEdge *get_or_insert_edge(RenderGraph *rg, const PassEdge& edge)
+{
+	auto [it, inserted] = rg->edge_idx_map.emplace(edge.get_key(), rg->edges.size());
+
+	if (inserted) {
+		rg->edges.push_back(edge);
+	}
+
+	return &rg->edges.back();
+}
+
 static void update_pass_barriers(RenderGraph &rg, const PassBarrier& barrier,
 								 uint32_t src_pass_idx, uint32_t dst_pass_idx)
 {
-	if (src_pass_idx != dst_pass_idx) {
-		PassEdge edge = {
-			.src_pass = src_pass_idx,
-			.dst_pass = dst_pass_idx,
-			.barrier = barrier,
-		};
-		rg.edges.push_back(edge);
-	}
+	const TaggedResource resource = barrier.resource;
+	const bool is_write_barrier = barrier.is_write;
 
-	PassParse *src_parse = &rg.parses[src_pass_idx];
-	PassParse *dst_parse = &rg.parses[dst_pass_idx];
+	PassNode *dst_node = &rg.nodes[dst_pass_idx];
+
+	bool needs_queue_transfer = 
+		barrier.dst_state.queue_family_index != barrier.src_state.queue_family_index; 
 
 	// TODO: Handle situation where resource had been used by another queue family 
 	// not in this frame.
 
-	if (barrier.dst_state.queue_family_index != barrier.src_state.queue_family_index) {
-		PassBarrier src_barrier = barrier;
-		src_barrier.dst_state.stage = 0;
-		src_barrier.dst_state.access = 0;
-
-		PassBarrier dst_barrier = barrier;
-		dst_barrier.src_state.stage = 0;
-		dst_barrier.src_state.access = 0;
-
-		src_parse->barriers.push_back(src_barrier);
-		dst_parse->barriers.push_back(dst_barrier);
-	} else {
-		src_parse->barriers.push_back(barrier);
+	if (needs_queue_transfer && src_pass_idx != PASS_INDEX_OUT_OF_FRAME) {
+		rg.nodes[src_pass_idx].barriers.push_back(barrier);
 	}
+
+	PassEdge *edge = get_or_insert_edge(&rg, PassEdge{
+		.src_pass = src_pass_idx,
+		.dst_pass = dst_pass_idx,
+		.barrier = barrier
+	});
+
+	// When there was previously a read barrier on the resource, and we're
+	// doing another read, we will union the destination flags of the existing
+	// barrier with the new destination flags instead of adding a redundant
+	// barrier.
+
+	PassBarrier *final_barrier;
+	if (
+		final_barrier = dst_node->barriers.empty() ? nullptr : &dst_node->barriers.back();
+
+		!is_write_barrier && final_barrier && 
+		!final_barrier->is_write && final_barrier->resource == resource
+	) {
+		final_barrier->dst_state.access |= barrier.dst_state.access;
+		final_barrier->dst_state.stage |= barrier.dst_state.stage;
+
+		// update the barrier for the edge
+		edge->barrier = *final_barrier;
+	} else {
+		dst_node->barriers.push_back(barrier);
+		final_barrier = &dst_node->barriers.back();
+	}
+
+	dst_node->final_states[resource] = final_barrier->dst_state;
 }
 
-void rg_use_buffer(RenderGraph &rg, GfxContext *ctx, uint32_t dst_pass_idx, const CmdUseBuffer& cmd)
+void rg_use_buffer(RenderGraph &rg, GfxContext *ctx, uint32_t dst_node_idx, const CmdUseBuffer& cmd)
 {
-	auto [it, exists] = rg.buffer_passes.emplace(cmd.buffer.id, dst_pass_idx);
+	auto [it, inserted] = rg.buffer_passes.emplace(cmd.buffer.id, dst_node_idx);
 
-	uint32_t src_pass_idx = it->second;
-
-	const ev2::Pass *dst_pass = &rg.passes[dst_pass_idx];
+	const PassNode &dst_node = rg.nodes[dst_node_idx];
 
 	Buffer *buf = ctx->get_buffer(cmd.buffer);
 	ResourceState *p_state = &buf->state;
 
-	ResourceStateFlags src_flags = update_resource_state(p_state, cmd.usage, dst_pass->queue_family);
+	ResourceStateFlags src_flags = update_resource_state(p_state, cmd.usage, 
+													  dst_node.queue_family_index);
 	ResourceStateFlags dst_flags = p_state->get_current();
 
 	PassBarrier barrier = {
-		.buffer = cmd.buffer,
 		.src_state = src_flags,
 		.dst_state = dst_flags,
-		.type = PASS_EDGE_BUFFER,
+		.resource = TaggedResource(cmd.buffer),
+		.is_write = (bool)(usage_to_rw_flags(cmd.usage) & PASS_WRITE)
 	};
 
-	update_pass_barriers(rg, barrier, src_pass_idx, dst_pass_idx);
+	uint32_t src_pass_idx = inserted ? it->second : PASS_INDEX_OUT_OF_FRAME;
+	update_pass_barriers(rg, barrier, src_pass_idx, dst_node_idx);
+
+	if (!inserted)
+		it->second = dst_node_idx;
 }
 
-void rg_use_image(RenderGraph &rg, GfxContext *ctx, uint32_t dst_pass_idx, const CmdUseImage& cmd)
+void rg_use_image(RenderGraph &rg, GfxContext *ctx, uint32_t dst_node_idx, const CmdUseImage& cmd)
 {
-	auto [it, exists] = rg.image_passes.emplace(cmd.image.id, dst_pass_idx);
+	auto [it, inserted] = rg.image_passes.emplace(cmd.image.id, dst_node_idx);
 
-	uint32_t src_pass_idx = it->second;
-
-	const ev2::Pass *dst_pass = &rg.passes[dst_pass_idx];
+	const PassNode &dst_node = rg.nodes[dst_node_idx];
 
 	Image *img = ctx->get_image(cmd.image);
 	ResourceState *p_state = &img->state;
 
-	ResourceStateFlags src_flags = update_resource_state(p_state, cmd.usage, dst_pass->queue_family);
+	ResourceStateFlags src_flags = update_resource_state(p_state, cmd.usage, 
+													  dst_node.queue_family_index);
 	ResourceStateFlags dst_flags = p_state->get_current();
 
 	PassBarrier barrier = {
-		.image = cmd.image,
 		.src_state = src_flags,
 		.dst_state = dst_flags,
-		.type = PASS_EDGE_IMAGE,
+		.resource = TaggedResource(cmd.image),
+		.is_write = (bool)(usage_to_rw_flags(cmd.usage) & PASS_WRITE)
 	};
 
-	update_pass_barriers(rg, barrier, src_pass_idx, dst_pass_idx);
+	uint32_t src_pass_idx = inserted ? it->second : PASS_INDEX_OUT_OF_FRAME;
+	update_pass_barriers(rg, barrier, src_pass_idx, dst_node_idx);
+
+	if (!inserted)
+		it->second = dst_node_idx;
 }
 
-static PassCommand &rg_new_pass_command(PassParse &parse, const ev2::Command cmd)
+static PassCommand &rg_new_pass_command(PassNode &node, const Command cmd)
 {
-	uint32_t barrier_count = (uint32_t)parse.barriers.size();
-	uint32_t barrier_offset = parse.barrier_offset;
+	uint32_t barrier_count = (uint32_t)node.barriers.size();
+	uint32_t barrier_offset = node.barrier_offset;
 
 	uint32_t cmd_barrier_count = barrier_count > barrier_offset ? 
 		barrier_count - barrier_offset : 0;
 
-	return parse.commands.emplace_back(PassCommand{
+	node.barrier_offset = barrier_count;
+
+	return node.commands.emplace_back(PassCommand{
 		.base = cmd,
 		.barrier_count = cmd_barrier_count
 	});
 }
 
-static void rg_record_pass_cmds(GfxContext *ctx, const PassParse &parse, VkCommandBuffer cmds)
+static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 {
-}
+	FrameContext *frame = ctx->get_current_frame();
 
-static void rg_compile(GfxContext *ctx, RenderGraph *rg, uint32_t pass_count, ev2::Pass *passes)
-{
-	*rg = RenderGraph{
-		.ctx = ctx,
-		.passes = passes,
-	};
-	rg->parses.resize(pass_count, PassParse{});
+	uint32_t node_count = (uint32_t)rg->nodes.size();
 
-	for (uint32_t pass_idx = 0; pass_idx < pass_count; ++pass_idx) {
-		const ev2::Pass &pass = passes[pass_idx];
-		PassParse &parse = rg->parses[pass_idx];
+	for (uint32_t node_idx = 0; node_idx < node_count; ++node_idx) {
+		PassNode &node = rg->nodes[node_idx];
+		const Pass *pass = node.pass;
 
-		for (const Command &cmd_union : pass.cmds) {
-			switch(cmd_union.type) {
-				case BindComputePipeline: {
-					rg_new_pass_command(parse, cmd_union);
-					break;
-				}
-				case BindGfxPipeline: {
-					rg_new_pass_command(parse, cmd_union);
-					break;
-				}
-				case BindResources: {
-					rg_new_pass_command(parse, cmd_union);
-					break;
-				}
+		uint32_t cmd_count = (uint32_t)pass->cmds.size();
+
+		for (uint32_t i = 0; i < cmd_count; ++i) {
+			const Command &cmd = pass->cmds[i];
+
+			switch(cmd.type) {
+				case BindComputePipeline:
+				case BindGfxPipeline:
+				case BindResources:
+				case BindVertexBuffer:
+				case BindIndexBuffer:
 				case Dispatch: {
-					rg_new_pass_command(parse, cmd_union);
+					rg_new_pass_command(node, cmd);
 					break;
 				}
 				case UseBuffer: {
-					rg_use_buffer(*rg, ctx, pass_idx, cmd_union.use_buffer);
+					rg_use_buffer(*rg, ctx, node_idx, cmd.use_buffer);
 					break;
 				} 
 				case UseImage: {
-					rg_use_image(*rg, ctx, pass_idx, cmd_union.use_image);
+					rg_use_image(*rg, ctx, node_idx, cmd.use_image);
 					break;
 				}
 			}
 		}
 	}
 
-	rg->command_buffers.resize(pass_count, VK_NULL_HANDLE);
+	//------------------------------------------------------------------------------
+	// Assign submission groups
+	//
+	// Naive approach: For starters, just assign every node it's own submission group;
+	// TODO: Merge sequential node dependencies into a single command buffer
+	
+	uint32_t last_screen_render_index = INDEX_NONE;
 
-	for (uint32_t pass_idx = 0; pass_idx < pass_count; ++pass_idx) {
-		rg_record_pass_cmds(ctx, rg->parses[pass_idx], rg->command_buffers[pass_idx]);
+	for (const PassNode &node : rg->nodes) {
+		uint32_t queue_family_index = node.pass->queue_family;
+
+		RenderGraphSubmission &submission = rg->submissions.emplace_back(RenderGraphSubmission{
+			.nodes = {&node},
+			.queue_index = queue_family_index
+		});
+
+		uint32_t submission_index = (uint32_t)rg->submissions.size() - 1;
+
+		// If we render to the swapchain image, 
+		if (node.pass->gfx && node.pass->gfx->render_to_swapchain()) {
+			if (!frame->swap_image_use_count++) {
+				submission.wait.push_back(VkSemaphoreSubmitInfo{
+					.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+					.semaphore = frame->image_available_sempahore,
+					.stageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+					.deviceIndex = DEFAULT_DEVICE_INDEX,
+				});
+			}
+			last_screen_render_index = submission_index;
+		}
 	}
 
+	if (last_screen_render_index != INDEX_NONE) {
+		rg->submissions[last_screen_render_index].signal.push_back(VkSemaphoreSubmitInfo{
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+			.semaphore = frame->render_finished_semaphore,
+			.stageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.deviceIndex = DEFAULT_DEVICE_INDEX,
+		});
+		rg->submissions[last_screen_render_index].signal.push_back(VkSemaphoreSubmitInfo{
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+			.semaphore = ctx->frame_semaphore,
+			.value = frame->index,
+			.stageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.deviceIndex = DEFAULT_DEVICE_INDEX,
+		});
+	} else {
+		log_error("Incomplete render graph: does not render to display");
+		return ev2::ERENDER_GRAPH;
+	}
+
+	//------------------------------------------------------------------------------
+	// Populate semaphores
+	//
+	// After assigning each node in the graph to a submission group (i.e.,
+	// a group of nodes, specific queue, and wait + signal semaphores), 
+	//
+	// Populate the semaphores for that submission group based on a 
+
+	for (const PassEdge &edge : rg->edges) {
+		if (edge.is_on_same_queue())
+			continue;
+
+		PassNode &dst_node = rg->nodes[edge.dst_pass];
+		RenderGraphSubmission &submission = rg->submissions[dst_node.submission_idx];
+
+		ResourceSync *done_sync = 
+			done_sync = frame->get_resource_sync(
+				edge.barrier.resource, 
+				rg->queues[submission.queue_index]->queue
+			);
+
+		assert(done_sync);
+
+		++done_sync->wait_value;
+
+		ResourceState *state = nullptr;
+		switch (edge.barrier.resource.type) {
+			case RESOURCE_TYPE_BUFFER: {
+				Buffer *buffer = ctx->get_buffer(edge.barrier.resource.to_buffer());
+				state = &buffer->state;
+				break;
+			}
+			case RESOURCE_TYPE_IMAGE: {
+				Image *image = ctx->get_image(edge.barrier.resource.to_image());
+				state = &image->state;
+				break;
+			}
+		}
+		assert(state);
+
+		uint32_t wait_sync_count;
+		const ResourceSync *wait_syncs;
+
+		state->get_current_sync(&wait_sync_count, &wait_syncs);
+
+		for (uint32_t i = 0; i < wait_sync_count; ++i) {
+			submission.wait.push_back(VkSemaphoreSubmitInfo{
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+				.semaphore = wait_syncs[i].semaphore,
+				.value = wait_syncs[i].wait_value,
+				.stageMask = edge.barrier.dst_state.stage,
+				.deviceIndex = DEFAULT_DEVICE_INDEX,
+			});
+		}
+		submission.signal.push_back(VkSemaphoreSubmitInfo{
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+			.semaphore = done_sync->semaphore,
+			.value = done_sync->wait_value,
+			.stageMask = dst_node.final_states[edge.barrier.resource].stage,
+			.deviceIndex = DEFAULT_DEVICE_INDEX,
+		});
+
+		if (edge.barrier.is_write) {
+			state->sync_write(done_sync->semaphore, done_sync->wait_value);
+		} else {
+			state->sync_read(done_sync->semaphore, done_sync->wait_value);
+		}
+	}
+
+	return ev2::SUCCESS;
+}
+
+static VkDependencyInfo generate_dependency_info(
+	GfxContext *ctx,
+	const PassBarrier *barriers,
+	uint32_t count,
+	std::vector<VkBufferMemoryBarrier2>& buffer_barriers,
+	std::vector<VkImageMemoryBarrier2>& image_barriers
+)
+{
+	for (const PassBarrier *p_barrier = barriers; p_barrier < barriers + count; ++p_barrier) {
+		const PassBarrier &barrier = *p_barrier;
+
+		bool is_queue_transfer = 
+			barrier.src_state.queue_family_index != barrier.dst_state.queue_family_index;
+
+		switch (barrier.resource.type) {
+			case RESOURCE_TYPE_BUFFER: {
+				const Buffer *buffer = ctx->get_buffer(barrier.resource.to_buffer());
+				buffer_barriers.push_back(VkBufferMemoryBarrier2{
+					.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+
+					.srcStageMask = barrier.src_state.stage,
+					.srcAccessMask = barrier.src_state.access,
+
+					.dstStageMask = barrier.dst_state.stage,
+					.dstAccessMask = barrier.dst_state.access,
+
+					.srcQueueFamilyIndex = is_queue_transfer ?
+						barrier.src_state.queue_family_index : VK_QUEUE_FAMILY_IGNORED,
+					.dstQueueFamilyIndex = is_queue_transfer ?
+						barrier.dst_state.queue_family_index : VK_QUEUE_FAMILY_IGNORED,
+
+					.buffer = buffer->buffer,
+					.offset = 0,
+					.size = buffer->size
+				});
+
+				break; 
+			}
+			case RESOURCE_TYPE_IMAGE: {
+				const Image *image = ctx->get_image(barrier.resource.to_image());
+				image_barriers.push_back(VkImageMemoryBarrier2{
+					.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+
+					.srcStageMask = barrier.src_state.stage,
+					.srcAccessMask = barrier.src_state.access,
+
+					.dstStageMask = barrier.dst_state.stage,
+					.dstAccessMask = barrier.dst_state.access,
+
+					.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+					.newLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+
+					.srcQueueFamilyIndex = is_queue_transfer ?
+						barrier.src_state.queue_family_index : VK_QUEUE_FAMILY_IGNORED,
+					.dstQueueFamilyIndex = is_queue_transfer ?
+						barrier.dst_state.queue_family_index : VK_QUEUE_FAMILY_IGNORED,
+
+					.image = image->image,
+					.subresourceRange = VkImageSubresourceRange{
+						.aspectMask = image->aspect_mask,
+						.baseMipLevel = 0,
+						.levelCount = image->levels,
+						.baseArrayLayer = 0,
+						.layerCount = image->d,
+					}
+				});
+				break;
+			}
+		}
+	}
+	return VkDependencyInfo{
+		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+		.dependencyFlags = 0,
+		.bufferMemoryBarrierCount = (uint32_t)buffer_barriers.size(),
+		.pBufferMemoryBarriers = buffer_barriers.data(),
+		.imageMemoryBarrierCount = (uint32_t)image_barriers.size(),
+		.pImageMemoryBarriers = image_barriers.data(),
+
+	};
+}
+
+static void rg_record_gfx_pass_begin(RenderGraph*rg, const PassNode &node, VkCommandBuffer cmds)
+{
+	GfxContext *ctx = rg->ctx;
+
+	const FrameContext *frame = ctx->get_current_frame(); 
+	const RenderPass *render_pass = node.pass->gfx;
+
+	assert(render_pass);
+
+	//------------------------------------------------------------------------------
+	// Can record commands now
+
+	// if the handle passed is null, use the target for the current swapchain image
+	const RenderTarget *target = render_pass->target.is_valid() ? 
+		EV2_TYPE_PTR_CAST(RenderTarget, render_pass->target) : 
+		frame->screen_target; 
+
+	VkRenderingAttachmentInfo color_info, depth_info, stencil_info;
+	VkRenderingInfo rendering_info;
+
+	populate_rendering_info(target, &rendering_info, &color_info, &depth_info, &stencil_info);
+
+	vkCmdBeginRendering(cmds, &rendering_info);
+
+	VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (float)render_pass->viewport.w;
+    viewport.height = (float)render_pass->viewport.h;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(cmds, 0, 1, &viewport);
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = VkExtent2D{
+		.width = render_pass->scissor.w,
+		.height = render_pass->scissor.h
+	};
+    vkCmdSetScissor(cmds, 0, 1, &scissor);
+
+	std::array<VkDescriptorSet,3> base_sets = {
+		VK_NULL_HANDLE,
+		frame->descriptor_set,
+		render_pass->descriptor_set,
+	};
+
+	VkPipelineLayout base_layout = ctx->get_base_pipeline_layout(EV2_BASE_SET_PER_PASS);
+
+	vkCmdBindDescriptorSets(
+		cmds, 
+		VK_PIPELINE_BIND_POINT_GRAPHICS,
+		base_layout, 
+		EV2_BASE_SET_PER_FRAME, 
+		(uint32_t)base_sets.size(), base_sets.data(),
+		0, nullptr
+	);
+}
+
+static void rg_record_gfx_pass_end(RenderGraph*rg, const PassNode &node, VkCommandBuffer cmds)
+{
+	vkCmdEndRendering(cmds);
+}
+
+static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBuffer cmds)
+{
+	GfxContext *ctx = rg->ctx;
+
+	uint32_t barrier_offset = 0;
+
+	std::vector<VkImageMemoryBarrier2> image_barriers;
+	std::vector<VkBufferMemoryBarrier2> buffer_barriers;
+
+	const bool is_gfx_pass = node.is_gfx_node();
+
+	if (is_gfx_pass) {
+		rg_record_gfx_pass_begin(rg, node, cmds);
+	}
+
+	for (const PassCommand &pass_cmd : node.commands) {
+		if (pass_cmd.barrier_count) {
+			image_barriers.clear();
+			buffer_barriers.clear();
+
+			VkDependencyInfo dependency_info = generate_dependency_info(
+				ctx, 
+				&node.barriers[barrier_offset],
+				pass_cmd.barrier_count,
+				buffer_barriers,
+				image_barriers
+			);
+
+			vkCmdPipelineBarrier2(cmds, &dependency_info);
+
+			barrier_offset += pass_cmd.barrier_count;
+		}
+
+		switch(pass_cmd.base.type) {
+			case BindComputePipeline: {
+				CmdBindComputePipeline cmd = pass_cmd.base.bind_compute_pipeline;
+				ComputePipeline *pipeline = ctx->get_compute_pipeline(cmd.pipeline);
+
+				vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->base.pipeline);
+				break;
+			}
+			case BindGfxPipeline: {
+				CmdBindGfxPipeline cmd = pass_cmd.base.bind_gfx_pipeline;
+				GfxPipeline *pipeline = ctx->get_gfx_pipeline(cmd.pipeline);
+
+				vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->base.pipeline);
+				break;
+			}
+			case BindResources: {
+				CmdBindResources cmd = pass_cmd.base.bind_resources;
+				const ShaderBindings *bindings = ctx->get_shader_bindings(cmd.bindings);
+				vkCmdBindDescriptorSets(
+					cmds, 
+					bindings->bind_point, 
+					bindings->pipeline_layout,
+					bindings->index, 
+					1, &bindings->descriptor_set, 
+					0, nullptr
+				); 
+				break;
+			}
+			case BindIndexBuffer: {
+				break;
+			}
+			case BindVertexBuffer: {
+				break;
+			}
+			case Dispatch: {
+				CmdDispatch cmd = pass_cmd.base.dispatch;
+				vkCmdDispatch(cmds, cmd.counts[0], cmd.counts[1], cmd.counts[2]);
+				break;
+			}
+			case Custom: {
+				CmdCustom cmd = pass_cmd.base.custom;
+				node.pass->custom_callbacks[cmd.callback_id](cmds);
+				break;
+			}
+			case UseBuffer:
+			case UseImage:
+			default:
+				break;
+		}
+	}
+
+	if (is_gfx_pass) {
+		rg_record_gfx_pass_end(rg, node, cmds);
+	}
+
+	return VK_SUCCESS;
+}
+
+static VkResult rg_record(GfxContext *ctx, RenderGraph *rg)
+{
+	VkResult result = VK_SUCCESS;
+
+	std::vector<VkCommandBuffer> cmds (rg->submissions.size());
+
+	FrameContext *frame = ctx->get_current_frame();
+
+	VkCommandBufferAllocateInfo alloc_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.commandPool = frame->command_pools[0],
+		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandBufferCount = (uint32_t)cmds.size(),
+	};
+
+	result = vkAllocateCommandBuffers(ctx->device, &alloc_info, cmds.data()); 
+
+	if (result != VK_SUCCESS)
+		return result;
+
+	for (RenderGraphSubmission& submission : rg->submissions) {
+
+		VkCommandBufferBeginInfo begin_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+			.pInheritanceInfo = nullptr,
+		};
+
+		result = vkBeginCommandBuffer(submission.cmds, &begin_info); 
+
+		if (result != VK_SUCCESS)
+			break;
+
+		for (const PassNode *node : submission.nodes) {
+			result = rg_record_node(rg, *node, submission.cmds);
+			if (result != VK_SUCCESS)
+				break;
+		}
+
+		result = vkEndCommandBuffer(submission.cmds);
+
+		if (result != VK_SUCCESS)
+			break;
+
+	}
+
+	if (result != VK_SUCCESS) {
+		log_error("Render graph command recording failed");
+	}
+	return result;
+
+}
+
+static VkResult rg_submit(GfxContext *ctx, const RenderGraph *rg)
+{
+	std::vector<VkCommandBufferSubmitInfo> cmd_infos (rg->submissions.size());
+
+	for (size_t i = 0; i < cmd_infos.size(); ++i) {
+		cmd_infos[i] = VkCommandBufferSubmitInfo{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+			.commandBuffer = rg->submissions[i].cmds,
+			.deviceMask = 0,
+		};
+	}
+
+	// queue_index -> submit infos
+	std::unordered_map<uint32_t, std::vector<VkSubmitInfo2>> submission_map;
+
+	for (size_t i = 0; i <  rg->submissions.size(); ++i) {
+		const RenderGraphSubmission &submission = rg->submissions[i];
+
+		auto [it, exists] = submission_map.emplace(
+			submission.queue_index,std::vector<VkSubmitInfo2>());
+
+		std::vector<VkSubmitInfo2>& submissions = it->second;
+
+		submissions.emplace_back(VkSubmitInfo2{
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+			.flags = 0,
+
+			.waitSemaphoreInfoCount = (uint32_t)submission.wait.size(),
+			.pWaitSemaphoreInfos = submission.wait.data(),
+
+			.commandBufferInfoCount = 1,
+			.pCommandBufferInfos = &cmd_infos[i],
+
+			.signalSemaphoreInfoCount = (uint32_t)submission.signal.size(),
+			.pSignalSemaphoreInfos = submission.signal.data()
+		});
+	}
+
+	VkResult result = VK_SUCCESS;
+
+	for (const auto& [queue_index, submit_infos] : submission_map) {
+		if (!rg->queues[queue_index]) {
+			log_error("queue %d is not initialized!");
+			abort();
+		}
+		
+		result = rg->queues[queue_index]->submit(
+			(uint32_t)submit_infos.size(), 
+			submit_infos.data(), 
+			VK_NULL_HANDLE
+		);
+
+		if (result != VK_SUCCESS) {
+			break;
+		}
+	}
+
+	if (result != VK_SUCCESS) {
+		log_error("Render graph submission failed");
+	}
+
+	FrameContext *frame = ctx->get_current_frame();
+
+	VkResult present_result = VK_SUCCESS;
+
+	VkPresentInfoKHR present_info = {
+		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+		.waitSemaphoreCount = 1,
+		.pWaitSemaphores = &frame->render_finished_semaphore,
+		.swapchainCount = 1,
+		.pSwapchains = &ctx->swap_chain.swapchain,
+		.pImageIndices = &frame->swap_chain_image_index,
+		.pResults = &present_result,
+	};
+
+	result = vkQueuePresentKHR(ctx->present_queue, &present_info);
+	if (result != VK_SUCCESS || present_result != VK_SUCCESS) {
+		log_error("Present submission failed");
+		return result;
+	}
+	return result;
+}
+
+static RenderGraph *rg_create(GfxContext *ctx)
+{
+	FrameContext *frame = ctx->get_current_frame();
+
+	frame->render_graph = std::make_unique<RenderGraph>();
+	RenderGraph *rg = frame->render_graph.get();
+
+	uint32_t pass_count = (uint32_t)frame->passes.size();
+
+	rg->nodes.resize(pass_count);
+	for (uint32_t i = 0; i < pass_count; ++i) {
+		const Pass *pass = frame->passes[i]; 
+
+		rg->nodes[i] = PassNode {
+			.pass = pass,
+			.queue_family_index = pass->queue_family 
+		};
+	}
+
+	uint32_t queue_family_count = (uint32_t)ctx->queue_families.size(); 
+
+	for (uint32_t i = 0; i < queue_family_count; ++i) {
+		QueueFamily &queue_family = ctx->queue_families[i];
+		rg->queues[i] = queue_family.queues ? 
+			&queue_family.queues[0] : nullptr;
+	}
+
+	return rg;
 }
 
 void end_frame(GfxContext *ctx)
 {
-	FrameContext *frame = ctx->get_current_frame();
+	ev2::Result result = ev2::SUCCESS;
 
-	uint32_t pass_count = (uint32_t)frame->passes.size();
+	RenderGraph *rg = rg_create(ctx);
 
-	RenderGraph lexer;
-	rg_compile(ctx, &lexer, pass_count, frame->new_passes.data());
+	result = rg_compile(ctx, rg);
+	if (result != ev2::SUCCESS) {
+		return;
+	}
 
+	VkResult vk_result = VK_SUCCESS;
+
+	vk_result = rg_record(ctx, rg);
+	if (vk_result != VK_SUCCESS) {
+		return;
+	}
+
+	vk_result = rg_submit(ctx, rg);
+	if (vk_result != VK_SUCCESS) {
+		return;
+	}
 }
 
 };

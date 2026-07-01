@@ -4,12 +4,12 @@
 #include <cstddef>
 #include <cassert>
 
-static inline size_t align_up(size_t x, size_t alignment)
+static inline constexpr size_t align_up(size_t x, size_t alignment)
 {
     return ((x + alignment - 1) / alignment) * alignment;
 }
 
-static inline size_t align_up_pow2(size_t x, size_t align)
+static inline constexpr size_t align_up_pow2(size_t x, size_t align)
 {
     return (x + (align - 1)) & ~(align - 1);;
 }

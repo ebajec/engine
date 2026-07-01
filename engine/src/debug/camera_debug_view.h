@@ -1,4 +1,5 @@
 #include <ev2/context.h>
+#include <ev2/pipeline.h>
 #include <ev2/utils/geometry.h>
 
 #include <glm/mat4x4.hpp>

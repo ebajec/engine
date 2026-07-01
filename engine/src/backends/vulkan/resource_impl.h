@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <vector>
 
 struct ResourceSync {
 	uint64_t 				wait_value;
@@ -24,8 +25,44 @@ struct ResourceState {
 	ResourceStateFlags read;
 	ResourceStateFlags write;
 
+	ResourceSync write_sync;
+	std::vector<ResourceSync> read_syncs;
+
 	inline ResourceStateFlags get_current() {
 		return read.stage ? read : write;
+	}
+
+	void get_current_sync(uint32_t *count, const ResourceSync **syncs)
+	{
+		if (read_syncs.empty()) {
+			*count = 1;
+			*syncs = &write_sync;
+			return;
+		} else {
+			*count = (uint32_t)read_syncs.size();
+			*syncs = read_syncs.data();
+		}
+		*count = 0;
+		*syncs = nullptr;
+	}
+
+	inline void sync_read(VkSemaphore semaphore, uint64_t wait_value)
+	{
+		read_syncs.push_back(ResourceSync{
+			.wait_value = wait_value,
+			.semaphore = semaphore,
+		});
+	}
+
+	inline void sync_write(VkSemaphore semaphore, uint64_t wait_value)
+	{
+		read_syncs.clear();
+		write_sync = {
+			.wait_value = wait_value,
+			.semaphore = semaphore,
+		};
+
+		return;
 	}
 
 	inline ResourceStateFlags set_read(VkAccessFlags2 access, VkPipelineStageFlags2 stage, 
@@ -54,6 +91,48 @@ struct ResourceState {
 	}
 };
 
+enum ResourceType : uint8_t {
+	RESOURCE_TYPE_BUFFER,
+	RESOURCE_TYPE_IMAGE
+};
+
+union TaggedResource {
+	struct {
+		uint64_t handle : 48;
+		uint64_t type : 16;
+	};
+	uint64_t u64;
+
+	TaggedResource() {}
+	TaggedResource(ev2::BufferID buffer) {
+		handle = buffer.id;
+		type = RESOURCE_TYPE_BUFFER;
+	}
+
+	TaggedResource(ev2::ImageID image) {
+		handle = image.id;
+		type = RESOURCE_TYPE_IMAGE;
+	}
+
+	TaggedResource(uint64_t value) {
+		u64 = value;
+	}
+
+	operator uint64_t () const {return u64;} 
+
+	constexpr bool operator == (const TaggedResource &other) const {
+		return u64 == other.u64;
+	}
+
+	constexpr ev2::BufferID to_buffer() const {
+		return ev2::BufferID{.id = this->handle};
+	}
+
+	constexpr ev2::ImageID to_image() const {
+		return ev2::ImageID{.id = this->handle};
+	}
+};
+
 namespace ev2 {
 
 struct Buffer
@@ -62,7 +141,6 @@ struct Buffer
 	VmaAllocation allocation;
 	size_t size;
 
-	ResourceSync sync;
 	ResourceState state;
 };
 
@@ -74,7 +152,6 @@ struct Image
 	// optional
 	VkImageView base_view = VK_NULL_HANDLE;
 
-	ResourceSync sync;
 	ResourceState state;
 	VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -85,70 +162,6 @@ struct Image
 	uint32_t levels;
 	ev2::ImageFormat format;
 };
-
-//static VkBufferMemoryBarrier2 use_buffer(Buffer *buffer, 
-//								 VkAccessFlags2 access,
-//								 VkPipelineStageFlags2 stage,
-//								 uint32_t src_queue_family_index = VK_QUEUE_FAMILY_IGNORED,
-//								 uint32_t dst_queue_family_index = VK_QUEUE_FAMILY_IGNORED
-//								 )
-//{
-//	VkBufferMemoryBarrier2 barrier = {
-//		.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-//		.pNext = nullptr, 
-//		.srcStageMask = buffer->sync.stage,
-//		.srcAccessMask = buffer->sync.access,
-//		.dstStageMask = stage,
-//		.dstAccessMask = access,
-//		.srcQueueFamilyIndex = src_queue_family_index,
-//		.dstQueueFamilyIndex = dst_queue_family_index,
-//		.buffer = buffer->buffer,
-//		.offset = 0,
-//		.size = buffer->size,
-//	};
-//
-//	buffer->sync.stage = stage;
-//	buffer->sync.access = access;
-//
-//	if (dst_queue_family_index != VK_QUEUE_FAMILY_IGNORED)
-//		buffer->sync.queue_family_index = dst_queue_family_index;
-//
-//	return barrier;
-//}
-//
-//static VkImageMemoryBarrier2 use_image(Image *img,
-//								 VkAccessFlags2 access,
-//								 VkPipelineStageFlags2 stage,
-//								 VkImageSubresourceRange subresource,
-//								 VkImageLayout layout = VK_IMAGE_LAYOUT_GENERAL,
-//								 uint32_t src_queue_family_index = VK_QUEUE_FAMILY_IGNORED,
-//								 uint32_t dst_queue_family_index = VK_QUEUE_FAMILY_IGNORED
-//								 )
-//{
-//	VkImageMemoryBarrier2 barrier = {
-//		.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-//		.pNext = nullptr, 
-//		.srcStageMask = img->sync.stage,
-//		.srcAccessMask = img->sync.access,
-//		.dstStageMask = stage,
-//		.dstAccessMask = access,
-//		.oldLayout = img->layout,
-//		.newLayout = layout,
-//		.srcQueueFamilyIndex = src_queue_family_index,
-//		.dstQueueFamilyIndex = dst_queue_family_index,
-//		.image = img->image,
-//		.subresourceRange = subresource,
-//	};
-//
-//	img->sync.stage = stage;
-//	img->sync.access = access;
-//	img->layout = layout;
-//
-//	if (dst_queue_family_index != VK_QUEUE_FAMILY_IGNORED)
-//		img->sync.queue_family_index = dst_queue_family_index;
-//
-//	return barrier;
-//}
 
 struct Texture
 {

@@ -140,11 +140,6 @@ struct RenderTarget
 
 struct Pass;
 
-struct Sync
-{
-	Pass *pass;
-};
-
 //------------------------------------------------------------------------------
 // Pipeline commands
 
@@ -157,6 +152,14 @@ struct CmdBindGfxPipeline{
 struct CmdBindResources{
 	ShaderBindingsID bindings;
 };
+struct CmdBindIndexBuffer{
+	BufferID buffer;
+	size_t offset;
+};
+struct CmdBindVertexBuffer{
+	BufferID buffer;
+	size_t offset;
+};
 struct CmdDispatch{
 	uint32_t counts[3];
 };
@@ -168,15 +171,21 @@ struct CmdUseImage{
 	ImageID image;
 	Usage usage;
 };
+struct CmdCustom{
+	uint32_t callback_id;
+};
 
 enum CmdType
 {
 	BindComputePipeline,
 	BindGfxPipeline,
 	BindResources,
+	BindIndexBuffer,
+	BindVertexBuffer,
 	Dispatch,
 	UseBuffer,
-	UseImage
+	UseImage,
+	Custom
 };
 
 struct Command {
@@ -184,9 +193,12 @@ struct Command {
 		CmdBindComputePipeline 	bind_compute_pipeline;
 		CmdBindGfxPipeline 		bind_gfx_pipeline;
 		CmdBindResources 		bind_resources;
+		CmdBindIndexBuffer		bind_index_buffer;
+		CmdBindVertexBuffer		bind_vertex_buffer;
 		CmdDispatch 			dispatch;
 		CmdUseBuffer 			use_buffer; 
 		CmdUseImage 			use_image;
+		CmdCustom				custom;
 	};
 	CmdType type;
 };
@@ -200,14 +212,17 @@ struct RenderPass
 
 	// Contains UBO with view data.
 	VkDescriptorSet descriptor_set;
+
+	bool render_to_swapchain() {
+		return !target.is_valid();
+	}
 };
 
 struct Pass
 {
-	Sync sync;
-
 	GfxContext *ctx;
 
+	std::vector<std::function<void(VkCommandBuffer)>> custom_callbacks;
 	std::vector<Command> cmds;
 	uint32_t queue_family;
 

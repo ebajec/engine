@@ -5,6 +5,7 @@
 
 #include <ev2/utils/geometry.h>
 #include <ev2/context.h>
+#include <ev2/pipeline.h>
 #include <ev2/resource.h>
 
 #include <glm/vec3.hpp>

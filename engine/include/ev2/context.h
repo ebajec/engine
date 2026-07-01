@@ -8,8 +8,6 @@
 
 namespace ev2 { 
 
-MAKE_HANDLE(Sync);
-
 enum Result
 {
 	TIMEOUT = 1,
@@ -18,7 +16,8 @@ enum Result
 	ERESIZE_FAILED = -2,
 	EINVALID_BINDING = -3,
 	EINIT_FAILED = -4,
-	EMISMATCHED_SHADERS = -5,
+	EBAD_SHADER = -5,
+	ERENDER_GRAPH = -6,
 	EUNKNOWN = -1024
 };
 

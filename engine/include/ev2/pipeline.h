@@ -1,9 +1,10 @@
 #ifndef EV2_PIPELINE_H
 #define EV2_PIPELINE_H
 
-
 #include "ev2/context.h"
 #include "ev2/resource.h"
+
+#include <functional>
 
 namespace ev2 {
 
@@ -165,13 +166,12 @@ PassID begin_pass(
 	Rect viewport, Rect scissor = {}
 );
 
-// @brief Begin a render pass.  Configures bindings for pass-specific data  
-// (view matrices, etc).    
+// @brief Begin a compute pass   
 PassID begin_pass(
 	GfxContext *ctx 
 );
 
-SyncID end_pass(GfxContext *ctx, PassID pass);
+void end_pass(GfxContext *ctx, PassID pass);
 
 //------------------------------------------------------------------------------
 // command recording
@@ -192,7 +192,7 @@ void cmd_bind_compute_pipeline(PassID pass_id, ComputePipelineID pipeline_id);
 void cmd_bind_gfx_pipeline(PassID pass_id, GfxPipelineID pipeline_id);
 
 void cmd_bind_index_buffer(PassID pass_id, BufferID buf);
-void cmd_draw_screen_quad(PassID pass_id); 
+void cmd_bind_vertex_buffer(PassID pass_id, BufferID buf);
 
 void cmd_dispatch(
 	PassID pass_id,
@@ -211,6 +211,11 @@ void cmd_use_image(
 	PassID pass_id,
 	ImageID img_id,
 	Usage usage
+);
+
+void cmd_custom(
+	PassID pass_id,
+	std::function<void(VkCommandBuffer)>&& callback
 );
 };
 

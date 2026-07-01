@@ -12,7 +12,7 @@ namespace ev2 {
 
 UploadPool *UploadPool::create(
 	GfxContext *ctx, 
-	uint32_t queue_family_index,
+	QueueFamily *queue_family,
 	size_t capacity,
 	size_t align,
 	size_t max_uploads
@@ -112,7 +112,7 @@ UploadPool *UploadPool::create(
 		.memory = alloc_info.deviceMemory,
 		.memory_offset = alloc_info.offset,
 
-		.queue_family_index = queue_family_index,
+		.queue_family = queue_family,
 
 		.ctx = ctx,
 	};
@@ -209,9 +209,6 @@ VkResult UploadPool::flush()
 
 	size_t flushed_bytes = 0;
 
-	// TODO : Better synchrnozation that doesn't lock this
-	// whole loop
-	//
 	// Another threads may increment the ring buffer but not
 	// touch the queue for now. 
 	std::unique_lock<std::mutex> lock(sync);
@@ -266,6 +263,64 @@ VkResult UploadPool::flush()
 		return result;
 	}
 
+	std::vector<VkImageMemoryBarrier2> image_barriers;
+	std::vector<VkBufferMemoryBarrier2> buffer_barriers;
+
+	for (uint32_t i = flush_tail; i != flush_head; i = (i + 1) & (max_uploads - 1)) {
+		constexpr VkPipelineStageFlags2 dst_stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+		constexpr VkAccessFlags2 dst_access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+
+		entry_t *ent = &entries[i];
+		if (ent->has_semaphore)
+			continue;
+
+		switch (ent->type) {
+			case UPLOAD_TYPE_BUFFER: {
+				Buffer *dst_buf = ctx->get_buffer(ent->resource.to_buffer());
+				buffer_barriers.push_back(VkBufferMemoryBarrier2{
+					.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+					.srcStageMask = ent->prev_state.stage,
+					.srcAccessMask = ent->prev_state.access,
+
+					.dstStageMask = dst_stage,
+					.dstAccessMask = dst_access,
+					
+					.buffer = dst_buf->buffer,
+					.offset = 0,
+					.size = dst_buf->size,
+
+					.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+					.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
+				});
+				break;
+			} 
+			case UPLOAD_TYPE_IMAGE: {
+				Image *dst_img = ctx->get_image(ent->resource.to_image());
+				image_barriers.push_back(VkImageMemoryBarrier2{
+					.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+					.srcStageMask = ent->prev_state.stage,
+					.srcAccessMask = ent->prev_state.access,
+
+					.dstStageMask = dst_stage,
+					.dstAccessMask = dst_access,
+
+					.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+					.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+
+					.image = dst_img->image,
+					.subresourceRange = VkImageSubresourceRange{
+						.aspectMask = dst_img->aspect_mask,
+						.baseMipLevel = 0,
+						.levelCount = dst_img->levels,
+						.baseArrayLayer = 0,
+						.layerCount = dst_img->d,
+					}
+				});
+				break;
+			}
+		}
+	}
+
 	//-----------------------------------------------------------------------------
 	// Record and submit the uploads
 
@@ -273,7 +328,7 @@ VkResult UploadPool::flush()
 	// and/or submitted. E.g., a command buffer which persists across frame 
 	// boundaries, a secondary command buffer, etc. 
 	
-	VkCommandPool command_pool = ctx->get_current_frame_command_pool(queue_family_index);
+	VkCommandPool command_pool = ctx->get_current_frame_command_pool(queue_family->index);
 
 	VkCommandBufferAllocateInfo alloc_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -296,6 +351,16 @@ VkResult UploadPool::flush()
 	if (result != VK_SUCCESS)
 		return result;
 
+	VkDependencyInfo dependency_info = {
+		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+		.bufferMemoryBarrierCount = (uint32_t)buffer_barriers.size(),
+		.pBufferMemoryBarriers = buffer_barriers.data(),
+		.imageMemoryBarrierCount  = (uint32_t)image_barriers.size(),
+		.pImageMemoryBarriers = image_barriers.data(),
+	};
+
+	vkCmdPipelineBarrier2(command_buffer, &dependency_info);
+
 	size_t buf_idx = 0;
 	size_t img_idx = 0;
 
@@ -305,7 +370,7 @@ VkResult UploadPool::flush()
 
 		switch (ent->type) {
 			case UPLOAD_TYPE_BUFFER: {
-				Buffer *dst_buf = ctx->get_buffer(ent->resource.buf);
+				Buffer *dst_buf = ctx->get_buffer(ent->resource.to_buffer());
 				const VkBufferCopy2 *regions = &queues[1].buffers[buf_idx]; 
 
 				record_buffer_copy(command_buffer, staging_buf, dst_buf, count, regions);
@@ -314,7 +379,7 @@ VkResult UploadPool::flush()
 				break;
 			} 
 			case UPLOAD_TYPE_IMAGE: {
-				Image *dst_img = ctx->get_image(ent->resource.img);
+				Image *dst_img = ctx->get_image(ent->resource.to_image());
 				const VkBufferImageCopy2 *regions = &queues[1].images[img_idx]; 
 
 				record_image_copy(command_buffer, staging_buf, dst_img, count, regions);
@@ -350,8 +415,8 @@ VkResult UploadPool::flush()
 
 		.flags = 0,
 
-		.waitSemaphoreInfoCount = (uint32_t)queues[1].submit_info.size(),
-		.pWaitSemaphoreInfos = queues[1].submit_info.data(),
+		.waitSemaphoreInfoCount = (uint32_t)queues[1].waits.size(),
+		.pWaitSemaphoreInfos = queues[1].waits.data(),
 
 		.commandBufferInfoCount = 1,
 		.pCommandBufferInfos = &cmd_info,
@@ -360,7 +425,7 @@ VkResult UploadPool::flush()
 		.pSignalSemaphoreInfos = &signal_info,
 	};
 
-	result = ctx->queue_families[queue_family_index].queues[0].submit(
+	result = queue_family->queues[0].submit(
 		1, &submit_info, VK_NULL_HANDLE
 	);
 
@@ -372,8 +437,6 @@ VkResult UploadPool::flush()
 		.size = flushed_bytes,
 		.sync = done_value,
 	};
-
-	//glFlush();
 
 	//log_info(
 	//	"Flushed uploads:\n"
@@ -416,6 +479,46 @@ static inline uint32_t limit_count(uint32_t count)
 	return count;
 }
 
+uint64_t UploadPool::post_commit_sync(entry_t *ent, ResourceState *state)
+{
+	size_t size = ent->size;
+	size_t done_value = size + timeline_ctr.fetch_add(size, std::memory_order_acquire); 
+	ent->done_value = done_value;
+
+	VkPipelineStageFlags2 dst_stage = VK_PIPELINE_STAGE_2_COPY_BIT; 
+
+	ResourceStateFlags old_state = state->set_write(
+		dst_stage,
+		VK_ACCESS_2_TRANSFER_WRITE_BIT,
+		queue_family->index
+	);
+
+	const bool has_semaphore = old_state.queue_family_index == queue_family->index; 
+
+	ent->prev_state = old_state;
+	ent->has_semaphore = has_semaphore;
+
+	if (has_semaphore) {
+		uint32_t sync_count;
+		const ResourceSync *syncs;
+
+		state->get_current_sync(&sync_count, &syncs);
+
+		for (uint32_t i = 0; i < sync_count; ++i) {
+			queues[0].waits.push_back(VkSemaphoreSubmitInfo{
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+				.semaphore = syncs[i].semaphore,
+				.value = syncs[i].wait_value,
+				.stageMask = dst_stage,
+				.deviceIndex = 0, 
+			});
+		}
+	}
+	state->sync_write(semaphore, done_value);
+
+	return done_value;
+}
+
 uint64_t UploadPool::commmit_buffer(uint32_t idx, BufferID buf, const BufferUpload *regions, 
 									uint32_t count)
 {
@@ -425,7 +528,7 @@ uint64_t UploadPool::commmit_buffer(uint32_t idx, BufferID buf, const BufferUplo
 
 	ent->count = count;
 	ent->type = UPLOAD_TYPE_BUFFER;
-	ent->resource.buf = buf;
+	ent->resource = buf;
 
 	size_t start = ent->start;
 
@@ -443,23 +546,7 @@ uint64_t UploadPool::commmit_buffer(uint32_t idx, BufferID buf, const BufferUplo
 
 	Buffer *buffer = ctx->get_buffer(buf);
 
-	ResourceStateFlags old_state = buffer->state.set_write(
-		VK_PIPELINE_STAGE_2_COPY_BIT,
-		VK_ACCESS_2_TRANSFER_WRITE_BIT
-	);
-
-	queues[0].submit_info.push_back(VkSemaphoreSubmitInfo{
-		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-		.semaphore = buffer->sync.semaphore,
-		.value = buffer->sync.wait_value,
-		.stageMask = old_state.stage,
-		.deviceIndex = 0, 
-	});
-
-	uint64_t done_value = set_commited(ent); 
-
-	buffer->sync.wait_value = done_value;
-	buffer->sync.semaphore = semaphore;
+	uint64_t done_value = post_commit_sync(ent, &buffer->state);
 
 	return done_value;
 }
@@ -473,7 +560,7 @@ uint64_t UploadPool::commmit_image(uint32_t idx, ImageID img, const ImageUpload 
 
 	ent->count = count;
 	ent->type = UPLOAD_TYPE_IMAGE;
-	ent->resource.img = img;
+	ent->resource = img;
 
 	size_t start = ent->start;
 
@@ -507,20 +594,7 @@ uint64_t UploadPool::commmit_image(uint32_t idx, ImageID img, const ImageUpload 
 
 	Image *image = ctx->get_image(img);
 
-	queues[0].submit_info.push_back(VkSemaphoreSubmitInfo{
-		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-		.semaphore = image->sync.semaphore,
-		.value = image->sync.wait_value,
-		.stageMask = image->sync.stage,
-		.deviceIndex = 0, 
-	});
-
-	uint64_t done_value = set_commited(ent); 
-
-	image->sync.wait_value = done_value;
-	image->sync.semaphore = semaphore;
-	image->sync.stage = VK_PIPELINE_STAGE_2_COPY_BIT;
-
+	uint64_t done_value = post_commit_sync(ent, &image->state);
 
 	return done_value;
 }

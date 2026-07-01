@@ -22,6 +22,8 @@ struct FlushOptions
 {
 };
 
+struct QueueFamily;
+
 struct UploadPool
 {
 	enum UploadType 
@@ -57,14 +59,15 @@ struct UploadPool
 		// set at commit time
 		uint64_t done_value;
 
-		union {
-			BufferID buf;
-			ImageID img;
-		} resource = {};
+		TaggedResource resource;
+
+		ResourceStateFlags prev_state;
 
 		uint64_t size : 46;  // size in bytes of upload
 		uint64_t count : 16; // number of upload regions
 		uint64_t type : 2;   // upload type
+
+		bool has_semaphore : 1;
 	};
 
 	size_t max_uploads;
@@ -101,7 +104,7 @@ struct UploadPool
 	struct {
 		std::vector<VkBufferCopy2> buffers;
 		std::vector<VkBufferImageCopy2> images;
-		std::vector<VkSemaphoreSubmitInfo> submit_info;
+		std::vector<VkSemaphoreSubmitInfo> waits;
 	} queues[2] {};
 
 	mutable std::mutex sync{};
@@ -111,14 +114,14 @@ struct UploadPool
 	VkDeviceMemory memory;
 	VkDeviceSize memory_offset;
 
-	uint32_t queue_family_index;
+	QueueFamily *queue_family;
 	GfxContext *ctx;
 
 	//------------------------------------------------------------------------------ 
 	//
 	static UploadPool *create(
 		GfxContext *ctx, 
-		uint32_t queue_family_index,
+		QueueFamily *queue_family,
 		size_t capacity, 
 		size_t align,
 		size_t max_uploads
@@ -134,6 +137,8 @@ struct UploadPool
 	
 	uint64_t commmit_buffer(uint32_t idx, BufferID buf, const BufferUpload *regions, uint32_t count);
 	uint64_t commmit_image(uint32_t idx, ImageID buf, const ImageUpload *regions, uint32_t count);
+
+	uint64_t post_commit_sync(entry_t *ent, ResourceState *state);
 
 	VkResult flush();
 

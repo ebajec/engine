@@ -494,7 +494,7 @@ ev2::Result merge_shader_layouts(
 			ev2::ShaderLayoutIndex::BindingEntry &a_ent = it->second;
 
 			if (check_or_log(a_ent.set == b_ent.set)) {
-				return ev2::EMISMATCHED_SHADERS;
+				return ev2::EBAD_SHADER;
 			}
 
 			VkDescriptorSetLayoutBinding &a_layout_binding = out.bindings[a_ent.set][a_ent.idx];
@@ -502,13 +502,13 @@ ev2::Result merge_shader_layouts(
 			a_layout_binding.stageFlags |= b_layout_binding.stageFlags;
 
 			if (check_or_log(a_layout_binding.binding == b_layout_binding.binding)) {
-				return ev2::EMISMATCHED_SHADERS;
+				return ev2::EBAD_SHADER;
 			}
 			if (check_or_log(a_layout_binding.descriptorType == b_layout_binding.descriptorType)) {
-				return ev2::EMISMATCHED_SHADERS;
+				return ev2::EBAD_SHADER;
 			}
 			if (check_or_log(a_layout_binding.descriptorCount == b_layout_binding.descriptorCount)) {
-				return ev2::EMISMATCHED_SHADERS;
+				return ev2::EBAD_SHADER;
 			}
 		} else {
 			auto it = out.bindings.emplace(b_ent.set, std::vector<VkDescriptorSetLayoutBinding>{});
@@ -1197,14 +1197,14 @@ void destroy_bindings(GfxContext *ctx, ShaderBindingsID bindings_id)
 
 ev2::Result bind_buffer(
 	GfxContext *ctx, 
-	ShaderBindingsID binding_handle, 
+	ShaderBindingsID bindings_handle, 
 	BufferID buffer_handle, 
 	const char *name,
 	size_t offset, 
 	size_t size
 ) 
 {
-	ShaderBindings *bindings = EV2_TYPE_PTR_CAST(ShaderBindings, binding_handle);
+	ShaderBindings *bindings = ctx->get_shader_bindings(bindings_handle);
 	const Buffer *buffer = ctx->get_buffer(buffer_handle);
 
 	uint32_t set;

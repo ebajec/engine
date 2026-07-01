@@ -16,6 +16,8 @@
 
 //------------------------------------------------------------------------------
 
+namespace ev2 {
+
 VkInstance g_vk_instance = VK_NULL_HANDLE;
 
 //------------------------------------------------------------------------------
@@ -480,7 +482,7 @@ static ev2::Result pick_logical_device(ev2::GfxContext *ctx,
     }
 
     vkGetDeviceQueue(ctx->device, indices.presentFamily.value(), 0,
-					 &ctx->presentQueue);
+					 &ctx->present_queue);
 
 	uint32_t family_count;
 	std::vector<VkQueueFamilyProperties> queue_props;
@@ -782,25 +784,37 @@ static ev2::Result create_frame_context(ev2::GfxContext *ctx,
 		}
 	}
 
-
-	VkSemaphoreTypeCreateInfo timeline_info;
-	timeline_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
-	timeline_info.pNext = NULL;
-	timeline_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
-	timeline_info.initialValue = 0;
-
-	VkSemaphoreCreateInfo semaphore_info;
-	semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-	semaphore_info.pNext = &timeline_info;
-	semaphore_info.flags = 0;
-	VkResult vk_result = vkCreateSemaphore(ctx->device, &semaphore_info, nullptr, &frame->semaphore);
-	if (vk_result)
-		return ev2::EINIT_FAILED;
-
 	ev2::Result result = create_default_descriptor_pool(ctx, &frame->descriptor_pool);
 
 	if (result != ev2::SUCCESS)
 		return ev2::EINIT_FAILED;
+
+	VkResult vk_result = VK_SUCCESS;
+
+	{
+		VkSemaphoreCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+		};
+		vk_result = vkCreateSemaphore(
+			ctx->device, 
+			&create_info, 
+			nullptr, 
+			&frame->image_available_sempahore
+		);
+
+		if (!vk_result)
+			return ev2::EINIT_FAILED;
+
+		vk_result = vkCreateSemaphore(
+			ctx->device, 
+			&create_info, 
+			nullptr, 
+			&frame->render_finished_semaphore
+		);
+
+		if (!vk_result)
+			return ev2::EINIT_FAILED;
+	}
 
 	result = init_frame_descriptor_set(ctx, frame);
 
@@ -817,7 +831,7 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 	//-----------------------------------------------------------------------------
 	// important things
 	
-	ctx->max_frames_in_flight = 1;
+	ctx->max_frames_in_flight = 2;
 	ctx->max_workers = std::max(std::thread::hardware_concurrency() - 1, 1U);
 
 	ctx->worker_pool.reset(new ThreadPool(ctx->max_workers, "gfx_worker"));
@@ -828,6 +842,27 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 
 	if (result)
 		return result;
+
+	VkResult vk_result = VK_SUCCESS; 
+	{
+		VkSemaphoreTypeCreateInfo timeline_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+			.pNext = NULL,
+			.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+			.initialValue = 0,
+		};
+
+		VkSemaphoreCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+			.pNext = &timeline_info
+		};
+
+		vk_result = vkCreateSemaphore(
+			ctx->device, &create_info, nullptr, &ctx->frame_semaphore);
+
+		if (result)
+			return result;
+	}
 
 	ctx->base_descriptor_set_layouts[EV2_BASE_SET_PER_FRAME] = 
 		ev2::generate_per_frame_descriptor_set_layout(ctx);
@@ -851,7 +886,7 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 			.pPushConstantRanges = nullptr,
 		};
 
-		VkResult vk_result = vkCreatePipelineLayout(
+		vk_result = vkCreatePipelineLayout(
 			ctx->device, 
 			&create_info, 
 			nullptr, 
@@ -919,8 +954,6 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 	return ev2::SUCCESS;
 }
 
-
-namespace ev2 {
 
 VkCommandPool GfxContext::get_command_pool(
 	uint32_t frame, 
@@ -990,19 +1023,17 @@ failure:
 
 ev2::Result GfxContext::wait_for_frame_completion(FrameContext *frame)
 {
-	VkSemaphore wait_semaphore = get_graphics_timeline_semaphore();
-
 	VkSemaphoreWaitInfo wait_info = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
 		.semaphoreCount = 1,
-		.pSemaphores = &wait_semaphore,
-		.pValues = &frame->wait_value,
+		.pSemaphores = &frame_semaphore,
+		.pValues = &frame->index,
 	};
 
 	VkResult result = vkWaitSemaphores(device, &wait_info, EV2_FRAME_TIMEOUT);
 
 	if (result == VK_TIMEOUT) {
-		log_warn("Frame %d timed out", current_frame_index);
+		log_warn("Frame %d timed out", frame->index);
 		return ev2::TIMEOUT;
 	} else if (result != VK_SUCCESS) {
 		return ev2::EUNKNOWN;
@@ -1011,6 +1042,39 @@ ev2::Result GfxContext::wait_for_frame_completion(FrameContext *frame)
 	return ev2::SUCCESS;  
 }
 
+//------------------------------------------------------------------------------
+// FrameContext
+
+ResourceSync *FrameContext::get_resource_sync(TaggedResource resource, VkQueue queue)
+{
+	auto [it, inserted] = sync_map.emplace(SyncKey{
+		.resource = resource,
+		.queue = queue 
+	}, ResourceSync{});
+
+	ResourceSync &sync = it->second;
+
+	if (inserted) {
+		VkSemaphoreTypeCreateInfo timeline_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+			.pNext = NULL,
+			.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+			.initialValue = 0,
+		};
+
+		VkSemaphoreCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+			.pNext = &timeline_info
+		};
+
+		VkResult result = vkCreateSemaphore(ctx->device, &create_info, nullptr, &sync.semaphore);
+
+		if (result != VK_SUCCESS)
+			return nullptr;
+	}
+
+	return &sync;
+}
 
 //------------------------------------------------------------------------------
 // Interface
