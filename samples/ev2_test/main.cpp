@@ -188,10 +188,10 @@ int WaveSim::update(ev2::Device *dev)
 	uint32_t grps_x = grid_w/32, grps_y = grid_h/32, grps_z = 1;
 
 	ev2::bind_texture(dev, sim0_set, img_in_slot, swap_tex[img_A]);
-	ev2::bind_texture(dev, sim0_set, img_out_slot, swap_tex[img_B]);
+	ev2::bind_image(dev, sim0_set, img_out_slot, swap_img[img_B]);
 
 	ev2::bind_texture(dev, sim1_set, img_in_slot, swap_tex[img_B]);
-	ev2::bind_texture(dev, sim1_set, img_out_slot, swap_tex[img_A]);
+	ev2::bind_image(dev, sim1_set, img_out_slot, swap_img[img_A]);
 
 	ev2::RecorderID rec = ev2::begin_commands(dev);
 	ev2::cmd_use_texture(rec, swap_tex[img_A], ev2::USAGE_STORAGE_READ_COMPUTE);
