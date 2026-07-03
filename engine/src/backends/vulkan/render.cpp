@@ -22,8 +22,8 @@ static Result reset_frame_context(GfxContext *ctx, FrameContext *frame)
 		.swapchain = ctx->swap_chain.swapchain,
 		.timeout = 0,
 		.semaphore = frame->image_available_sempahore,
-		.deviceMask = 0,
 		.fence = VK_NULL_HANDLE,
+		.deviceMask = 0,
 	};
 
 	uint32_t image_index;
@@ -68,20 +68,20 @@ static Result reset_frame_context(GfxContext *ctx, FrameContext *frame)
 	return SUCCESS;
 }
 
-static VkResult create_depth_image(GfxContext *ctx, uint32_t w, uint32_t h,
+VkResult create_depth_stencil_image(GfxContext *ctx, uint32_t w, uint32_t h,
 									  ImageID* out_image, VkImageView *out_view)
 {
 	VkImageCreateInfo create_info  = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
     	.flags = 0,
     	.imageType = VK_IMAGE_TYPE_2D, 
-    	.format = VK_FORMAT_R32_SFLOAT,
+    	.format = VK_FORMAT_D32_SFLOAT_S8_UINT,
     	.extent = VkExtent3D{
 			.width = w,
 			.height = h,
 			.depth = 1,
 		},
-    	.mipLevels = 0, 
+    	.mipLevels = 1, 
     	.arrayLayers = 1,
     	.samples = VK_SAMPLE_COUNT_1_BIT,
     	.tiling = VK_IMAGE_TILING_OPTIMAL,
@@ -105,18 +105,24 @@ static VkResult create_depth_image(GfxContext *ctx, uint32_t w, uint32_t h,
 	VkResult result = 
 		vmaCreateImage(ctx->allocator, &create_info, &alloc_info, &vk_image, &allocation, nullptr);
 
-	if (result != VK_SUCCESS)
+	if (result != VK_SUCCESS) {
+		log_error("Failed to create depth + stencil image");
 		return result;
+	}
+
+	VkImageAspectFlags aspect_mask = 
+		VK_IMAGE_ASPECT_DEPTH_BIT |
+		VK_IMAGE_ASPECT_STENCIL_BIT;
 
 	VkImageViewCreateInfo view_info {
-.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 		.flags = 0, 
 		.image = vk_image,
 		.viewType = VK_IMAGE_VIEW_TYPE_2D,
-		.format = VK_FORMAT_R32_SFLOAT,
+		.format = VK_FORMAT_D32_SFLOAT_S8_UINT,
 		.components = {},
 		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+			.aspectMask = aspect_mask,
 			.baseMipLevel = 0,
 			.levelCount = 1,
 			.baseArrayLayer = 0,
@@ -128,12 +134,16 @@ static VkResult create_depth_image(GfxContext *ctx, uint32_t w, uint32_t h,
 
 	result = vkCreateImageView(ctx->device, &view_info, nullptr, &view);
 
+	if (result != VK_SUCCESS) {
+		log_error("Failed to create depth + stencil image view");
+		return result;
+	}
+
 	Image image = {
 		.image = vk_image,
 		.allocation = allocation,
 		.base_view = VK_NULL_HANDLE,
-		.layout = VK_IMAGE_LAYOUT_UNDEFINED,
-		.aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT,
+		.aspect_mask = aspect_mask,
 		.w = w,
 		.h = h,
 		.d = 1,
@@ -141,9 +151,7 @@ static VkResult create_depth_image(GfxContext *ctx, uint32_t w, uint32_t h,
 		.format = IMAGE_FORMAT_32F
 	};
 
-	ImageID handle = ctx->emplace_image(std::move(image));
-
-	*out_image = handle;
+	*out_image = ctx->emplace_image(std::move(image));
 	*out_view = view;
 
 	return result;
@@ -162,7 +170,7 @@ static VkResult create_color_image(GfxContext *ctx, uint32_t w, uint32_t h,
 			.height = h,
 			.depth = 1,
 		},
-    	.mipLevels = 0, 
+    	.mipLevels = 1, 
     	.arrayLayers = 1,
     	.samples = VK_SAMPLE_COUNT_1_BIT,
     	.tiling = VK_IMAGE_TILING_OPTIMAL,
@@ -213,7 +221,6 @@ static VkResult create_color_image(GfxContext *ctx, uint32_t w, uint32_t h,
 		.image = vk_image,
 		.allocation = allocation,
 		.base_view = VK_NULL_HANDLE,
-		.layout = VK_IMAGE_LAYOUT_UNDEFINED,
 		.aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT,
 		.w = w,
 		.h = h,
@@ -241,11 +248,11 @@ RenderTarget *create_render_target_internal(
 	RenderTargetFlags flags
 )
 {
-	RenderTarget *target = new RenderTarget{};
-
-	target->w = w;
-	target->h = h;
-	target->flags = flags;
+	RenderTarget *target = new RenderTarget{
+		.w = w,
+		.h = h,
+		.flags = flags,
+	};
 
 	VkResult result = VK_SUCCESS; 
 
@@ -255,8 +262,8 @@ RenderTarget *create_render_target_internal(
 				"RENDER_TARGET_CREATE_DEPTH_BIT set while depth_view is not VK_NULL_HANDLE"); 
 			return nullptr;
 		}
-		result = create_depth_image(ctx, w, h, &target->depth_img, &target->depth_view);
-		if (result)
+		result = create_depth_stencil_image(ctx, w, h, &target->depth_img, &target->depth_view);
+		if (result != VK_SUCCESS)
 			goto cleanup;
 	} else {
 		target->depth_view = depth_view;
@@ -269,13 +276,13 @@ RenderTarget *create_render_target_internal(
 			return nullptr;
 		}
 		result = create_color_image(ctx, w, h, &target->color_img, &target->color_view);
-		if (result)
+		if (result != VK_SUCCESS)
 			goto cleanup;
 	} else {
-		target->depth_view = depth_view;
+		target->color_view = color_view;
 	}
 
-	return nullptr;
+	return target;
 cleanup:
 	destroy_render_target_internal(ctx, target);
 	return {};
@@ -286,14 +293,18 @@ void destroy_render_target_internal(
 	RenderTarget* target
 )
 {
-	if (target->flags & RENDER_TARGET_CREATE_DEPTH_BIT) {
-		destroy_image(ctx, target->depth_img);
-		vkDestroyImageView(ctx->device, target->depth_view, nullptr);
+	if (target->depth_img.is_valid() && target->flags & RENDER_TARGET_CREATE_DEPTH_BIT) {
+		if (target->depth_img.is_valid())
+			destroy_image(ctx, target->depth_img);
+		if (target->depth_view)
+			vkDestroyImageView(ctx->device, target->depth_view, nullptr);
 	}
 
 	if (target->flags & RENDER_TARGET_CREATE_COLOR_BIT) {
-		destroy_image(ctx, target->color_img);
-		vkDestroyImageView(ctx->device, target->color_view, nullptr);
+		if (target->color_img.is_valid())
+			destroy_image(ctx, target->color_img);
+		if (target->color_view)
+			vkDestroyImageView(ctx->device, target->color_view, nullptr);
 	}
 
 	delete target;
@@ -326,6 +337,12 @@ void destroy_render_target(
 	destroy_render_target_internal(ctx, target);
 }
 
+VkImageView get_render_target_color_view(RenderTargetID handle)
+{
+	RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget, handle);
+	return target->color_view;
+}
+
 ViewID create_view(GfxContext *ctx, float view[], float proj[])
 {
 	ViewData data = view_data_from_matrices(view, proj);
@@ -350,83 +367,6 @@ void destroy_view(GfxContext *ctx, ViewID handle)
 	ctx->view_data.remove(id);
 }
 
-
-static RenderPass *create_gfx_pass(
-	GfxContext *ctx, 
-	RenderTargetID target_handle,
-	ViewID view_handle,
-	Rect in_viewport,
-	Rect in_scissor
-)
-{
-	const FrameContext *frame = ctx->get_current_frame();
-
-	std::unique_ptr<RenderPass> pass (new RenderPass{
-		.target = target_handle,
-		.view = view_handle,
-		.viewport = in_viewport,
-		.scissor = in_scissor
-	});
-
-	VkDescriptorSetLayout layout = 
-		ctx->get_base_descriptor_set_layout(EV2_BASE_SET_PER_PASS); 
-
-	VkDescriptorSetAllocateInfo alloc_info = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.descriptorPool = frame->descriptor_pool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = &layout,
-	};
-
-	VkResult result = 
-		vkAllocateDescriptorSets(ctx->device, &alloc_info, &pass->descriptor_set);
-
-	if (result != VK_SUCCESS)
-		return nullptr;
-
-	Buffer * buf = ctx->get_buffer(ctx->view_data.buffer);
-
-	VkDescriptorBufferInfo buffer_info = {
-		.buffer = buf->buffer,
-		.offset = ctx->view_data.get_offset((uint32_t)view_handle.id),
-		.range = ctx->view_data.stride
-	};
-
-	VkWriteDescriptorSet write = {
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = pass->descriptor_set,
-		.dstBinding = 0,
-		.dstArrayElement = 0,
-		.descriptorCount = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		.pBufferInfo = &buffer_info
-	};
-
-	vkUpdateDescriptorSets(ctx->device, 1, &write, 0, nullptr);
-
-	return pass.release();
-}
-
-static VkCommandBuffer create_pass_commands(GfxContext *ctx)
-{
-	VkCommandBufferAllocateInfo alloc_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-		.commandPool = ctx->get_current_frame_command_pool(),  
-		.commandBufferCount = 1,
-	};
-	
-	VkCommandBuffer command_buffer;
-
-	VkResult result = 
-		vkAllocateCommandBuffers(ctx->device, &alloc_info, &command_buffer);
-	if (result != VK_SUCCESS)
-		return nullptr;
-
-	if (result != VK_SUCCESS)
-		return nullptr;
-	return command_buffer;
-}
-
 static void populate_rendering_info(
 	const RenderTarget *p_target,
 	VkRenderingInfo *p_rendering_info,
@@ -439,6 +379,7 @@ static void populate_rendering_info(
 
 	bool has_color = p_target->color_view != VK_NULL_HANDLE;
 	bool has_depth = p_target->depth_view != VK_NULL_HANDLE;
+	bool has_stencil = has_depth;
 
 	if (has_color) {
 		*p_color_info = VkRenderingAttachmentInfo{
@@ -459,6 +400,24 @@ static void populate_rendering_info(
 
 	if (has_depth) {
 		*p_depth_info = VkRenderingAttachmentInfo{
+			.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+			.imageView = p_target->depth_view,
+			.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+			.resolveMode = VK_RESOLVE_MODE_NONE,
+			.resolveImageView = VK_NULL_HANDLE,
+			.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+			.clearValue = VkClearValue{
+				.depthStencil = {
+					.depth = 0,
+					.stencil = 0
+				}
+			},
+		};
+	}
+	if (has_stencil) {
+		*p_stencil_info = VkRenderingAttachmentInfo{
 			.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
 			.imageView = p_target->depth_view,
 			.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
@@ -487,11 +446,11 @@ static void populate_rendering_info(
 		.colorAttachmentCount = 1,
 		.pColorAttachments = has_color ? p_color_info : nullptr,
 		.pDepthAttachment = has_depth ? p_depth_info : nullptr,
-		.pStencilAttachment = nullptr,
+		.pStencilAttachment = has_stencil ? p_stencil_info : nullptr,
 	};
 }
 
-PassID begin_pass(
+PassID begin_gfx_pass(
 	GfxContext *ctx, 
 	RenderTargetID target_handle, ViewID view_handle,
 	Rect in_viewport, Rect in_scissor
@@ -506,37 +465,100 @@ PassID begin_pass(
 
 	Pass *pass = new Pass{
 		.ctx = ctx,
+		.queue_family = ctx->graphics_family->index
 	};
 
-	RenderPass *gfx = create_gfx_pass(
-		ctx, 
-		target_handle, 
-		view_handle,
-		in_viewport,
-		in_scissor
-	);
+	const FrameContext *frame = ctx->get_current_frame();
+
+	std::unique_ptr<RenderPass> gfx (new RenderPass{
+		.target = target_handle,
+		.view = view_handle,
+		.viewport = in_viewport,
+		.scissor = in_scissor
+	});
+
+	VkDescriptorSetLayout layout = 
+		ctx->get_base_descriptor_set_layout(EV2_BASE_SET_PER_PASS); 
+
+	VkDescriptorSetAllocateInfo alloc_info = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.descriptorPool = frame->descriptor_pool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = &layout,
+	};
+
+	VkResult result = 
+		vkAllocateDescriptorSets(ctx->device, &alloc_info, &gfx->descriptor_set);
+
+	if (result != VK_SUCCESS)
+		return EV2_NULL_HANDLE(Pass);
+
+	Buffer * buf = ctx->get_buffer(ctx->view_data.buffer);
+
+	VkDescriptorBufferInfo buffer_info = {
+		.buffer = buf->buffer,
+		.offset = ctx->view_data.get_offset((uint32_t)view_handle.id),
+		.range = ctx->view_data.stride
+	};
+
+	VkWriteDescriptorSet write = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = gfx->descriptor_set,
+		.dstBinding = 0,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		.pBufferInfo = &buffer_info
+	};
+
+	vkUpdateDescriptorSets(ctx->device, 1, &write, 0, nullptr);
 
 	if (!gfx)
 		return EV2_NULL_HANDLE(Pass);
 
-	pass->gfx = gfx;
+	pass->gfx = gfx.release();
 
-	VkCommandBuffer cmds = create_pass_commands(ctx); 
-	if (!cmds)
-		return EV2_NULL_HANDLE(Pass);
+	const bool render_to_swapchain = target_handle.is_valid();
 
-	VkCommandBufferBeginInfo begin_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-		.pInheritanceInfo = nullptr,
-	};
-
-	VkResult result = vkBeginCommandBuffer(cmds, &begin_info);
-
-	if (result)
-		return EV2_NULL_HANDLE(Pass);
+	if (render_to_swapchain) {
+		pass->cmds.push_back(Command{
+			.use_image = CmdUseImage{
+				.image = ctx->depth_buffer,
+				.usage = USAGE_DEPTH_ATTACHMENT, 
+			},
+			.type = UseImage
+		});		
+	} else if (RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget,target_handle)){
+		if (target->depth_img.is_valid())
+			pass->cmds.push_back(Command{
+				.use_image = CmdUseImage{
+					.image = target->depth_img,
+					.usage = USAGE_DEPTH_ATTACHMENT, 
+				},
+				.type = UseImage
+			});		
+		if (target->color_img.is_valid())
+			pass->cmds.push_back(Command{
+				.use_image = CmdUseImage{
+					.image = target->color_img,
+					.usage = USAGE_DEPTH_ATTACHMENT, 
+				},
+				.type = UseImage
+			});		
+	}
 
 	return EV2_HANDLE_CAST(Pass, pass); 
+}
+
+PassID begin_compute_pass(GfxContext *ctx)
+{
+	Pass *pass = new Pass{
+		.ctx = ctx,
+		.queue_family = ctx->graphics_family->index
+	};
+
+	return EV2_HANDLE_CAST(Pass, pass); 
+
 }
 
 void end_pass(GfxContext *ctx, PassID pass_handle)
@@ -758,25 +780,39 @@ void cmd_bind_gfx_pipeline(PassID pass_id, GfxPipelineID pipeline_id)
 	});
 }
 
-void cmd_bind_index_buffer(PassID pass_id, BufferID buf_id)
+void cmd_bind_index_buffer(PassID pass_id, BufferID buf_id, size_t offset)
 {
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 	pass->cmds.push_back(Command{
 		.bind_index_buffer = CmdBindIndexBuffer{
-			.buffer = buf_id
+			.buffer = buf_id,
+			.offset = offset
 		},
 		.type = BindIndexBuffer,
 	});
 }
 
-void cmd_bind_vertex_buffer(PassID pass_id, BufferID buf_id)
+void cmd_bind_vertex_buffer(PassID pass_id, BufferID buf_id, size_t offset)
 {
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 	pass->cmds.push_back(Command{
 		.bind_vertex_buffer = CmdBindVertexBuffer{
-			.buffer = buf_id
+			.buffer = buf_id,
+			.offset = offset
 		},
 		.type = BindVertexBuffer,
+	});
+}
+
+void cmd_bind_indirect_buffer(PassID pass_id, BufferID buf_id, size_t offset)
+{
+	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
+	pass->cmds.push_back(Command{
+		.bind_indirect_buffer = CmdBindIndirectBuffer{
+			.buffer = buf_id,
+			.offset = offset
+		},
+		.type = BindIndirectBuffer,
 	});
 }
 
@@ -998,6 +1034,8 @@ static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 				case BindResources:
 				case BindVertexBuffer:
 				case BindIndexBuffer:
+				case BindIndirectBuffer:
+				case Custom:
 				case Dispatch: {
 					rg_new_pass_command(node, cmd);
 					break;
@@ -1186,8 +1224,8 @@ static VkDependencyInfo generate_dependency_info(
 					.dstStageMask = barrier.dst_state.stage,
 					.dstAccessMask = barrier.dst_state.access,
 
-					.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-					.newLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+					.oldLayout = barrier.src_state.layout,
+					.newLayout = VK_IMAGE_LAYOUT_GENERAL,
 
 					.srcQueueFamilyIndex = is_queue_transfer ?
 						barrier.src_state.queue_family_index : VK_QUEUE_FAMILY_IGNORED,
@@ -1347,6 +1385,9 @@ static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBu
 				break;
 			}
 			case BindVertexBuffer: {
+				break;
+			}
+			case BindIndirectBuffer: {
 				break;
 			}
 			case Dispatch: {

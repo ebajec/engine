@@ -13,16 +13,12 @@ MAKE_HANDLE(ComputePipeline);
 MAKE_HANDLE(ShaderBindings);
 MAKE_HANDLE(ShaderLayout);
 MAKE_HANDLE(Shader);
-MAKE_HANDLE(Recorder);
-
-MAKE_HANDLE(DescriptorSet);
 
 enum ShaderStage
 {
 	STAGE_VERTEX,
 	STAGE_FRAGMENT,
 	STAGE_COMPUTE,
-	STAGE_MAX_ENUM,
 };
 
 enum Usage
@@ -61,12 +57,13 @@ ShaderBindingsID create_bindings(GfxContext *ctx,
 
 ShaderBindingsID create_bindings(GfxContext *ctx, 
 								ComputePipelineID pipeline_id, uint32_t index);
+void destroy_bindings(GfxContext *ctx, ShaderBindingsID bindings);
 
 ev2::Result bind_buffer(
 	GfxContext *ctx, 
 	ShaderBindingsID binding_handle, 
-	BufferID buffer_handle, 
 	const char *name,
+	BufferID buffer_handle, 
 	size_t offset, 
 	size_t size
 );
@@ -74,18 +71,18 @@ ev2::Result bind_buffer(
 ev2::Result bind_texture(
 	GfxContext *ctx, 
 	ShaderBindingsID binding_handle,
-	TextureID texture_handle,  
-	const char *name
+	const char *name,
+	TextureID texture_handle  
 ); 
 
 ev2::Result bind_image(
 	GfxContext *ctx,
 	ShaderBindingsID binding_handle,
-	ImageID image_handle,
-	const char *name 
+	const char *name,
+	ImageID image_handle
 );
 
-ev2::Result flush_bindings(GfxContext *ctx, ShaderBindingsID bindings_id);
+void flush_bindings(GfxContext *ctx, ShaderBindingsID bindings_id);
 
 //------------------------------------------------------------------------------
 // rendering
@@ -123,6 +120,8 @@ void destroy_render_target(
 	RenderTargetID id
 );
 
+VkImageView get_render_target_color_view(RenderTargetID target);
+
 ev2::Result begin_frame(GfxContext *ctx);
 void end_frame(GfxContext *ctx);
 
@@ -130,12 +129,6 @@ void end_frame(GfxContext *ctx);
 ViewID create_view(GfxContext *ctx, float view[], float proj[]);
 void update_view(GfxContext *ctx, ViewID handle, float view[], float proj[]);
 void destroy_view(GfxContext *ctx, ViewID handle);
-
-struct PassContext
-{
-	RecorderID rec;
-	PassID pass;
-};
 
 struct Rect
 {
@@ -160,14 +153,14 @@ struct BeginPassInfo
 
 // @brief Begin a render pass.  Configures bindings for pass-specific data  
 // (view matrices, etc).    
-PassID begin_pass(
+PassID begin_gfx_pass(
 	GfxContext *ctx, 
 	RenderTargetID target, ViewID view,
 	Rect viewport, Rect scissor = {}
 );
 
 // @brief Begin a compute pass   
-PassID begin_pass(
+PassID begin_compute_pass(
 	GfxContext *ctx 
 );
 
@@ -187,36 +180,18 @@ enum DrawMode
 };
 
 void cmd_bind_resources(PassID pass_id, ShaderBindingsID bindings_id);
-
 void cmd_bind_compute_pipeline(PassID pass_id, ComputePipelineID pipeline_id);
 void cmd_bind_gfx_pipeline(PassID pass_id, GfxPipelineID pipeline_id);
+void cmd_bind_index_buffer(PassID pass_id, BufferID buf, size_t offset);
+void cmd_bind_vertex_buffer(PassID pass_id, BufferID buf, size_t offset);
+void cmd_bind_indirect_buffer(PassID pass_id, BufferID buf, size_t offset);
 
-void cmd_bind_index_buffer(PassID pass_id, BufferID buf);
-void cmd_bind_vertex_buffer(PassID pass_id, BufferID buf);
+void cmd_dispatch(PassID pass_id, uint32_t countx, uint32_t county, uint32_t countz);
 
-void cmd_dispatch(
-	PassID pass_id,
-	uint32_t countx, 
-	uint32_t county, 
-	uint32_t countz
-);
+void cmd_use_buffer(PassID pass_id, BufferID buf_id, Usage usage);
+void cmd_use_image(PassID pass_id, ImageID img_id, Usage usage);
 
-void cmd_use_buffer(
-	PassID pass_id,
-	BufferID buf_id,
-	Usage usage
-);
-
-void cmd_use_image(
-	PassID pass_id,
-	ImageID img_id,
-	Usage usage
-);
-
-void cmd_custom(
-	PassID pass_id,
-	std::function<void(VkCommandBuffer)>&& callback
-);
+void cmd_custom(PassID pass_id, std::function<void(VkCommandBuffer)>&& callback);
 };
 
 #endif //EV2_PIPELINE_H

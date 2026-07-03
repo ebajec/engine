@@ -3,11 +3,12 @@
 #include "ev2/utils/log.h"
 
 #include "ev2/context.h"
+#include "ev2/pipeline.h"
 
 // imgui
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
-#include "backends/imgui_impl_opengl3.h"
+#include "backends/imgui_impl_vulkan.h"
 
 // STL / libc
 #include <cstdio>
@@ -194,7 +195,7 @@ int App::update()
 	input.scroll_delta = glm::vec2(0);
 
 #ifdef ENABLE_IMGUI
-	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 #endif
@@ -224,15 +225,23 @@ void App::begin_frame()
 
 void App::end_frame()
 {
-	ev2::end_frame(ctx);
-
 #ifdef ENABLE_IMGUI
 	ImGui::Render();
-	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());	
-	ImGui::EndFrame();
 #endif
 
-	glfwSwapBuffers(win.ptr);
+	ev2::PassID gui_pass = ev2::begin_gfx_pass(
+		ctx, 
+		{}, {}, 
+		ev2::Rect{(uint32_t)win.width, (uint32_t)win.height}
+	);
+
+	ev2::cmd_custom(gui_pass, [](VkCommandBuffer cmds) {
+		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmds);
+	});
+	ev2::end_pass(ctx, gui_pass);
+
+	ImGui::EndFrame();
+	ev2::end_frame(ctx);
 }
 
 int App::initialize(int argc, char *argv[])
@@ -277,7 +286,7 @@ int App::initialize(int argc, char *argv[])
     std::vector<const char*> extensions(
 		glfwExtensions,glfwExtensions + glfwExtensionCount);
 
-	ev2::InitOptionsVulkan init_opts = {
+	ev2::VulkanInitOptions init_opts = {
 		.validationLayers = validationLayers.data(),
 		.validationLayerCount = validationLayers.size(),
 		.instanceExtensions = extensions.data(),
@@ -298,13 +307,11 @@ int App::initialize(int argc, char *argv[])
 		return EXIT_FAILURE;
     }
 
-	ev2::ContextInfoVulkan vulkan_params = {
+	ev2::GfxContextVulkanInfo vulkan_params = {
 		.surface = surface		
 	};
 
 	ctx = ev2::create_context_for_vulkan(RESOURCE_PATH, vulkan_params);
-
-	return EXIT_FAILURE;
 
 #ifdef ENABLE_IMGUI
 	IMGUI_CHECKVERSION();
@@ -315,8 +322,18 @@ int App::initialize(int argc, char *argv[])
 
 	// Set ImGui style
 	ImGui::StyleColorsDark();
-	ImGui_ImplGlfw_InitForOpenGL(win.ptr, true);
-	ImGui_ImplOpenGL3_Init("#version 450");
+	if (!ImGui_ImplGlfw_InitForVulkan(win.ptr, true)) {
+		log_error("Failed to initialize imgui for glfw");
+		return EXIT_FAILURE;
+	}
+
+	ImGui_ImplVulkan_InitInfo init_info;
+	ev2::populate_imgui_vulkan_init_info(ctx, &init_info);
+
+	if (!ImGui_ImplVulkan_Init(&init_info)) {
+		log_error("Failed to initialize imgui for vulkan");
+		return EXIT_FAILURE;
+	}
 
 	ImPlot::CreateContext();
 #endif
@@ -339,7 +356,7 @@ int App::initialize(int argc, char *argv[])
 void App::terminate()
 {
 #ifdef ENABLE_IMGUI
-	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplVulkan_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
 

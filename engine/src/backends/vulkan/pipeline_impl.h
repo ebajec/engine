@@ -16,19 +16,12 @@
 #include <memory>
 #include <cstdint>
 
-enum {
-	EV2_BASE_SET_BINDLESS, 
-	EV2_BASE_SET_PER_FRAME,
-	EV2_BASE_SET_PER_PASS,
-	EV2_BASE_SET_COUNT
-};
-
 #define EV2_FRAME_UBO_BINDING 0
 #define EV2_PER_PASS_UBO_BINDING 0
 
 namespace ev2 {
 
-struct ShaderLayoutIndex
+struct ShaderLayoutMapping
 {
 	struct BindingEntry {
 		uint32_t set;
@@ -56,12 +49,12 @@ struct Shader
 {
 	VkShaderModule 	shader_module;
 	ShaderStage stage;
-	std::shared_ptr<ShaderLayoutIndex> layout_index;
+	std::shared_ptr<ShaderLayoutMapping> layout_index;
 };
 
 struct BasePipeline
 {
-	std::shared_ptr<const ShaderLayoutIndex> layout_index;
+	std::shared_ptr<const ShaderLayoutMapping> layout_index;
 	std::vector<VkDescriptorSetLayout> set_layouts;
 	VkPipelineLayout layout;
 	VkPipeline pipeline;
@@ -97,7 +90,7 @@ struct ShaderBindings
 		BindType type;
 	};
 
-	std::shared_ptr<const ShaderLayoutIndex> layout_index;
+	std::shared_ptr<const ShaderLayoutMapping> layout_index;
 
 	std::vector<Info> info;
 	std::vector<VkWriteDescriptorSet> writes;
@@ -160,6 +153,10 @@ struct CmdBindVertexBuffer{
 	BufferID buffer;
 	size_t offset;
 };
+struct CmdBindIndirectBuffer{
+	BufferID buffer;
+	size_t offset;
+};
 struct CmdDispatch{
 	uint32_t counts[3];
 };
@@ -182,6 +179,7 @@ enum CmdType
 	BindResources,
 	BindIndexBuffer,
 	BindVertexBuffer,
+	BindIndirectBuffer,
 	Dispatch,
 	UseBuffer,
 	UseImage,
@@ -195,6 +193,7 @@ struct Command {
 		CmdBindResources 		bind_resources;
 		CmdBindIndexBuffer		bind_index_buffer;
 		CmdBindVertexBuffer		bind_vertex_buffer;
+		CmdBindIndirectBuffer	bind_indirect_buffer;
 		CmdDispatch 			dispatch;
 		CmdUseBuffer 			use_buffer; 
 		CmdUseImage 			use_image;
@@ -247,8 +246,11 @@ extern RenderTarget *create_render_target_internal(
 	uint32_t w, uint32_t h,
 	VkImageView color_view,
 	VkImageView depth_view,
-	RenderTargetFlags flags
+	RenderTargetFlags flags = 0
 );
+
+extern VkResult create_depth_stencil_image(GfxContext *ctx, uint32_t w, uint32_t h,
+									  ImageID* out_image, VkImageView *out_view);
 
 extern void destroy_render_target_internal(
 	GfxContext *ctx, 

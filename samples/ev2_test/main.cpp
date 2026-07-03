@@ -76,8 +76,8 @@ struct WaveSim
 	ev2::ImageID swap_img[2] {};
 	ev2::TextureID swap_tex[2] {};
 
-	ev2::DescriptorSetID sim0_set;
-	ev2::DescriptorSetID sim1_set;
+	ev2::ShaderBindingsID sim0_bindings;
+	ev2::ShaderBindingsID sim1_bindings;
 
 	int swap_ctr = 0;
 
@@ -108,30 +108,27 @@ int WaveSim::init(ev2::GfxContext *ctx)
 
 	grid_w = 512, grid_h = grid_w;
 
-	swap_img[0] = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_RGBA32F);
-	swap_img[1] = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_RGBA32F);
+	swap_img[0] = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_RGBA32F,
+								 ev2::IMAGE_USAGE_STORAGE_BIT | ev2::IMAGE_USAGE_SAMPLED_BIT);
+	swap_img[1] = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_RGBA32F,
+								 ev2::IMAGE_USAGE_STORAGE_BIT | ev2::IMAGE_USAGE_SAMPLED_BIT);
 
-	swap_tex[0] = ev2::create_texture(ctx, swap_img[0],ev2::FILTER_BILINEAR);
-	swap_tex[1] = ev2::create_texture(ctx, swap_img[1],ev2::FILTER_BILINEAR);
+	swap_tex[0] = ev2::create_texture(ctx, swap_img[0], ev2::FILTER_BILINEAR);
+	swap_tex[1] = ev2::create_texture(ctx, swap_img[1], ev2::FILTER_BILINEAR);
 
-	ubo = ev2::create_buffer(ctx, sizeof(uniforms));
+	ubo = ev2::create_buffer(ctx, sizeof(uniforms),
+		ev2::BUFFER_USAGE_TRANSFER_DST_BIT | ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
 	//------------------------------------------------------------------------------
 	// Get shader resource locations and create descriptor sets
 
-	ev2::ShaderLayoutID layout = 
-		ev2::get_compute_pipeline_layout(ctx, sim_pipelines[0]);
+	sim0_bindings = ev2::create_bindings(ctx, sim_pipelines[0], 0);
+	ev2::bind_buffer(ctx, sim0_bindings, "Uniforms", ubo, 0, sizeof(uniforms));
+	ev2::flush_bindings(ctx, sim0_bindings);
 
-	sim0_set = ev2::create_descriptor_set(ctx, layout);
-
-	sim1_set = ev2::create_descriptor_set(ctx, layout);
-
-	img_in_slot = ev2::find_binding(layout, "img_in");
-	img_out_slot = ev2::find_binding(layout, "img_out");
-
-	ev2::BindingSlot ubo_slot = ev2::find_binding(layout, "Uniforms");
-	ev2::bind_buffer(ctx, sim0_set, ubo_slot, ubo, 0, sizeof(uniforms));
-	ev2::bind_buffer(ctx, sim1_set, ubo_slot, ubo, 0, sizeof(uniforms));
+	sim1_bindings = ev2::create_bindings(ctx, sim_pipelines[0], 0);
+	ev2::bind_buffer(ctx, sim1_bindings, "Uniforms", ubo, 0, sizeof(uniforms));
+	ev2::flush_bindings(ctx, sim1_bindings);
 
 	//------------------------------------------------------------------------------
 	// Upload some stuff
@@ -186,39 +183,39 @@ int WaveSim::update(ev2::GfxContext *ctx)
 
 	uint32_t grps_x = grid_w/32, grps_y = grid_h/32, grps_z = 1;
 
-	ev2::bind_texture(ctx, sim0_set, img_in_slot, swap_tex[img_A]);
-	ev2::bind_image(ctx, sim0_set, img_out_slot, swap_img[img_B]);
+	ev2::bind_texture(ctx, sim0_bindings, "img_in", swap_tex[img_A]);
+	ev2::bind_image(ctx, sim0_bindings, "img_out", swap_img[img_B]);
 
-	ev2::bind_texture(ctx, sim1_set, img_in_slot, swap_tex[img_B]);
-	ev2::bind_image(ctx, sim1_set, img_out_slot, swap_img[img_A]);
+	ev2::bind_texture(ctx, sim1_bindings, "img_in", swap_tex[img_B]);
+	ev2::bind_image(ctx, sim1_bindings, "img_out", swap_img[img_A]);
 
-	ev2::RecorderID rec = ev2::begin_commands(ctx);
-	ev2::cmd_use_texture(rec, swap_tex[img_A], ev2::USAGE_STORAGE_READ_COMPUTE);
-	ev2::cmd_use_texture(rec, swap_tex[img_B], ev2::USAGE_STORAGE_RW_COMPUTE);
+	ev2::PassID pass = ev2::begin_compute_pass(ctx);
 
-	ev2::cmd_bind_descriptor_set(rec, sim0_set);
-	ev2::cmd_bind_compute_pipeline(rec, sim_pipelines[0]);
-	ev2::cmd_dispatch(rec, grps_x, grps_y, grps_z);
+	ev2::cmd_use_image(pass, swap_img[img_A], ev2::USAGE_STORAGE_READ_COMPUTE);
+	ev2::cmd_use_image(pass, swap_img[img_B], ev2::USAGE_STORAGE_RW_COMPUTE);
 
-	ev2::cmd_use_texture(rec, swap_tex[img_B], ev2::USAGE_STORAGE_READ_COMPUTE);
-	ev2::cmd_use_texture(rec, swap_tex[img_A], ev2::USAGE_STORAGE_RW_COMPUTE);
-	glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
+	ev2::cmd_bind_resources(pass, sim0_bindings);
+	ev2::cmd_bind_compute_pipeline(pass, sim_pipelines[0]);
+	ev2::cmd_dispatch(pass, grps_x, grps_y, grps_z);
 
-	ev2::cmd_bind_descriptor_set(rec, sim1_set);
-	ev2::cmd_bind_compute_pipeline(rec, sim_pipelines[1]);
-	ev2::cmd_dispatch(rec, grps_x, grps_y, grps_z);
+	ev2::cmd_use_image(pass, swap_img[img_B], ev2::USAGE_STORAGE_READ_COMPUTE);
+	ev2::cmd_use_image(pass, swap_img[img_A], ev2::USAGE_STORAGE_RW_COMPUTE);
 
-	ev2::cmd_use_texture(rec, swap_tex[img_B], ev2::USAGE_SAMPLED_GRAPHICS);
+	ev2::cmd_bind_resources(pass, sim1_bindings);
+	ev2::cmd_bind_compute_pipeline(pass, sim_pipelines[1]);
+	ev2::cmd_dispatch(pass, grps_x, grps_y, grps_z);
 
-	ev2::SyncID cmd_sync = ev2::end_commands(rec);
+	ev2::cmd_use_image(pass, swap_img[img_B], ev2::USAGE_SAMPLED_GRAPHICS);
+
+	ev2::end_pass(ctx, pass);
 
 	return App::OK;
 }
 
 void WaveSim::destroy(ev2::GfxContext *ctx)
 {
-	ev2::destroy_descriptor_set(ctx, sim0_set);
-	ev2::destroy_descriptor_set(ctx, sim1_set);
+	ev2::destroy_bindings(ctx, sim0_bindings);
+	ev2::destroy_bindings(ctx, sim1_bindings);
 
 	ev2::destroy_texture(ctx, swap_tex[0]);
 	ev2::destroy_texture(ctx, swap_tex[1]);
@@ -241,8 +238,6 @@ struct FluidApp : public App
 		glm::vec2 cursor2;
 		uint32_t flags;
 	} uniforms;
-	ev2::ComputePipelineID cursor;
-	ev2::DescriptorSetID cursor_desc;
 	ev2::BufferID ubo;
 
 	FluidApp() : App(1200, 500, "fluid") {

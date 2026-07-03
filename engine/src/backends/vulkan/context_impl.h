@@ -15,8 +15,6 @@
 
 #include <glm/mat4x4.hpp>
 
-#include <deque>
-
 #define EV2_MAX_FRAMES_IN_FLIGHT 3
 #define EV2_FRAME_TIMEOUT 1e9
 
@@ -28,7 +26,8 @@ namespace ev2 {
 struct VulkanOptions
 {
     std::vector<const char*> deviceExtensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME,
     };
 };
 
@@ -65,12 +64,11 @@ struct QueueFamily
 
 struct RenderGraph;
 
-	
 struct SyncKey {
 	TaggedResource resource;
 	VkQueue queue;
 
-	constexpr bool operator == (const SyncKey &other) {
+	constexpr bool operator == (const SyncKey &other) const {
 		return resource == other.resource && queue == other.queue;
 	}
 
@@ -98,7 +96,7 @@ struct FrameContext
 	std::vector<ev2::Pass*> passes;
 	std::vector<ev2::Pass> new_passes;
 
-	// count = num workers
+	// count = 1 + num workers
 	std::vector<VkCommandPool> command_pools;
 
 	VkSemaphore image_available_sempahore;
@@ -185,11 +183,18 @@ struct PassEdge
 	struct KeyEquals {
 		using is_transparent = void;
 
-		bool operator()(const PassEdge& a, const Key &key) {
+		bool operator()(const PassEdge& a, const Key &key) const {
 			return 
 				a.src_pass == key.src_pass &&
 				a.dst_pass == key.dst_pass &&
 				a.barrier.resource.u64 == key.resource;
+		}
+
+		bool operator()(const Key& a, const Key &b) const {
+			return 
+				a.src_pass == b.src_pass &&
+				a.dst_pass == b.dst_pass &&
+				a.resource == b.resource;
 		}
 	};
 
@@ -285,11 +290,12 @@ struct GfxContext
     VkDevice                    device;
 
 	std::vector<QueueFamily> 	queue_families;
-	const QueueFamily * 		graphics_family;
-	const QueueFamily * 		transfer_family;
-	const QueueFamily * 		compute_family;
 
-	const QueueSubmitter * 		graphics_queue;
+	QueueFamily * 		graphics_family;
+	QueueFamily * 		transfer_family;
+	QueueFamily * 		compute_family;
+
+	QueueSubmitter * 		graphics_queue;
 
     VkQueue                     present_queue;
 
@@ -299,6 +305,9 @@ struct GfxContext
 
 	SwapChain 					swap_chain;
 	std::vector<RenderTarget*>	swap_chain_targets;
+
+	ImageID depth_buffer;
+	VkImageView depth_buffer_view;
 
 	VkDescriptorSetLayout 		base_descriptor_set_layouts[EV2_BASE_SET_COUNT];
 	VkPipelineLayout 			base_pipeline_layouts[EV2_BASE_SET_COUNT];
@@ -311,11 +320,15 @@ struct GfxContext
 	//-----------------------------------------------------------------------------
 	// Important things 
 	
+	struct {
+		uint32_t max_workers;
+		VkPhysicalDeviceLimits limits;
+	} caps;
+	
 	// set on initialization
 	std::thread::id main_thread_id;
 	
 	uint32_t max_frames_in_flight;
-	uint32_t max_workers;
 
 	uint64_t start_time_ns;
 
@@ -431,6 +444,10 @@ struct GfxContext
 		return (Shader*)ent->usr;
 	}
 };
+
+extern VkPipelineRenderingCreateInfoKHR get_swapchain_rendering_info(GfxContext *ctx);
+extern std::vector<VkDynamicState> get_dynamic_states(GfxContext *ctx);
+
 };
 
 #endif //DEVICE_

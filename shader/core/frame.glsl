@@ -1,8 +1,10 @@
 #ifndef FRAMEDATA_GLSL
 #define FRAMEDATA_GLSL
 
-#define VIEWDATA_BINDING 15
-#define FRAMEDATA_BINDING 16
+#define BINDLESS_SET 0 
+#define PER_FRAME_SET 1
+#define PER_PASS_SET 2
+#define PER_DRAW_SET 3 
 
 struct framedata_t
 {
@@ -11,15 +13,10 @@ struct framedata_t
 	float dt;
 };
 
-layout (std140, binding = FRAMEDATA_BINDING) uniform FrameData
+layout (set = PER_FRAME_SET, std140, binding = 0) uniform FrameData
 {
 	framedata_t u_frame;
 };
-
-float ftime()
-{
-	return float(u_frame.t_seconds) + u_frame.t_fract;
-}
 
 struct viewdata_t
 {
@@ -31,10 +28,15 @@ struct viewdata_t
 	ivec2 resolution; 
 };
 
-layout (std140, binding = VIEWDATA_BINDING) uniform ViewData
+layout (set = PER_PASS_SET, std140, binding = 0) uniform ViewData
 {
 	viewdata_t u_view;
 };
+
+float ftime()
+{
+	return float(u_frame.t_seconds) + u_frame.t_fract;
+}
 
 vec3 view_dir()
 {

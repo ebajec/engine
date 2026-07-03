@@ -48,23 +48,17 @@ int TextureViewerPanel::update_pipeline(const char *path)
 	if (!EV2_VALID(pipeline))
 		return EXIT_FAILURE;
 
-	ev2::ShaderLayoutID layout = 
-		ev2::get_graphics_pipeline_layout(app->ctx, pipeline);
-
-	ev2::DescriptorSetID set = ev2::create_descriptor_set(app->ctx, layout);
-	ev2::BindingSlot slot = ev2::find_binding(layout, "u_tex");
-
-	ev2::Result res = ev2::bind_texture(app->ctx, set, slot, rd.tex);
+	ev2::ShaderBindingsID bindings = ev2::create_bindings(app->ctx, pipeline, EV2_GFX_SET_PER_DRAW);
+	ev2::Result res = ev2::bind_texture(app->ctx, bindings, "u_tex", rd.tex);
 
 	if (res != ev2::SUCCESS)
 		return EXIT_FAILURE;
 
-	if (EV2_VALID(rd.desc_set))
-		ev2::destroy_descriptor_set(app->ctx, rd.desc_set);
+	if (EV2_VALID(rd.bindings))
+		ev2::destroy_bindings(app->ctx, rd.bindings);
 
 	rd.pipeline = pipeline;
-	rd.desc_set = set;
-	rd.tex_slot = slot;
+	rd.bindings = bindings;
 	pipeline_path = path;
 
 	return EXIT_SUCCESS;
@@ -88,7 +82,7 @@ int TextureViewerPanel::init(ev2::GfxContext *ctx, ev2::TextureID tex)
 
 int TextureViewerPanel::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
 {
-	ev2::Result res = ev2::bind_texture(ctx, rd.desc_set, rd.tex_slot, tex);
+	ev2::Result res = ev2::bind_texture(ctx, rd.bindings, "u_tex", tex);
 
 	if (res)
 		return EXIT_FAILURE;
@@ -151,30 +145,30 @@ int TextureViewerPanel::update(ev2::GfxContext *ctx)
 	return EXIT_SUCCESS;
 }
 
-ev2::PassContext TextureViewerPanel::begin_pass(ev2::GfxContext *ctx)
+ev2::PassID TextureViewerPanel::begin_pass(ev2::GfxContext *ctx)
 {
 	glm::ivec2 win_size = panel->get_size(); 
 
 	ev2::RenderTargetID window_target = panel->get_target();
 	ev2::Rect view_rect = {0,0, (uint32_t)win_size.x, (uint32_t)win_size.y};
 
-	return ev2::begin_pass(ctx, window_target, rd.camera, view_rect);
+	return ev2::begin_gfx_pass(ctx, window_target, rd.camera, view_rect);
 }
 
 void TextureViewerPanel::render(ev2::GfxContext *ctx)
 {
-	ev2::PassContext pass = this->begin_pass(ctx);
+	ev2::PassID pass = this->begin_pass(ctx);
 	ev2::cmd_bind_gfx_pipeline(pass, rd.pipeline);
-	ev2::cmd_bind_descriptor_set(pass.rec, rd.desc_set);
-	ev2::cmd_draw_screen_quad(pass);
-	ev2::SyncID pass_sync = ev2::end_pass(ctx, pass);
-
-	ev2::submit(pass_sync);
+	ev2::cmd_bind_resources(pass, rd.bindings);
+	ev2::cmd_custom(pass, [](VkCommandBuffer cmds){
+		vkCmdDraw(cmds, 6, 1, 0, 0);
+	});
+	ev2::end_pass(ctx, pass);
 }
 
 void TextureViewerPanel::destroy(ev2::GfxContext *ctx)
 {
-	ev2::destroy_descriptor_set(ctx, rd.desc_set);
+	ev2::destroy_bindings(ctx, rd.bindings);
 	panel.reset();
 }
 

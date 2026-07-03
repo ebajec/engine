@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <cassert>
 #include <vector>
 
 struct ResourceSync {
@@ -19,6 +20,7 @@ struct ResourceStateFlags {
 	VkAccessFlags2			access;
 	VkPipelineStageFlags2 	stage;
 	uint32_t 				queue_family_index;
+	VkImageLayout 			layout;
 };
 
 struct ResourceState {
@@ -34,13 +36,15 @@ struct ResourceState {
 
 	void get_current_sync(uint32_t *count, const ResourceSync **syncs)
 	{
-		if (read_syncs.empty()) {
+		if (!read_syncs.empty()) {
+			assert(write_sync.semaphore);
+			*count = (uint32_t)read_syncs.size();
+			*syncs = read_syncs.data();
+			return;
+		} else if (write_sync.semaphore) {
 			*count = 1;
 			*syncs = &write_sync;
 			return;
-		} else {
-			*count = (uint32_t)read_syncs.size();
-			*syncs = read_syncs.data();
 		}
 		*count = 0;
 		*syncs = nullptr;
@@ -48,6 +52,8 @@ struct ResourceState {
 
 	inline void sync_read(VkSemaphore semaphore, uint64_t wait_value)
 	{
+		assert(semaphore);
+
 		read_syncs.push_back(ResourceSync{
 			.wait_value = wait_value,
 			.semaphore = semaphore,
@@ -56,6 +62,8 @@ struct ResourceState {
 
 	inline void sync_write(VkSemaphore semaphore, uint64_t wait_value)
 	{
+		assert(semaphore);
+
 		read_syncs.clear();
 		write_sync = {
 			.wait_value = wait_value,
@@ -68,9 +76,12 @@ struct ResourceState {
 	inline ResourceStateFlags set_read(VkAccessFlags2 access, VkPipelineStageFlags2 stage, 
 									uint32_t queue_family)
 	{
+		assert(write.layout);
+
 		read.access |= access;
 		read.stage |= stage;
 		read.queue_family_index = queue_family;
+		read.layout = VK_IMAGE_LAYOUT_GENERAL;
 
 		return write;
 	}
@@ -86,6 +97,7 @@ struct ResourceState {
 		write.access = access;
 		write.stage = stage;
 		write.queue_family_index = queue_family;
+		write.layout = VK_IMAGE_LAYOUT_GENERAL;
 
 		return old;
 	}
@@ -153,7 +165,6 @@ struct Image
 	VkImageView base_view = VK_NULL_HANDLE;
 
 	ResourceState state;
-	VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
 	VkImageAspectFlags aspect_mask;
 	uint32_t w;
@@ -167,6 +178,7 @@ struct Texture
 {
 	ImageID img;
 	TextureFilter filter;
+	VkSampler sampler;
 };
 
 struct ImageAsset

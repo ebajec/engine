@@ -45,7 +45,7 @@ static ev2::Result reload(Device *ctx, void **usr, const char *path)
 
 static void image_upload_gl(Device *ctx, ImageID h, void *data, size_t size)
 {
-	Image *image = ctx->image_pool->get(ResourceID{h.id});
+	Image *image = ctx->image_pool->get(PoolID{h.id});
 	GLenum fmt, type;
 
 	image_format_to_gl(image->fmt, &fmt, &type);

@@ -5,6 +5,8 @@
 
 #include <glad/glad.h>
 
+#define ENABLE_IMGUI
+
 // glfw
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>

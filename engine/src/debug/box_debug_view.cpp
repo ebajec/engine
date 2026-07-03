@@ -110,7 +110,7 @@ void BoxDebugView::update()
 		vcap = verts.size() * sizeof(vertex3d);
 		if (vbo.id)
 			ev2::destroy_buffer(ctx, vbo);
-		vbo = ev2::create_buffer(ctx, vcap);
+		vbo = ev2::create_buffer(ctx, vcap, ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT);
 	}
 	vsize = verts.size() * sizeof(vertex3d);
 
@@ -118,7 +118,7 @@ void BoxDebugView::update()
 		icap = indices.size() * sizeof(uint32_t);
 		if (ibo.id)
 			ev2::destroy_buffer(ctx, ibo);
-		ibo = ev2::create_buffer(ctx, icap);
+		ibo = ev2::create_buffer(ctx, icap, ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT);
 	}
 	isize = indices.size() * sizeof(uint32_t);
 
@@ -146,26 +146,26 @@ void BoxDebugView::update()
 	oboxes.clear();
 }
 
-void BoxDebugView::draw(ev2::PassContext pass)
+void BoxDebugView::draw(ev2::PassID pass)
 {
 	ev2::wait_complete(ctx, upload_index);
 	if (!vbo.id || !ibo.id)
 		return;
 
-	ev2::cmd_bind_gfx_pipeline(pass.rec, pipeline);
+	ev2::cmd_bind_gfx_pipeline(pass, pipeline);
 
 	ev2::Buffer *vbo_obj = ctx->get_buffer(vbo);
 	ev2::Buffer *ibo_obj = ctx->get_buffer(ibo);
 
-	glBindVertexArray(vao);
-	glBindVertexBuffer(0, vbo_obj->id, 0, sizeof(vertex3d));
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_obj->id);
+	//glBindVertexArray(vao);
+	//glBindVertexBuffer(0, vbo_obj->id, 0, sizeof(vertex3d));
+	//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_obj->id);
 
-	uint32_t count = (uint32_t)(isize/(sizeof(uint32_t)));
+	//uint32_t count = (uint32_t)(isize/(sizeof(uint32_t)));
 
-	glDrawElements(GL_LINES, count, GL_UNSIGNED_INT, nullptr); 
+	//glDrawElements(GL_LINES, count, GL_UNSIGNED_INT, nullptr); 
 
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glBindVertexArray(0);
+	//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+	//glBindBuffer(GL_ARRAY_BUFFER, 0);
+	//glBindVertexArray(0);
 }

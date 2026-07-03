@@ -3,16 +3,23 @@
 
 namespace ev2 {
 
-BufferID create_buffer(GfxContext *ctx, size_t size, BufferUsageFlags flags, size_t align)
+BufferID create_buffer(GfxContext *ctx, size_t size, BufferUsageFlags usage, size_t align)
 {
 	Buffer buf {};
+
+	if (!usage) {
+		log_error("buffer usage flags cannot be 0!");
+		return EV2_NULL_HANDLE(Buffer);
+	}
+
+	usage |= ev2::BUFFER_USAGE_TRANSFER_DST_BIT;
 
 	VkBufferCreateInfo buffer_ci = {
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
 		.pNext = nullptr,
 		.flags = 0,
 		.size = size,
-		.usage = flags, 
+		.usage = usage, 
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
 		.queueFamilyIndexCount = 0,
 		.pQueueFamilyIndices = nullptr
@@ -58,15 +65,15 @@ uint64_t get_buffer_gpu_handle(GfxContext *ctx, BufferID h)
 
 //------------------------------------------------------------------------------
 
-ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, ImageFormat fmt, 
-					 uint32_t levels, ImageUsageFlags usage)
+ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, ImageFormat fmt, ImageUsageFlags usage, 
+					 uint32_t levels)
 {
-	Image img {};
+	if (!usage) {
+		log_error("image usage flags cannot be 0!");
+		return EV2_NULL_HANDLE(Image);
+	}
 
-	img.w = w;
-	img.h = h;
-	img.d = d;
-	img.format = fmt;
+	usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
 	VkImageType type = d <= 1 ?  
 		VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_3D;
@@ -100,17 +107,22 @@ ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, ImageF
 		.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 	};
 
+	VkImage image;
+	VmaAllocation allocation;
+
 	VkResult result = vmaCreateImage(ctx->allocator, 
-		&img_ci, &alloc_ci, &img.image, &img.allocation, nullptr);
+		&img_ci, &alloc_ci, &image, &allocation, nullptr);
 
 	if (result != VK_SUCCESS)
 		return EV2_NULL_HANDLE(Image);
+
+	VkImageView image_view;
 
 	VkImageViewCreateInfo viewInfo = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 		.pNext = nullptr,
 		.flags = 0,
-		.image = img.image,
+		.image = image,
 		.viewType = (VkImageViewType)img_ci.imageType,
 		.format = img_ci.format,
 		.components = {},
@@ -123,14 +135,24 @@ ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, ImageF
 		},
 	};
 
-	result = vkCreateImageView(ctx->device, &viewInfo, nullptr, &img.base_view);
+	result = vkCreateImageView(ctx->device, &viewInfo, nullptr, &image_view);
 
 	if (result != VK_SUCCESS) {
-		vmaDestroyImage(ctx->allocator, img.image, img.allocation);
+		vmaDestroyImage(ctx->allocator, image, allocation);
 		return EV2_NULL_HANDLE(Image);
 	}
 
-	return ctx->emplace_image(std::move(img));
+	return ctx->emplace_image(Image{
+		.image = image,
+		.allocation = allocation,
+		.base_view = image_view,
+		.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT,
+		.w = w,
+		.h = h, 
+		.d = d,
+		.levels = levels,
+		.format = fmt,
+	});
 }
 
 void get_image_dims(GfxContext *ctx, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d)
@@ -209,11 +231,37 @@ ev2::Result wait_complete(GfxContext *ctx, uint64_t sync)
 
 TextureID create_texture(GfxContext *ctx, ImageID img, TextureFilter filter)
 {
-	Texture tex {};
-	tex.img = img;
-	tex.filter = filter;
+	VkSampler sampler;
 
-	return ctx->emplace_texture(std::move(tex));
+	VkSamplerCreateInfo create_info = {
+		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+		.flags = 0,
+		.magFilter = VK_FILTER_LINEAR,
+		.minFilter = VK_FILTER_LINEAR,
+		.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+		.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+		.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+		.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+		.mipLodBias = 0.f,
+		.anisotropyEnable = false,
+		.compareEnable = false,
+		.compareOp = VK_COMPARE_OP_NEVER,
+		.minLod = 0.f,
+		.maxLod = 0.f,
+		.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+		.unnormalizedCoordinates = false,
+	};
+
+	VkResult result = vkCreateSampler(ctx->device, &create_info, nullptr, &sampler);
+
+	if (result != VK_SUCCESS)
+		return EV2_NULL_HANDLE(Texture);
+
+	return ctx->emplace_texture(Texture{
+		.img = img,
+		.filter = filter,
+		.sampler = sampler
+	});
 }
 
 void destroy_texture(GfxContext *ctx, TextureID h)
@@ -222,11 +270,12 @@ void destroy_texture(GfxContext *ctx, TextureID h)
 	ctx->texture_pool->deallocate(id);
 }
 
-uint64_t get_texture_gpu_handle(GfxContext *ctx, TextureID h)
+void get_texture_gpu_handle(GfxContext *ctx, TextureID h, VkImageView *view)
 {
 	Texture *tex = ctx->get_texture(h);
 	Image *img = ctx->get_image(tex->img);
-	return (uint64_t)img->base_view;
+
+	*view = img->base_view;
 }
 
 void get_texture_dims(GfxContext *ctx, TextureID h_tex, uint32_t *w, uint32_t *h, uint32_t*d)

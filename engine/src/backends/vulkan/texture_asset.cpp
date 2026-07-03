@@ -43,22 +43,6 @@ static ev2::Result reload(GfxContext *ctx, void **usr, const char *path)
 	return res;
 }
 
-static void image_upload_gl(GfxContext *ctx, ImageID h, void *data, size_t size)
-{
-	Image *image = ctx->image_pool->get(PoolID{h.id});
-	GLenum fmt, type;
-
-	image_format_to_gl(image->format, &fmt, &type);
-
-	glTextureSubImage2D(
-		image->id, 
-		0,
-		0, 0, 
-		image->w, image->h,
-		fmt, type, data
-	);
-}
-
 static ev2::Result create(GfxContext *ctx, ImageAsset * asset, const char *path)
 {
 	std::string syspath = 
@@ -86,9 +70,15 @@ static ev2::Result create(GfxContext *ctx, ImageAsset * asset, const char *path)
 	}
 
 	ImageID img = create_image(ctx, 
-		(uint32_t)width, (uint32_t)height, 1, IMAGE_FORMAT_RGBA8);
+		(uint32_t)width, (uint32_t)height, 1, IMAGE_FORMAT_RGBA8, 
+		ev2::IMAGE_USAGE_SAMPLED_BIT
+	);
 
-	image_upload_gl(ctx, img, rgba, sizeof(uint32_t)*width*height);
+	// TODO : upload the data
+
+	log_error("unimplemented");
+
+	//image_upload_gl(ctx, img, rgba, sizeof(uint32_t)*width*height);
 
 	asset->img = img;
 

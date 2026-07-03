@@ -17,21 +17,14 @@ CameraDebugView::CameraDebugView(ev2::GfxContext *_ctx) : ctx(_ctx)
 		4,5, 4,6, 6,7, 7,5
 	};
 
-	ibo = ev2::create_buffer(ctx, sizeof(frust_indices));
-
-	ssbo = ev2::create_buffer(ctx, sizeof(glm::mat4), 
-						  ev2::MAP_WRITE | ev2::MAP_COHERENT | ev2::MAP_PERSISTENT);
-
-	mapped = glMapNamedBufferRange(ctx->get_buffer(ssbo)->id, 0, sizeof(glm::mat4),
-						GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT); 
+	ibo = ev2::create_buffer(ctx, sizeof(frust_indices), ev2::BUFFER_USAGE_INDEX_BUFFER_BIT);
+	ssbo = ev2::create_buffer(ctx, sizeof(glm::mat4), ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
 	pipeline = ev2::load_graphics_pipeline(ctx, "pipelines/frustum.yaml");
 
-	ev2::ShaderLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, pipeline);
-	desc = ev2::create_descriptor_set(ctx, layout);
+	desc = ev2::create_bindings(ctx, pipeline, EV2_GFX_SET_PER_DRAW);
 
-	ev2::BindingSlot slot = ev2::find_binding(layout, "Cameras");
-	ev2::bind_buffer(ctx, desc, slot, ssbo, 0, sizeof(glm::mat4));
+	ev2::bind_buffer(ctx, desc, "Camera", ssbo, 0, sizeof(glm::mat4));
 
 	glGenVertexArrays(1,&m_vao);
 
@@ -52,11 +45,10 @@ CameraDebugView::CameraDebugView(ev2::GfxContext *_ctx) : ctx(_ctx)
 CameraDebugView::~CameraDebugView()
 {
 	glDeleteVertexArrays(1, &m_vao);
-	glUnmapNamedBuffer(ctx->get_buffer(ssbo)->id);
 
 	ev2::destroy_buffer(ctx, ssbo);
 	ev2::destroy_buffer(ctx, ibo);
-	ev2::destroy_descriptor_set(ctx, desc);
+	ev2::destroy_bindings(ctx, desc);
 }
 
 void CameraDebugView::set_camera(const Camera *camera) {
@@ -68,15 +60,15 @@ const Camera *CameraDebugView::get_camera() {
 	return &m_camera;
 }
 
-void CameraDebugView::render(const ev2::PassContext& pass)
+void CameraDebugView::render(const ev2::PassID& pass)
 { 
 	glm::mat4 pv = m_camera.proj*m_camera.view;
 
 	memcpy(mapped, glm::value_ptr(pv), sizeof(glm::mat4));
 
-	ev2::cmd_bind_gfx_pipeline(pass.rec, pipeline);
-	ev2::cmd_bind_descriptor_set(pass.rec, desc);
+	ev2::cmd_bind_gfx_pipeline(pass, pipeline);
+	ev2::cmd_bind_resources(pass, desc);
 
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ctx->get_buffer(ibo)->id);
+	//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ctx->get_buffer(ibo)->id);
 	glDrawElements(GL_LINES, 24, GL_UNSIGNED_INT,nullptr);
 }

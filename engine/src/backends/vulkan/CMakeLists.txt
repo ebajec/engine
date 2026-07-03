@@ -10,6 +10,7 @@ file(GLOB SOURCES
 target_sources(engine PRIVATE 
 	${SOURCES}
 )
+
 target_link_libraries(engine 
 	PUBLIC 
 		glad
@@ -18,3 +19,4 @@ target_link_libraries(engine
 	PRIVATE
 		vulkan_memory_allocator
 )
+

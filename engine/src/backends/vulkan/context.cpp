@@ -6,9 +6,11 @@
 
 #include "utils/asset_table.h"
 #include "utils/pool.h"
+#include "ev2/utils/ansi_colors.h"
 
 #include "stb_image.h"
 
+#include <cstdarg>
 #include <algorithm>
 #include <sstream>
 #include <set>
@@ -19,6 +21,7 @@
 namespace ev2 {
 
 VkInstance g_vk_instance = VK_NULL_HANDLE;
+VkDebugUtilsMessengerEXT g_vk_messenger = VK_NULL_HANDLE;
 
 //------------------------------------------------------------------------------
 
@@ -40,6 +43,37 @@ struct SwapChainSupportDetails {
     std::vector<VkPresentModeKHR> presentModes;
 };
 
+static VkResult CreateDebugUtilsMessengerEXT(
+    VkInstance instance,
+    const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator,
+    VkDebugUtilsMessengerEXT* pDebugMessenger)
+{
+    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)
+        vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+    } else {
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+}
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wswitch-enum"
+#pragma clang diagnostic ignored "-Wunused-function"
+
+static void DestroyDebugUtilsMessengerEXT(
+    VkInstance instance,
+    VkDebugUtilsMessengerEXT debugMessenger,
+    const VkAllocationCallbacks* pAllocator)
+{
+    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
+        vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        func(instance, debugMessenger, pAllocator);
+    }
+}
+
 //------------------------------------------------------------------------------
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -52,13 +86,13 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
 		break;
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-    	log_info("validation layer: %s", pCallbackData->pMessage);
+    	log_info(ANSI_PINK(validation layer:) " %s", pCallbackData->pMessage);
 		break;
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-    	log_warn("validation layer: %s", pCallbackData->pMessage);
+    	log_warn(ANSI_PINK(validation layer:) " %s", pCallbackData->pMessage);
 		break;
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-    	log_error("validation layer: %s", pCallbackData->pMessage);
+    	log_error_nofileinfo(ANSI_PINK(validation layer:) " %s", pCallbackData->pMessage);
 		break;
 	default:
 		break;
@@ -66,61 +100,12 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     return VK_FALSE;
 }
 
-static void init_gl(ev2::GfxContext *ctx)
-{
-	glEnable(GL_DEBUG_OUTPUT);
-	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);       // makes callback synchronous
-
-	glDebugMessageCallback([]( GLenum source,
-							  GLenum type,
-							  GLuint id,
-							  GLenum severity,
-							  GLsizei length,
-							  const GLchar* message,
-							  const void* userParam )
-	{
-		const char *fmt = 
-			"GL DEBUG: [%u]\n"
-			"    Source:   0x%x\n"
-			"    Type:     0x%x\n"
-			"    Severity: 0x%x\n"
-			"    Message:  %s";
-
-		if (type == GL_DEBUG_TYPE_ERROR) {
-			log_error(fmt, id, source, type, severity, message);
-		} else {
-			log_info(fmt, id, source, type, severity, message);
-		}
-	}, nullptr);
-
-	glDebugMessageControl(
-		GL_DONT_CARE,          // source
-		GL_DONT_CARE,          // type
-		GL_DONT_CARE,          // severity
-		0, nullptr,            // count + list of IDs
-		GL_TRUE);              // enable
-
-    glEnable(GL_MULTISAMPLE);
-
-	const GLubyte* renderer = glGetString(GL_RENDERER);
-    const GLubyte* version = glGetString(GL_VERSION);
-    const GLubyte* vendor = glGetString(GL_VENDOR);
-    const GLubyte* glslVersion = glGetString(GL_SHADING_LANGUAGE_VERSION);
-
-	log_info(
-		"Successfully initiailzed OpenGL\n"
-		"\tRenderer: %s\n"
-		"\tOpenGL version: %s\n"
-		"\tVendor: %s\n"
-		"\tGLSL version: %s",
-		renderer, version, vendor, glslVersion
-	);
-}
+#pragma clang diagnostic push
 
 //------------------------------------------------------------------------------
 // Vulkan initialization helpers
 
-static bool checkValidationLayerSupport(const ev2::InitOptionsVulkan &opts)
+static bool checkValidationLayerSupport(const ev2::VulkanInitOptions &opts)
 {
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount,nullptr);
@@ -147,7 +132,7 @@ static bool checkValidationLayerSupport(const ev2::InitOptionsVulkan &opts)
 }   
 
 static std::vector<const char*> getRequiredExtensions(
-	const ev2::InitOptionsVulkan &opts)
+	const ev2::VulkanInitOptions &opts)
 {
     std::vector<const char*> extensions; 
 	extensions.reserve(1 + opts.instanceExtensionCount);
@@ -166,19 +151,6 @@ static std::vector<const char*> getRequiredExtensions(
 static void populateDebugMessengerCreateInfo(
 	VkDebugUtilsMessengerCreateInfoEXT& createInfo)
 {
-    createInfo.sType = 
-		VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity = 
-		VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
-		VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | 
-		VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    createInfo.messageType = 
-		VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | 
-		VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | 
-		VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    createInfo.pfnUserCallback = debugCallback;
-    createInfo.pUserData = nullptr; // Optional
-    createInfo.pNext = nullptr;
 } 
 
 static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, 
@@ -345,8 +317,12 @@ static void create_queue_family(
 	}
 }
 
+
 static void destroy_swap_chain_targets(ev2::GfxContext *ctx)
 {
+	destroy_image(ctx, ctx->depth_buffer);
+	vkDestroyImageView(ctx->device, ctx->depth_buffer_view, nullptr);
+
 	for (ev2::RenderTarget *target : ctx->swap_chain_targets)
 		if (target)
 			ev2::destroy_render_target_internal(ctx, target);
@@ -363,18 +339,23 @@ static ev2::Result create_swap_chain_targets(ev2::GfxContext *ctx)
 
 	ev2::Result result = ev2::SUCCESS;
 
+	VkResult vk_result = create_depth_stencil_image(
+		ctx, w,h, &ctx->depth_buffer, &ctx->depth_buffer_view);
+	if (vk_result != VK_SUCCESS)
+		return set_error(ev2::EBAD_SWAPCHAIN, "Failed to create depth buffer");
+
 	ctx->swap_chain_targets.resize(image_count, nullptr);
 
 	for (uint32_t i = 0; i < image_count; ++i) {
 		ev2::RenderTarget *target = ev2::create_render_target_internal(ctx,
 			w, h, 
 			swap_chain.image_views[i],
-			VK_NULL_HANDLE, 
-	  		ev2::RENDER_TARGET_CREATE_DEPTH_BIT
+			ctx->depth_buffer_view 
 	  	);
 
+		// This should never fail, just assigning stuff
 		if (!target) {
-			result = ev2::EUNKNOWN;
+			result = set_error(ev2::EBAD_SWAPCHAIN, "Failed to create swapchain render targets");
 			break;
 		}
 
@@ -419,6 +400,8 @@ static ev2::Result pick_physical_device(ev2::GfxContext *ctx,
 	VkPhysicalDeviceProperties properties;
 	vkGetPhysicalDeviceProperties(ctx->physicalDevice, &properties);
 
+	ctx->caps.limits = properties.limits;
+
 	std::stringstream msg;
 
 	msg << "Physical device: \n"
@@ -448,13 +431,22 @@ static ev2::Result pick_logical_device(ev2::GfxContext *ctx,
 	if (indices.transferFamily.has_value())
 		uniqueQueueFamilies.insert(*indices.transferFamily);
 
+	uint32_t family_count;
+	std::vector<VkQueueFamilyProperties> queue_props;
+
+	vkGetPhysicalDeviceQueueFamilyProperties(ctx->physicalDevice, 
+										  &family_count, nullptr);
+	queue_props.resize(family_count);
+	vkGetPhysicalDeviceQueueFamilyProperties(ctx->physicalDevice, 
+										  &family_count, queue_props.data());
+
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
     float queuePriority = 1.0f;
     for (uint32_t queueFamily : uniqueQueueFamilies) {
         VkDeviceQueueCreateInfo queueCreateInfo = {
 			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
 			.queueFamilyIndex = queueFamily,
-			.queueCount = 1,
+			.queueCount = queue_props[queueFamily].queueCount,
 			.pQueuePriorities = &queuePriority,
 		};
 
@@ -463,13 +455,25 @@ static ev2::Result pick_logical_device(ev2::GfxContext *ctx,
     
     // device features
     VkPhysicalDeviceFeatures deviceFeatures{};
+
+	VkPhysicalDeviceVulkan12Features features12{
+		.sType             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+		.timelineSemaphore = VK_TRUE,
+	};
+
+	VkPhysicalDeviceVulkan13Features features13{
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+		.pNext = &features12,
+		.synchronization2 = VK_TRUE,
+		.dynamicRendering = VK_TRUE,
+	};
+
     VkDeviceCreateInfo createInfo = {
 		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-		.queueCreateInfoCount = static_cast<uint32_t>(
-			queueCreateInfos.size()),
+		.pNext = &features13,
+		.queueCreateInfoCount = (uint32_t)queueCreateInfos.size(),
 		.pQueueCreateInfos = queueCreateInfos.data(),
-		.enabledExtensionCount = static_cast<uint32_t>(
-			opts.deviceExtensions.size()),
+		.enabledExtensionCount = (uint32_t)opts.deviceExtensions.size(),
 		.ppEnabledExtensionNames = opts.deviceExtensions.data(),
 		.pEnabledFeatures = &deviceFeatures,
 	};
@@ -483,15 +487,6 @@ static ev2::Result pick_logical_device(ev2::GfxContext *ctx,
 
     vkGetDeviceQueue(ctx->device, indices.presentFamily.value(), 0,
 					 &ctx->present_queue);
-
-	uint32_t family_count;
-	std::vector<VkQueueFamilyProperties> queue_props;
-
-	vkGetPhysicalDeviceQueueFamilyProperties(ctx->physicalDevice, 
-										  &family_count, nullptr);
-	queue_props.resize(family_count);
-	vkGetPhysicalDeviceQueueFamilyProperties(ctx->physicalDevice, 
-										  &family_count, queue_props.data());
 
 	ctx->queue_families.resize(family_count);
 
@@ -697,6 +692,14 @@ static ev2::Result create_default_descriptor_pool(ev2::GfxContext *ctx, VkDescri
 			.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.descriptorCount = 64,
 		},
+		VkDescriptorPoolSize{
+			.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = 64,
+		},
+		VkDescriptorPoolSize{
+			.type = VK_DESCRIPTOR_TYPE_SAMPLER,
+			.descriptorCount = 32,
+		},
 	};
 
 	VkDescriptorPoolCreateInfo create_info = {
@@ -769,7 +772,7 @@ static ev2::Result create_frame_context(ev2::GfxContext *ctx,
 									ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT | 
 									ev2::BUFFER_USAGE_TRANSFER_DST_BIT);
 
-	uint32_t pool_count = 1 + ctx->max_workers;
+	uint32_t pool_count = 1 + ctx->caps.max_workers;
 	frame->command_pools.resize(pool_count);
 
 	{
@@ -802,7 +805,7 @@ static ev2::Result create_frame_context(ev2::GfxContext *ctx,
 			&frame->image_available_sempahore
 		);
 
-		if (!vk_result)
+		if (vk_result != VK_SUCCESS)
 			return ev2::EINIT_FAILED;
 
 		vk_result = vkCreateSemaphore(
@@ -812,7 +815,7 @@ static ev2::Result create_frame_context(ev2::GfxContext *ctx,
 			&frame->render_finished_semaphore
 		);
 
-		if (!vk_result)
+		if (vk_result != VK_SUCCESS)
 			return ev2::EINIT_FAILED;
 	}
 
@@ -832,9 +835,9 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 	// important things
 	
 	ctx->max_frames_in_flight = 2;
-	ctx->max_workers = std::max(std::thread::hardware_concurrency() - 1, 1U);
+	ctx->caps.max_workers = std::max(std::thread::hardware_concurrency() - 1, 1U);
 
-	ctx->worker_pool.reset(new ThreadPool(ctx->max_workers, "gfx_worker"));
+	ctx->worker_pool.reset(new ThreadPool(ctx->caps.max_workers, "gfx_worker"));
 	ctx->start_time_ns = 
 		std::chrono::high_resolution_clock::now().time_since_epoch().count();
 
@@ -907,8 +910,8 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 	ctx->texture_pool.reset(ResourcePool<ev2::Texture>::create());
 
 	// Per-frame updated uniforms
-	GLint64 ubo_offset_alignment;
-	glGetInteger64v(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &ubo_offset_alignment);
+	uint64_t ubo_offset_alignment = 
+		ctx->caps.limits.minUniformBufferOffsetAlignment;
 
 	ctx->transforms = GPUTTable<glm::mat4>(
 		(size_t)ubo_offset_alignment,
@@ -945,7 +948,7 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 	size_t upload_alignment = 512;
 
 	ctx->pool.reset(ev2::UploadPool::create(ctx, 
-		0,
+		ctx->graphics_family,
 		upload_capacity, 
 		upload_alignment, 
 		(1 << 14)
@@ -962,7 +965,7 @@ VkCommandPool GfxContext::get_command_pool(
 )
 {
 	assert(frame < this->max_frames_in_flight);
-	assert(worker < this->max_workers);
+	assert(worker < this->caps.max_workers);
 	assert(queue == 0);
 
 	return frames[frame].command_pools[worker];
@@ -974,8 +977,11 @@ VkCommandPool GfxContext::get_current_frame_command_pool(
 {
 	FrameContext *frame = this->get_current_frame();
 	std::thread::id tid = std::this_thread::get_id();
-	uint32_t worker = this->worker_pool->get_pool_index(tid);
 
+	if (tid == main_thread_id)
+		return frame->command_pools.back();
+
+	uint32_t worker = this->worker_pool->get_pool_index(tid);
 	if (worker == UINT32_MAX) {
 		log_error("Command pool only available on main thread or graphics worker");
 		return VK_NULL_HANDLE;
@@ -1080,7 +1086,7 @@ ResourceSync *FrameContext::get_resource_sync(TaggedResource resource, VkQueue q
 // Interface
 
 GfxContext *create_context_for_vulkan(const char *path, 
-								 const GfxContextInfoVulkan &params)
+								 const GfxContextVulkanInfo &params)
 {
 	if (!g_vk_instance) {
 		log_error(
@@ -1127,6 +1133,8 @@ GfxContext *create_context_for_vulkan(const char *path,
 	result = init_device_resources(path, ctx);
 	if (result)
 		goto error;
+
+	ctx->reset_swap_chain();
 	
 	return ctx;
 
@@ -1140,9 +1148,11 @@ ev2::Result on_resize(GfxContext *ctx, uint32_t width, uint32_t height)
 	ctx->desired_surface_width = width;
 	ctx->desired_surface_height = height;
 	ctx->is_swap_chain_valid = true;
+
+	return ev2::SUCCESS;
 }
 
-ev2::Result init_for_vulkan(const ev2::InitOptionsVulkan &opts)
+ev2::Result init_for_vulkan(const ev2::VulkanInitOptions &opts)
 {
 	if (opts.enableValidationLayers && !checkValidationLayerSupport(opts)) {
 		log_error("Validation layers required, but not available");
@@ -1152,9 +1162,9 @@ ev2::Result init_for_vulkan(const ev2::InitOptionsVulkan &opts)
     VkApplicationInfo appInfo = {
     	.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
     	.pApplicationName = "Hello Triangle",
-    	.applicationVersion = VK_API_VERSION,
+    	.applicationVersion = VK_VERSION,
     	.pEngineName = "No Engine",
-    	.engineVersion = VK_API_VERSION,
+    	.engineVersion = VK_VERSION,
     	.apiVersion = VK_API_VERSION,
 	};
     
@@ -1167,7 +1177,20 @@ ev2::Result init_for_vulkan(const ev2::InitOptionsVulkan &opts)
     	.ppEnabledExtensionNames = extensions.data(),
 	};
 
-    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{
+		.sType = 
+			VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+		.messageSeverity = 
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | 
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+		.messageType = 
+			VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | 
+			VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | 
+			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+		.pfnUserCallback = debugCallback,
+		.pUserData = nullptr,
+	};
 
     if (opts.enableValidationLayers) {
         createInfo.enabledLayerCount = static_cast<uint32_t>(opts.validationLayerCount);
@@ -1181,11 +1204,16 @@ ev2::Result init_for_vulkan(const ev2::InitOptionsVulkan &opts)
         createInfo.enabledLayerCount = 0;
         createInfo.pNext  = nullptr;
     }
-    
+
     if (vkCreateInstance(&createInfo, nullptr, &g_vk_instance) != VK_SUCCESS) {
         log_error("failed to create Vulkan instance!");
 		return ev2::EINIT_FAILED;
     }
+
+	if (CreateDebugUtilsMessengerEXT(g_vk_instance, &debugCreateInfo, nullptr, &g_vk_messenger)) {
+		log_error("Failed to create debug messenger!");
+		return ev2::EINIT_FAILED;
+	}
 
     if ((false)) {
         uint32_t extensionCount = 0;
@@ -1223,4 +1251,59 @@ void destroy_context(GfxContext *ctx)
 	delete ctx;
 }
 
+Result _set_error_internal(Result result, const char *file, int line, const char *msg, ...)
+{
+	assert(result != SUCCESS);
+
+	va_list args;
+    va_start(args, msg);
+
+	_log_function(LOG_LEVEL_ERROR, file, line, msg, args);
+
+    va_end(args);
+
+	return result;
+}
+
 };
+
+#ifdef EV2_IMGUI_COMPATIBILITY
+
+#include <imgui.h>
+#include "backends/imgui_impl_vulkan.h"
+
+namespace ev2 {
+void populate_imgui_vulkan_init_info(GfxContext *ctx, ImGui_ImplVulkan_InitInfo *info)
+{
+	std::vector<VkDynamicState> internal_dynamic_states = get_dynamic_states(ctx);
+
+	ImVector<VkDynamicState> dynamic_states;
+	dynamic_states.reserve(dynamic_states.size());
+	for (VkDynamicState state : internal_dynamic_states)
+		dynamic_states.push_back(state);
+
+	*info = ImGui_ImplVulkan_InitInfo{
+		.ApiVersion = VK_API_VERSION,
+		.Instance = g_vk_instance,
+		.PhysicalDevice = ctx->physicalDevice,
+		.Device = ctx->device,
+		.QueueFamily = ctx->graphics_family->index,
+		.Queue = ctx->graphics_queue->queue,
+		.DescriptorPool = VK_NULL_HANDLE,
+		.DescriptorPoolSize = 16,
+		.MinImageCount = ctx->max_frames_in_flight,
+		.ImageCount = ctx->max_frames_in_flight,
+		.PipelineCache = VK_NULL_HANDLE,
+		.PipelineInfoMain = ImGui_ImplVulkan_PipelineInfo{
+			.PipelineRenderingCreateInfo = get_swapchain_rendering_info(ctx),
+		},
+		.UseDynamicRendering = true,
+		.Allocator = nullptr,
+		.CheckVkResultFn = nullptr,
+		.MinAllocationSize = 1024 * 1024,
+	};
+}
+}
+
+#endif
+

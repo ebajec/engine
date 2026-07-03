@@ -6,7 +6,7 @@ layout (location = 0) out vec3 out_pos;
 layout (location = 1) out vec2 out_uv;
 layout (location = 2) out vec3 out_normal;
 
-layout (binding = 0) uniform sampler2D u_tex;
+layout (set = PER_DRAW_SET, binding = 0) uniform sampler2D u_tex;
 
 struct tgrad_t
 {

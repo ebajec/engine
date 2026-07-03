@@ -60,22 +60,22 @@ struct Device
 
 	// convenience
 	inline Buffer *get_buffer(BufferID h) {
-		ResourceID rid = {.u64 = h.id};
+		PoolID rid = {.u64 = h.id};
 		return buffer_pool->get(rid);
 	}
 	inline Image *get_image(ImageID h) {
-		ResourceID rid = {.u64 = h.id};
+		PoolID rid = {.u64 = h.id};
 		return image_pool->get(rid);
 	}
 	inline Texture *get_texture(TextureID h) {
-		ResourceID rid = {.u64 = h.id};
+		PoolID rid = {.u64 = h.id};
 		return texture_pool->get(rid);
 	}
 
-	inline GraphicsPipeline *get_gfx_pipeline(GfxPipelineID h) {
+	inline GfxPipeline *get_gfx_pipeline(GfxPipelineID h) {
 		AssetID id = static_cast<uint32_t>(h.id);
 		AssetEntry *ent = assets->get_entry(id);
-		return (GraphicsPipeline*)ent->usr;
+		return (GfxPipeline*)ent->usr;
 	}
 	inline ComputePipeline *get_compute_pipeline(ComputePipelineID h) {
 		AssetID id = static_cast<uint32_t>(h.id);

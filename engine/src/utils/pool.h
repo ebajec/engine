@@ -65,9 +65,131 @@ struct AtomicResourceState {
 		} while (!value.compare_exchange_weak(expected, desired, 
 			std::memory_order_acq_rel, std::memory_order_relaxed));
 
-		return expected;
+		return desired;
 	}
 };
+
+template<typename T>
+struct ResourcePool {
+	static constexpr uint32_t PAGE_SIZE_BITS = 6;
+	static constexpr uint32_t PAGE_MASK = (1 << PAGE_SIZE_BITS) - 1;
+	static constexpr uint32_t PAGE_SIZE = 1 << PAGE_SIZE_BITS;
+
+	struct entry_t {
+		T val;
+		AtomicResourceState state;
+	};
+
+	static uint16_t get_gen(uint64_t state) {
+		return (uint16_t)(state >> 32);
+	}
+	static uint32_t get_refs(uint64_t state) {
+		return (uint32_t)(state);
+	}
+
+	static ResourcePool<T> *create();
+
+	std::vector<std::unique_ptr<entry_t[]>> pages;
+	std::vector<uint32_t> free_list;
+
+	size_t cap = 0;
+
+	// TODO: Eventually want to not use a mutex and have pages of 
+	// atomic counters
+	mutable std::mutex sync;
+
+	PoolID allocate(T&& val);
+	void deallocate(PoolID id);
+	T* get(PoolID id) const;
+
+	bool check_handle(PoolID id) const {
+		uint32_t slot = id.slot();
+		if (!slot || slot > cap) {
+			log_error("Invalid resource handle passed : %d", slot);
+			throw std::runtime_error("Invalid resource handle passed");
+			return false;
+		}
+		return true;
+	}
+
+	entry_t *get_entry(uint32_t slot) const {
+		--slot;
+		return &pages[slot >> PAGE_SIZE_BITS][slot & PAGE_MASK];
+	}
+};
+
+//------------------------------------------------------------------------------
+// Template implementation
+
+template<typename T>
+ResourcePool<T> *ResourcePool<T>::create()
+{
+	return new ResourcePool<T>();
+}
+
+template<typename T>
+PoolID ResourcePool<T>::allocate(T&& val)
+{
+	std::unique_lock<std::mutex> lock(sync);
+	uint32_t slot = 0;
+
+	if (!free_list.empty()) {
+		slot = free_list.back();
+		free_list.pop_back();
+	} else {
+		slot = static_cast<uint32_t>(++cap);
+
+		if (slot > static_cast<uint32_t>(pages.size()) * PAGE_SIZE)
+			pages.emplace_back(new entry_t[PAGE_SIZE]);
+	}
+	lock.unlock();
+
+	entry_t *ent = get_entry(slot);
+	uint64_t state = ent->state.inc_gen();
+	ent->val = std::move(val); 
+
+	assert(slot);
+
+	return PoolID::create(slot, get_gen(state));
+}
+
+template<typename T>
+void ResourcePool<T>::deallocate(PoolID id)
+{
+	if (!check_handle(id)) {
+		return;
+	}
+
+	uint32_t slot = id.slot();
+	entry_t *ent = get_entry(slot);
+
+	uint64_t state = ent->state.value.load(std::memory_order_relaxed);
+	if (id.gen() != get_gen(state)) {
+		log_error("generation counter mismatch: %d != %d", id.gen(), get_gen(state));
+	}
+
+	ent->val = T{};
+
+	std::unique_lock<std::mutex> lock(sync);
+	free_list.push_back(slot);
+}
+
+template<typename T>
+T *ResourcePool<T>::get(PoolID id) const
+{
+	if (!check_handle(id)) {
+		return nullptr;
+	}
+
+	uint32_t slot = id.slot();
+	uint32_t gen = id.gen();
+
+	entry_t *ent = get_entry(slot);
+
+	uint64_t state = ent->state.value.load(std::memory_order_relaxed);
+
+	return (get_gen(state) == gen) ? &ent->val : nullptr;
+}
 
 #define aligned_alloc_alias(align, size) aligned_alloc(align, size)
 #define aligned_free_alias(ptr) free(ptr)
@@ -127,8 +249,7 @@ struct PagedArray
 		page_alloc_num_ = req_pages;
 	}
 
-	template<typename DefVal = void>
-	void resize(size_t size, DefVal defval = void{})
+	void resize(size_t size)
 	{
 		if (size < size_) {
 			shrink_to(size, true);
@@ -146,10 +267,7 @@ struct PagedArray
 				size_t count = (i == end - 1 && rem) ? rem : PageSize;
 
 				for (size_t j = (i == start_page) * start_idx; j < count; ++j) {
-					if constexpr(std::is_same_v<DefVal, void>)
-						new (data + j) T;
-					else
-						new (data + j) T {defval};
+					new (data + j) T;
 				}
 			}
 		}
@@ -235,146 +353,5 @@ struct PagedArray
 		shrink_to(0, false);
 	}
 };
-
-static PagedArray<uint32_t, 128> paged_array_test;
-
-static void paged_array_test_compile() {
-	paged_array_test.push_back(0);
-	paged_array_test.push_back(1);
-	paged_array_test.push_back(2);
-
-	paged_array_test.reserve(10);
-	paged_array_test.resize(5);
-
-	uint32_t tmp = paged_array_test[0];
-
-	paged_array_test.clear();
-	paged_array_test.push_back(tmp);
-}
-
-template<typename T>
-struct ResourcePool {
-	static constexpr uint32_t PAGE_SIZE_BITS = 6;
-	static constexpr uint32_t PAGE_MASK = (1 << PAGE_SIZE_BITS) - 1;
-	static constexpr uint32_t PAGE_SIZE = 1 << PAGE_SIZE_BITS;
-
-	struct entry_t {
-		T val;
-		AtomicResourceState state;
-	};
-
-	static uint16_t get_gen(uint64_t state) {
-		return (uint16_t)(state >> 32);
-	}
-	static uint32_t get_refs(uint64_t state) {
-		return (uint32_t)(state);
-	}
-
-	static ResourcePool<T> *create();
-
-	std::vector<std::unique_ptr<entry_t[]>> pages;
-	std::vector<uint32_t> free_list;
-
-	size_t cap = 0;
-
-	// TODO: Eventually want to not use a mutex and have pages of 
-	// atomic counters
-	mutable std::mutex sync;
-
-	PoolID allocate(T&& val);
-	void deallocate(PoolID id);
-	T* get(PoolID id) const;
-
-	bool check_handle(PoolID id) const {
-		uint32_t slot = id.slot();
-		if (!slot || slot > cap) {
-			log_error("Invalid resource handle passed : %d", slot);
-			throw std::runtime_error("Invalid resource handle passed");
-			return false;
-		}
-		return true;
-	}
-
-	entry_t *get_entry(uint32_t slot) const {
-		--slot;
-		return &pages[slot >> PAGE_SIZE_BITS][slot & PAGE_MASK];
-	}
-};
-
-//------------------------------------------------------------------------------
-// Template implementation
-
-template<typename T>
-ResourcePool<T> *ResourcePool<T>::create()
-{
-	return new ResourcePool<T>();
-}
-
-template<typename T>
-PoolID ResourcePool<T>::allocate(T&& val)
-{
-	std::unique_lock<std::mutex> lock(sync);
-	uint32_t slot = 0;
-
-	if (!free_list.empty()) {
-		slot = free_list.back();
-		free_list.pop_back();
-	} else {
-		slot = static_cast<uint32_t>(++cap);
-
-		if (slot > static_cast<uint32_t>(pages.size()) * PAGE_SIZE)
-			pages.emplace_back(new entry_t[PAGE_SIZE]);
-	}
-	lock.unlock();
-
-	entry_t *ent = get_entry(slot);
-	uint64_t state = ent->state.inc_gen();
-	ent->val = std::move(val); 
-
-	assert(slot);
-
-	uint16_t gen = get_gen(state);
-
-	return PoolID::create(slot, gen);
-}
-
-template<typename T>
-void ResourcePool<T>::deallocate(PoolID id)
-{
-	if (!check_handle(id)) {
-		return;
-	}
-
-	uint32_t slot = id.slot();
-	entry_t *ent = get_entry(slot);
-
-	uint64_t state = ent->state.value.load(std::memory_order_relaxed);
-	if (id.gen() == get_gen(state)) {
-		log_error("generation counter mismatch: %d != %d", id.gen(), get_gen(state));
-	}
-
-	memset(&ent->val, 0x0, sizeof(T));
-
-	std::unique_lock<std::mutex> lock(sync);
-	free_list.push_back(slot);
-}
-
-template<typename T>
-T *ResourcePool<T>::get(PoolID id) const
-{
-	if (!check_handle(id)) {
-		return nullptr;
-	}
-
-	uint32_t slot = id.slot();
-	uint32_t gen = id.gen();
-
-	entry_t *ent = get_entry(slot);
-
-	uint64_t state = ent->state.value.load(std::memory_order_relaxed);
-
-	return (get_gen(state) == gen) ? &ent->val : nullptr;
-}
-
 
 #endif // EV2_POOL_H

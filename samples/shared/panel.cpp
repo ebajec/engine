@@ -1,4 +1,5 @@
 #include "panel.h"
+#include "backends/imgui_impl_vulkan.h"
 
 ev2::RenderTargetID Panel::get_target() {
 	return m_target;
@@ -100,13 +101,14 @@ void Panel::imgui()
 			m_size = size;
 		}
 
-		ev2::RenderTargetAttachments attachments = 
-			ev2::get_render_target_attachments(m_ctx, m_target);
-		GLuint gl_tex_handle = ev2::get_texture_gpu_handle(
-			m_ctx, attachments.color);
+		VkImageView view = ev2::get_render_target_color_view(m_target);
+		VkDescriptorSet id = ImGui_ImplVulkan_AddTexture(
+			view,
+			VK_IMAGE_LAYOUT_GENERAL
+		);
 
 		ImVec2 content = ImGui::GetContentRegionAvail();
-		ImGui::Image((ImTextureID)(intptr_t)gl_tex_handle, content, ImVec2(0,1), ImVec2(1,0));
+		ImGui::Image((ImTextureID)(intptr_t)id, content, ImVec2(0,1), ImVec2(1,0));
 	}
 
 	ImGui::End();

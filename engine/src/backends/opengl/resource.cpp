@@ -29,14 +29,14 @@ BufferID create_buffer(Device *ctx, size_t size, BufferFlags flags)
 		return EV2_NULL_HANDLE(Buffer);
 	}
 
-	ResourceID id = ctx->buffer_pool->allocate(&buf);
+	PoolID id = ctx->buffer_pool->allocate(&buf);
 
 	return EV2_HANDLE_CAST(Buffer, id.u64);
 }
 
 void destroy_buffer(Device *ctx, BufferID h)
 {
-	ResourceID id = ResourceID{h.id};
+	PoolID id = PoolID{h.id};
 	Buffer* buf = ctx->buffer_pool->get(id);
 
 	glDeleteBuffers(1, &buf->id);
@@ -80,7 +80,7 @@ ImageID create_image(Device *ctx, uint32_t w, uint32_t h, uint32_t d, ImageForma
 		return EV2_NULL_HANDLE(Image);
 	}
 
-	ResourceID id = ctx->image_pool->allocate(&img);
+	PoolID id = ctx->image_pool->allocate(&img);
 
 	return EV2_HANDLE_CAST(Image, id.u64);
 }
@@ -96,7 +96,7 @@ void get_image_dims(Device *ctx, ImageID h_img, uint32_t *w, uint32_t *h, uint32
 
 void destroy_image(Device *ctx, ImageID h)
 {
-	ResourceID id = ResourceID{h.id};
+	PoolID id = PoolID{h.id};
 	Image *img = ctx->image_pool->get(id);
 
 	glDeleteTextures(1, &img->id);
@@ -129,7 +129,7 @@ UploadContext begin_upload(Device *ctx, size_t bytes, size_t align)
 uint64_t commit_buffer_uploads(Device *ctx, UploadContext ctx, BufferID buf, 
 							   const BufferUpload *regions, uint32_t count)
 {
-	if (!ctx->buffer_pool->check_handle(ResourceID{buf.id}))
+	if (!ctx->buffer_pool->check_handle(PoolID{buf.id}))
 		return 0;
 
 	UploadPool *pool = ctx->pool.get();
@@ -166,14 +166,13 @@ TextureID create_texture(Device *ctx, ImageID img, TextureFilter filter)
 	tex.img = img;
 	tex.filter = filter;
 
-	ResourceID id = ctx->texture_pool->allocate(&tex);
+	PoolID id = ctx->texture_pool->allocate(&tex);
 	return EV2_HANDLE_CAST(Texture, id.u64);
 }
 
 void destroy_texture(Device *ctx, TextureID h)
 {
-	ResourceID id = {.u64 = h.id};
-	ctx->texture_pool->deallocate(id);
+	PoolID id = {.u64 = h.id}; ctx->texture_pool->deallocate(id);
 }
 
 uint64_t get_texture_gpu_handle(Device *ctx, TextureID h)

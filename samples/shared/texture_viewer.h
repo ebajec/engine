@@ -22,7 +22,7 @@ struct TextureViewerPanel
 	struct RenderData {
 		ev2::TextureID tex {};
 		ev2::GfxPipelineID pipeline {};
-		ev2::DescriptorSetID desc_set {};
+		ev2::ShaderBindingsID bindings {};
 
 		ev2::BindingSlot tex_slot;
 
@@ -43,7 +43,7 @@ struct TextureViewerPanel
 
 	int set_texture(ev2::GfxContext *ctx, ev2::TextureID tex);
 
-	ev2::PassContext begin_pass(ev2::GfxContext *ctx);
+	ev2::PassID begin_pass(ev2::GfxContext *ctx);
 
 	int init(ev2::GfxContext *ctx, ev2::TextureID tex);
 	int update(ev2::GfxContext *ctx);

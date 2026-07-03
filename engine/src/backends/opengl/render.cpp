@@ -290,7 +290,7 @@ SyncID end_pass(Device *ctx, PassCtx ctx)
 void cmd_bind_gfx_pipeline(RecorderID rec, GfxPipelineID h)
 {
 	Device *ctx = EV2_TYPE_PTR_CAST(Device, rec);
-	GraphicsPipeline *pipeline = ctx->get_gfx_pipeline(h);
+	GfxPipeline *pipeline = ctx->get_gfx_pipeline(h);
 
 	if (!pipeline) {
 		log_error("Invalid pipeline handle %lld", (unsigned long long)h.id);

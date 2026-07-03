@@ -46,8 +46,7 @@ int HeightmapViewerPanel::init(App *app_, ev2::GfxContext *ctx, ev2::TextureID t
 	if (!EV2_VALID(rd.pipeline))
 		return EXIT_FAILURE;
 
-	ev2::ShaderLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, rd.pipeline);
-	rd.descriptors = ev2::create_descriptor_set(ctx, layout);
+	rd.bindings = ev2::create_bindings(ctx, rd.pipeline, EV2_GFX_SET_PER_DRAW);
 
 	int result = this->set_texture(ctx, tex);
 
@@ -69,7 +68,7 @@ int HeightmapViewerPanel::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
 
 		size_t indices_size = indices.size()*sizeof(uint32_t);
 
-		rd.ibo = ev2::create_buffer(ctx, indices_size);
+		rd.ibo = ev2::create_buffer(ctx, indices_size, ev2::BUFFER_USAGE_INDEX_BUFFER_BIT);
 
 		ev2::UploadContext uc = ev2::begin_upload(ctx, indices_size, alignof(uint32_t)); 
 		memcpy(uc.ptr, indices.data(), indices_size); 
@@ -78,9 +77,10 @@ int HeightmapViewerPanel::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
 		ev2::wait_complete(ctx, sync);
 	}
 
-	ev2::ShaderLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, rd.pipeline);
-	ev2::BindingSlot tex_slot = ev2::find_binding(layout, "u_tex");
-	ev2::bind_texture(ctx, rd.descriptors, tex_slot, tex);
+	if (ev2::bind_texture(ctx, rd.bindings, "u_tex", tex) != ev2::SUCCESS) {
+		return -1;
+	}
+	ev2::flush_bindings(ctx, rd.bindings);
 
 	rd.w = w;
 	rd.h = h;
@@ -119,21 +119,25 @@ void HeightmapViewerPanel::render(ev2::GfxContext *ctx)
 		.x0 = 0, .y0 = 0,
 		.w = (uint32_t)panel_size.x, .h = (uint32_t)panel_size.y
 	};
-	ev2::PassContext pass = ev2::begin_pass(ctx, panel->get_target(), rd.camera, rect);
-	ev2::cmd_bind_gfx_pipeline(pass.rec, rd.pipeline);
-	ev2::cmd_bind_descriptor_set(pass.rec, rd.descriptors);
-	ev2::cmd_bind_index_buffer(pass.rec, rd.ibo);
+	ev2::PassID pass = ev2::begin_gfx_pass(ctx, panel->get_target(), rd.camera, rect);
+	ev2::cmd_bind_gfx_pipeline(pass, rd.pipeline);
+	ev2::cmd_bind_resources(pass, rd.bindings);
+	ev2::cmd_bind_index_buffer(pass, rd.ibo, 0);
 
 	uint32_t idx_count = 6 * rd.w * rd.h;
 
-	glDrawElements(GL_TRIANGLES, idx_count, GL_UNSIGNED_INT, nullptr);
+	ev2::cmd_custom(pass, [idx_count](VkCommandBuffer cmds){
+		vkCmdDrawIndexed(cmds, idx_count, 1, 0, 0, 0); 
+	});
 
-	ev2::SyncID sync = ev2::end_pass(ctx, pass);
+	//glDrawElements(GL_TRIANGLES, idx_count, GL_UNSIGNED_INT, nullptr);
+
+	ev2::end_pass(ctx, pass);
 }
 
 void HeightmapViewerPanel::destroy(ev2::GfxContext *ctx)
 {
-	ev2::destroy_descriptor_set(ctx, rd.descriptors);
+	ev2::destroy_bindings(ctx, rd.bindings);
 	ev2::destroy_buffer(ctx, rd.ibo);
 	ev2::destroy_view(ctx, rd.camera);
 	panel.reset();

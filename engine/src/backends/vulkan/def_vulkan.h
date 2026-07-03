@@ -4,6 +4,7 @@
 // vulkan
 #include <vulkan/vulkan.h>
 
+#define VK_VERSION VK_MAKE_VERSION(1, 3, 0)
 #define VK_API_VERSION VK_API_VERSION_1_3
 
 #include "backends/opengl/def_opengl.h"

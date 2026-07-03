@@ -6,7 +6,8 @@ project(imgui)
 file(GLOB SOURCES
     "imgui/*.cpp"
     "imgui/backends/imgui_impl_glfw.cpp"
-    "imgui/backends/imgui_impl_opengl3.cpp"
+	#"imgui/backends/imgui_impl_opengl3.cpp"
+    "imgui/backends/imgui_impl_vulkan.cpp"
 	"implot/implot.cpp"
 	"implot/implot_items.cpp"
     )

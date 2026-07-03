@@ -61,7 +61,7 @@ struct BoxDebugView
 	void add(const aabb3_t &box){boxes.push_back(box);}
 	void add(const obb_t &box){oboxes.push_back(box);}
 	void update();
-	void draw(ev2::PassContext ctx);
+	void draw(ev2::PassID pass);
 };
 
 #endif

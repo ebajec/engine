@@ -88,13 +88,10 @@ uint64_t commit_buffer_uploads(GfxContext *ctx, UploadContext uc, BufferID buf,
 uint64_t commit_image_uploads(GfxContext *ctx, UploadContext uc, ImageID img, 
 							  const ImageUpload *uploads, uint32_t count);
 
-//ev2::Result wait_complete(GfxContext *ctx, uint64_t sync);
-
-
 //--------------------------------------------------------------------
 // Buffer
 
-BufferID create_buffer(GfxContext *ctx, size_t size, BufferUsageFlags usage = 0, 
+BufferID create_buffer(GfxContext *ctx, size_t size, BufferUsageFlags usage, 
 					   size_t align = 0);
 void destroy_buffer(GfxContext *ctx, BufferID buf);
 uint64_t get_buffer_gpu_handle(GfxContext *ctx, BufferID h);
@@ -103,7 +100,7 @@ uint64_t get_buffer_gpu_handle(GfxContext *ctx, BufferID h);
 // Image
 
 ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, 
-					 ImageFormat fmt, uint32_t levels = 1, ImageUsageFlags usage = 0);
+					 ImageFormat fmt, ImageUsageFlags usage, uint32_t levels = 1);
 void destroy_image(GfxContext *ctx, ImageID img);
 
 void get_image_dims(GfxContext *ctx, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d);
@@ -114,7 +111,7 @@ uint64_t get_image_gpu_handle(GfxContext *ctx, ImageID img);
 
 TextureID create_texture(GfxContext *ctx, ImageID img, TextureFilter filter);
 void destroy_texture(GfxContext *ctx, TextureID tex);
-uint64_t get_texture_gpu_handle(GfxContext *ctx, TextureID tex);
+void get_texture_gpu_handle(GfxContext *ctx, TextureID h, VkImageView *view);
 
 void get_texture_dims(GfxContext *ctx, TextureID tex, uint32_t *w, uint32_t *h, uint32_t*d);
 

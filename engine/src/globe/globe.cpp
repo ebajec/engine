@@ -211,7 +211,7 @@ struct RenderData
 	ev2::BufferID ssbo;
 
 	ev2::GfxPipelineID pipeline;
-	ev2::DescriptorSetID bindings;
+	ev2::ShaderBindingsID bindings;
 
 	std::vector<ev2::DrawCommand> cmds;
 };
@@ -252,14 +252,14 @@ static void globe_init_debug(Globe *globe) {
 	globe->dbg.enable_boxes = false;
 }
 
-static void globe_draw_debug(Globe const *globe, ev2::PassContext const &ctx)
+static void globe_draw_debug(Globe const *globe, ev2::PassID const &pass)
 {
 	if (globe->dbg.enable_boxes) {
-		globe->dbg.boxes->draw(ctx);
+		globe->dbg.boxes->draw(pass);
 	}
 
 	if (globe->dbg.fix_camera)
-		globe->dbg.camera->render(ctx);
+		globe->dbg.camera->render(pass);
 }
 
 static aabb3_t tile_aabb(TileCode code, float min, float max) 
@@ -486,22 +486,22 @@ static ev2::Result create_render_data(ev2::GfxContext *ctx, RenderData &data)
 	if (!data.pipeline.id)
 		goto load_failed;
 
-	data.vbo = ev2::create_buffer(ctx, vbo_size);
+	data.vbo = ev2::create_buffer(ctx, vbo_size, ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
 	if (!data.vbo.id)
 		goto load_failed;
 
-	data.indirect = ev2::create_buffer(ctx, indirect_size);
+	data.indirect = ev2::create_buffer(ctx, indirect_size, ev2::BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 
 	if (!data.indirect.id)
 		goto load_failed;
 
-	data.ssbo = ev2::create_buffer(ctx, ssbo_size);
+	data.ssbo = ev2::create_buffer(ctx, ssbo_size, ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
 	if (!data.ssbo.id)
 		goto load_failed;
 
-	data.ibo = ev2::create_buffer(ctx, ibo_size);
+	data.ibo = ev2::create_buffer(ctx, ibo_size, ev2::BUFFER_USAGE_INDEX_BUFFER_BIT);
 
 	if (!data.ibo.id)
 		goto load_failed;
@@ -520,14 +520,9 @@ static ev2::Result create_render_data(ev2::GfxContext *ctx, RenderData &data)
 		ev2::commit_buffer_uploads(ctx, uc, data.ibo, &upload, 1);
 		ev2::flush_uploads(ctx);
 	}
-	{
-		ev2::ShaderLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, data.pipeline);
-		ev2::BindingSlot slot = ev2::find_binding(layout, "Metadata");
 
-		data.bindings = ev2::create_descriptor_set(ctx, layout);
-		ev2::bind_buffer(ctx, data.bindings, slot, data.ssbo, 0, ssbo_size);
-	}
-
+	result = ev2::bind_buffer(ctx, data.bindings, "Metadata", data.ssbo, 0, ssbo_size);
+	ev2::flush_bindings(ctx, data.bindings);
 
 	if (result)
 		goto load_failed;
@@ -968,7 +963,7 @@ ev2::Result globe_update(Globe *globe, GlobeUpdateInfo *info)
 
 #include "backends/vulkan/context_impl.h"
 
-void globe_draw(const Globe *globe, const ev2::PassContext& pass)
+void globe_draw(const Globe *globe, ev2::PassID pass)
 {
 	const RenderData &data = globe->render_data;
 
@@ -978,26 +973,42 @@ void globe_draw(const Globe *globe, const ev2::PassContext& pass)
 	const ev2::Buffer* ibo = ctx->get_buffer(data.ibo); 
 	const ev2::Buffer* indirect = ctx->get_buffer(data.indirect); 
 
-	ev2::cmd_bind_gfx_pipeline(pass.rec, globe->render_data.pipeline);
-	glEnable(GL_CULL_FACE);
-	glCullFace(GL_BACK);
-	glFrontFace(GL_CCW);
+	ev2::cmd_bind_gfx_pipeline(pass, globe->render_data.pipeline);
+	//glEnable(GL_CULL_FACE);
+	//glCullFace(GL_BACK);
+	//glFrontFace(GL_CCW);
 
-	ev2::cmd_bind_descriptor_set(pass.rec, globe->render_data.bindings);
+	ev2::cmd_bind_resources(pass, globe->render_data.bindings);
 	globe->gpu_cache->bind_textures(1);
 
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo->id);
-	glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirect->id);
-	glBindVertexBuffer(0, vbo->id, 0, sizeof(GlobeVertex));
+	ev2::cmd_bind_indirect_buffer(pass, data.indirect, 0);
+	ev2::cmd_bind_index_buffer(pass, data.ibo, 0);
+	ev2::cmd_bind_vertex_buffer(pass, data.vbo, 0);
 
-	glMultiDrawElementsIndirect(
-		GL_TRIANGLES, 
-		GL_UNSIGNED_INT, 
-		nullptr, 
-		(GLsizei)globe->selected_tiles.size(), 
-		sizeof(ev2::DrawCommand)	
-	);
+	ev2::cmd_custom(pass, 
+		[indirect, count = globe->selected_tiles.size()]
+		(VkCommandBuffer cmds){
+			vkCmdDrawIndexedIndirect(
+				cmds, 
+				indirect->buffer, 
+				0,
+				(uint32_t)count, 
+				sizeof(ev2::DrawCommand)
+			);
+		});
 
-	glDisable(GL_CULL_FACE);
+	//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo->id);
+	//glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirect->id);
+	//glBindVertexBuffer(0, vbo->id, 0, sizeof(GlobeVertex));
+
+	//glMultiDrawElementsIndirect(
+	//	GL_TRIANGLES, 
+	//	GL_UNSIGNED_INT, 
+	//	nullptr, 
+	//	(GLsizei)globe->selected_tiles.size(), 
+	//	sizeof(ev2::DrawCommand)	
+	//);
+
+	//glDisable(GL_CULL_FACE);
 }
 

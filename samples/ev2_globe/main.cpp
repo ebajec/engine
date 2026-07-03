@@ -122,11 +122,9 @@ void WaveSim::render()
 		.h = (uint32_t)app->win.height
 	};
 
-	ev2::PassContext pass = ev2::begin_pass(ctx, {}, rd.camera, view_rect);
+	ev2::PassID pass = ev2::begin_gfx_pass(ctx, {}, rd.camera, view_rect);
 	globe_draw(globe,pass);
-	ev2::SyncID pass_sync = ev2::end_pass(ctx, pass);
-
-	ev2::submit(pass_sync);
+	ev2::end_pass(ctx, pass);
 }
 
 void WaveSim::destroy()

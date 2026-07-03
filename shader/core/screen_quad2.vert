@@ -2,7 +2,7 @@
 #extension GL_GOOGLE_include_directive : require
 #include "frame.glsl"
 
-layout (binding = 0) uniform sampler2D u_tex;
+layout (set = PER_DRAW_SET, binding = 0) uniform sampler2D u_tex;
 
 //--------------------------------------------------------------------------------------------------
 // Vert

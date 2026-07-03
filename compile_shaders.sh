@@ -2,9 +2,19 @@
 
 set -euo pipefail
 
+FORCE_COMPILE=0
+
+while getopts "f" opt; do
+    case "$opt" in
+		f) FORCE_COMPILE=1 ;;
+        \?) echo "Invalid option" >&2; exit 1 ;;
+    esac
+done
+shift $((OPTIND - 1))
+
 # Usage: ./compile_shaders.sh [INPUT_DIR] [OUTPUT_DIR]
 INPUT_DIR="${1:-./shader}"
-OUTPUT_DIR="${2:-./res/shader}"
+OUTPUT_DIR="${2:-./resource/shader}"
 
 # Make sure the output directory exists
 mkdir -p "$OUTPUT_DIR"
@@ -29,10 +39,10 @@ for ext in "${EXTENSIONS[@]}"; do
     filename="$(basename "$src")"
     out="$OUTPUT_DIR/${filename}.spv"
 
-	if [ ${out} -ot ${src} ]; then
+	if [ ${out} -ot ${src} ] || [ ${FORCE_COMPILE} -eq 1 ]; then
 		echo "Compiling $src → $out"
 		# glslangValidator -V ${INCLUDE_FLAGS} "$src" -o "$out"
-		glslc -c -g ${INCLUDE_FLAGS} "$src" -o "$out"
+		glslc -c -O -g -fpreserve-bindings --target-env=vulkan1.3 ${INCLUDE_FLAGS} "$src" -o "$out"
 		i=$((i + 1))
 	fi
   done

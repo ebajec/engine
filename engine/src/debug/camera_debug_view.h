@@ -14,7 +14,7 @@ class CameraDebugView
 	ev2::GfxContext *ctx;
 
 	ev2::GfxPipelineID pipeline;
-	ev2::DescriptorSetID desc;
+	ev2::ShaderBindingsID desc;
 
 	ev2::BufferID ssbo;
 	ev2::BufferID ibo;
@@ -25,7 +25,7 @@ class CameraDebugView
 public:
 	CameraDebugView(ev2::GfxContext *ctx);
 	~CameraDebugView();
-	void render(const ev2::PassContext& ctx);
+	void render(const ev2::PassID& pass);
 	void set_camera(const Camera *camera);
 	const Camera *get_camera();
 };

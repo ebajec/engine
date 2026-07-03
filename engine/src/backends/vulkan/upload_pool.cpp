@@ -66,9 +66,9 @@ UploadPool *UploadPool::create(
 		.usage = VMA_MEMORY_USAGE_AUTO,
 		.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, 
 		.preferredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+		.memoryTypeBits = UINT32_MAX,
 		.pool = nullptr,
 		.minAlignment = align,
-		.memoryTypeBits = UINT32_MAX
 	};
 
 	VmaAllocationInfo alloc_info;
@@ -153,12 +153,15 @@ static inline void record_buffer_copy(VkCommandBuffer cmds,
 static inline void record_image_copy(VkCommandBuffer cmds,
 	VkBuffer staging, Image *img, uint32_t count, const VkBufferImageCopy2 *regions)
 {
+	VkImageLayout layout = img->state.get_current().layout;
+	assert(layout);
+
 	VkCopyBufferToImageInfo2 copy_info = {
 		.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
 		.pNext = nullptr,
 		.srcBuffer = staging,
 		.dstImage = img->image,
-		.dstImageLayout = img->layout,
+		.dstImageLayout = layout,
 		.regionCount = count,
 		.pRegions = regions,
 	};
@@ -236,7 +239,11 @@ VkResult UploadPool::flush()
 
 	size_t flush_start = entries[flush_tail].start;
 
-	bool is_overflowed = flush_start + flushed_bytes < capacity; 
+	bool is_overflowed = flush_start + flushed_bytes > capacity; 
+
+	if (flush_start + flushed_bytes == capacity) {
+		log_error("Bad?");
+	}
 
 	uint32_t range_count = is_overflowed ? 2 : 1;
 	VkMappedMemoryRange ranges[2] = {
@@ -285,12 +292,12 @@ VkResult UploadPool::flush()
 					.dstStageMask = dst_stage,
 					.dstAccessMask = dst_access,
 					
+					.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+					.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+
 					.buffer = dst_buf->buffer,
 					.offset = 0,
 					.size = dst_buf->size,
-
-					.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-					.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
 				});
 				break;
 			} 
@@ -304,8 +311,11 @@ VkResult UploadPool::flush()
 					.dstStageMask = dst_stage,
 					.dstAccessMask = dst_access,
 
-					.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+					.oldLayout = ent->prev_state.layout,
 					.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+
+					.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+					.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 
 					.image = dst_img->image,
 					.subresourceRange = VkImageSubresourceRange{
@@ -403,7 +413,7 @@ VkResult UploadPool::flush()
 	};
 
 	VkSemaphoreSubmitInfo signal_info = {
-		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
 		.semaphore = semaphore,
 		.value = done_value,
 		.stageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
@@ -493,18 +503,19 @@ uint64_t UploadPool::post_commit_sync(entry_t *ent, ResourceState *state)
 		queue_family->index
 	);
 
-	const bool has_semaphore = old_state.queue_family_index == queue_family->index; 
+
+	uint32_t sync_count;
+	const ResourceSync *syncs;
+	state->get_current_sync(&sync_count, &syncs);
+
+	const bool has_semaphore = sync_count && old_state.queue_family_index == queue_family->index; 
 
 	ent->prev_state = old_state;
 	ent->has_semaphore = has_semaphore;
 
 	if (has_semaphore) {
-		uint32_t sync_count;
-		const ResourceSync *syncs;
-
-		state->get_current_sync(&sync_count, &syncs);
-
 		for (uint32_t i = 0; i < sync_count; ++i) {
+			assert(syncs[i].semaphore);
 			queues[0].waits.push_back(VkSemaphoreSubmitInfo{
 				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
 				.semaphore = syncs[i].semaphore,
@@ -566,6 +577,10 @@ uint64_t UploadPool::commmit_image(uint32_t idx, ImageID img, const ImageUpload 
 
 	std::unique_lock<std::mutex> lock(sync);
 	for (size_t i = 0; i < count; ++i) {
+		const Image * image = ctx->get_image(img);
+
+		assert(image->aspect_mask);
+
 		VkBufferImageCopy2 copy = {
 			.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2,
 			.pNext = nullptr,
@@ -573,7 +588,7 @@ uint64_t UploadPool::commmit_image(uint32_t idx, ImageID img, const ImageUpload 
 			.bufferRowLength= 0,
 			.bufferImageHeight = 0,
 			.imageSubresource = VkImageSubresourceLayers{
-				.aspectMask = ctx->get_image(img)->aspect_mask,
+				.aspectMask = image->aspect_mask,
 				.mipLevel = regions[i].level,
 				.baseArrayLayer = regions[i].z,
 				.layerCount = regions[i].d,
