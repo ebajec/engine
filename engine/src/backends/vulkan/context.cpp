@@ -385,9 +385,11 @@ static ev2::Result pick_physical_device(ev2::GfxContext *ctx,
     std::vector<VkPhysicalDevice> devices(deviceCount);
     vkEnumeratePhysicalDevices(g_vk_instance, &deviceCount, devices.data());
 
-    for (const VkPhysicalDevice& device : devices) {
+    for (uint32_t i = 0; i < devices.size(); ++i) {
+		VkPhysicalDevice device = devices[i];
         if (isDeviceSuitable(ctx->surface, device, opts)) {
             ctx->physicalDevice = device;
+			ctx->physical_device_index = i;
             break;
         }
     }
@@ -768,6 +770,7 @@ static ev2::Result init_frame_descriptor_set(ev2::GfxContext *ctx, FrameContext 
 static ev2::Result create_frame_context(ev2::GfxContext *ctx,
 									   FrameContext *frame)
 {
+	frame->ctx = ctx;
 	frame->ubo = ev2::create_buffer(ctx, sizeof(GPUFramedata), 
 									ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT | 
 									ev2::BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -1070,7 +1073,7 @@ ResourceSync *FrameContext::get_resource_sync(TaggedResource resource, VkQueue q
 
 		VkSemaphoreCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-			.pNext = &timeline_info
+			.pNext = &timeline_info,
 		};
 
 		VkResult result = vkCreateSemaphore(ctx->device, &create_info, nullptr, &sync.semaphore);

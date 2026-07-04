@@ -139,7 +139,7 @@ static inline void record_buffer_copy(VkCommandBuffer cmds,
 	VkBuffer staging, Buffer *dst, uint32_t count, const VkBufferCopy2 *regions)
 {
 	VkCopyBufferInfo2 copy_info = {
-		.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
+		.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
 		.pNext = nullptr,
 		.srcBuffer = staging,
 		.dstBuffer = dst->buffer,

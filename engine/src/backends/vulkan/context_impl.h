@@ -150,10 +150,13 @@ static inline uint64_t hash_combine(uint64_t a, uint64_t b) {
 
 struct PassEdge
 {
-	uint32_t src_pass;
-	uint32_t dst_pass;
+	uint32_t src_node;
+	uint32_t dst_node;
 
 	PassBarrier barrier;
+
+	bool src_write : 1;
+	bool dst_write : 1;
 
 	struct Key
 	{
@@ -165,8 +168,8 @@ struct PassEdge
 	constexpr bool operator == (const PassEdge &other) {
 		return 
 			barrier.resource == other.barrier.resource && 
-			src_pass == other.src_pass &&
-			dst_pass == other.dst_pass;
+			src_node == other.src_node &&
+			dst_node == other.dst_node;
 	}
 
 	struct KeyHash {
@@ -185,8 +188,8 @@ struct PassEdge
 
 		bool operator()(const PassEdge& a, const Key &key) const {
 			return 
-				a.src_pass == key.src_pass &&
-				a.dst_pass == key.dst_pass &&
+				a.src_node == key.src_pass &&
+				a.dst_node == key.dst_pass &&
 				a.barrier.resource.u64 == key.resource;
 		}
 
@@ -200,13 +203,13 @@ struct PassEdge
 
 	Key get_key() const {
 		return Key{
-			.src_pass = src_pass,
-			.dst_pass = dst_pass,
+			.src_pass = src_node,
+			.dst_pass = dst_node,
 			.resource = barrier.resource
 		};
 	}
 
-	bool is_on_same_queue() const {
+	bool is_cross_queue() const {
 		return 
 			barrier.src_state.queue_family_index != barrier.dst_state.queue_family_index;
 	}
@@ -273,7 +276,7 @@ struct RenderGraph
 	std::vector<QueueSubmitter *> queues;
 };
 
-static constexpr uint32_t PASS_INDEX_OUT_OF_FRAME = UINT32_MAX;
+static constexpr uint32_t PASS_NODE_INDEX_OUT_OF_FRAME = UINT32_MAX;
 
 //------------------------------------------------------------------------------
 // Graphics context
@@ -327,6 +330,8 @@ struct GfxContext
 	
 	// set on initialization
 	std::thread::id main_thread_id;
+
+	uint32_t physical_device_index;
 	
 	uint32_t max_frames_in_flight;
 
