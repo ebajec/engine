@@ -185,9 +185,11 @@ int WaveSim::update(ev2::GfxContext *ctx)
 
 	ev2::bind_texture(ctx, sim0_bindings, "img_in", swap_tex[img_A]);
 	ev2::bind_image(ctx, sim0_bindings, "img_out", swap_img[img_B]);
+	ev2::flush_bindings(ctx, sim0_bindings);
 
 	ev2::bind_texture(ctx, sim1_bindings, "img_in", swap_tex[img_B]);
 	ev2::bind_image(ctx, sim1_bindings, "img_out", swap_img[img_A]);
+	ev2::flush_bindings(ctx, sim1_bindings);
 
 	ev2::PassID pass = ev2::begin_compute_pass(ctx);
 
@@ -323,9 +325,11 @@ int main(int argc, char *argv[])
 	while (
 		app->update() == App::OK
 	) {
-		app->begin_frame();
+		if (app->begin_frame() != ev2::SUCCESS)
+			return EXIT_FAILURE;
 		app->render();
-		app->end_frame();
+		if (app->end_frame() != ev2::SUCCESS)
+			return EXIT_FAILURE;
 	}
 
 	app->destroy();

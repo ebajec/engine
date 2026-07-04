@@ -11,7 +11,7 @@ file(GLOB SOURCES "*.cpp" "*.c")
 add_executable(${TARGET} ${SOURCES})
 
 target_link_libraries(${TARGET} PRIVATE
-	samples-common
+	samples-shared
 	engine
 )
 

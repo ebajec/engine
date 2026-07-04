@@ -123,7 +123,7 @@ void destroy_render_target(
 VkImageView get_render_target_color_view(RenderTargetID target);
 
 ev2::Result begin_frame(GfxContext *ctx);
-void end_frame(GfxContext *ctx);
+ev2::Result end_frame(GfxContext *ctx);
 
 
 ViewID create_view(GfxContext *ctx, float view[], float proj[]);

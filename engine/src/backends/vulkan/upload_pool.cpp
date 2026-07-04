@@ -496,13 +496,13 @@ uint64_t UploadPool::post_commit_sync(entry_t *ent, ResourceState *state)
 	ent->done_value = done_value;
 
 	VkPipelineStageFlags2 dst_stage = VK_PIPELINE_STAGE_2_COPY_BIT; 
+	VkAccessFlags2 dst_access = VK_ACCESS_2_TRANSFER_WRITE_BIT; 
 
 	ResourceStateFlags old_state = state->set_write(
+		dst_access,
 		dst_stage,
-		VK_ACCESS_2_TRANSFER_WRITE_BIT,
 		queue_family->index
 	);
-
 
 	uint32_t sync_count;
 	const ResourceSync *syncs;

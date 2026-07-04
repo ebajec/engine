@@ -37,8 +37,9 @@ static Result reset_frame_context(GfxContext *ctx, FrameContext *frame)
 
 	frame->swap_image_use_count = 0;
 
-	if (result != SUCCESS)
+	if (result != SUCCESS) {
 		return result;
+	}
 
 	frame->screen_target = ctx->swap_chain_targets[image_index];
 	frame->swap_chain_image_index = image_index;
@@ -48,10 +49,10 @@ static Result reset_frame_context(GfxContext *ctx, FrameContext *frame)
 	if (frame->index < ctx->max_frames_in_flight)
 		return SUCCESS;
 
-	frame->render_graph.reset();
-
 	//------------------------------------------------------------------------------
 	// cleaup previous state
+
+	frame->render_graph.reset();
 
 	for (const VkCommandPool &command_pool : frame->command_pools) {
 		vk_result = vkResetCommandPool(ctx->device, command_pool, 0);
@@ -721,6 +722,12 @@ void cmd_bind_resources(PassID pass_id, ShaderBindingsID bindings_id)
 {
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 
+	ShaderBindings *bindings = EV2_TYPE_PTR_CAST(ShaderBindings, bindings_id);
+
+	if (!bindings->writes.empty()) {
+		log_warn("Binding resources with pending writes. Remember to call flush_bindings");
+	}
+
 	pass->cmds.push_back(Command{
 		.bind_resources = {
 			.bindings = bindings_id
@@ -853,7 +860,7 @@ Result begin_frame(GfxContext *ctx)
 	if (result != SUCCESS)
 		return result;
 
-	frame->index = ctx->frame_counter++;
+	frame->index = ctx->frame_counter;
 
 	//------------------------------------------------------------------------------
 	// Cleanup frame context if previously used
@@ -861,7 +868,7 @@ Result begin_frame(GfxContext *ctx)
 	result = reset_frame_context(ctx, frame);
 
 	if (result != SUCCESS)
-		return result;
+		return set_error(result, "Failed to reset_frame_context");
 
 	//------------------------------------------------------------------------------
 	// Update stuff
@@ -1039,7 +1046,7 @@ static void rg_update_attachment_states(RenderGraph *rg, const RenderPass *rende
 {
 	GfxContext *ctx = rg->ctx;
 
-	const bool render_to_swapchain = render_pass->target.is_valid();
+	const bool render_to_swapchain = !render_pass->target.is_valid();
 	const RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget, render_pass->target);
 
 	if (render_to_swapchain) {
@@ -1138,7 +1145,7 @@ static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 		rg->submissions[last_screen_render_index].signal.push_back(VkSemaphoreSubmitInfo{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
 			.semaphore = ctx->frame_semaphore,
-			.value = frame->index,
+			.value = 1 + frame->index,
 			.stageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 			.deviceIndex = DEFAULT_DEVICE_INDEX,
 		});
@@ -1156,7 +1163,7 @@ static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 			continue;
 
 		if (edge.src_node == PASS_NODE_INDEX_OUT_OF_FRAME) {
-			log_warn("LL");
+			log_warn("Cross queue render graph dependency outside of frame");
 			continue;
 		}
 
@@ -1212,61 +1219,6 @@ static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 		} else {
 			state->sync_read(sync->semaphore, sync->wait_value);
 		}
-
-		//PassNode &dst_node = rg->nodes[edge.dst_node];
-		//RenderGraphSubmission &submission = rg->submissions[dst_node.submission_idx];
-
-		//ResourceSync *done_sync = frame->get_resource_sync(
-		//	edge.barrier.resource, 
-		//	rg->queues[submission.queue_index]->queue
-		//);
-
-		//assert(done_sync);
-
-		//++done_sync->wait_value;
-
-		//ResourceState *state = nullptr;
-		//switch (edge.barrier.resource.type) {
-		//	case RESOURCE_TYPE_BUFFER: {
-		//		Buffer *buffer = ctx->get_buffer(edge.barrier.resource.to_buffer());
-		//		state = &buffer->state;
-		//		break;
-		//	}
-		//	case RESOURCE_TYPE_IMAGE: {
-		//		Image *image = ctx->get_image(edge.barrier.resource.to_image());
-		//		state = &image->state;
-		//		break;
-		//	}
-		//}
-		//assert(state);
-
-		//uint32_t wait_sync_count;
-		//const ResourceSync *wait_syncs;
-
-		//state->get_current_sync(&wait_sync_count, &wait_syncs);
-
-		//for (uint32_t i = 0; i < wait_sync_count; ++i) {
-		//	submission.wait.push_back(VkSemaphoreSubmitInfo{
-		//		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-		//		.semaphore = wait_syncs[i].semaphore,
-		//		.value = wait_syncs[i].wait_value,
-		//		.stageMask = edge.barrier.dst_state.stage,
-		//		.deviceIndex = DEFAULT_DEVICE_INDEX,
-		//	});
-		//}
-		//submission.signal.push_back(VkSemaphoreSubmitInfo{
-		//	.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-		//	.semaphore = done_sync->semaphore,
-		//	.value = done_sync->wait_value,
-		//	.stageMask = dst_node.final_states[edge.barrier.resource].stage,
-		//	.deviceIndex = DEFAULT_DEVICE_INDEX,
-		//});
-
-		//if (edge.barrier.is_write) {
-		//	state->sync_write(done_sync->semaphore, done_sync->wait_value);
-		//} else {
-		//	state->sync_read(done_sync->semaphore, done_sync->wait_value);
-		//}
 	}
 
 	return ev2::SUCCESS;
@@ -1370,6 +1322,8 @@ static void rg_record_gfx_pass_begin(RenderGraph*rg, const PassNode &node, VkCom
 		EV2_TYPE_PTR_CAST(RenderTarget, render_pass->target) : 
 		frame->screen_target; 
 
+	assert(target);
+
 	VkRenderingAttachmentInfo color_info, depth_info, stencil_info;
 	VkRenderingInfo rendering_info;
 
@@ -1394,8 +1348,7 @@ static void rg_record_gfx_pass_begin(RenderGraph*rg, const PassNode &node, VkCom
 	};
     vkCmdSetScissor(cmds, 0, 1, &scissor);
 
-	std::array<VkDescriptorSet,3> base_sets = {
-		VK_NULL_HANDLE,
+	std::array<VkDescriptorSet,2> base_sets = {
 		frame->descriptor_set,
 		render_pass->descriptor_set,
 	};
@@ -1419,6 +1372,9 @@ static void rg_record_gfx_pass_end(RenderGraph*rg, const PassNode &node, VkComma
 
 static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBuffer cmds)
 {
+	if (node.commands.empty())
+		return VK_SUCCESS;
+
 	GfxContext *ctx = rg->ctx;
 
 	uint32_t barrier_offset = 0;
@@ -1429,11 +1385,28 @@ static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBu
 	const bool is_gfx_pass = node.is_gfx_node();
 
 	if (is_gfx_pass) {
+		if (!node.barriers.empty()) {
+			const PassCommand &first_cmd = node.commands[0];
+			VkDependencyInfo dependency_info = generate_dependency_info(
+				ctx, 
+				&node.barriers[barrier_offset],
+				first_cmd.barrier_count,
+				buffer_barriers,
+				image_barriers
+			);
+			vkCmdPipelineBarrier2(cmds, &dependency_info);
+
+			barrier_offset += first_cmd.barrier_count;
+		}
+
 		rg_record_gfx_pass_begin(rg, node, cmds);
 	}
 
 	for (const PassCommand &pass_cmd : node.commands) {
-		if (pass_cmd.barrier_count) {
+
+		// Without certain device features, barriers may not be recorded inside of
+		// a render pass.
+		if (!is_gfx_pass && pass_cmd.barrier_count) {
 			image_barriers.clear();
 			buffer_barriers.clear();
 
@@ -1479,9 +1452,15 @@ static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBu
 				break;
 			}
 			case BindIndexBuffer: {
+				CmdBindIndexBuffer cmd = pass_cmd.base.bind_index_buffer;
+				Buffer *buffer = ctx->get_buffer(cmd.buffer);
+				vkCmdBindIndexBuffer(cmds, buffer->buffer, cmd.offset, VK_INDEX_TYPE_UINT32);
 				break;
 			}
 			case BindVertexBuffer: {
+				CmdBindVertexBuffer cmd = pass_cmd.base.bind_vertex_buffer;
+				Buffer *buffer = ctx->get_buffer(cmd.buffer);
+				vkCmdBindVertexBuffers(cmds, 0, 1, &buffer->buffer, &cmd.offset);
 				break;
 			}
 			case BindIndirectBuffer: {
@@ -1506,6 +1485,21 @@ static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBu
 
 	if (is_gfx_pass) {
 		rg_record_gfx_pass_end(rg, node, cmds);
+
+		if (node.barriers.size() > barrier_offset) {
+			buffer_barriers.clear();
+			image_barriers.clear();
+
+			uint32_t barrier_count = (uint32_t)node.barriers.size() - barrier_offset;
+			VkDependencyInfo dependency_info = generate_dependency_info(
+				ctx, 
+				&node.barriers[barrier_offset],
+				barrier_count,
+				buffer_barriers,
+				image_barriers
+			);
+			vkCmdPipelineBarrier2(cmds, &dependency_info);
+		}
 	}
 
 	return VK_SUCCESS;
@@ -1550,7 +1544,8 @@ static VkResult rg_record(GfxContext *ctx, RenderGraph *rg)
 		if (result != VK_SUCCESS)
 			break;
 
-		for (const PassNode *node : submission.nodes) {
+		for (uint32_t i = 0; i < (uint32_t)submission.nodes.size(); ++i) {
+			const PassNode *node = submission.nodes[i];
 			result = rg_record_node(rg, *node, submission.cmds);
 			if (result != VK_SUCCESS)
 				break;
@@ -1686,7 +1681,7 @@ static RenderGraph *rg_create(GfxContext *ctx)
 	return rg;
 }
 
-void end_frame(GfxContext *ctx)
+ev2::Result end_frame(GfxContext *ctx)
 {
 	ev2::Result result = ev2::SUCCESS;
 
@@ -1694,20 +1689,23 @@ void end_frame(GfxContext *ctx)
 
 	result = rg_compile(ctx, rg);
 	if (result != ev2::SUCCESS) {
-		return;
+		return set_error(ev2::ERENDER_GRAPH,"Failed to compile render graph");
 	}
 
 	VkResult vk_result = VK_SUCCESS;
 
 	vk_result = rg_record(ctx, rg);
 	if (vk_result != VK_SUCCESS) {
-		return;
+		return set_error(ev2::ERENDER_GRAPH,"Failed to record render graph");
 	}
 
 	vk_result = rg_submit(ctx, rg);
 	if (vk_result != VK_SUCCESS) {
-		return;
+		return set_error(ev2::ERENDER_GRAPH,"Failed to submit render graph");
 	}
+
+	++ctx->frame_counter;
+	return ev2::SUCCESS;
 }
 
 };

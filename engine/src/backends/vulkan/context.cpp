@@ -574,7 +574,7 @@ static ev2::Result create_swap_chain(ev2::GfxContext *ctx, uint32_t w, uint32_t 
     uint32_t maxImageCount = swapChainSupport.capabilities.maxImageCount;
 
     if (maxImageCount) 
-		imageCount = ++imageCount > maxImageCount ? maxImageCount : imageCount;
+		imageCount = (imageCount + 1) > maxImageCount ? maxImageCount : (imageCount + 1);
 
     VkSwapchainCreateInfoKHR createInfo = {
 		.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -606,7 +606,7 @@ static ev2::Result create_swap_chain(ev2::GfxContext *ctx, uint32_t w, uint32_t 
     createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     createInfo.presentMode = presentMode;
     createInfo.clipped = VK_TRUE;
-    createInfo.oldSwapchain = VK_NULL_HANDLE;
+    createInfo.oldSwapchain = ctx->swap_chain.swapchain;
 
 	VkResult result = VK_SUCCESS;
 
@@ -614,21 +614,20 @@ static ev2::Result create_swap_chain(ev2::GfxContext *ctx, uint32_t w, uint32_t 
 							   &ctx->swap_chain.swapchain); 
 
     if (result) {
-        log_error("failed to create swap chain!");
-		return ev2::ERESIZE_FAILED;
+        return set_error(ev2::ERESIZE_FAILED, "vkCreateSwapchainKHR failed!");
     }
 
     result = vkGetSwapchainImagesKHR(ctx->device, 
 									 ctx->swap_chain.swapchain, &imageCount, nullptr);
     if (result)
-		return ev2::ERESIZE_FAILED;
+		return set_error(ev2::ERESIZE_FAILED, "vkGetSwapchainImagesKHR failed!");
 
     ctx->swap_chain.images.resize(imageCount);
     
 	result = vkGetSwapchainImagesKHR(ctx->device, ctx->swap_chain.swapchain, &imageCount, 
 							ctx->swap_chain.images.data());
 	if (result)
-		return ev2::ERESIZE_FAILED;
+		return set_error(ev2::ERESIZE_FAILED, "vkGetSwapchainImagesKHR failed!");
 
     ctx->swap_chain.image_format = surfaceFormat.format;
     ctx->swap_chain.extent = extent;
@@ -636,7 +635,7 @@ static ev2::Result create_swap_chain(ev2::GfxContext *ctx, uint32_t w, uint32_t 
 	result = create_swap_chain_views(ctx);
 
 	if (result)
-		return ev2::ERESIZE_FAILED;
+		return set_error(ev2::ERESIZE_FAILED, "Failed to create swap chain image views");
 
 	return ev2::SUCCESS;
 }
@@ -647,8 +646,10 @@ static void destroy_swap_chain(VkDevice device, SwapChain &swap_chain)
         vkDestroyImageView(device, swap_chain.image_views[i], nullptr);
     }
     
-	if (swap_chain.swapchain)
+	if (swap_chain.swapchain) {
     	vkDestroySwapchainKHR(device, swap_chain.swapchain, nullptr);
+		swap_chain.swapchain = VK_NULL_HANDLE;
+	}
 
 	swap_chain.images.clear();
 	swap_chain.image_views.clear();
@@ -886,7 +887,7 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 		VkPipelineLayoutCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 			.flags = 0,
-			.setLayoutCount = i, 
+			.setLayoutCount = 1 + i, 
 			.pSetLayouts = ctx->base_descriptor_set_layouts,
 			.pushConstantRangeCount = 0,
 			.pPushConstantRanges = nullptr,
@@ -1032,11 +1033,12 @@ failure:
 
 ev2::Result GfxContext::wait_for_frame_completion(FrameContext *frame)
 {
+	uint64_t wait_value = 1 + frame->index;
 	VkSemaphoreWaitInfo wait_info = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
 		.semaphoreCount = 1,
 		.pSemaphores = &frame_semaphore,
-		.pValues = &frame->index,
+		.pValues = &wait_value,
 	};
 
 	VkResult result = vkWaitSemaphores(device, &wait_info, EV2_FRAME_TIMEOUT);
@@ -1148,9 +1150,14 @@ error:
 
 ev2::Result on_resize(GfxContext *ctx, uint32_t width, uint32_t height)
 {
-	ctx->desired_surface_width = width;
-	ctx->desired_surface_height = height;
-	ctx->is_swap_chain_valid = true;
+	uint32_t old_width = ctx->desired_surface_width;
+	uint32_t old_height = ctx->desired_surface_width;
+
+	if (old_width != width || old_height != height) {
+		ctx->desired_surface_width = width;
+		ctx->desired_surface_height = height;
+		ctx->is_swap_chain_valid = false;
+	}
 
 	return ev2::SUCCESS;
 }

@@ -167,9 +167,8 @@ int App::resize(int width, int height)
 	win.width = width;
 	win.height = height;
 
-	int result = OK;
-
-	return result;
+	return ev2::on_resize(ctx, width, height) == ev2::SUCCESS ? 
+		App::OK : App::ERROR;
 }
 
 int App::update()
@@ -218,12 +217,16 @@ int App::update()
 	return result;
 }
 
-void App::begin_frame()
+int App::begin_frame()
 {
-	ev2::begin_frame(ctx);
+	ev2::Result result = ev2::begin_frame(ctx);
+
+	if (result != ev2::SUCCESS)
+		return App::ERROR;
+	return App::OK;
 }
 
-void App::end_frame()
+int App::end_frame()
 {
 #ifdef ENABLE_IMGUI
 	ImGui::Render();
@@ -232,7 +235,7 @@ void App::end_frame()
 	ev2::PassID gui_pass = ev2::begin_gfx_pass(
 		ctx, 
 		{}, {}, 
-		ev2::Rect{(uint32_t)win.width, (uint32_t)win.height}
+		ev2::Rect{0,0,(uint32_t)win.width, (uint32_t)win.height}
 	);
 
 	ev2::cmd_custom(gui_pass, [](VkCommandBuffer cmds) {
@@ -242,6 +245,7 @@ void App::end_frame()
 
 	ImGui::EndFrame();
 	ev2::end_frame(ctx);
+	return App::OK;
 }
 
 int App::initialize(int argc, char *argv[])

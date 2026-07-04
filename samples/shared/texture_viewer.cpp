@@ -54,8 +54,7 @@ int TextureViewerPanel::update_pipeline(const char *path)
 	if (res != ev2::SUCCESS)
 		return EXIT_FAILURE;
 
-	if (EV2_VALID(rd.bindings))
-		ev2::destroy_bindings(app->ctx, rd.bindings);
+	ev2::flush_bindings(app->ctx, bindings);
 
 	rd.pipeline = pipeline;
 	rd.bindings = bindings;

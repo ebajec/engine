@@ -83,9 +83,9 @@ struct App
 	int resize(int width, int height);
 
 	int update();
+	int begin_frame();
+	int end_frame();
 
-	void begin_frame();
-	void end_frame();
 	void imgui();
 
 	void update_input();
