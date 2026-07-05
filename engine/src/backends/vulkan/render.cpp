@@ -15,40 +15,8 @@ namespace ev2 {
 
 static Result reset_frame_context(GfxContext *ctx, FrameContext *frame)
 {
-	Result result = ev2::SUCCESS;
 
-	VkAcquireNextImageInfoKHR acquire_info = {
-		.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
-		.swapchain = ctx->swap_chain.swapchain,
-		.timeout = 0,
-		.semaphore = frame->image_available_sempahore,
-		.fence = VK_NULL_HANDLE,
-		.deviceMask = (uint32_t)(1 << ctx->physical_device_index),
-	};
-
-	uint32_t image_index;
-    VkResult vk_result = vkAcquireNextImage2KHR(ctx->device, &acquire_info, &image_index);
-
-	if (vk_result == VK_ERROR_OUT_OF_DATE_KHR) {
-        result = ctx->reset_swap_chain();
-    } else if (vk_result != VK_SUCCESS && vk_result != VK_SUBOPTIMAL_KHR) {
-        throw std::runtime_error("failed to acquire swap chain image!");
-    }
-
-	frame->swap_image_use_count = 0;
-
-	if (result != SUCCESS) {
-		return result;
-	}
-
-	frame->screen_target = ctx->swap_chain_targets[image_index];
-	frame->swap_chain_image_index = image_index;
-
-	// Skip cleanup if not used yet
-	
-	if (frame->index < ctx->max_frames_in_flight)
-		return SUCCESS;
-
+	VkResult vk_result = VK_SUCCESS;
 	//------------------------------------------------------------------------------
 	// cleaup previous state
 
@@ -57,7 +25,7 @@ static Result reset_frame_context(GfxContext *ctx, FrameContext *frame)
 	for (const VkCommandPool &command_pool : frame->command_pools) {
 		vk_result = vkResetCommandPool(ctx->device, command_pool, 0);
 
-		if (result)
+		if (vk_result != VK_SUCCESS)
 			return EUNKNOWN;
 	}
 
@@ -519,34 +487,34 @@ PassID begin_gfx_pass(
 
 	pass->gfx = gfx.release();
 
-	//const bool render_to_swapchain = target_handle.is_valid();
+	const bool render_to_swapchain = target_handle.is_valid();
 
-	//if (render_to_swapchain) {
-	//	pass->cmds.push_back(Command{
-	//		.use_image = CmdUseImage{
-	//			.image = ctx->depth_buffer,
-	//			.usage = USAGE_DEPTH_ATTACHMENT, 
-	//		},
-	//		.type = UseImage
-	//	});		
-	//} else if (RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget,target_handle)){
-	//	if (target->depth_img.is_valid())
-	//		pass->cmds.push_back(Command{
-	//			.use_image = CmdUseImage{
-	//				.image = target->depth_img,
-	//				.usage = USAGE_DEPTH_ATTACHMENT, 
-	//			},
-	//			.type = UseImage
-	//		});		
-	//	if (target->color_img.is_valid())
-	//		pass->cmds.push_back(Command{
-	//			.use_image = CmdUseImage{
-	//				.image = target->color_img,
-	//				.usage = USAGE_DEPTH_ATTACHMENT, 
-	//			},
-	//			.type = UseImage
-	//		});		
-	//}
+	if (render_to_swapchain) {
+		pass->cmds.push_back(Command{
+			.use_image = CmdUseImage{
+				.image = ctx->depth_buffer,
+				.usage = USAGE_DEPTH_ATTACHMENT, 
+			},
+			.type = UseImage
+		});		
+	} else if (RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget,target_handle)){
+		if (target->depth_img.is_valid())
+			pass->cmds.push_back(Command{
+				.use_image = CmdUseImage{
+					.image = target->depth_img,
+					.usage = USAGE_DEPTH_ATTACHMENT, 
+				},
+				.type = UseImage
+			});		
+		if (target->color_img.is_valid())
+			pass->cmds.push_back(Command{
+				.use_image = CmdUseImage{
+					.image = target->color_img,
+					.usage = USAGE_COLOR_ATTACHMENT, 
+				},
+				.type = UseImage
+			});		
+	}
 
 	return EV2_HANDLE_CAST(Pass, pass); 
 }
@@ -615,9 +583,12 @@ static ResourceStateFlags usage_to_state_flags(Usage usage)
 			};
 		case USAGE_DEPTH_ATTACHMENT:
 			return ResourceStateFlags{
-				.access = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, 
-				.stage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT_KHR |
-				VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT_KHR
+				.access = 
+					VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+					VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT, 
+				.stage = 
+					VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT_KHR |
+					VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT_KHR
 			};
 		case USAGE_STORAGE_READ_COMPUTE:
 			return ResourceStateFlags{
@@ -853,22 +824,45 @@ Result begin_frame(GfxContext *ctx)
 
 	FrameContext *frame = ctx->get_current_frame();
 
-	//------------------------------------------------------------------------------
-	// Wait until frame at this index is complete before resetting it.
-	Result result = ctx->wait_for_frame_completion(frame);
+	Result result = ev2::SUCCESS;
 
-	if (result != SUCCESS)
+	VkAcquireNextImageInfoKHR acquire_info = {
+		.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
+		.swapchain = ctx->swap_chain.swapchain,
+		.timeout = 0,
+		.semaphore = frame->image_available_sempahore,
+		.fence = VK_NULL_HANDLE,
+		.deviceMask = (uint32_t)(1 << ctx->physical_device_index),
+	};
+
+	uint32_t image_index;
+    VkResult vk_result = vkAcquireNextImage2KHR(ctx->device, &acquire_info, &image_index);
+
+	if (vk_result == VK_ERROR_OUT_OF_DATE_KHR) {
+        result = ctx->reset_swap_chain();
+    } else if (vk_result != VK_SUCCESS && vk_result != VK_SUBOPTIMAL_KHR) {
+        throw std::runtime_error("failed to acquire swap chain image!");
+    }
+
+	if (result != SUCCESS) {
 		return result;
-
-	frame->index = ctx->frame_counter;
+	}
 
 	//------------------------------------------------------------------------------
 	// Cleanup frame context if previously used
 	
-	result = reset_frame_context(ctx, frame);
+	if (frame->index >= ctx->max_frames_in_flight) {
+		result = ctx->wait_for_frame_completion(frame);
+		result = reset_frame_context(ctx, frame);
 
-	if (result != SUCCESS)
-		return set_error(result, "Failed to reset_frame_context");
+		if (result != SUCCESS)
+			return set_error(result, "Failed to reset frame context");
+	}
+
+	frame->swap_image_use_count = 0;
+	frame->index = ctx->frame_counter;
+	frame->screen_target = ctx->swap_chain_targets[image_index];
+	frame->swap_chain_image_index = image_index;
 
 	//------------------------------------------------------------------------------
 	// Update stuff
@@ -902,7 +896,6 @@ Result begin_frame(GfxContext *ctx)
 	};
 	uint64_t sync = commit_buffer_uploads(ctx, uc, frame->ubo, &up, 1);
 	flush_uploads(ctx);
-	wait_complete(ctx, sync);
 
 	return SUCCESS;
 }
@@ -972,7 +965,9 @@ static void update_barriers_for_use(
 	PassEdge *edge = get_or_insert_edge(&rg, PassEdge{
 		.src_node = src_node_idx,
 		.dst_node = dst_node_idx,
-		.barrier = barrier,
+		.src_state = src_flags,
+		.dst_state = dst_flags,
+		.resource = resource,
 		.src_write = access_contains_write(src_flags.access),
 	});
 
@@ -992,7 +987,8 @@ static void update_barriers_for_use(
 		final_barrier->dst_state.stage |= barrier.dst_state.stage;
 
 		// update the barrier for the edge
-		edge->barrier = *final_barrier;
+		edge->dst_state = final_barrier->dst_state;
+		edge->src_state = final_barrier->src_state;
 	} else {
 		dst_node.barriers.push_back(barrier);
 		final_barrier = &dst_node.barriers.back();
@@ -1024,6 +1020,8 @@ void rg_use_image(RenderGraph &rg, GfxContext *ctx, uint32_t dst_node_idx, const
 		it->second = dst_node_idx;
 
 	update_barriers_for_use(rg, src_node_idx, dst_node_idx, &img->state, cmd.image, cmd.usage);
+
+	assert(img->state.get_current().layout != VK_IMAGE_LAYOUT_UNDEFINED);
 }
 
 static PassCommand &rg_new_pass_command(PassNode &node, const Command cmd)
@@ -1042,24 +1040,6 @@ static PassCommand &rg_new_pass_command(PassNode &node, const Command cmd)
 	});
 }
 
-static void rg_update_attachment_states(RenderGraph *rg, const RenderPass *render_pass)
-{
-	GfxContext *ctx = rg->ctx;
-
-	const bool render_to_swapchain = !render_pass->target.is_valid();
-	const RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget, render_pass->target);
-
-	if (render_to_swapchain) {
-
-	} else {
-		if (target->depth_img.is_valid()) {
-		}
-
-		if (target->color_img.is_valid()) {
-		}
-	}
-}
-
 static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 {
 	FrameContext *frame = ctx->get_current_frame();
@@ -1071,10 +1051,6 @@ static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 		const Pass *pass = node.pass;
 
 		uint32_t cmd_count = (uint32_t)pass->cmds.size();
-
-		if (node.is_gfx_node()) {
-			rg_update_attachment_states(rg, node.pass->gfx);
-		}
 
 		for (uint32_t i = 0; i < cmd_count; ++i) {
 			const Command &cmd = pass->cmds[i];
@@ -1159,65 +1135,64 @@ static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 	for (const PassEdge &edge : rg->edges) {
 		const bool is_cross_queue_edge = edge.is_cross_queue(); 
 
-		if (!is_cross_queue_edge)
-			continue;
-
-		if (edge.src_node == PASS_NODE_INDEX_OUT_OF_FRAME) {
-			log_warn("Cross queue render graph dependency outside of frame");
-			continue;
-		}
-
-		PassNode &src_node = rg->nodes[edge.src_node];
-		RenderGraphSubmission &src_submission = rg->submissions[src_node.submission_idx];
-
-		PassNode &dst_node = rg->nodes[edge.dst_node];
-		RenderGraphSubmission &dst_submission = rg->submissions[dst_node.submission_idx];
-
-		ResourceSync *sync = frame->get_resource_sync(
-			edge.barrier.resource, 
-			rg->queues[src_submission.queue_index]->queue
-		);
-
-		assert(sync);
-
-		++sync->wait_value;
-
-		src_submission.signal.push_back(VkSemaphoreSubmitInfo{
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = sync->semaphore,
-			.value = sync->wait_value,
-			.stageMask = edge.barrier.src_state.stage,
-			.deviceIndex = DEFAULT_DEVICE_INDEX,
-		});
-
-		dst_submission.wait.push_back(VkSemaphoreSubmitInfo{
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = sync->semaphore,
-			.value = sync->wait_value,
-			.stageMask = edge.barrier.dst_state.stage,
-			.deviceIndex = DEFAULT_DEVICE_INDEX,
-		});
-
 		ResourceState *state = nullptr;
-		switch (edge.barrier.resource.type) {
+		switch (edge.resource.type) {
 			case RESOURCE_TYPE_BUFFER: {
-				Buffer *buffer = ctx->get_buffer(edge.barrier.resource.to_buffer());
+				Buffer *buffer = ctx->get_buffer(edge.resource.to_buffer());
 				state = &buffer->state;
 				break;
 			}
 			case RESOURCE_TYPE_IMAGE: {
-				Image *image = ctx->get_image(edge.barrier.resource.to_image());
+				Image *image = ctx->get_image(edge.resource.to_image());
 				state = &image->state;
 				break;
 			}
 		}
-
 		assert(state);
 
-		if (edge.src_write) {
-			state->sync_write(sync->semaphore, sync->wait_value);
-		} else {
-			state->sync_read(sync->semaphore, sync->wait_value);
+		PassNode &dst_node = rg->nodes[edge.dst_node];
+		RenderGraphSubmission &dst_submission = rg->submissions[dst_node.submission_idx];
+		
+		ResourceSync *sync = nullptr;
+
+		if (edge.src_node == PASS_NODE_INDEX_OUT_OF_FRAME) {
+			sync = frame->get_resource_sync(
+				edge.resource, 
+				rg->queues[dst_submission.queue_index]->queue
+			);
+		} else if (is_cross_queue_edge) {
+			PassNode &src_node = rg->nodes[edge.src_node];
+			RenderGraphSubmission &src_submission = rg->submissions[src_node.submission_idx];
+
+			sync = frame->get_resource_sync(
+				edge.resource, 
+				rg->queues[src_submission.queue_index]->queue
+			);
+
+			++sync->wait_value;
+
+			src_submission.signal.push_back(VkSemaphoreSubmitInfo{
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+				.semaphore = sync->semaphore,
+				.value = sync->wait_value,
+				.stageMask = edge.src_state.stage,
+				.deviceIndex = DEFAULT_DEVICE_INDEX,
+			});
+		}
+
+		if (sync) {
+			dst_submission.wait.push_back(VkSemaphoreSubmitInfo{
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+				.semaphore = sync->semaphore,
+				.value = sync->wait_value,
+				.stageMask = edge.dst_state.stage,
+				.deviceIndex = DEFAULT_DEVICE_INDEX,
+			});
+			if (edge.src_write) {
+				state->sync_write(sync->semaphore, sync->wait_value);
+			} else {
+				state->sync_read(sync->semaphore, sync->wait_value);
+			}
 		}
 	}
 

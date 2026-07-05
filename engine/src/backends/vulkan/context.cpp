@@ -909,9 +909,9 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 		return result;
 
 	// Resource pools
-	ctx->buffer_pool.reset(ResourcePool<ev2::Buffer>::create());
-	ctx->image_pool.reset(ResourcePool<ev2::Image>::create());
-	ctx->texture_pool.reset(ResourcePool<ev2::Texture>::create());
+	ctx->buffer_pool.reset(Pool<ev2::Buffer>::create());
+	ctx->image_pool.reset(Pool<ev2::Image>::create());
+	ctx->texture_pool.reset(Pool<ev2::Texture>::create());
 
 	// Per-frame updated uniforms
 	uint64_t ubo_offset_alignment = 

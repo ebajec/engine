@@ -18,6 +18,28 @@
 #define EV2_MAX_FRAMES_IN_FLIGHT 3
 #define EV2_FRAME_TIMEOUT 1e9
 
+#define MAKE_VERSIONED_HANDLE_ACCESS(Type, TypeLower)\
+inline Type##ID emplace_##TypeLower(Type &&val) {\
+	PoolID id = TypeLower##_pool->allocate(std::move(val));\
+	return Type##ID{\
+		.id = id.slot,\
+		.gen = id.gen\
+	};\
+}\
+inline Type *get_##TypeLower(Type##ID h) {\
+	PoolID id = {.slot = h.id, .gen = h.gen};\
+	Type *ptr = TypeLower##_pool->get_checked(id);\
+	if (!ptr) {\
+		log_error("Invalid %s handle passed : id=%d, gen=%d", #TypeLower, h.id, h.gen);\
+		throw std::runtime_error("Invalid handle");\
+	}\
+	return ptr;\
+}\
+inline Type *get_##TypeLower_unchecked(Type##ID h) {\
+	PoolID id = {.slot = h.id, .gen = h.gen};\
+	return TypeLower##_pool->get_unchecked(id);\
+}
+
 namespace ev2 {
 
 //------------------------------------------------------------------------------
@@ -90,7 +112,6 @@ struct FrameContext
 
 	double t; 
 	double dt;
-	uint32_t w, h;
 	ev2::BufferID ubo;
 
 	std::vector<ev2::Pass*> passes;
@@ -153,7 +174,9 @@ struct PassEdge
 	uint32_t src_node;
 	uint32_t dst_node;
 
-	PassBarrier barrier;
+	ResourceStateFlags src_state;
+	ResourceStateFlags dst_state;
+	TaggedResource resource;
 
 	bool src_write : 1;
 	bool dst_write : 1;
@@ -167,7 +190,7 @@ struct PassEdge
 
 	constexpr bool operator == (const PassEdge &other) {
 		return 
-			barrier.resource == other.barrier.resource && 
+			resource == other.resource && 
 			src_node == other.src_node &&
 			dst_node == other.dst_node;
 	}
@@ -190,7 +213,7 @@ struct PassEdge
 			return 
 				a.src_node == key.src_pass &&
 				a.dst_node == key.dst_pass &&
-				a.barrier.resource.u64 == key.resource;
+				a.resource.u64 == key.resource;
 		}
 
 		bool operator()(const Key& a, const Key &b) const {
@@ -205,13 +228,13 @@ struct PassEdge
 		return Key{
 			.src_pass = src_node,
 			.dst_pass = dst_node,
-			.resource = barrier.resource
+			.resource = resource
 		};
 	}
 
 	bool is_cross_queue() const {
 		return 
-			barrier.src_state.queue_family_index != barrier.dst_state.queue_family_index;
+			src_state.queue_family_index != dst_state.queue_family_index;
 	}
 };
 
@@ -280,6 +303,10 @@ static constexpr uint32_t PASS_NODE_INDEX_OUT_OF_FRAME = UINT32_MAX;
 
 //------------------------------------------------------------------------------
 // Graphics context
+
+MAKE_POOL_ID_CONVERSION(Buffer)
+MAKE_POOL_ID_CONVERSION(Image)
+MAKE_POOL_ID_CONVERSION(Texture)
 
 struct GfxContext
 {
@@ -360,9 +387,9 @@ struct GfxContext
 	};
 
 	// Resource pools
-	std::unique_ptr<ResourcePool<Buffer>> buffer_pool;
-	std::unique_ptr<ResourcePool<Image>> image_pool;
-	std::unique_ptr<ResourcePool<Texture>> texture_pool;
+	std::unique_ptr<Pool<Buffer>> buffer_pool;
+	std::unique_ptr<Pool<Image>> image_pool;
+	std::unique_ptr<Pool<Texture>> texture_pool;
 
 	// Special GPU Resources
 	GPUTTable<ViewData> view_data;
@@ -400,34 +427,9 @@ struct GfxContext
 		return &frames[idx % max_frames_in_flight];
 	}
 
-	// convenience (emplace)
-	inline BufferID emplace_buffer(Buffer &&buf) {
-		PoolID rid = buffer_pool->allocate(std::move(buf));
-		return EV2_HANDLE_CAST(Buffer, rid.u64);
-	}
-	inline ImageID emplace_image(Image &&img) {
-		PoolID rid = image_pool->allocate(std::move(img));
-		return EV2_HANDLE_CAST(Image, rid.u64);
-	}
-	inline TextureID emplace_texture(Texture &&tex) {
-		PoolID rid = texture_pool->allocate(std::move(tex));
-		return EV2_HANDLE_CAST(Texture, rid.u64);
-	}
-
-	// convenience (get)
-
-	inline Buffer *get_buffer(BufferID h) {
-		PoolID rid = {.u64 = h.id};
-		return buffer_pool->get(rid);
-	}
-	inline Image *get_image(ImageID h) {
-		PoolID rid = {.u64 = h.id};
-		return image_pool->get(rid);
-	}
-	inline Texture *get_texture(TextureID h) {
-		PoolID rid = {.u64 = h.id};
-		return texture_pool->get(rid);
-	}
+	MAKE_VERSIONED_HANDLE_ACCESS(Buffer, buffer);
+	MAKE_VERSIONED_HANDLE_ACCESS(Image, image);
+	MAKE_VERSIONED_HANDLE_ACCESS(Texture, texture);
 
 	inline ShaderBindings *get_shader_bindings(ShaderBindingsID h) {
 		return EV2_TYPE_PTR_CAST(ShaderBindings, h);

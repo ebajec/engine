@@ -110,7 +110,8 @@ enum ResourceType : uint8_t {
 
 union TaggedResource {
 	struct {
-		uint64_t handle : 48;
+		uint64_t handle : 32;
+		uint64_t generation : 16;
 		uint64_t type : 16;
 	};
 	uint64_t u64;
@@ -118,11 +119,13 @@ union TaggedResource {
 	TaggedResource() {}
 	TaggedResource(ev2::BufferID buffer) {
 		handle = buffer.id;
+		generation = buffer.gen;
 		type = RESOURCE_TYPE_BUFFER;
 	}
 
 	TaggedResource(ev2::ImageID image) {
 		handle = image.id;
+		generation = image.gen;
 		type = RESOURCE_TYPE_IMAGE;
 	}
 
@@ -137,11 +140,11 @@ union TaggedResource {
 	}
 
 	constexpr ev2::BufferID to_buffer() const {
-		return ev2::BufferID{.id = this->handle};
+		return ev2::BufferID{.id = handle, .gen = generation};
 	}
 
 	constexpr ev2::ImageID to_image() const {
-		return ev2::ImageID{.id = this->handle};
+		return ev2::ImageID{.id = handle, .gen = generation};
 	}
 };
 

@@ -49,12 +49,10 @@ BufferID create_buffer(GfxContext *ctx, size_t size, BufferUsageFlags usage, siz
 
 void destroy_buffer(GfxContext *ctx, BufferID h)
 {
-	PoolID id = PoolID{h.id};
-	Buffer* buf = ctx->buffer_pool->get(id);
-
+	Buffer* buf = ctx->get_buffer(h);
 	vmaDestroyBuffer(ctx->allocator, buf->buffer, buf->allocation);
 
-	ctx->buffer_pool->deallocate(id);
+	ctx->buffer_pool->deallocate(to_pool_id(h));
 }
 
 uint64_t get_buffer_gpu_handle(GfxContext *ctx, BufferID h)
@@ -166,12 +164,11 @@ void get_image_dims(GfxContext *ctx, ImageID h_img, uint32_t *w, uint32_t *h, ui
 
 void destroy_image(GfxContext *ctx, ImageID h)
 {
-	PoolID id = PoolID{h.id};
-	Image *img = ctx->image_pool->get(id);
+	Image *img = ctx->get_image(h);
 
 	vmaDestroyImage(ctx->allocator, img->image, img->allocation);
 
-	ctx->image_pool->deallocate(id);
+	ctx->image_pool->deallocate(to_pool_id(h));
 }
 
 uint64_t get_image_gpu_handle(GfxContext *ctx, ImageID h)
@@ -199,11 +196,7 @@ UploadContext begin_upload(GfxContext *ctx, size_t bytes, size_t align)
 uint64_t commit_buffer_uploads(GfxContext *ctx, UploadContext uc, BufferID buf, 
 							   const BufferUpload *regions, uint32_t count)
 {
-	if (!ctx->buffer_pool->check_handle(PoolID{buf.id}))
-		return 0;
-
 	UploadPool *pool = ctx->pool.get();
-
 	return pool->commmit_buffer(uc.allocation_index, buf, regions, count);
 }
 
@@ -217,7 +210,6 @@ uint64_t commit_image_uploads(GfxContext *ctx, UploadContext uc, ImageID img,
 void flush_uploads(GfxContext *ctx) 
 {
 	UploadPool *pool = ctx->pool.get();
-
 	pool->flush();
 }
 
@@ -266,8 +258,7 @@ TextureID create_texture(GfxContext *ctx, ImageID img, TextureFilter filter)
 
 void destroy_texture(GfxContext *ctx, TextureID h)
 {
-	PoolID id = {.u64 = h.id};
-	ctx->texture_pool->deallocate(id);
+	ctx->texture_pool->deallocate(to_pool_id(h));
 }
 
 void get_texture_gpu_handle(GfxContext *ctx, TextureID h, VkImageView *view)
