@@ -1,6 +1,7 @@
 #ifndef EV2_PIPELINE_H
 #define EV2_PIPELINE_H
 
+#include "ev2/defines.h"
 #include "ev2/context.h"
 #include "ev2/resource.h"
 
@@ -10,9 +11,10 @@ namespace ev2 {
 
 MAKE_HANDLE(GfxPipeline);
 MAKE_HANDLE(ComputePipeline);
-MAKE_HANDLE(ShaderBindings);
 MAKE_HANDLE(ShaderLayout);
 MAKE_HANDLE(Shader);
+
+MAKE_HANDLE_VERSIONED(ShaderBindings);
 
 enum ShaderStage
 {
@@ -115,6 +117,8 @@ enum RenderTargetFlagBits
 	RENDER_TARGET_CREATE_COLOR_BIT = 0x2,
 	// Create a new depth buffer for this target
 	RENDER_TARGET_CREATE_DEPTH_BIT = 0x4,
+	// Create a new depth buffer for this target
+	RENDER_TARGET_CREATE_STENCIL_BIT = 0x8,
 };
 typedef uint32_t RenderTargetFlags;
 

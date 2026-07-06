@@ -14,7 +14,11 @@ struct name##ID {\
 struct alignas(uintptr_t) name##ID {\
 	uint32_t id = 0;\
 	uint16_t gen = 0;\
-	inline bool is_valid() const{return id;}\
+	constexpr bool is_valid() const{return id;}\
+	constexpr uint64_t uint64() const{return (uint64_t)id|((uint64_t)gen << 32);}\
+	constexpr bool operator == (const name##ID &other) const {\
+		return other.id == id && other.gen == gen;\
+	}\
 }
 
 #define EV2_HANDLE_CAST(ty, val)\

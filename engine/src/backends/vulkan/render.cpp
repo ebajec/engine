@@ -361,7 +361,7 @@ static void populate_rendering_info(
 			.resolveMode = VK_RESOLVE_MODE_NONE,
 			.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-			.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 			.clearValue = VkClearValue{
 				.color = {
 					.float32 = {rgb[0],rgb[0],rgb[0],1.f}
@@ -382,7 +382,7 @@ static void populate_rendering_info(
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 			.clearValue = VkClearValue{
 				.depthStencil = {
-					.depth = 0,
+					.depth = 1.f,
 					.stencil = 0
 				}
 			},
@@ -428,8 +428,7 @@ PassID begin_gfx_pass(
 	Rect in_viewport, Rect in_scissor
 )
 {
-	if (!ctx->assert_inside_frame())
-		return {};
+	ctx->assert_inside_frame();
 
 	if (EV2_IS_NULL(ctx->view_data.buffer))
 		log_error("No views created.  Did you remember to call begin_frame()?"); 
@@ -445,11 +444,17 @@ PassID begin_gfx_pass(
 		.queue_family = ctx->graphics_family->index
 	});
 
+	Rect scissor;
+
+	if (in_scissor.h == 0 || in_scissor.w == 0) {
+		in_scissor = in_viewport;
+	}
+
 	std::unique_ptr<RenderPass> gfx (new RenderPass{
 		.target = target_handle,
 		.view = view_handle,
 		.viewport = in_viewport,
-		.scissor = in_scissor
+		.scissor = scissor
 	});
 
 	VkDescriptorSetLayout layout = 
@@ -527,8 +532,7 @@ PassID begin_gfx_pass(
 
 PassID begin_compute_pass(GfxContext *ctx)
 {
-	if (!ctx->assert_inside_frame())
-		return {};
+	ctx->assert_inside_frame();
 
 	FrameContext *frame = ctx->get_current_frame();
 	Pass *pass = frame->new_pass(Pass{
@@ -710,7 +714,7 @@ void cmd_bind_resources(PassID pass_id, ShaderBindingsID bindings_id)
 {
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 
-	ShaderBindings *bindings = EV2_TYPE_PTR_CAST(ShaderBindings, bindings_id);
+	ShaderBindings *bindings = pass->ctx->get_bindings(bindings_id);
 
 	if (!bindings->writes.empty()) {
 		log_warn("Binding resources with pending writes. Remember to call flush_bindings");
@@ -1489,8 +1493,7 @@ static void rg_record_gfx_pass_begin(RenderGraph*rg, const PassNode &node, VkCom
 
 	assert(target);
 
-	VkRenderingAttachmentInfo color_info, depth_info, stencil_info;
-	VkRenderingInfo rendering_info;
+	VkRenderingAttachmentInfo color_info, depth_info, stencil_info; VkRenderingInfo rendering_info;
 
 	populate_rendering_info(target, &rendering_info, &color_info, &depth_info, &stencil_info);
 
@@ -1624,7 +1627,7 @@ static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBu
 			}
 			case BindResources: {
 				CmdBindResources cmd = pass_cmd.base.bind_resources;
-				const ShaderBindings *bindings = ctx->get_shader_bindings(cmd.bindings);
+				const ShaderBindings *bindings = ctx->get_bindings(cmd.bindings);
 				vkCmdBindDescriptorSets(
 					cmds, 
 					bindings->bind_point, 

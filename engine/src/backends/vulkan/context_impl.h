@@ -333,6 +333,7 @@ static constexpr uint32_t PASS_NODE_INDEX_OUT_OF_FRAME = UINT32_MAX;
 MAKE_POOL_ID_CONVERSION(Buffer)
 MAKE_POOL_ID_CONVERSION(Image)
 MAKE_POOL_ID_CONVERSION(Texture)
+MAKE_POOL_ID_CONVERSION(ShaderBindings)
 
 struct GfxContext
 {
@@ -417,6 +418,7 @@ struct GfxContext
 	std::unique_ptr<Pool<Buffer>> buffer_pool;
 	std::unique_ptr<Pool<Image>> image_pool;
 	std::unique_ptr<Pool<Texture>> texture_pool;
+	std::unique_ptr<Pool<ShaderBindings>> bindings_pool;
 
 	// Special GPU Resources
 	GPUTTable<ViewData> view_data;
@@ -427,7 +429,8 @@ struct GfxContext
 
 	//------------------------------------------------------------------------------
 
-	bool assert_inside_frame();
+	void assert_inside_frame();
+	void assert_outside_frame();
 	bool is_inside_frame() {return get_current_frame()->index >= frame_counter;}
 	
 	double seconds_since_start(struct timespec ts) {
@@ -453,10 +456,7 @@ struct GfxContext
 	MAKE_VERSIONED_HANDLE_ACCESS(Buffer, buffer);
 	MAKE_VERSIONED_HANDLE_ACCESS(Image, image);
 	MAKE_VERSIONED_HANDLE_ACCESS(Texture, texture);
-
-	inline ShaderBindings *get_shader_bindings(ShaderBindingsID h) {
-		return EV2_TYPE_PTR_CAST(ShaderBindings, h);
-	}
+	MAKE_VERSIONED_HANDLE_ACCESS(ShaderBindings, bindings);
 
 	inline GfxPipeline *get_gfx_pipeline(GfxPipelineID h) {
 		AssetID id = static_cast<uint32_t>(h.id);

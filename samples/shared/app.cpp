@@ -268,11 +268,11 @@ int App::initialize(int argc, char *argv[])
 	bool enable_validation_layers = false;
 
 	for (int i = 0; i < argc; ++i) {
-		if (!strcmp(argv[i],"--wayland"))
+		if (!strcmp(argv[i],"--wayland")) {
 			glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
-		else if (!strcmp(argv[i],"--x11"))
+		} else if (!strcmp(argv[i],"--x11")) {
 			glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
-		else if (!strcmp(argv[i],"--vk-validation"))
+		} else if (!strcmp(argv[i],"--vk-validation"))
 			enable_validation_layers = true;
 	}
 
@@ -299,15 +299,17 @@ int App::initialize(int argc, char *argv[])
 	}
 
 	std::vector<const char *> validationLayers = {
-		"VK_LAYER_KHRONOS_validation"
+		"VK_LAYER_KHRONOS_validation",
 	};
+
 
 	uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions;
 
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
     std::vector<const char*> extensions(
-		glfwExtensions,glfwExtensions + glfwExtensionCount);
+		glfwExtensions, glfwExtensions + glfwExtensionCount);
 
 	ev2::VulkanInitOptions init_opts = {
 		.validationLayers = validationLayers.data(),
@@ -326,7 +328,7 @@ int App::initialize(int argc, char *argv[])
 
 	VkResult vk_res = glfwCreateWindowSurface(vk_instance, win.ptr, nullptr, &surface); 
 
-	if (vk_res != VK_SUCCESS) {
+	if (vk_res < VK_SUCCESS) {
         log_error("failed to create window surface!");
 		return EXIT_FAILURE;
     }

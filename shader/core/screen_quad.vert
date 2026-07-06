@@ -15,29 +15,22 @@ void main()
 {
 	uint id = gl_VertexIndex; 
 
+	vec4 corners_ccw[4] = {
+		vec4(-1,-1,0,0),
+	 	vec4(1,-1,1,0),
+		vec4(0,1,0,1),
+	 	vec4(1,1,1,1)
+	};
+
 	vec2 pos;
 	vec2 uv;
 
-	switch (id) {
-		case 0: 
-			pos = vec2(-1,-1);
-			uv = vec2(0, 0);
-			break;
-
-		case 1: 
-			pos = vec2(1, -1);
-			uv = vec2(1, 0);
-			break;
-
-		case 2: 
-			pos = vec2(1,  1);
-			uv = vec2(1, 1);
-			break;
-
-		case 3: 
-			pos = vec2(-1, 1);
-			uv = vec2(0, 1);
-			break;
+	if (id < 3) {
+		pos = corners_ccw[id].xy;
+		uv = corners_ccw[id].zw;
+	} else {
+		pos = corners_ccw[1 + id % 3 ].xy;
+		uv = corners_ccw[1 + id % 3].zw;
 	}
 
 	frag_pos = pos;

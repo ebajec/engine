@@ -44,6 +44,8 @@ struct Pool {
 	struct EntryRef {
 		T *val;
 		uint16_t *generation;
+
+		bool is_valid() {return val && generation;}
 	};
 
 	struct Page {
@@ -74,7 +76,11 @@ struct Pool {
 	T* get_checked(PoolID id);
 	T* get_unchecked(PoolID id);
 
-	inline constexpr EntryRef entry_at(uint32_t slot) {
+	constexpr bool is_valid(PoolID id) {
+		return get_entry_checked(id).is_valid();
+	}
+
+	constexpr EntryRef entry_at(uint32_t slot) {
 		Page *page = pages[(slot - 1) >> LogPageSize].get();
 
 		size_t idx = (slot - 1) & (PageSize - 1);
@@ -95,7 +101,6 @@ struct Pool {
 		EntryRef ent = entry_at(slot);
 
 		if (*ent.generation != id.gen) {
-			log_error("generation counter mismatch: %d != %d", id.gen, *ent.generation);
 			return {};
 		}
 
@@ -146,6 +151,11 @@ template<typename T, size_t PageSize, size_t PageAlign>
 void Pool<T, PageSize, PageAlign>::deallocate(PoolID id)
 {
 	EntryRef ent = get_entry_checked(id);
+
+	if (!ent.is_valid()) {
+		log_error("Double free attempted in pool %x at position %d", this, id.slot); 
+		return;
+	}
 
 	*ent.val = T{};
 	++(*ent.generation);

@@ -58,6 +58,9 @@ struct BasePipeline
 	std::vector<VkDescriptorSetLayout> set_layouts;
 	VkPipelineLayout layout;
 	VkPipeline pipeline;
+
+	// Used to allow reloading at runtime.
+	std::vector<ShaderBindingsID> active_bindings;
 };
 
 struct GfxPipeline
@@ -94,7 +97,6 @@ struct ShaderBindings
 
 	std::vector<Info> info;
 	std::vector<VkWriteDescriptorSet> writes;
-	std::vector<BindType> types;
 
 	VkPipelineLayout pipeline_layout;
 	VkPipelineBindPoint bind_point;
@@ -130,7 +132,7 @@ struct RenderTarget
 	VkImageView depth_view;
 	VkImageView color_view;
 
-	uint32_t flags;
+	RenderTargetFlags flags;
 };
 
 struct Pass;

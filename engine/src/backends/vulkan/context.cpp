@@ -952,6 +952,7 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 	ctx->buffer_pool.reset(Pool<ev2::Buffer>::create());
 	ctx->image_pool.reset(Pool<ev2::Image>::create());
 	ctx->texture_pool.reset(Pool<ev2::Texture>::create());
+	ctx->bindings_pool.reset(Pool<ev2::ShaderBindings>::create());
 
 	// Per-frame updated uniforms
 	uint64_t ubo_offset_alignment = 
@@ -1012,16 +1013,24 @@ VkPipelineLayout GfxContext::get_base_pipeline_layout(uint32_t set)
 	return set < EV2_BASE_SET_COUNT ? base_pipeline_layouts[set] : VK_NULL_HANDLE;
 }
 
-bool GfxContext::assert_inside_frame()
+void GfxContext::assert_outside_frame()
 {
-	bool inside = get_current_frame()->index >= frame_counter;
+	bool inside = is_inside_frame();
+
+	if (inside) {
+		log_error("Inside of frame!"); 
+		abort();
+	}
+}
+
+void GfxContext::assert_inside_frame()
+{
+	bool inside = is_inside_frame();
 
 	if (!inside) {
 		log_error("Outside of frame!"); 
 		abort();
 	}
-
-	return inside;
 }
 
 ev2::Result GfxContext::reset_swap_chain()
