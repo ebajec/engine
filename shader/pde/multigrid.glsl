@@ -14,6 +14,11 @@ layout (r32f, binding = 4) readonly uniform image2D in_rhs;
 
 layout (binding = 5) uniform sampler2D bd_mask;
 
+// Layout [R1_0, R1_1, ... R1_N]
+layout (r32f, binding = 6) uniform image2D R1[MAX_MIPS];
+
+// Layout [R2_1, ... R2_N+1]
+layout (r32f, binding = 12) uniform image2D R2[MAX_MIPS];
 
 shared float block[GROUPS][GROUPS];
 shared bool boundary[GROUPS][GROUPS];

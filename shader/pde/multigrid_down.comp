@@ -17,12 +17,6 @@
 // The level 0 iteration fetches directly from f. Subsequent iterations
 // downsample the residuals from the previous pass
 
-// Layout [R1_0, R1_1, ... R1_N]
-layout (r32f, binding = 6) uniform image2D R1[MAX_MIPS];
-
-// Layout [R2_1, ... R2_N+1]
-layout (r32f, binding = 12) writeonly uniform image2D R2[MAX_MIPS];
-
 float RHS(ivec2 idx, uint level, out float valid)
 {
 	ivec2 size = imageSize(R1[level]);
