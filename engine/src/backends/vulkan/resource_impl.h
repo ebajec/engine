@@ -30,6 +30,8 @@ struct ResourceState {
 	ResourceSync write_sync;
 	std::vector<ResourceSync> read_syncs;
 
+	uint64_t last_used_by_frame;
+
 	inline ResourceStateFlags get_current() {
 		return read.stage ? read : write;
 	}
@@ -174,7 +176,6 @@ struct Image
 	uint32_t h;
 	uint32_t d;
 	uint32_t levels;
-	ev2::ImageFormat format;
 };
 
 struct Texture

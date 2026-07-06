@@ -98,6 +98,21 @@ UploadPool *UploadPool::create(
 		return nullptr;
 	}
 
+	VkCommandPoolCreateInfo pool_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+		.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+		.queueFamilyIndex = queue_family->index,
+	};
+
+	VkCommandPool command_pool;
+
+	result = vkCreateCommandPool(ctx->device, &pool_info, nullptr, &command_pool);
+
+	if (result != VK_SUCCESS) {
+		log_error("Failed to create command pool for upload pool");
+		return nullptr;
+	}
+
 	UploadPool *pool = new UploadPool{
 		.max_uploads = max_uploads,
 		.capacity = capacity,
@@ -112,8 +127,9 @@ UploadPool *UploadPool::create(
 		.memory = alloc_info.deviceMemory,
 		.memory_offset = alloc_info.offset,
 
-		.queue_family = queue_family,
+		.command_pool = command_pool,
 
+		.queue_family = queue_family,
 		.ctx = ctx,
 	};
 
@@ -127,9 +143,21 @@ void UploadPool::destroy(UploadPool *pool)
 
 	ev2::GfxContext *ctx = pool->ctx;
 
+	uint64_t done_value = pool->done_ctr.load(); 
+
+	VkSemaphoreWaitInfo wait_info = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+		.semaphoreCount = 1,
+		.pSemaphores = &pool->semaphore,
+		.pValues = &done_value,
+	};
+
+	vkWaitSemaphores(ctx->device, &wait_info, 1e9);
+
 	vkUnmapMemory(ctx->device,pool->memory);
 	vmaDestroyBuffer(ctx->allocator, pool->staging_buf, pool->allocation);
 	vkDestroySemaphore(ctx->device, pool->semaphore, nullptr);
+	vkDestroyCommandPool(ctx->device, pool->command_pool, nullptr);
 
 	delete[] pool->entries;
 	delete pool;
@@ -197,11 +225,77 @@ ev2::Result UploadPool::wait_for(uint64_t value)
 			log_error("Upload failed, aborting");
 			return ev2::EUNKNOWN;
 		}
+
+		free_command_buffers.push_back(epoch.command_buffer);
 		epochs.pop();
 	}
 	return SUCCESS;
 }
 
+void UploadPool::collect_finished_command_buffers()
+{
+	return;
+}
+
+VkCommandBuffer UploadPool::get_command_buffer()
+{
+	//-----------------------------------------------------------------------------
+	// Reclaim command buffers from any previous submissions
+
+	bool requires_new = true;
+	VkCommandBuffer cmds = VK_NULL_HANDLE;
+	VkResult result = VK_SUCCESS;
+
+	if (free_command_buffers.empty()) {
+		uint64_t semaphore_value;
+		result = vkGetSemaphoreCounterValue(ctx->device, semaphore, &semaphore_value);
+
+		if (result != VK_SUCCESS) {
+			log_warn("Failed to read upload pool semaphore");
+		} else {
+			while (!epochs.empty()) {
+				epoch_t epoch = epochs.top();
+				if (epoch.done_value > semaphore_value)
+					break;
+
+				requires_new = false;
+				cmds = epoch.command_buffer;
+				epochs.pop();
+				break;
+			}
+		}
+	} else {
+		cmds = free_command_buffers.back();
+		free_command_buffers.pop_back();
+		requires_new = false;
+	}
+
+	if (requires_new) {
+		VkCommandBufferAllocateInfo alloc_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			 .commandPool = command_pool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1,
+		};
+		result = vkAllocateCommandBuffers(ctx->device, &alloc_info, &cmds);
+
+		if (result != VK_SUCCESS) {
+			log_error("Failed to allocate command buffer", cmds);
+			return VK_NULL_HANDLE;
+		}
+
+		log_info("Allocated new VkCommandBuffer %x", cmds);
+	} else {
+		result = vkResetCommandBuffer(cmds, 0);
+
+		if (result != VK_SUCCESS) {
+			log_error("Failed to reset VkCommandBuffer %x", cmds);
+			return VK_NULL_HANDLE;
+		}
+	}
+
+	return cmds;
+}
 VkResult UploadPool::flush()
 {
 	//-----------------------------------------------------------------------------
@@ -333,22 +427,8 @@ VkResult UploadPool::flush()
 
 	//-----------------------------------------------------------------------------
 	// Record and submit the uploads
-
-	// TODO: Want more control in how/when this command buffer is allocated
-	// and/or submitted. E.g., a command buffer which persists across frame 
-	// boundaries, a secondary command buffer, etc. 
 	
-	VkCommandPool command_pool = ctx->get_current_frame_command_pool(queue_family->index);
-
-	VkCommandBufferAllocateInfo alloc_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-		.commandPool = command_pool,
-		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-		.commandBufferCount = 1,
-	};
-
-	VkCommandBuffer command_buffer;
-	vkAllocateCommandBuffers(ctx->device, &alloc_info, &command_buffer); 
+	VkCommandBuffer command_buffer = get_command_buffer();
 
 	VkCommandBufferBeginInfo begin_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -404,8 +484,8 @@ VkResult UploadPool::flush()
 	if (result != VK_SUCCESS)
 		return result;
 
-	uint64_t done_value = 
-		done_ctr.fetch_add(flushed_bytes, std::memory_order_acquire) + flushed_bytes; 
+	uint64_t prev_value = done_ctr.fetch_add(flushed_bytes, std::memory_order_acquire); 
+	uint64_t done_value = prev_value + flushed_bytes; 
 
 	VkCommandBufferSubmitInfo cmd_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
@@ -419,6 +499,14 @@ VkResult UploadPool::flush()
 		.stageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
 		.deviceIndex = 0,
 	};
+
+	queues[1].waits.push_back(VkSemaphoreSubmitInfo{
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+		.semaphore = semaphore,
+		.value = prev_value,
+		.stageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+		.deviceIndex = 0,
+	});
 
 	VkSubmitInfo2 submit_info = {
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
@@ -446,6 +534,7 @@ VkResult UploadPool::flush()
 		.done_value = done_value,
 		.size = flushed_bytes,
 		.sync = done_value,
+		.command_buffer = command_buffer
 	};
 
 	//log_info(
@@ -462,6 +551,7 @@ VkResult UploadPool::flush()
 
 	queues[1].buffers.clear();
 	queues[1].images.clear();
+	queues[1].waits.clear();
 
 	return result;
 }
@@ -526,11 +616,12 @@ uint64_t UploadPool::post_commit_sync(entry_t *ent, ResourceState *state)
 		}
 	}
 	state->sync_write(semaphore, done_value);
+	state->last_used_by_frame = ctx->frame_counter;
 
 	return done_value;
 }
 
-uint64_t UploadPool::commmit_buffer(uint32_t idx, BufferID buf, const BufferUpload *regions, 
+uint64_t UploadPool::commit_buffer(uint32_t idx, BufferID buf, const BufferUpload *regions, 
 									uint32_t count)
 {
 	entry_t *ent = &entries[idx];
@@ -562,7 +653,7 @@ uint64_t UploadPool::commmit_buffer(uint32_t idx, BufferID buf, const BufferUplo
 	return done_value;
 }
 
-uint64_t UploadPool::commmit_image(uint32_t idx, ImageID img, const ImageUpload *regions,
+uint64_t UploadPool::commit_image(uint32_t idx, ImageID img, const ImageUpload *regions,
 								   uint32_t count)
 {
 	entry_t *ent = &entries[idx];
@@ -682,6 +773,7 @@ UploadPool::alloc_result_t UploadPool::alloc(size_t _bytes, size_t _align)
 				return ALLOC_FAILED;
 			}
 
+			free_command_buffers.push_back(epoch.command_buffer);
 			epochs.pop();
 			wait_value = epoch.done_value;
 		}

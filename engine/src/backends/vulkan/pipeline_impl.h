@@ -99,8 +99,10 @@ struct ShaderBindings
 	VkPipelineLayout pipeline_layout;
 	VkPipelineBindPoint bind_point;
 
+	VkDescriptorSetLayout set_layout;
 	VkDescriptorSet descriptor_set;
 	uint32_t index;
+	BindingMode mode;
 };
 
 struct Recorder {
@@ -225,7 +227,7 @@ struct Pass
 	std::vector<Command> cmds;
 	uint32_t queue_family;
 
-	RenderPass* gfx;
+	std::unique_ptr<RenderPass> gfx;
 };
 
 static inline ViewData view_data_from_matrices(float view[], float proj[])

@@ -13,6 +13,7 @@
 
 class Panel
 {
+	App *m_app;
 	ev2::GfxContext *m_ctx;
 
 	std::string m_name;
@@ -32,6 +33,7 @@ class Panel
 	bool m_focused : 1 = false;
 	bool m_bar_selected : 1 = false;
 public:
+	VkDescriptorSet imgui_texture = VK_NULL_HANDLE;
 
 	ev2::RenderTargetID get_target();
 
@@ -46,7 +48,7 @@ public:
 	bool is_hovered();
 	bool is_content_selected();
 
-	Panel(ev2::GfxContext *ctx, const char *name, 
+	Panel(App *app, ev2::GfxContext *ctx, const char *name, 
 		uint32_t x, uint32_t y, uint32_t w, uint32_t h);
 
 	~Panel();

@@ -31,20 +31,36 @@ struct PoolID
 	}
 };
 
-template<typename T>
+template<typename T, size_t PageSize = 64, size_t PageAlign = alignof(T)>
 struct Pool {
-	static constexpr uint32_t PageSizeBits = 6;
-	static constexpr uint32_t PageMask = (1 << PageSizeBits) - 1;
-	static constexpr uint32_t PAGE_SIZE = 1 << PageSizeBits;
+	static_assert(PageSize && is_pow2(PageSize));
+	static_assert(PageAlign && is_pow2(PageAlign));
+	static_assert(PageAlign <= PageSize);
+	static_assert(PageAlign >= alignof(T));
 
-	struct entry_t {
-		T val;
-		uint16_t generation;
+	static constexpr size_t PageSizeBytes = PageSize * sizeof(T);
+	static constexpr unsigned LogPageSize = std::bit_width(PageSize) - 1;
+
+	struct EntryRef {
+		T *val;
+		uint16_t *generation;
 	};
 
-	static Pool<T> *create();
+	struct Page {
+		uint16_t generation[PageSize];
+		alignas(PageAlign) T values[PageSize];
+	};
 
-	std::vector<std::unique_ptr<entry_t[]>> pages;
+	static void delete_page(Page *page) {
+		page->~Page();
+		operator delete(page, std::align_val_t(PageAlign));
+	}
+
+	typedef std::unique_ptr<Page, decltype(&delete_page)> PagePtr;
+
+	static Pool<T, PageSize, PageAlign> *create();
+
+	std::vector<PagePtr> pages;
 	std::vector<uint32_t> free_list;
 
 	size_t cap = 0;
@@ -55,21 +71,32 @@ struct Pool {
 
 	PoolID allocate(T&& val);
 	void deallocate(PoolID id);
-	T* get_checked(PoolID id) const;
-	T* get_unchecked(PoolID id) const;
+	T* get_checked(PoolID id);
+	T* get_unchecked(PoolID id);
 
-	entry_t *get_entry_checked(PoolID id) const {
+	inline constexpr EntryRef entry_at(uint32_t slot) {
+		Page *page = pages[(slot - 1) >> LogPageSize].get();
+
+		size_t idx = (slot - 1) & (PageSize - 1);
+
+		return EntryRef{
+			.val = &page->values[idx], 
+			.generation = &page->generation[idx]
+		};
+	}
+
+	EntryRef get_entry_checked(PoolID id) {
 		uint32_t slot = id.slot;
 
 		if (!slot || slot > cap) {
-			return nullptr;
+			return {};
 		}
 
-		entry_t *ent = &pages[(slot - 1) >> PageSizeBits][(slot - 1) & PageMask]; 
+		EntryRef ent = entry_at(slot);
 
-		if (ent->generation != id.gen) {
-			log_error("generation counter mismatch: %d != %d", id.gen, ent->generation);
-			return nullptr;
+		if (*ent.generation != id.gen) {
+			log_error("generation counter mismatch: %d != %d", id.gen, *ent.generation);
+			return {};
 		}
 
 		return ent;
@@ -80,14 +107,14 @@ struct Pool {
 //------------------------------------------------------------------------------
 // Template implementation
 
-template<typename T>
-Pool<T> *Pool<T>::create()
+template<typename T, size_t PageSize, size_t PageAlign>
+Pool<T, PageSize, PageAlign> *Pool<T, PageSize, PageAlign>::create()
 {
 	return new Pool<T>();
 }
 
-template<typename T>
-PoolID Pool<T>::allocate(T&& val)
+template<typename T, size_t PageSize, size_t PageAlign>
+PoolID Pool<T, PageSize, PageAlign>::allocate(T&& val)
 {
 	std::unique_lock<std::mutex> lock(sync);
 	uint32_t slot = 0;
@@ -98,44 +125,47 @@ PoolID Pool<T>::allocate(T&& val)
 	} else {
 		slot = static_cast<uint32_t>(++cap);
 
-		if (slot > static_cast<uint32_t>(pages.size()) * PAGE_SIZE)
-			pages.emplace_back(new entry_t[PAGE_SIZE]);
+		if (slot > static_cast<uint32_t>(pages.size()) * PageSize) {
+			PagePtr ptr = {
+				new (std::align_val_t(PageAlign)) Page, delete_page
+			};
+			pages.emplace_back(std::move(ptr));
+		}
 	}
 	lock.unlock();
 
-	entry_t *ent = &pages[(slot - 1) >> PageSizeBits][(slot - 1) & PageMask]; 
-	ent->val = std::move(val); 
-	uint16_t generation = ent->generation;
+	EntryRef ent = entry_at(slot);
+	*ent.val = std::move(val); 
 
 	assert(slot);
 
-	return PoolID::create(slot, generation);
+	return PoolID::create(slot, *ent.generation);
 }
 
-template<typename T>
-void Pool<T>::deallocate(PoolID id)
+template<typename T, size_t PageSize, size_t PageAlign>
+void Pool<T, PageSize, PageAlign>::deallocate(PoolID id)
 {
-	entry_t *ent = get_entry_checked(id);
+	EntryRef ent = get_entry_checked(id);
 
-	ent->val = T{};
-	++ent->generation;
+	*ent.val = T{};
+	++(*ent.generation);
 
 	std::unique_lock<std::mutex> lock(sync);
 	free_list.push_back(id.slot);
 }
 
-template<typename T>
-T *Pool<T>::get_checked(PoolID id) const
+template<typename T, size_t PageSize, size_t PageAlign>
+T *Pool<T, PageSize, PageAlign>::get_checked(PoolID id)
 {
-	entry_t *ent = get_entry_checked(id);
-	return ent ? &ent->val : nullptr;
+	EntryRef ent = get_entry_checked(id);
+	return ent.val;
 }
 
-template<typename T>
-T* Pool<T>::get_unchecked(PoolID id) const
+template<typename T, size_t PageSize, size_t PageAlign>
+T* Pool<T, PageSize, PageAlign>::get_unchecked(PoolID id)
 {
-	entry_t *ent = &pages[(id.slot - 1) >> PageSizeBits][(id.slot - 1) & PageMask]; 
-	return &ent->val;
+	EntryRef ent = entry_at(id.slot);
+	return ent.val;
 }
 
 #endif // EV2_POOL_H

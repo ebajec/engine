@@ -214,6 +214,10 @@ int App::update()
 	imgui();
 #endif
 
+	ev2::Result ev2_result = ev2::begin_frame(ctx);
+	if (ev2_result != ev2::SUCCESS)
+		return App::ERROR;
+
 	return result;
 }
 
@@ -238,23 +242,38 @@ int App::end_frame()
 		ev2::Rect{0,0,(uint32_t)win.width, (uint32_t)win.height}
 	);
 
+	for (ev2::ImageID image : imgui_images) {
+		ev2::cmd_use_image(gui_pass, image, ev2::USAGE_SAMPLED_GRAPHICS);
+	}
+
 	ev2::cmd_custom(gui_pass, [](VkCommandBuffer cmds) {
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmds);
 	});
 	ev2::end_pass(ctx, gui_pass);
+
+	imgui_images.clear();
 
 	ImGui::EndFrame();
 	ev2::end_frame(ctx);
 	return App::OK;
 }
 
+void App::use_image_for_gui(ev2::ImageID image)
+{
+	imgui_images.push_back(image);
+}
+
 int App::initialize(int argc, char *argv[])
 {
+	bool enable_validation_layers = false;
+
 	for (int i = 0; i < argc; ++i) {
 		if (!strcmp(argv[i],"--wayland"))
 			glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
 		else if (!strcmp(argv[i],"--x11"))
 			glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+		else if (!strcmp(argv[i],"--vk-validation"))
+			enable_validation_layers = true;
 	}
 
 	if (!glfwInit()) {
@@ -294,7 +313,8 @@ int App::initialize(int argc, char *argv[])
 		.validationLayers = validationLayers.data(),
 		.validationLayerCount = validationLayers.size(),
 		.instanceExtensions = extensions.data(),
-		.instanceExtensionCount = extensions.size()
+		.instanceExtensionCount = extensions.size(),
+		.enableValidationLayers = enable_validation_layers,
 	};
 
 	ev2::Result ev2_res = ev2::init_for_vulkan(init_opts);

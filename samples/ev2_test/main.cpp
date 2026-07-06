@@ -122,21 +122,13 @@ int WaveSim::init(ev2::GfxContext *ctx)
 	//------------------------------------------------------------------------------
 	// Get shader resource locations and create descriptor sets
 
-	sim0_bindings = ev2::create_bindings(ctx, sim_pipelines[0], 0);
-	ev2::bind_buffer(ctx, sim0_bindings, "Uniforms", ubo, 0, sizeof(uniforms));
-	ev2::flush_bindings(ctx, sim0_bindings);
-
-	sim1_bindings = ev2::create_bindings(ctx, sim_pipelines[0], 0);
-	ev2::bind_buffer(ctx, sim1_bindings, "Uniforms", ubo, 0, sizeof(uniforms));
-	ev2::flush_bindings(ctx, sim1_bindings);
+	sim0_bindings = ev2::create_bindings(ctx, sim_pipelines[0], 0, ev2::BINDING_MODE_DYNAMIC);
+	sim1_bindings = ev2::create_bindings(ctx, sim_pipelines[0], 0, ev2::BINDING_MODE_DYNAMIC);
 
 	//------------------------------------------------------------------------------
 	// Upload some stuff
 
 	uint64_t sync = upload_img_data(ctx,swap_img[0], grid_w, grid_h);
-	ev2::flush_uploads(ctx);
-
-	ev2::wait_complete(ctx, sync);
 
 	return EXIT_SUCCESS;
 }
@@ -171,9 +163,6 @@ int WaveSim::update(ev2::GfxContext *ctx)
 	};
 
 	sync = ev2::commit_buffer_uploads(ctx, uc, ubo, &upload, 1);
-	ev2::flush_uploads(ctx);
-
-	ev2::wait_complete(ctx, sync);
 
 	int img_A = 0;
 	int img_B = 1;
@@ -183,10 +172,14 @@ int WaveSim::update(ev2::GfxContext *ctx)
 
 	uint32_t grps_x = grid_w/32, grps_y = grid_h/32, grps_z = 1;
 
+	ev2::reset_bindings(ctx, sim0_bindings);
+	ev2::bind_buffer(ctx, sim0_bindings, "Uniforms", ubo, 0, sizeof(uniforms));
 	ev2::bind_texture(ctx, sim0_bindings, "img_in", swap_tex[img_A]);
 	ev2::bind_image(ctx, sim0_bindings, "img_out", swap_img[img_B]);
 	ev2::flush_bindings(ctx, sim0_bindings);
 
+	ev2::reset_bindings(ctx, sim1_bindings);
+	ev2::bind_buffer(ctx, sim1_bindings, "Uniforms", ubo, 0, sizeof(uniforms));
 	ev2::bind_texture(ctx, sim1_bindings, "img_in", swap_tex[img_B]);
 	ev2::bind_image(ctx, sim1_bindings, "img_out", swap_img[img_A]);
 	ev2::flush_bindings(ctx, sim1_bindings);
@@ -299,6 +292,8 @@ int FluidApp::update()
 		this->input.right_mouse_pressed && 
 		main_panel->panel->is_content_selected();
 
+	ev2::flush_uploads(ctx);
+
 	return result;
 }
 void FluidApp::render()
@@ -325,8 +320,6 @@ int main(int argc, char *argv[])
 	while (
 		app->update() == App::OK
 	) {
-		if (app->begin_frame() != ev2::SUCCESS)
-			return EXIT_FAILURE;
 		app->render();
 		if (app->end_frame() != ev2::SUCCESS)
 			return EXIT_FAILURE;

@@ -35,7 +35,7 @@ inline Type *get_##TypeLower(Type##ID h) {\
 	}\
 	return ptr;\
 }\
-inline Type *get_##TypeLower_unchecked(Type##ID h) {\
+__attribute__((noinline)) Type *get_##TypeLower##_unchecked(Type##ID h) {\
 	PoolID id = {.slot = h.id, .gen = h.gen};\
 	return TypeLower##_pool->get_unchecked(id);\
 }
@@ -60,6 +60,9 @@ struct SwapChain
     VkExtent2D                  extent;
     std::vector<VkImage>        images;
     std::vector<VkImageView>    image_views;
+    std::vector<ImageID>        image_ids;
+	std::vector<RenderTarget*>	targets;
+	std::vector<VkSemaphore> 	semaphores;
 };
 
 struct QueueSubmitter
@@ -104,27 +107,40 @@ struct SyncKey {
     };
 };
 
+struct TransientCommands
+{
+	VkDevice device;
+	VkCommandPool command_pool;
+	std::vector<VkCommandBuffer> free_cmds;
+	std::vector<VkCommandBuffer> in_use_cmds;
+
+	VkResult init(VkDevice device, uint32_t queue_family_index);
+	void destroy();
+	VkResult reset();
+	VkResult get_cmds(uint32_t count, VkCommandBuffer *out_cmds);
+};
+
 struct FrameContext
 {
 	ev2::GfxContext *ctx;
 
-	uint64_t index;
+	uint64_t index = 0;
+	uint64_t image_use_count = 0;
+
+	uint32_t image_index;
 
 	double t; 
 	double dt;
 	ev2::BufferID ubo;
 
-	std::vector<ev2::Pass*> passes;
-	std::vector<ev2::Pass> new_passes;
+	std::deque<ev2::Pass> passes;
 
-	// count = 1 + num workers
-	std::vector<VkCommandPool> command_pools;
+	std::vector<TransientCommands> commands;
 
 	VkSemaphore image_available_sempahore;
-	VkSemaphore render_finished_semaphore;
 
-	uint64_t swap_image_use_count;
-	uint32_t swap_chain_image_index;
+	// owned by the swapchain
+	VkSemaphore render_finished_semaphore;
 
 	VkDescriptorPool descriptor_pool;
 
@@ -140,8 +156,11 @@ struct FrameContext
 
 	ResourceSync *get_resource_sync(TaggedResource resource, VkQueue queue);
 
-	void add_pass(ev2::Pass *pass) {
-		passes.emplace_back(pass);
+	// Destroy any semaphores for resources not used by this frame
+	void cull_unused_syncs();
+
+	Pass * new_pass(Pass &&pass) {
+		return &passes.emplace_back(std::move(pass));
 	}
 };
 
@@ -163,6 +182,10 @@ struct PassBarrier
 
 	// write flag for destination
 	bool is_write : 1;
+
+	inline bool is_queue_transfer() const {
+		return src_state.queue_family_index != dst_state.queue_family_index;
+	}
 };
 
 static inline uint64_t hash_combine(uint64_t a, uint64_t b) {
@@ -248,6 +271,8 @@ struct PassNode
 {
 	std::vector<PassCommand> commands;
 	std::vector<PassBarrier> barriers;
+	std::vector<PassBarrier> pre_barriers;
+	std::vector<PassBarrier> post_barriers;
 
 	std::unordered_map<uint64_t, ResourceStateFlags> final_states;
 
@@ -258,7 +283,7 @@ struct PassNode
 	uint32_t queue_family_index;
 
 	bool is_gfx_node() const {
-		return pass->gfx;
+		return pass->gfx.get();
 	}
 };
 
@@ -334,7 +359,6 @@ struct GfxContext
 	VmaAllocator 				allocator;
 
 	SwapChain 					swap_chain;
-	std::vector<RenderTarget*>	swap_chain_targets;
 
 	ImageID depth_buffer;
 	VkImageView depth_buffer_view;
@@ -400,24 +424,15 @@ struct GfxContext
 
 	//------------------------------------------------------------------------------
 
-	VkCommandPool get_command_pool(
-		uint32_t frame, 
-		uint32_t worker,
-		uint32_t queue = 0
-	);
-
-	// @brief Get a command pool for the current thread + frame
-	// for the selected queue family.
-	VkCommandPool get_current_frame_command_pool(
-		uint32_t queue_famlily_index = 0
-	);
+	bool assert_inside_frame();
+	bool is_inside_frame() {return get_current_frame()->index >= frame_counter;}
 
 	VkDescriptorSetLayout get_base_descriptor_set_layout(uint32_t level);
 	VkPipelineLayout get_base_pipeline_layout(uint32_t level);
 
 	ev2::Result reset_swap_chain();
 
-	ev2::Result wait_for_frame_completion(FrameContext *frame);
+	ev2::Result wait_for_frame(uint64_t frame_index);
 
 	inline FrameContext *get_current_frame() {
 		return &frames[frame_counter % max_frames_in_flight];

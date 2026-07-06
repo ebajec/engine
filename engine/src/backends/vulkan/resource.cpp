@@ -50,8 +50,10 @@ BufferID create_buffer(GfxContext *ctx, size_t size, BufferUsageFlags usage, siz
 void destroy_buffer(GfxContext *ctx, BufferID h)
 {
 	Buffer* buf = ctx->get_buffer(h);
-	vmaDestroyBuffer(ctx->allocator, buf->buffer, buf->allocation);
 
+	ctx->wait_for_frame(buf->state.last_used_by_frame);
+
+	vmaDestroyBuffer(ctx->allocator, buf->buffer, buf->allocation);
 	ctx->buffer_pool->deallocate(to_pool_id(h));
 }
 
@@ -149,7 +151,6 @@ ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, ImageF
 		.h = h, 
 		.d = d,
 		.levels = levels,
-		.format = fmt,
 	});
 }
 
@@ -166,8 +167,9 @@ void destroy_image(GfxContext *ctx, ImageID h)
 {
 	Image *img = ctx->get_image(h);
 
-	vmaDestroyImage(ctx->allocator, img->image, img->allocation);
+	ctx->wait_for_frame(img->state.last_used_by_frame);
 
+	vmaDestroyImage(ctx->allocator, img->image, img->allocation);
 	ctx->image_pool->deallocate(to_pool_id(h));
 }
 
@@ -197,20 +199,19 @@ uint64_t commit_buffer_uploads(GfxContext *ctx, UploadContext uc, BufferID buf,
 							   const BufferUpload *regions, uint32_t count)
 {
 	UploadPool *pool = ctx->pool.get();
-	return pool->commmit_buffer(uc.allocation_index, buf, regions, count);
+	return pool->commit_buffer(uc.allocation_index, buf, regions, count);
 }
 
 uint64_t commit_image_uploads(GfxContext *ctx, UploadContext uc, ImageID img, 
 							  const ImageUpload *regions, uint32_t count)
 {
 	UploadPool *pool = ctx->pool.get();
-	return pool->commmit_image(uc.allocation_index, img, regions, count); 
+	return pool->commit_image(uc.allocation_index, img, regions, count); 
 }
 
 void flush_uploads(GfxContext *ctx) 
 {
-	UploadPool *pool = ctx->pool.get();
-	pool->flush();
+	ctx->pool->flush();
 }
 
 ev2::Result wait_complete(GfxContext *ctx, uint64_t sync)

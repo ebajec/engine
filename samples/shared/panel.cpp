@@ -27,12 +27,14 @@ bool Panel::is_focused() {
 }
 
 Panel::Panel(
+	App * app,
 	ev2::GfxContext *ctx,
 	const char *name, 
 	uint32_t x, uint32_t y,
 	uint32_t w, uint32_t h)
 {
 	m_ctx = ctx;
+	m_app = app;
 
 	m_pos = glm::ivec2(x,y);
 	m_size = glm::ivec2(w,h);
@@ -99,16 +101,18 @@ void Panel::imgui()
 			m_target = ev2::create_render_target(m_ctx, (uint32_t)size.x, (uint32_t)size.y,
 							 m_target_flags);
 			m_size = size;
+
+			VkImageView view = ev2::get_render_target_color_view(m_target);
+			ImGui_ImplVulkan_RemoveTexture(imgui_texture);
+			imgui_texture = ImGui_ImplVulkan_AddTexture(
+				view,
+				VK_IMAGE_LAYOUT_GENERAL
+			);
 		}
 
-		VkImageView view = ev2::get_render_target_color_view(m_target);
-		VkDescriptorSet id = ImGui_ImplVulkan_AddTexture(
-			view,
-			VK_IMAGE_LAYOUT_GENERAL
-		);
-
+		m_app->use_image_for_gui(ev2::get_render_target_color_image(m_target));
 		ImVec2 content = ImGui::GetContentRegionAvail();
-		ImGui::Image((ImTextureID)(intptr_t)id, content, ImVec2(0,1), ImVec2(1,0));
+		ImGui::Image((ImTextureID)imgui_texture, content, ImVec2(0,1), ImVec2(1,0));
 	}
 
 	ImGui::End();

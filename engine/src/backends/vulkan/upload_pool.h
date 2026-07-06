@@ -42,6 +42,7 @@ struct UploadPool
 		uint64_t done_value;
 		size_t size;
 		uint64_t sync;
+		VkCommandBuffer command_buffer;
 
 		constexpr bool operator == (epoch_t other) const {
 			return done_value == other.done_value;
@@ -63,11 +64,10 @@ struct UploadPool
 
 		ResourceStateFlags prev_state;
 
-		uint64_t size : 46;  // size in bytes of upload
+		uint64_t size : 45;  // size in bytes of upload
 		uint64_t count : 16; // number of upload regions
 		uint64_t type : 2;   // upload type
-
-		bool has_semaphore : 1;
+		uint64_t has_semaphore : 1;
 	};
 
 	size_t max_uploads;
@@ -114,8 +114,13 @@ struct UploadPool
 	VkDeviceMemory memory;
 	VkDeviceSize memory_offset;
 
+	VkCommandPool command_pool;
+	std::vector<VkCommandBuffer> free_command_buffers;
+
 	QueueFamily *queue_family;
 	GfxContext *ctx;
+
+	VkCommandBuffer get_command_buffer();
 
 	//------------------------------------------------------------------------------ 
 	//
@@ -135,12 +140,14 @@ struct UploadPool
 	
 	uint64_t set_commited(entry_t *ent); 
 	
-	uint64_t commmit_buffer(uint32_t idx, BufferID buf, const BufferUpload *regions, uint32_t count);
-	uint64_t commmit_image(uint32_t idx, ImageID buf, const ImageUpload *regions, uint32_t count);
+	uint64_t commit_buffer(uint32_t idx, BufferID buf, const BufferUpload *regions, uint32_t count);
+	uint64_t commit_image(uint32_t idx, ImageID buf, const ImageUpload *regions, uint32_t count);
 
 	uint64_t post_commit_sync(entry_t *ent, ResourceState *state);
 
 	VkResult flush();
+
+	void collect_finished_command_buffers();
 
 	ev2::Result wait_for(uint64_t value);
 };

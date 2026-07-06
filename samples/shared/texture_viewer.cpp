@@ -35,7 +35,7 @@ TextureViewerPanel::TextureViewerPanel(App *app,
 	panel_idx = ++ctr;
 
 	std::string name = "Texture" + std::to_string(panel_idx);
-	panel.reset(new Panel(app->ctx, name.c_str(), x, y, w, h));
+	panel.reset(new Panel(app, app->ctx, name.c_str(), x, y, w, h));
 
 
 	pipeline_path = pipeline;
@@ -48,7 +48,8 @@ int TextureViewerPanel::update_pipeline(const char *path)
 	if (!EV2_VALID(pipeline))
 		return EXIT_FAILURE;
 
-	ev2::ShaderBindingsID bindings = ev2::create_bindings(app->ctx, pipeline, EV2_GFX_SET_PER_DRAW);
+	ev2::ShaderBindingsID bindings = ev2::create_bindings(
+		app->ctx, pipeline, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_STATIC);
 	ev2::Result res = ev2::bind_texture(app->ctx, bindings, "u_tex", rd.tex);
 
 	if (res != ev2::SUCCESS)

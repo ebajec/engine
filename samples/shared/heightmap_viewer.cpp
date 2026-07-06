@@ -25,7 +25,7 @@ int HeightmapViewerPanel::init(App *app_, ev2::GfxContext *ctx, ev2::TextureID t
 {
 	app = app_;
 
-	panel = std::make_unique<Panel>(ctx, "3D view", 700, 0, 500, 500);
+	panel = std::make_unique<Panel>(app_, ctx, "3D view", 700, 0, 500, 500);
 
 	//-----------------------------------------------------------------------------
 	// Input
@@ -46,7 +46,8 @@ int HeightmapViewerPanel::init(App *app_, ev2::GfxContext *ctx, ev2::TextureID t
 	if (!EV2_VALID(rd.pipeline))
 		return EXIT_FAILURE;
 
-	rd.bindings = ev2::create_bindings(ctx, rd.pipeline, EV2_GFX_SET_PER_DRAW);
+	rd.bindings = ev2::create_bindings(
+		ctx, rd.pipeline, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_STATIC);
 
 	int result = this->set_texture(ctx, tex);
 
@@ -120,6 +121,8 @@ void HeightmapViewerPanel::render(ev2::GfxContext *ctx)
 		.w = (uint32_t)panel_size.x, .h = (uint32_t)panel_size.y
 	};
 	ev2::PassID pass = ev2::begin_gfx_pass(ctx, panel->get_target(), rd.camera, rect);
+	ev2::cmd_use_buffer(pass, rd.ibo, ev2::USAGE_INDEX_INPUT);
+
 	ev2::cmd_bind_gfx_pipeline(pass, rd.pipeline);
 	ev2::cmd_bind_resources(pass, rd.bindings);
 	ev2::cmd_bind_index_buffer(pass, rd.ibo, 0);

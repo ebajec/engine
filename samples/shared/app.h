@@ -2,6 +2,7 @@
 #define EV2_APP_H
 
 #include <ev2/context.h>
+#include <ev2/resource.h>
 
 #include <glad/glad.h>
 
@@ -60,7 +61,6 @@ struct App
 	typedef std::function<void(double, double)> cursor_position_callback_t;
 	typedef std::function<void(int, int)> framebuffer_size_callback_t;
 
-
 	enum State {
 		OK = 0,
 		ERROR = -1,
@@ -76,6 +76,8 @@ struct App
 
 	std::vector<key_callback_t> key_callbacks;
 
+	std::vector<ev2::ImageID> imgui_images;
+
 	//-----------------------------------------------------------------------------
 	
 	App(int width, int height, const char *title);
@@ -89,6 +91,8 @@ struct App
 	void imgui();
 
 	void update_input();
+
+	void use_image_for_gui(ev2::ImageID image);
 
 	int initialize(int argc, char *argv[]);
 	void terminate();

@@ -320,12 +320,17 @@ static void create_queue_family(
 
 static void destroy_swap_chain_targets(ev2::GfxContext *ctx)
 {
-	destroy_image(ctx, ctx->depth_buffer);
-	vkDestroyImageView(ctx->device, ctx->depth_buffer_view, nullptr);
+	if (ctx->depth_buffer.is_valid())
+		destroy_image(ctx, ctx->depth_buffer);
 
-	for (ev2::RenderTarget *target : ctx->swap_chain_targets)
+	if (ctx->depth_buffer_view)
+		vkDestroyImageView(ctx->device, ctx->depth_buffer_view, nullptr);
+
+	for (ev2::RenderTarget *target : ctx->swap_chain.targets)
 		if (target)
 			ev2::destroy_render_target_internal(ctx, target);
+
+	ctx->swap_chain.targets.clear();
 }
 
 static ev2::Result create_swap_chain_targets(ev2::GfxContext *ctx)
@@ -344,7 +349,7 @@ static ev2::Result create_swap_chain_targets(ev2::GfxContext *ctx)
 	if (vk_result != VK_SUCCESS)
 		return set_error(ev2::EBAD_SWAPCHAIN, "Failed to create depth buffer");
 
-	ctx->swap_chain_targets.resize(image_count, nullptr);
+	ctx->swap_chain.targets.resize(image_count, nullptr);
 
 	for (uint32_t i = 0; i < image_count; ++i) {
 		ev2::RenderTarget *target = ev2::create_render_target_internal(ctx,
@@ -359,7 +364,7 @@ static ev2::Result create_swap_chain_targets(ev2::GfxContext *ctx)
 			break;
 		}
 
-		ctx->swap_chain_targets[i] = target;
+		ctx->swap_chain.targets[i] = target;
 	}
 
 	if (result != ev2::SUCCESS)
@@ -558,6 +563,7 @@ static VkResult create_swap_chain_views(ev2::GfxContext *ctx)
 			return res;
         }
     }
+
 	return VK_SUCCESS;
 }
 
@@ -629,6 +635,19 @@ static ev2::Result create_swap_chain(ev2::GfxContext *ctx, uint32_t w, uint32_t 
 	if (result)
 		return set_error(ev2::ERESIZE_FAILED, "vkGetSwapchainImagesKHR failed!");
 
+	ctx->swap_chain.semaphores.resize(imageCount);
+
+	for (uint32_t i = 0; i < imageCount; ++i) {
+		VkSemaphoreCreateInfo create_info {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+		};	
+		result = vkCreateSemaphore(
+			ctx->device, &create_info, nullptr, &ctx->swap_chain.semaphores[i]);
+
+		if (result)
+			return set_error(ev2::ERESIZE_FAILED, "Failed to create swapchain image semaphores");
+	}
+
     ctx->swap_chain.image_format = surfaceFormat.format;
     ctx->swap_chain.extent = extent;
 
@@ -636,23 +655,48 @@ static ev2::Result create_swap_chain(ev2::GfxContext *ctx, uint32_t w, uint32_t 
 
 	if (result)
 		return set_error(ev2::ERESIZE_FAILED, "Failed to create swap chain image views");
+	
+	ctx->swap_chain.image_ids.resize(imageCount);
+	for (uint32_t i = 0; i < imageCount; ++i) {
+		ctx->swap_chain.image_ids[i] = ctx->emplace_image(Image{
+			.image = ctx->swap_chain.images[i],
+			.allocation = VK_NULL_HANDLE,
+			.base_view = VK_NULL_HANDLE,
+			.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.w = extent.width, 
+			.h = extent.height,
+			.d = 1,
+			.levels = 1,
+		});
+	}
 
 	return ev2::SUCCESS;
 }
 
-static void destroy_swap_chain(VkDevice device, SwapChain &swap_chain)
+static void destroy_swap_chain(GfxContext *ctx, SwapChain &swap_chain)
 {
+	destroy_swap_chain_targets(ctx);
+
     for (size_t i = 0; i < swap_chain.image_views.size(); i++) {
-        vkDestroyImageView(device, swap_chain.image_views[i], nullptr);
+		ctx->image_pool->deallocate(to_pool_id(swap_chain.image_ids[i]));
+	}
+
+    for (size_t i = 0; i < swap_chain.image_views.size(); i++) {
+        vkDestroyImageView(ctx->device, swap_chain.image_views[i], nullptr);
     }
-    
+
 	if (swap_chain.swapchain) {
-    	vkDestroySwapchainKHR(device, swap_chain.swapchain, nullptr);
+    	vkDestroySwapchainKHR(ctx->device, swap_chain.swapchain, nullptr);
 		swap_chain.swapchain = VK_NULL_HANDLE;
+	}
+
+	for (size_t i = 0; i < swap_chain.semaphores.size(); ++i) {
+		vkDestroySemaphore(ctx->device, swap_chain.semaphores[i], nullptr);
 	}
 
 	swap_chain.images.clear();
 	swap_chain.image_views.clear();
+	swap_chain.image_ids.clear();
 }
 
 static ev2::Result create_allocator(ev2::GfxContext *ctx)
@@ -680,7 +724,7 @@ static ev2::Result create_allocator(ev2::GfxContext *ctx)
 	return ev2::SUCCESS;
 }
 
-static ev2::Result create_default_descriptor_pool(ev2::GfxContext *ctx, VkDescriptorPool *pool)
+static ev2::Result create_static_descriptor_pool(ev2::GfxContext *ctx, VkDescriptorPool *pool)
 {
 	VkDescriptorPoolSize pool_sizes[] = {
 		VkDescriptorPoolSize{
@@ -707,7 +751,8 @@ static ev2::Result create_default_descriptor_pool(ev2::GfxContext *ctx, VkDescri
 
 	VkDescriptorPoolCreateInfo create_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.flags = 0,
+		.flags = 
+			VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
 		.maxSets = 64,
 		.poolSizeCount = sizeof(pool_sizes)/sizeof(pool_sizes[0]),
 		.pPoolSizes = pool_sizes,
@@ -771,32 +816,30 @@ static ev2::Result init_frame_descriptor_set(ev2::GfxContext *ctx, FrameContext 
 static ev2::Result create_frame_context(ev2::GfxContext *ctx,
 									   FrameContext *frame)
 {
+	VkResult vk_result = VK_SUCCESS;
+
 	frame->ctx = ctx;
 	frame->ubo = ev2::create_buffer(ctx, sizeof(GPUFramedata), 
 									ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT | 
 									ev2::BUFFER_USAGE_TRANSFER_DST_BIT);
 
-	uint32_t pool_count = 1 + ctx->caps.max_workers;
-	frame->command_pools.resize(pool_count);
+	uint32_t pool_count = 1;
+frame->commands.resize(pool_count);
 
-	{
-		VkCommandPoolCreateInfo create_info = {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-			.flags = 0,
-			.queueFamilyIndex = ctx->graphics_family->index,
-		};
+	for (uint32_t i = 0; i < pool_count; ++i) {
+		vk_result = frame->commands[i].init(
+			ctx->device, 
+			ctx->graphics_family->index);
 
-		for (uint32_t i = 0; i < pool_count; ++i) {
-			vkCreateCommandPool(ctx->device, &create_info, nullptr, &frame->command_pools[i]);
+		if (vk_result != VK_SUCCESS) {
+			return set_error(ev2::EINIT_FAILED, "Failed to create frame command pools");
 		}
 	}
 
-	ev2::Result result = create_default_descriptor_pool(ctx, &frame->descriptor_pool);
+	ev2::Result result = create_static_descriptor_pool(ctx, &frame->descriptor_pool);
 
 	if (result != ev2::SUCCESS)
-		return ev2::EINIT_FAILED;
-
-	VkResult vk_result = VK_SUCCESS;
+		return result;
 
 	{
 		VkSemaphoreCreateInfo create_info = {
@@ -807,16 +850,6 @@ static ev2::Result create_frame_context(ev2::GfxContext *ctx,
 			&create_info, 
 			nullptr, 
 			&frame->image_available_sempahore
-		);
-
-		if (vk_result != VK_SUCCESS)
-			return ev2::EINIT_FAILED;
-
-		vk_result = vkCreateSemaphore(
-			ctx->device, 
-			&create_info, 
-			nullptr, 
-			&frame->render_finished_semaphore
 		);
 
 		if (vk_result != VK_SUCCESS)
@@ -839,13 +872,17 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 	// important things
 	
 	ctx->max_frames_in_flight = 2;
-	ctx->caps.max_workers = std::max(std::thread::hardware_concurrency() - 1, 1U);
+	ctx->caps.max_workers = 2; 
+	//std::max(
+	//	std::min(std::thread::hardware_concurrency() - 1, 2U), 
+	//	1U
+	//);
 
 	ctx->worker_pool.reset(new ThreadPool(ctx->caps.max_workers, "gfx_worker"));
 	ctx->start_time_ns = 
 		std::chrono::high_resolution_clock::now().time_since_epoch().count();
 
-	result = create_default_descriptor_pool(ctx, &ctx->static_descriptor_pool);
+	result = create_static_descriptor_pool(ctx, &ctx->static_descriptor_pool);
 
 	if (result)
 		return result;
@@ -962,38 +999,6 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 }
 
 
-VkCommandPool GfxContext::get_command_pool(
-	uint32_t frame, 
-	uint32_t worker,
-	uint32_t queue
-)
-{
-	assert(frame < this->max_frames_in_flight);
-	assert(worker < this->caps.max_workers);
-	assert(queue == 0);
-
-	return frames[frame].command_pools[worker];
-}
-
-VkCommandPool GfxContext::get_current_frame_command_pool(
-	uint32_t queue_family_index
-)
-{
-	FrameContext *frame = this->get_current_frame();
-	std::thread::id tid = std::this_thread::get_id();
-
-	if (tid == main_thread_id)
-		return frame->command_pools.back();
-
-	uint32_t worker = this->worker_pool->get_pool_index(tid);
-	if (worker == UINT32_MAX) {
-		log_error("Command pool only available on main thread or graphics worker");
-		return VK_NULL_HANDLE;
-	}
-
-	return frame->command_pools[worker];
-}
-
 VkDescriptorSetLayout GfxContext::get_base_descriptor_set_layout(uint32_t set)
 {
 	return set < EV2_BASE_SET_COUNT ? base_descriptor_set_layouts[set] : VK_NULL_HANDLE;
@@ -1004,11 +1009,23 @@ VkPipelineLayout GfxContext::get_base_pipeline_layout(uint32_t set)
 	return set < EV2_BASE_SET_COUNT ? base_pipeline_layouts[set] : VK_NULL_HANDLE;
 }
 
+bool GfxContext::assert_inside_frame()
+{
+	bool inside = get_current_frame()->index >= frame_counter;
+
+	if (!inside) {
+		log_error("Outside of frame!"); 
+		abort();
+	}
+
+	return inside;
+}
+
 ev2::Result GfxContext::reset_swap_chain()
 {
 	vkDeviceWaitIdle(this->device);
 
-	destroy_swap_chain(this->device, this->swap_chain);
+	destroy_swap_chain(this, this->swap_chain);
 
 	ev2::Result result = 
 		create_swap_chain(this, desired_surface_width, desired_surface_height);
@@ -1026,14 +1043,16 @@ ev2::Result GfxContext::reset_swap_chain()
 	return result;
 
 failure:
-	destroy_swap_chain_targets(this);
-	destroy_swap_chain(this->device, this->swap_chain);
+	destroy_swap_chain(this, this->swap_chain);
 	return result;
 }
 
-ev2::Result GfxContext::wait_for_frame_completion(FrameContext *frame)
+ev2::Result GfxContext::wait_for_frame(uint64_t frame_index)
 {
-	uint64_t wait_value = 1 + frame->index;
+	if (!frame_counter)
+		return ev2::SUCCESS;
+
+	uint64_t wait_value = 1 + frame_index;
 	VkSemaphoreWaitInfo wait_info = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
 		.semaphoreCount = 1,
@@ -1044,7 +1063,7 @@ ev2::Result GfxContext::wait_for_frame_completion(FrameContext *frame)
 	VkResult result = vkWaitSemaphores(device, &wait_info, EV2_FRAME_TIMEOUT);
 
 	if (result == VK_TIMEOUT) {
-		log_warn("Frame %d timed out", frame->index);
+		log_warn("Frame %d timed out", frame_index);
 		return ev2::TIMEOUT;
 	} else if (result != VK_SUCCESS) {
 		return ev2::EUNKNOWN;
@@ -1085,6 +1104,31 @@ ResourceSync *FrameContext::get_resource_sync(TaggedResource resource, VkQueue q
 	}
 
 	return &sync;
+}
+
+void FrameContext::cull_unused_syncs()
+{
+	std::vector<SyncKey> old;
+	for (auto &[key, sync] : sync_map) {
+		const ResourceState *state = nullptr;
+		switch (key.resource.type){
+			case RESOURCE_TYPE_BUFFER:
+				state = &ctx->get_buffer_unchecked(key.resource.to_buffer())->state;
+				break;
+			case RESOURCE_TYPE_IMAGE:
+				state = &ctx->get_image_unchecked(key.resource.to_image())->state;
+				break;
+		}
+		assert(state);
+
+		if (state->last_used_by_frame < this->index) {
+			vkDestroySemaphore(ctx->device, sync.semaphore, nullptr);
+			old.push_back(key);
+		}
+	}
+
+	for (const SyncKey &key : old)
+		sync_map.erase(key);
 }
 
 //------------------------------------------------------------------------------
@@ -1220,9 +1264,11 @@ ev2::Result init_for_vulkan(const ev2::VulkanInitOptions &opts)
 		return ev2::EINIT_FAILED;
     }
 
-	if (CreateDebugUtilsMessengerEXT(g_vk_instance, &debugCreateInfo, nullptr, &g_vk_messenger)) {
-		log_error("Failed to create debug messenger!");
-		return ev2::EINIT_FAILED;
+	if (opts.enableValidationLayers) {
+		if (CreateDebugUtilsMessengerEXT(g_vk_instance, &debugCreateInfo, nullptr, &g_vk_messenger)) {
+			log_error("Failed to create debug messenger!");
+			return ev2::EINIT_FAILED;
+		}
 	}
 
     if ((false)) {
@@ -1250,13 +1296,45 @@ VkInstance get_vulkan_instance()
 	return g_vk_instance;
 }
 
+static void destroy_frame_context(FrameContext *frame)
+{
+	GfxContext *ctx = frame->ctx;
+
+	for (TransientCommands &commands : frame->commands) {
+		commands.destroy();
+	}
+
+	if (frame->descriptor_pool)
+		vkDestroyDescriptorPool(ctx->device, frame->descriptor_pool, nullptr);
+
+	if (frame->image_available_sempahore)
+		vkDestroySemaphore(ctx->device, frame->image_available_sempahore, nullptr);
+
+	for (auto &[key, sync] : frame->sync_map) {
+		vkDestroySemaphore(ctx->device, sync.semaphore, nullptr);
+	}
+}
+
 void destroy_context(GfxContext *ctx)
 {
+	if (ctx->is_inside_frame()) {
+		log_error("destroy_context called inside of frame, aborting");
+		abort();
+	}
+
+	vkDeviceWaitIdle(ctx->device);
+
+	for (FrameContext &frame : ctx->frames) {
+		destroy_frame_context(&frame);
+	}
+
 	ctx->assets.reset();
 	ctx->pool.reset();
 
 	ctx->transforms.destroy(ctx);
 	ctx->view_data.destroy(ctx);
+
+	destroy_swap_chain(ctx, ctx->swap_chain);
 
 	delete ctx;
 }

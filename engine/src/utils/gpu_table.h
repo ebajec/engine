@@ -162,10 +162,8 @@ bool GPUTTable<T>::update(ev2::GfxContext *ctx)
 		};
 	}
 
-	uint64_t sync = ev2::commit_buffer_uploads(ctx, uc, buffer, 
-											uploads.data(), (uint32_t)uploads.size());
-	// TODO: bad bad bad bad bad get rid of this asap
-	ev2::wait_complete(ctx, sync);
+	ev2::commit_buffer_uploads(
+		ctx, uc, buffer, uploads.data(), (uint32_t)uploads.size());
 
 	updates.clear();
 

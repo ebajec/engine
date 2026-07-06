@@ -22,9 +22,11 @@ CameraDebugView::CameraDebugView(ev2::GfxContext *_ctx) : ctx(_ctx)
 
 	pipeline = ev2::load_graphics_pipeline(ctx, "pipelines/frustum.yaml");
 
-	desc = ev2::create_bindings(ctx, pipeline, EV2_GFX_SET_PER_DRAW);
+	desc = ev2::create_bindings(ctx, pipeline, EV2_GFX_SET_PER_DRAW, 
+							 ev2::BINDING_MODE_STATIC);
 
 	ev2::bind_buffer(ctx, desc, "Camera", ssbo, 0, sizeof(glm::mat4));
+	ev2::flush_bindings(ctx, desc);
 
 	glGenVertexArrays(1,&m_vao);
 

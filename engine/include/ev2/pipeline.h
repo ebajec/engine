@@ -31,6 +31,8 @@ enum Usage
     USAGE_DEPTH_ATTACHMENT,
     USAGE_STORAGE_READ_COMPUTE,
     USAGE_STORAGE_RW_COMPUTE,
+    USAGE_INDEX_INPUT,
+    USAGE_VERTEX_INPUT,
     USAGE_MAX_ENUM,
 };
 
@@ -52,12 +54,19 @@ void unload_compute_pipeline(GfxContext *ctx, ComputePipelineID pipe);
 //------------------------------------------------------------------------------
 // Bindings
 
-ShaderBindingsID create_bindings(GfxContext *ctx, 
-								GfxPipelineID pipeline_id, uint32_t index);
+enum BindingMode {
+	BINDING_MODE_STATIC,
+	BINDING_MODE_DYNAMIC
+};
 
-ShaderBindingsID create_bindings(GfxContext *ctx, 
-								ComputePipelineID pipeline_id, uint32_t index);
+ShaderBindingsID create_bindings(GfxContext *ctx, GfxPipelineID pipeline_id, 
+								 uint32_t index, BindingMode mode);
+ShaderBindingsID create_bindings(GfxContext *ctx, ComputePipelineID pipeline_id, 
+								 uint32_t index, BindingMode mode);
+
 void destroy_bindings(GfxContext *ctx, ShaderBindingsID bindings);
+
+ev2::Result reset_bindings(GfxContext *ctx, ShaderBindingsID bindings);
 
 ev2::Result bind_buffer(
 	GfxContext *ctx, 
@@ -121,6 +130,7 @@ void destroy_render_target(
 );
 
 VkImageView get_render_target_color_view(RenderTargetID target);
+ImageID get_render_target_color_image(RenderTargetID target);
 
 ev2::Result begin_frame(GfxContext *ctx);
 ev2::Result end_frame(GfxContext *ctx);
