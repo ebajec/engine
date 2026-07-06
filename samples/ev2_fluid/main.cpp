@@ -99,7 +99,7 @@ struct PressureSolver
 	int init(ev2::GfxContext *ctx, uint32_t w, uint32_t h);
 	void destroy(ev2::GfxContext *ctx);
 
-	void v_cycle(ev2::RecorderID rec, ev2::GfxContext *ctx, ev2::ImageID phi, ev2::ImageID f);
+	void v_cycle(ev2::PassID pass, ev2::GfxContext *ctx, ev2::ImageID phi, ev2::ImageID f);
 };
 
 static inline constexpr bool is_pow2(size_t x)
@@ -117,15 +117,16 @@ int PressureSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 
 	N = std::min((int)ceil(log2((double)w)), 6);
 
-	R1 = ev2::create_image(ctx, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, N); 
-	R2 = ev2::create_image(ctx, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_32F, N); 
+	ev2::ImageUsageFlags usage = 
+		ev2::IMAGE_USAGE_STORAGE_BIT | 
+		ev2::IMAGE_USAGE_SAMPLED_BIT;
 
-	lhs_tmp = ev2::create_image(ctx, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F);
+	R1 = ev2::create_image(ctx, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, usage, N); 
+	R2 = ev2::create_image(ctx, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_32F, usage, N); 
+
+	lhs_tmp = ev2::create_image(ctx, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, usage);
 
 	multigrid_down = ev2::load_compute_pipeline(ctx, "shader/multigrid_down.comp.spv");
-
-	ev2::ShaderLayoutID down_layout = 
-		ev2::get_compute_pipeline_layout(ctx, multigrid_down);
 
 	down_slots.ubo = ev2::find_binding(down_layout, "ubo");
 	down_slots.in_lhs = ev2::find_binding(down_layout, "in_lhs");
@@ -135,9 +136,6 @@ int PressureSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 	down_slots.tmp_lhs_id = ev2::find_binding(down_layout, "tmp_lhs");
 
 	multigrid_up = ev2::load_compute_pipeline(ctx, "shader/multigrid_up.comp.spv");
-
-	ev2::ShaderLayoutID up_layout = 
-		ev2::get_compute_pipeline_layout(ctx, multigrid_up);
 
 	up_slots.ubo = ev2::find_binding(up_layout, "ubo");
 	up_slots.out_lhs = ev2::find_binding(up_layout, "out_lhs");
