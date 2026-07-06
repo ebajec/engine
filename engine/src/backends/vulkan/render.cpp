@@ -905,14 +905,7 @@ VkResult TransientCommands::get_cmds(uint32_t count, VkCommandBuffer *out_cmds)
 Result begin_frame(GfxContext *ctx)
 {
 	FrameContext *frame = ctx->get_current_frame();
-	uint64_t time_ns = 
-		std::chrono::high_resolution_clock::now().time_since_epoch().count();
 	uint64_t old_frame_index = frame->index;
-
-	double time_seconds = (double)(time_ns - ctx->start_time_ns)/1e9;
-	frame->dt = time_seconds - ctx->get_previous_frame()->t;
-	frame->t = time_seconds;
-
 	Result result = ev2::SUCCESS; 
 
 	if (!ctx->is_swap_chain_valid)
@@ -924,9 +917,41 @@ Result begin_frame(GfxContext *ctx)
 	if (ctx->frame_counter >= ctx->max_frames_in_flight)
 		result = ctx->wait_for_frame(old_frame_index);
 
+
+	//----------------------------------------------------------------------------
+	// Manage timing
+
+	uint32_t interval_ns = 1000000000/ctx->framerate_hz;
+
+	struct timespec ts_prev = ctx->last_frame_ts; 
+	struct timespec ts_wait = {
+		.tv_sec = ts_prev.tv_sec,
+		.tv_nsec = ts_prev.tv_nsec + interval_ns 
+	};
+
+	if (ts_wait.tv_nsec >= 1000000000) {
+		++ts_wait.tv_sec;
+		ts_wait.tv_nsec -= 1000000000;
+	}
+
+	result = platform::sleep_until(&ts_wait);
 	if (result != ev2::SUCCESS)
 		return result;
 
+	struct timespec ts_now = platform::monotonic_clock_time();
+	ctx->last_frame_ts = ts_now;
+
+	double now_sec = ctx->seconds_since_start(ts_now);
+
+	frame->dt = now_sec - ctx->seconds_since_start(ts_prev);
+	frame->t = now_sec;
+
+	if (result != ev2::SUCCESS)
+		return result;
+
+	//----------------------------------------------------------------------------
+	// Acquire swapchain image
+	
 	constexpr uint64_t timeout_ns = 1e9;
 
 	VkAcquireNextImageInfoKHR acquire_info = {

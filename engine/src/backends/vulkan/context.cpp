@@ -6,6 +6,7 @@
 
 #include "utils/asset_table.h"
 #include "utils/pool.h"
+#include "utils/platform.h"
 #include "ev2/utils/ansi_colors.h"
 
 #include "stb_image.h"
@@ -881,6 +882,8 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 	ctx->worker_pool.reset(new ThreadPool(ctx->caps.max_workers, "gfx_worker"));
 	ctx->start_time_ns = 
 		std::chrono::high_resolution_clock::now().time_since_epoch().count();
+
+	ctx->last_frame_ts = platform::monotonic_clock_time();
 
 	result = create_static_descriptor_pool(ctx, &ctx->static_descriptor_pool);
 

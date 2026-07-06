@@ -1,5 +1,6 @@
 #include "panel.h"
 #include "backends/imgui_impl_vulkan.h"
+#include "imgui_internal.h"
 
 ev2::RenderTargetID Panel::get_target() {
 	return m_target;
@@ -59,24 +60,23 @@ void Panel::imgui()
 		ImGui::SetNextWindowSize(ImVec2(m_size.x, m_size.y));
 	}
 
-	{
-		ImVec2 win_pos = ImGui::GetMainViewport()->Pos;
-		ImVec2 win_size = ImGui::GetMainViewport()->Size;
+	if (ImGuiWindow* window = ImGui::FindWindowByName(m_name.c_str())) {
+		bool isDraggingThisWindow = ImGui::GetCurrentContext()->MovingWindow == window;
 
-		glm::ivec2 ll (win_pos.x, win_pos.y);
-		glm::ivec2 ur = ll + glm::ivec2(win_size.x, win_size.y);
+		if (isDraggingThisWindow) {
+			ImVec2 pos = window->Pos;
+			ImVec2 size = window->Size;
+			ImVec2 displaySize = ImGui::GetIO().DisplaySize;
 
-		glm::ivec2 clamped_pos = 
-			glm::clamp(m_pos, ll, ur);
-		glm::ivec2 clamped_size = 
-			glm::clamp(m_size, 
-			  glm::ivec2(0,0), 
-			  glm::ivec2(win_size.x, win_size.y) - m_pos
-			  );
+			ImVec2 clamped = pos;
+			clamped.y = ImMax(pos.y, 0.0f);
 
-		if (clamped_pos != m_pos || clamped_size != m_size) {
-			ImGui::SetNextWindowPos(ImVec2(clamped_pos.x, clamped_pos.y));
-			ImGui::SetNextWindowSize(ImVec2(clamped_size.x, clamped_size.y));
+			if (clamped.y != pos.y) {
+				// Nudge the click offset so the cursor doesn't desync from the window
+				ImGuiContext& g = *ImGui::GetCurrentContext();
+				g.ActiveIdClickOffset.y += pos.y - clamped.y; 
+				window->Pos = clamped;
+			}
 		}
 	}
 

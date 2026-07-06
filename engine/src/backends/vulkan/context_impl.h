@@ -8,6 +8,7 @@
 #include "utils/pool.h"
 #include "utils/gpu_table.h"
 #include "utils/thread_pool.h"
+#include "utils/platform.h"
 
 #include "backends/vulkan/resource_impl.h"
 #include "backends/vulkan/pipeline_impl.h"
@@ -385,8 +386,10 @@ struct GfxContext
 	uint32_t physical_device_index;
 	
 	uint32_t max_frames_in_flight;
+	uint32_t framerate_hz = 240;
 
 	uint64_t start_time_ns;
+	struct timespec last_frame_ts;
 
 	uint32_t current_swap_chain_index;
 	uint32_t desired_surface_width;
@@ -426,6 +429,11 @@ struct GfxContext
 
 	bool assert_inside_frame();
 	bool is_inside_frame() {return get_current_frame()->index >= frame_counter;}
+	
+	double seconds_since_start(struct timespec ts) {
+		uint64_t time_ns = (uint64_t)ts.tv_sec + (uint64_t)ts.tv_nsec; 
+		return (double)(time_ns - start_time_ns)/1e9;
+	}
 
 	VkDescriptorSetLayout get_base_descriptor_set_layout(uint32_t level);
 	VkPipelineLayout get_base_pipeline_layout(uint32_t level);

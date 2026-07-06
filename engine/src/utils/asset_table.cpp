@@ -2,6 +2,7 @@
 #include "ev2/context.h"
 
 #include "utils/asset_table.h"
+#include "backends/vulkan/context_impl.h"
 
 #include <algorithm>
 #include <numeric>
@@ -254,6 +255,10 @@ ev2::Result AssetReloader::update()
 	lock.unlock();
 
 	ev2::Result res = ev2::SUCCESS;
+
+	if (!updates.empty()) {
+		tbl->ctx->wait_for_frame(tbl->ctx->frame_counter - 1);
+	}
 
 	for (const std::string &key : updates) {
 		AssetID id = tbl->find(key.c_str());
