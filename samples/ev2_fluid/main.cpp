@@ -6,6 +6,7 @@
 #include <ev2/utils/log.h>
 
 #include <ev2/context.h>
+#include <ev2/pipeline.h>
 #include <ev2/resource.h>
 
 #include <ev2/utils/camera.h>
@@ -64,7 +65,7 @@ struct PressureSolver
 	ev2::ComputePipelineID multigrid_down;
 	ev2::ComputePipelineID multigrid_up;
 
-	ev2::DescriptorSetID down_set, up_set;
+	ev2::BindingsID down_set, up_set;
 
 	uint32_t sim_w = 0, sim_h = 0;
 

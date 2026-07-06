@@ -27,7 +27,7 @@ struct HeightmapViewerPanel
 		ev2::ViewID camera;
 		ev2::BufferID ibo; 
 		ev2::GfxPipelineID pipeline;
-		ev2::ShaderBindingsID bindings;
+		ev2::BindingsID bindings;
 	} rd;
 
 	int set_texture(ev2::GfxContext *ctx, ev2::TextureID tex);

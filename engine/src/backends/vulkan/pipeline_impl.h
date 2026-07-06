@@ -60,7 +60,7 @@ struct BasePipeline
 	VkPipeline pipeline;
 
 	// Used to allow reloading at runtime.
-	std::vector<ShaderBindingsID> active_bindings;
+	std::vector<BindingsID> active_bindings;
 };
 
 struct GfxPipeline
@@ -78,7 +78,7 @@ struct ComputePipeline
 	ev2::ShaderID shader;
 };
 
-struct ShaderBindings
+struct Bindings
 {
 	enum BindType {
 		Buffer,
@@ -147,7 +147,7 @@ struct CmdBindGfxPipeline{
 	GfxPipelineID pipeline;
 };
 struct CmdBindResources{
-	ShaderBindingsID bindings;
+	BindingsID bindings;
 };
 struct CmdBindIndexBuffer{
 	BufferID buffer;

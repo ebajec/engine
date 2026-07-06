@@ -76,8 +76,8 @@ struct WaveSim
 	ev2::ImageID swap_img[2] {};
 	ev2::TextureID swap_tex[2] {};
 
-	ev2::ShaderBindingsID sim0_bindings;
-	ev2::ShaderBindingsID sim1_bindings;
+	ev2::BindingsID sim0_bindings;
+	ev2::BindingsID sim1_bindings;
 
 	int swap_ctr = 0;
 

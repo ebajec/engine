@@ -22,7 +22,7 @@ struct TextureViewerPanel
 	struct RenderData {
 		ev2::TextureID tex {};
 		ev2::GfxPipelineID pipeline {};
-		ev2::ShaderBindingsID bindings {};
+		ev2::BindingsID bindings {};
 
 		ev2::BindingSlot tex_slot;
 

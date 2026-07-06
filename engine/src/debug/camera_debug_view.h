@@ -14,7 +14,7 @@ class CameraDebugView
 	ev2::GfxContext *ctx;
 
 	ev2::GfxPipelineID pipeline;
-	ev2::ShaderBindingsID desc;
+	ev2::BindingsID desc;
 
 	ev2::BufferID ssbo;
 	ev2::BufferID ibo;

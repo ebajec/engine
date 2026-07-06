@@ -333,7 +333,7 @@ static constexpr uint32_t PASS_NODE_INDEX_OUT_OF_FRAME = UINT32_MAX;
 MAKE_POOL_ID_CONVERSION(Buffer)
 MAKE_POOL_ID_CONVERSION(Image)
 MAKE_POOL_ID_CONVERSION(Texture)
-MAKE_POOL_ID_CONVERSION(ShaderBindings)
+MAKE_POOL_ID_CONVERSION(Bindings)
 
 struct GfxContext
 {
@@ -418,7 +418,7 @@ struct GfxContext
 	std::unique_ptr<Pool<Buffer>> buffer_pool;
 	std::unique_ptr<Pool<Image>> image_pool;
 	std::unique_ptr<Pool<Texture>> texture_pool;
-	std::unique_ptr<Pool<ShaderBindings>> bindings_pool;
+	std::unique_ptr<Pool<Bindings>> bindings_pool;
 
 	// Special GPU Resources
 	GPUTTable<ViewData> view_data;
@@ -456,7 +456,7 @@ struct GfxContext
 	MAKE_VERSIONED_HANDLE_ACCESS(Buffer, buffer);
 	MAKE_VERSIONED_HANDLE_ACCESS(Image, image);
 	MAKE_VERSIONED_HANDLE_ACCESS(Texture, texture);
-	MAKE_VERSIONED_HANDLE_ACCESS(ShaderBindings, bindings);
+	MAKE_VERSIONED_HANDLE_ACCESS(Bindings, bindings);
 
 	inline GfxPipeline *get_gfx_pipeline(GfxPipelineID h) {
 		AssetID id = static_cast<uint32_t>(h.id);

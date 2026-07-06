@@ -48,7 +48,7 @@ int TextureViewerPanel::update_pipeline(const char *path)
 	if (!EV2_VALID(pipeline))
 		return EXIT_FAILURE;
 
-	ev2::ShaderBindingsID bindings = ev2::create_bindings(
+	ev2::BindingsID bindings = ev2::create_bindings(
 		app->ctx, pipeline, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_STATIC);
 	ev2::Result res = ev2::bind_texture(app->ctx, bindings, "u_tex", rd.tex);
 

@@ -710,11 +710,11 @@ void cmd_use_image(
 	});
 }
 
-void cmd_bind_resources(PassID pass_id, ShaderBindingsID bindings_id)
+void cmd_bind_resources(PassID pass_id, BindingsID bindings_id)
 {
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 
-	ShaderBindings *bindings = pass->ctx->get_bindings(bindings_id);
+	Bindings *bindings = pass->ctx->get_bindings(bindings_id);
 
 	if (!bindings->writes.empty()) {
 		log_warn("Binding resources with pending writes. Remember to call flush_bindings");
@@ -1627,7 +1627,7 @@ static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBu
 			}
 			case BindResources: {
 				CmdBindResources cmd = pass_cmd.base.bind_resources;
-				const ShaderBindings *bindings = ctx->get_bindings(cmd.bindings);
+				const Bindings *bindings = ctx->get_bindings(cmd.bindings);
 				vkCmdBindDescriptorSets(
 					cmds, 
 					bindings->bind_point, 

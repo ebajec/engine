@@ -937,12 +937,12 @@ static ev2::Result base_pipeline_post_reload(ev2::GfxContext *ctx,
 {
 	new_pipeline->active_bindings.reserve(old_pipeline->active_bindings.size());
 
-	for (ev2::ShaderBindingsID id : old_pipeline->active_bindings)
+	for (ev2::BindingsID id : old_pipeline->active_bindings)
 	{
 		if (!ctx->bindings_pool->is_valid(to_pool_id(id)))
 			continue;
 
-	  	ev2::ShaderBindings *bindings = ctx->get_bindings(id); 
+	  	ev2::Bindings *bindings = ctx->get_bindings(id); 
 		bindings->pipeline_layout = new_pipeline->layout;
 
 		new_pipeline->active_bindings.push_back(id);
@@ -1184,11 +1184,11 @@ void unload_compute_pipeline(GfxContext *ctx, ComputePipelineID pipe)
 
 //------------------------------------------------------------------------------
 
-static ShaderBindingsID create_bindings_internal(
+static BindingsID create_bindings_internal(
 	GfxContext *ctx, BasePipeline &pipeline, 
 	uint32_t index, BindingMode mode, VkPipelineBindPoint bind_point)
 {
-	ShaderBindings out_bindings = ShaderBindings{
+	Bindings out_bindings = Bindings{
 		.layout_index = pipeline.layout_index,
 		.pipeline_layout = pipeline.layout,
 		.bind_point = bind_point,
@@ -1210,11 +1210,11 @@ static ShaderBindingsID create_bindings_internal(
 
 		if (vk_result != VK_SUCCESS) {
 			log_error("Failed to allocate descriptor sets from static pool");
-			return EV2_NULL_HANDLE(ShaderBindings);
+			return EV2_NULL_HANDLE(Bindings);
 		}
 	}
 
-	ShaderBindingsID id = ctx->emplace_bindings(std::move(out_bindings)); 
+	BindingsID id = ctx->emplace_bindings(std::move(out_bindings)); 
 	pipeline.active_bindings.push_back(id);
 	return id;
 }
@@ -1223,50 +1223,50 @@ static ShaderBindingsID create_bindings_internal(
 // Interface
 //------------------------------------------------------------------------------
 
-ShaderBindingsID create_bindings(GfxContext *ctx, GfxPipelineID pipeline_id, 
+BindingsID create_bindings(GfxContext *ctx, GfxPipelineID pipeline_id, 
 								 uint32_t index, BindingMode mode)
 {
 	GfxPipeline *pipeline = ctx->get_gfx_pipeline(pipeline_id);
 
 	if (!pipeline)
-		return EV2_NULL_HANDLE(ShaderBindings);
+		return EV2_NULL_HANDLE(Bindings);
 
 	if (index < EV2_BASE_SET_COUNT) {
 		log_error("Descriptor set index %d is reserved by the engine", index);
-		return EV2_NULL_HANDLE(ShaderBindings);
+		return EV2_NULL_HANDLE(Bindings);
 	}
 
 	if (!pipeline->base.layout_index->bindings.contains(index)) {
 		log_error("Descriptor set index %d does not exist for graphics pipeline %lld", 
 			index, (unsigned long long)pipeline_id.id);
-		return EV2_NULL_HANDLE(ShaderBindings);
+		return EV2_NULL_HANDLE(Bindings);
 	}
 
 	return create_bindings_internal(
 		ctx, pipeline->base, index, mode, VK_PIPELINE_BIND_POINT_GRAPHICS);
 }
 
-ShaderBindingsID create_bindings(GfxContext *ctx, ComputePipelineID pipeline_id, 
+BindingsID create_bindings(GfxContext *ctx, ComputePipelineID pipeline_id, 
 								 uint32_t index, BindingMode mode)
 {
 	ComputePipeline *pipeline = ctx->get_compute_pipeline(pipeline_id);
 
 	if (!pipeline)
-		return EV2_NULL_HANDLE(ShaderBindings);
+		return EV2_NULL_HANDLE(Bindings);
 
 	if (!pipeline->base.layout_index->bindings.contains(index)) {
 		log_error("Descriptor set index %d does not exist for compute pipeline %lld", 
 			index, (unsigned long long)pipeline_id.id);
-		return EV2_NULL_HANDLE(ShaderBindings);
+		return EV2_NULL_HANDLE(Bindings);
 	}
 
 	return create_bindings_internal(
 		ctx, pipeline->base, index, mode, VK_PIPELINE_BIND_POINT_COMPUTE);
 }
 
-void destroy_bindings(GfxContext *ctx, ShaderBindingsID bindings_id)
+void destroy_bindings(GfxContext *ctx, BindingsID bindings_id)
 {
-	ShaderBindings *bindings = ctx->get_bindings(bindings_id); 
+	Bindings *bindings = ctx->get_bindings(bindings_id); 
 
 	ctx->wait_for_frame(ctx->frame_counter ? ctx->frame_counter - 1 : 0);
 
@@ -1281,9 +1281,9 @@ void destroy_bindings(GfxContext *ctx, ShaderBindingsID bindings_id)
 	ctx->bindings_pool->deallocate(to_pool_id(bindings_id));
 }
 
-Result reset_bindings(GfxContext *ctx, ShaderBindingsID bindings_handle)
+Result reset_bindings(GfxContext *ctx, BindingsID bindings_handle)
 {
-	ShaderBindings *bindings = ctx->get_bindings(bindings_handle);
+	Bindings *bindings = ctx->get_bindings(bindings_handle);
 	VkResult vk_result = VK_SUCCESS;
 
 	VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
@@ -1320,14 +1320,14 @@ Result reset_bindings(GfxContext *ctx, ShaderBindingsID bindings_handle)
 
 ev2::Result bind_buffer(
 	GfxContext *ctx, 
-	ShaderBindingsID id, 
+	BindingsID id, 
 	const char *name,
 	BufferID buffer_handle, 
 	size_t offset, 
 	size_t size
 ) 
 {
-	ShaderBindings *bindings = ctx->get_bindings(id);
+	Bindings *bindings = ctx->get_bindings(id);
 	const Buffer *buffer = ctx->get_buffer(buffer_handle);
 
 	uint32_t set;
@@ -1363,19 +1363,19 @@ ev2::Result bind_buffer(
 	bindings->writes.push_back(write);
 	bindings->info.push_back({
 		.buffer = buffer_info,
-		.type = ShaderBindings::Buffer
+		.type = Bindings::Buffer
 	});
 	return ev2::SUCCESS;
 }
 
 ev2::Result bind_texture(
 	GfxContext *ctx, 
-	ShaderBindingsID id,
+	BindingsID id,
 	const char *name,
 	TextureID texture_handle  
 ) 
 {
-	ShaderBindings *bindings = ctx->get_bindings(id);
+	Bindings *bindings = ctx->get_bindings(id);
 	const Texture *texture = ctx->get_texture(texture_handle);
 	const Image *image = ctx->get_image(texture->img);
 
@@ -1412,19 +1412,19 @@ ev2::Result bind_texture(
 	bindings->writes.push_back(write);
 	bindings->info.push_back({
 		.image = image_info,
-		.type = ShaderBindings::Image
+		.type = Bindings::Image
 	});
 	return ev2::SUCCESS;
 }
 
 ev2::Result bind_image(
 	GfxContext *ctx,
-	ShaderBindingsID id,
+	BindingsID id,
 	const char *name, 
 	ImageID image_handle
 )
 {
-	ShaderBindings *bindings = ctx->get_bindings(id);
+	Bindings *bindings = ctx->get_bindings(id);
 	const Image *image = ctx->get_image(image_handle);
 
 	uint32_t set;
@@ -1460,24 +1460,24 @@ ev2::Result bind_image(
 	bindings->writes.push_back(write);
 	bindings->info.push_back({
 		.image = image_info,
-		.type = ShaderBindings::Image
+		.type = Bindings::Image
 	});
 
 	return ev2::SUCCESS;
 }
 
-void flush_bindings(GfxContext *ctx, ShaderBindingsID id)
+void flush_bindings(GfxContext *ctx, BindingsID id)
 {
-	ShaderBindings *bindings = ctx->get_bindings(id);
+	Bindings *bindings = ctx->get_bindings(id);
 
 	for (size_t i = 0; i < bindings->writes.size(); ++i) {
-		const ShaderBindings::Info &info = bindings->info[i];
+		const Bindings::Info &info = bindings->info[i];
 
 		switch(info.type) {
-			case ShaderBindings::Buffer:
+			case Bindings::Buffer:
 				bindings->writes[i].pBufferInfo = &info.buffer;
 				break;
-			case ShaderBindings::Image:
+			case Bindings::Image:
 				bindings->writes[i].pImageInfo = &info.image;
 				break;
 		}

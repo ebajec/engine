@@ -211,7 +211,7 @@ struct RenderData
 	ev2::BufferID ssbo;
 
 	ev2::GfxPipelineID pipeline;
-	ev2::ShaderBindingsID bindings;
+	ev2::BindingsID bindings;
 
 	std::vector<ev2::DrawCommand> cmds;
 };

@@ -14,7 +14,7 @@ MAKE_HANDLE(ComputePipeline);
 MAKE_HANDLE(ShaderLayout);
 MAKE_HANDLE(Shader);
 
-MAKE_HANDLE_VERSIONED(ShaderBindings);
+MAKE_HANDLE_VERSIONED(Bindings);
 
 enum ShaderStage
 {
@@ -61,18 +61,18 @@ enum BindingMode {
 	BINDING_MODE_DYNAMIC
 };
 
-ShaderBindingsID create_bindings(GfxContext *ctx, GfxPipelineID pipeline_id, 
+BindingsID create_bindings(GfxContext *ctx, GfxPipelineID pipeline_id, 
 								 uint32_t index, BindingMode mode);
-ShaderBindingsID create_bindings(GfxContext *ctx, ComputePipelineID pipeline_id, 
+BindingsID create_bindings(GfxContext *ctx, ComputePipelineID pipeline_id, 
 								 uint32_t index, BindingMode mode);
 
-void destroy_bindings(GfxContext *ctx, ShaderBindingsID bindings);
+void destroy_bindings(GfxContext *ctx, BindingsID bindings);
 
-ev2::Result reset_bindings(GfxContext *ctx, ShaderBindingsID bindings);
+ev2::Result reset_bindings(GfxContext *ctx, BindingsID bindings);
 
 ev2::Result bind_buffer(
 	GfxContext *ctx, 
-	ShaderBindingsID binding_handle, 
+	BindingsID binding_handle, 
 	const char *name,
 	BufferID buffer_handle, 
 	size_t offset, 
@@ -81,19 +81,19 @@ ev2::Result bind_buffer(
 
 ev2::Result bind_texture(
 	GfxContext *ctx, 
-	ShaderBindingsID binding_handle,
+	BindingsID binding_handle,
 	const char *name,
 	TextureID texture_handle  
 ); 
 
 ev2::Result bind_image(
 	GfxContext *ctx,
-	ShaderBindingsID binding_handle,
+	BindingsID binding_handle,
 	const char *name,
 	ImageID image_handle
 );
 
-void flush_bindings(GfxContext *ctx, ShaderBindingsID bindings_id);
+void flush_bindings(GfxContext *ctx, BindingsID bindings_id);
 
 //------------------------------------------------------------------------------
 // rendering
@@ -193,7 +193,7 @@ enum DrawMode
 	MODE_TRIANGLES
 };
 
-void cmd_bind_resources(PassID pass_id, ShaderBindingsID bindings_id);
+void cmd_bind_resources(PassID pass_id, BindingsID bindings_id);
 void cmd_bind_compute_pipeline(PassID pass_id, ComputePipelineID pipeline_id);
 void cmd_bind_gfx_pipeline(PassID pass_id, GfxPipelineID pipeline_id);
 void cmd_bind_index_buffer(PassID pass_id, BufferID buf, size_t offset);
