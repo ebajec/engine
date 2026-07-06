@@ -197,20 +197,20 @@ void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::GfxContext *ctx, ev2::Ima
 	// 'down' stage
 
 	glBindImageTexture(down_slots.in_lhs.id, phi_final_id, 
-		0, GL_FALSE, 0, GL_READ_ONLY, GL_R32F
+		0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F
 	);
 	glBindImageTexture(down_slots.in_rhs.id, f_id, 
-		0, GL_FALSE, 0, GL_READ_ONLY, GL_R32F
+		0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F
 	);
 	glBindImageTexture(down_slots.tmp_lhs_id.id, tmp_lhs_id, 
-		0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F
+		0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F
 	);
 
 	for (uint32_t i = 0; i < N; ++i) {
 		glBindImageTexture(down_slots.R1.id + i, R1_id,
 			i, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
 		glBindImageTexture(down_slots.R2.id + i, R2_id,
-			i, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
+			i, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
 	}
 
 	ev2::cmd_bind_compute_pipeline(rec, multigrid_down);
@@ -241,16 +241,15 @@ void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::GfxContext *ctx, ev2::Ima
 	glBindImageTexture(up_slots.out_lhs.id, phi_final_id,
 		0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
 
-	glBindImageTexture(up_slots.tmp_lhs_id.id, tmp_lhs_id,
-		0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+	//glBindImageTexture(up_slots.tmp_lhs_id.id, tmp_lhs_id,
+	//	0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
 
-
-	for (uint32_t i = 0; i < N; ++i) {
-		glBindImageTexture(up_slots.R1.id + i, R1_id,
-			i, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
-		glBindImageTexture(up_slots.R2.id + i, R2_id,
-			i, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
-	}
+	//for (uint32_t i = 0; i < N; ++i) {
+	//	glBindImageTexture(up_slots.R1.id + i, R1_id,
+	//		i, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+	//	glBindImageTexture(up_slots.R2.id + i, R2_id,
+	//		i, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+	//}
 
 	ev2::cmd_bind_compute_pipeline(rec, multigrid_up);
 
