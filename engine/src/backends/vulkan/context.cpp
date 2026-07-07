@@ -148,6 +148,13 @@ static std::vector<const char*> getRequiredExtensions(
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
 
+    #ifdef __APPLE__
+    extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    extensions.push_back("VK_KHR_portability_enumeration");
+    extensions.push_back("VK_KHR_get_physical_device_properties2");
+    // VK_MVK_macos_surface
+    #endif
+
     return extensions;
 }
 
@@ -1441,9 +1448,12 @@ ev2::Result init_for_vulkan(const ev2::VulkanInitOptions &opts)
 
     VkInstanceCreateInfo createInfo = {
     	.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+#ifdef __APPLE__
+        .flags=VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR,
+#endif
     	.pApplicationInfo = &appInfo,
     	.enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
-    	.ppEnabledExtensionNames = extensions.data(),
+    	.ppEnabledExtensionNames = extensions.data()
 	};
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{
