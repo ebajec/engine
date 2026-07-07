@@ -5,7 +5,7 @@
 layout (location = 0) out vec3 out_pos;
 layout (location = 1) out vec4 out_color;
 
-layout (binding = 0) uniform sampler2D u_tex;
+layout (set = PER_DRAW_SET, binding = 0) uniform sampler2D u_tex;
 
 vec3 palette(float t) {
 	t = clamp(t,0,1);

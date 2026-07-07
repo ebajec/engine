@@ -76,12 +76,6 @@ AssetID AssetTable::allocate(
 
 	map[path] = id;
 
-	if (msg) {
-		log_info("Loaded asset : %s\n%s", path, msg);
-	} else {
-		log_info("Loaded asset : %s", path);
-	}
-
 	return id;
 }
 

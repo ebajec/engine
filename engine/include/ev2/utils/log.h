@@ -34,6 +34,7 @@ extern void _log_warn(const char *file, const char *line, const char* format, ..
 
 extern void _log_function(log_level_t lvl, const char *file, int line, const char *format, ...);
 
+extern void _log_function_internal(log_level_t lvl, const char *file, int line, const char *format, va_list args);
 extern void log_set_callback(void * usr, log_callback_t callback);
 extern void log_set_flags(log_flags flags);
 extern log_flags log_get_flags(log_flags flags);

@@ -9,10 +9,11 @@
 
 namespace ev2 {
 
-MAKE_HANDLE(GfxPipeline);
-MAKE_HANDLE(ComputePipeline);
+MAKE_ASSET_HANDLE(GfxPipeline);
+MAKE_ASSET_HANDLE(ComputePipeline);
+MAKE_ASSET_HANDLE(Shader);
+
 MAKE_HANDLE(ShaderLayout);
-MAKE_HANDLE(Shader);
 
 MAKE_HANDLE_VERSIONED(Bindings);
 

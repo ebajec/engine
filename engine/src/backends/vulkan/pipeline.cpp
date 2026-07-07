@@ -81,7 +81,8 @@ static std::string get_shader_info(ev2::Shader *shader)
 
 	std::string info;
 	info += "\tstage : " + std::string(stage) + "\n";
-	info += get_layout_string(*shader->layout_map);
+	std::string layout_string = get_layout_string(*shader->layout_map); 
+	info += layout_string.empty() ? "\t(no bindings)" : std::move(layout_string);
 
 	return info;
 
@@ -1339,8 +1340,8 @@ BindingsID create_bindings(GfxContext *ctx, GfxPipelineID pipeline_id,
 	}
 
 	if (!pipeline->base.layout_map->bindings.contains(index)) {
-		log_error("Descriptor set index %d does not exist for graphics pipeline %lld", 
-			index, (unsigned long long)pipeline_id.id);
+		log_error("Descriptor set index %d does not exist for graphics pipeline '%s'", 
+			index, ctx->get_gfx_pipeline_name(pipeline_id));
 		return EV2_NULL_HANDLE(Bindings);
 	}
 
@@ -1357,8 +1358,8 @@ BindingsID create_bindings(GfxContext *ctx, ComputePipelineID pipeline_id,
 		return EV2_NULL_HANDLE(Bindings);
 
 	if (!pipeline->base.layout_map->bindings.contains(index)) {
-		log_error("Descriptor set index %d does not exist for compute pipeline %lld", 
-			index, (unsigned long long)pipeline_id.id);
+		log_error("Descriptor set index %d does not exist for compute pipeline '%s'", 
+			index, ctx->get_compute_pipeline_name(pipeline_id));
 		return EV2_NULL_HANDLE(Bindings);
 	}
 

@@ -12,8 +12,15 @@ static FILE * _log_files[LOG_LEVEL_MAX_ENUM] = {
 	stdout,
 	stderr
 };
+void _log_function(log_level_t lvl, const char *file, int line, const char *format, ...) 
+{
+	va_list args;
+	va_start(args, format);
+	_log_function_internal(lvl, file, line, format, args);
+	va_end(args);
+}
 
-void _log_function(log_level_t lvl, const char *file, int line, const char *format, ...)
+void _log_function_internal(log_level_t lvl, const char *file, int line, const char *format, va_list args)
 {
 	FILE *out = _log_files[lvl];
 
@@ -40,10 +47,7 @@ void _log_function(log_level_t lvl, const char *file, int line, const char *form
 			return;
 	}
 
-	va_list args;
-    va_start(args, format);   
 	vfprintf(out, format, args);      
-    va_end(args);
 
 	fprintf(out, "\n");
 

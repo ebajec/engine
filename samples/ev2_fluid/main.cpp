@@ -527,12 +527,13 @@ int FluidSim::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 
 int FluidSim::update_advect_set(ev2::GfxContext *ctx)
 {
-	ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_advect);
+	//ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_advect);
 
-	ev2::DescriptorSetID set = ev2::create_descriptor_set(ctx, layout);
-	ev2::bind_texture(ctx, set, ev2::find_binding(layout, "q_in"), q_tex_1);
-	ev2::bind_image(ctx, set, ev2::find_binding(layout, "q_out"), q_img_2);
-	ev2::bind_buffer(ctx, set, ev2::find_binding(layout, "ubo"), ubo, 0, sizeof(Uniforms));
+	ev2::BindingsID set = ev2::create_bindings(ctx, nvs_advect, 0, ev2::BINDING_MODE_STATIC);
+	ev2::bind_texture(ctx, set, "q_in", q_tex_1);
+	ev2::bind_image(ctx, set, "q_out", q_img_2);
+	ev2::bind_buffer(ctx, set, "ubo", ubo, 0, sizeof(Uniforms));
+	ev2::flush_bindings(ctx, set);
 
 	advect_set = set;
 
@@ -541,13 +542,13 @@ int FluidSim::update_advect_set(ev2::GfxContext *ctx)
 
 int FluidSim::update_diffuse_set(ev2::GfxContext *ctx)
 {
-	ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_diffuse);
+	//ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_diffuse);
 
-	ev2::DescriptorSetID set = ev2::create_descriptor_set(ctx, layout);
-
-	ev2::bind_image(ctx, set, ev2::find_binding(layout, "q_in"), q_img_2);
-	ev2::bind_image(ctx, set, ev2::find_binding(layout, "q_out"), q_img_1);
-	ev2::bind_buffer(ctx, set, ev2::find_binding(layout, "ubo"), ubo, 0, sizeof(Uniforms));
+	ev2::BindingsID set = ev2::create_bindings(ctx, nvs_diffuse, 0, ev2::BINDING_MODE_STATIC);
+	ev2::bind_image(ctx, set, "q_in", q_img_2);
+	ev2::bind_image(ctx, set, "q_out", q_img_1);
+	ev2::bind_buffer(ctx, set, "ubo", ubo, 0, sizeof(Uniforms));
+	ev2::flush_bindings(ctx, set);
 
 	diffuse_set = set;
 
@@ -556,12 +557,13 @@ int FluidSim::update_diffuse_set(ev2::GfxContext *ctx)
 
 int FluidSim::update_pressure_set(ev2::GfxContext *ctx)
 {
-	ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_pressure);
+	//ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_pressure);
 
-	ev2::DescriptorSetID set = ev2::create_descriptor_set(ctx, layout);
-	ev2::bind_texture(ctx, set, ev2::find_binding(layout, "q_in"), q_tex_1);
-	ev2::bind_image(ctx, set, ev2::find_binding(layout, "f_out"), lap_p_img);
-	ev2::bind_buffer(ctx, set, ev2::find_binding(layout, "ubo"), ubo, 0, sizeof(Uniforms));
+	ev2::BindingsID set = ev2::create_bindings(ctx, nvs_pressure, 0, ev2::BINDING_MODE_STATIC);
+	ev2::bind_texture(ctx, set, "q_in", q_tex_1);
+	ev2::bind_image(ctx, set, "f_out", lap_p_img);
+	ev2::bind_buffer(ctx, set, "ubo", ubo, 0, sizeof(Uniforms));
+	ev2::flush_bindings(ctx, set);
 
 	pressure_set = set;
 
@@ -569,13 +571,14 @@ int FluidSim::update_pressure_set(ev2::GfxContext *ctx)
 }
 int FluidSim::update_project_set(ev2::GfxContext *ctx)
 {
-	ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_project);
+	//ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_project);
 
-	ev2::DescriptorSetID set = ev2::create_descriptor_set(ctx, layout);
-	ev2::bind_image(ctx, set, ev2::find_binding(layout, "q_img"), q_img_1);
-	ev2::bind_texture(ctx, set, ev2::find_binding(layout, "p_in"), p_tex);
-	ev2::bind_texture(ctx, set, ev2::find_binding(layout, "lap_p_in"), lap_p_tex);
-	ev2::bind_buffer(ctx, set, ev2::find_binding(layout, "ubo"), ubo, 0, sizeof(Uniforms));
+	ev2::BindingsID set = ev2::create_bindings(ctx, nvs_project, 0, ev2::BINDING_MODE_STATIC);
+	ev2::bind_image(ctx, set, "q_img", q_img_1);
+	ev2::bind_texture(ctx, set, "p_in", p_tex);
+	ev2::bind_texture(ctx, set, "lap_p_in", lap_p_tex);
+	ev2::bind_buffer(ctx, set, "ubo", ubo, 0, sizeof(Uniforms));
+	ev2::flush_bindings(ctx, set);
 
 	project_set = set;
 
@@ -598,43 +601,43 @@ int FluidSim::update(ev2::GfxContext *ctx)
 
 	mean_subtractor->set_image(ctx, lap_p_img);
 
-	ev2::RecorderID rec = ev2::begin_commands(ctx);
+	ev2::PassID pass = ev2::begin_compute_pass(ctx);
 
-	ev2::cmd_bind_compute_pipeline(rec, nvs_advect);
-	ev2::cmd_bind_descriptor_set(rec, advect_set);
-	ev2::cmd_dispatch(rec, gx, gy, 1);
-
-	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-	ev2::cmd_bind_compute_pipeline(rec, nvs_diffuse);
-	ev2::cmd_bind_descriptor_set(rec, diffuse_set);
-	ev2::cmd_dispatch(rec, gx, gy, 1);
+	ev2::cmd_bind_compute_pipeline(pass, nvs_advect);
+	ev2::cmd_bind_resources(pass, advect_set);
+	ev2::cmd_dispatch(pass, gx, gy, 1);
 
 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
-	ev2::cmd_bind_compute_pipeline(rec, nvs_pressure);
-	ev2::cmd_bind_descriptor_set(rec, pressure_set);
-	ev2::cmd_dispatch(rec, gx, gy, 1);
+	ev2::cmd_bind_compute_pipeline(pass, nvs_diffuse);
+	ev2::cmd_bind_resources(pass, diffuse_set);
+	ev2::cmd_dispatch(pass, gx, gy, 1);
 
 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
-	mean_subtractor->record(rec);
+	ev2::cmd_bind_compute_pipeline(pass, nvs_pressure);
+	ev2::cmd_bind_resources(pass, pressure_set);
+	ev2::cmd_dispatch(pass, gx, gy, 1);
+
+	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+	mean_subtractor->record(pass);
 	
 	for (int i = 0; i < ((step == 0) ? 16 : 8); ++i) 
-		pressure_solver->v_cycle(rec, ctx, p_img, lap_p_img);
+		pressure_solver->v_cycle(pass, ctx, p_img, lap_p_img);
 
 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
-	ev2::cmd_bind_compute_pipeline(rec, nvs_project);
-	ev2::cmd_bind_descriptor_set(rec, project_set);
-	ev2::cmd_dispatch(rec, gx, gy, 1);
+	ev2::cmd_bind_compute_pipeline(pass, nvs_project);
+	ev2::cmd_bind_resources(pass, project_set);
+	ev2::cmd_dispatch(pass, gx, gy, 1);
 
 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
 	//mean_subtractor->set_image(ctx, p_img);
 	//mean_subtractor->record(rec);
 
-	ev2::end_commands(rec);
+	ev2::end_pass(ctx, pass);
 
 	 ++step;
 
@@ -659,10 +662,10 @@ void FluidSim::destroy(ev2::GfxContext *ctx)
 	
 	ev2::destroy_buffer(ctx, ubo);
 
-	ev2::destroy_descriptor_set(ctx, advect_set);
-	ev2::destroy_descriptor_set(ctx, diffuse_set);
-	ev2::destroy_descriptor_set(ctx, pressure_set);
-	ev2::destroy_descriptor_set(ctx, project_set);
+	ev2::destroy_bindings(ctx, advect_set);
+	ev2::destroy_bindings(ctx, diffuse_set);
+	ev2::destroy_bindings(ctx, pressure_set);
+	ev2::destroy_bindings(ctx, project_set);
 }
 
 struct FluidApp : public App
@@ -673,7 +676,7 @@ struct FluidApp : public App
 	std::unique_ptr<HeightmapViewerPanel> heightmap_panel;
 
 	ev2::GfxPipelineID vector_field_pipe;
-	ev2::DescriptorSetID vector_field_set;
+	ev2::BindingsID vector_field_set;
 
 	ev2::TextureID phi_tex;
 	ev2::TextureID f_tex;
@@ -712,10 +715,11 @@ int FluidApp::initialize(int argc, char **argv)
 
 	vector_field_pipe = ev2::load_graphics_pipeline(ctx, "pipelines/vector_field.yaml");
 	{
-		ev2::ShaderLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, vector_field_pipe);
-		;
-		vector_field_set = ev2::create_descriptor_set(ctx, layout);
-		ev2::bind_texture(ctx, vector_field_set, ev2::find_binding(layout, "u_tex"), phi_tex);
+		//ev2::ShaderLayoutID layout = ev2::get_graphics_pipeline_layout(ctx, vector_field_pipe);
+		vector_field_set = ev2::create_bindings(ctx, vector_field_pipe, 
+										  EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_STATIC);
+		ev2::bind_texture(ctx, vector_field_set, "u_tex", phi_tex);
+		ev2::flush_bindings(ctx, vector_field_set);
 	}
 
 	result = main_panel->init(ctx, f_tex); 
@@ -794,13 +798,16 @@ void FluidApp::render()
 {
 	main_panel->render(ctx);
 
-	ev2::PassContext pass = main_panel->begin_pass(ctx);
-	ev2::cmd_bind_gfx_pipeline(pass.rec, main_panel->rd.pipeline);
-	ev2::cmd_bind_descriptor_set(pass.rec, main_panel->rd.desc_set);
-	ev2::cmd_draw_screen_quad(pass.rec);
+	ev2::PassID pass = main_panel->begin_pass(ctx);
+	ev2::cmd_bind_gfx_pipeline(pass, main_panel->rd.pipeline);
+	ev2::cmd_bind_resources(pass, main_panel->rd.bindings);
+	//ev2::cmd_draw_screen_quad(pass.rec);
+	ev2::cmd_custom(pass, [](VkCommandBuffer cmds) {
+		vkCmdDraw(cmds, 6, 1, 0, 0);
+	});
 
-	ev2::cmd_bind_gfx_pipeline(pass.rec, vector_field_pipe);
-	ev2::cmd_bind_descriptor_set(pass.rec, vector_field_set);
+	ev2::cmd_bind_gfx_pipeline(pass, vector_field_pipe);
+	ev2::cmd_bind_resources(pass, vector_field_set);
 
 	glDisable(GL_DEPTH_TEST);
 	glEnable(GL_BLEND);
@@ -812,7 +819,7 @@ void FluidApp::render()
 	glDrawElementsInstanced(GL_LINES, 2, GL_UNSIGNED_INT, indices, count);
 	glDisable(GL_BLEND);
 
-	ev2::SyncID pass_sync = ev2::end_pass(ctx, pass);
+	ev2::end_pass(ctx, pass);
 
 	right_panel->render(ctx);
 	heightmap_panel->render(ctx);

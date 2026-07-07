@@ -1358,9 +1358,7 @@ Result _set_error_internal(Result result, const char *file, int line, const char
 
 	va_list args;
     va_start(args, msg);
-
-	_log_function(LOG_LEVEL_ERROR, file, line, msg, args);
-
+	_log_function_internal(LOG_LEVEL_ERROR, file, line, msg, args);
     va_end(args);
 
 	return result;

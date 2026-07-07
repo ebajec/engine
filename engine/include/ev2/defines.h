@@ -10,6 +10,12 @@ struct name##ID {\
 	inline bool is_valid() const{return id;}\
 }
 
+#define MAKE_ASSET_HANDLE(name)\
+struct name##ID {\
+	uint64_t id = 0;\
+	inline bool is_valid() const{return id;}\
+}
+
 #define MAKE_HANDLE_VERSIONED(name)\
 struct alignas(uintptr_t) name##ID {\
 	uint32_t id = 0;\

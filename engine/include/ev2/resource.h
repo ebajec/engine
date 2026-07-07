@@ -9,7 +9,8 @@ namespace ev2 {
 MAKE_HANDLE_VERSIONED(Buffer);
 MAKE_HANDLE_VERSIONED(Image);
 MAKE_HANDLE_VERSIONED(Texture);
-MAKE_HANDLE(ImageAsset);
+
+MAKE_ASSET_HANDLE(ImageAsset);
 
 enum ImageFormat
 {

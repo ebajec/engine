@@ -25,15 +25,15 @@ shared bool boundary[GROUPS][GROUPS];
 
 layout (push_constant, std430) uniform Inputs {
 	uint N;
-	uint in_level;
-	uint in_iterations;
-};
-
-layout (binding = 0) uniform ubo {
-	uint N;
 	uint u_level;
 	uint u_iterations;
 };
+
+//layout (binding = 0) uniform ubo {
+//	uint N;
+//	uint u_level;
+//	uint u_iterations;
+//};
 
 bool test_boundary(ivec2 idx, uint level)
 {

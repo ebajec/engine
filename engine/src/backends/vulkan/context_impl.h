@@ -31,7 +31,7 @@ inline Type *get_##TypeLower(Type##ID h) {\
 	PoolID id = {.slot = h.id, .gen = h.gen};\
 	Type *ptr = TypeLower##_pool->get_checked(id);\
 	if (!ptr) {\
-		log_error("Invalid %s handle passed : id=%d, gen=%d", #TypeLower, h.id, h.gen);\
+		log_error("Invalid " #Type "ID passed : id=%d, gen=%d", h.id, h.gen);\
 		throw std::runtime_error("Invalid handle");\
 	}\
 	return ptr;\
@@ -39,6 +39,18 @@ inline Type *get_##TypeLower(Type##ID h) {\
 __attribute__((noinline)) Type *get_##TypeLower##_unchecked(Type##ID h) {\
 	PoolID id = {.slot = h.id, .gen = h.gen};\
 	return TypeLower##_pool->get_unchecked(id);\
+}
+
+#define MAKE_ASSET_HANDLE_ACCESS(Type, TypeLower)\
+inline Type *get_##TypeLower(Type##ID h) {\
+	AssetID id = static_cast<uint32_t>(h.id);\
+	AssetEntry *ent = assets->get_entry(id);\
+	return (Type*)ent->usr;\
+}\
+inline const char *get_##TypeLower##_name(Type##ID h) {\
+	AssetID id = static_cast<uint32_t>(h.id);\
+	AssetEntry *ent = assets->get_entry(id);\
+	return (Type*)ent ? ent->path : nullptr;\
 }
 
 namespace ev2 {
@@ -448,21 +460,9 @@ struct GfxContext
 	MAKE_VERSIONED_HANDLE_ACCESS(Texture, texture);
 	MAKE_VERSIONED_HANDLE_ACCESS(Bindings, bindings);
 
-	inline GfxPipeline *get_gfx_pipeline(GfxPipelineID h) {
-		AssetID id = static_cast<uint32_t>(h.id);
-		AssetEntry *ent = assets->get_entry(id);
-		return (GfxPipeline*)ent->usr;
-	}
-	inline ComputePipeline *get_compute_pipeline(ComputePipelineID h) {
-		AssetID id = static_cast<uint32_t>(h.id);
-		AssetEntry *ent = assets->get_entry(id);
-		return (ComputePipeline*)ent->usr;
-	}
-	inline Shader *get_shader(ShaderID h) {
-		AssetID id = static_cast<uint32_t>(h.id);
-		AssetEntry *ent = assets->get_entry(id);
-		return (Shader*)ent->usr;
-	}
+	MAKE_ASSET_HANDLE_ACCESS(GfxPipeline, gfx_pipeline);
+	MAKE_ASSET_HANDLE_ACCESS(ComputePipeline, compute_pipeline);
+	MAKE_ASSET_HANDLE_ACCESS(Shader, shader);
 };
 
 extern VkPipelineRenderingCreateInfoKHR get_swapchain_rendering_info(GfxContext *ctx);
