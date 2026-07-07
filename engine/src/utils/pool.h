@@ -18,7 +18,7 @@ static constexpr PoolID to_pool_id(Type##ID id) {\
 	return PoolID{.slot = id.id, .gen = id.gen};\
 }
 
-struct PoolID
+struct alignas(alignof(uintptr_t)) PoolID
 {
 	uint32_t slot;
 	uint16_t gen;
@@ -29,6 +29,20 @@ struct PoolID
 			.gen = gen
 		};
 	}
+
+	constexpr bool operator == (const PoolID other) const {
+		return other.slot == slot && other.gen == gen;
+	}
+
+	explicit operator uint64_t () const {
+		return (uint64_t)slot | ((uint64_t)gen << 32);
+	}
+
+	struct Hash {
+		inline size_t operator ()(const PoolID id) const {
+			return std::hash<uint64_t>{}((uint64_t)id);
+		};
+	};
 };
 
 template<typename T, size_t PageSize = 64, size_t PageAlign = alignof(T)>

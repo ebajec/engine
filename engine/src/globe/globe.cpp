@@ -749,8 +749,6 @@ static ev2::Result update_render_data(
 
 	ev2::flush_uploads(ctx);
 
-	ev2::wait_complete(ctx, std::max(std::max(vbo_sync, ssbo_sync), indirect_sync));
-
 	return ev2::SUCCESS;
 };
 

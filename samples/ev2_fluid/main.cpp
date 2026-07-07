@@ -55,7 +55,7 @@ uint64_t upload_img_data(ev2::GfxContext *ctx, ev2::ImageID img,
 
 struct PressureSolver
 {
-	ev2::ImageID lhs_tmp; // intermediate image
+	ev2::ImageID tmp_lhs; // intermediate image
 
 	ev2::ImageID R1; // level 0 upto N
 	ev2::ImageID R2; // level 1 upto N + 1
@@ -65,28 +65,12 @@ struct PressureSolver
 	ev2::ComputePipelineID multigrid_down;
 	ev2::ComputePipelineID multigrid_up;
 
-	ev2::BindingsID down_set, up_set;
+	ev2::BindingsID bindings0;
+	ev2::BindingsID bindings1;
 
 	uint32_t sim_w = 0, sim_h = 0;
 
 	uint32_t N = 0;
-
-	struct {
-		ev2::BindingSlot ubo;
-		ev2::BindingSlot in_lhs;
-		ev2::BindingSlot in_rhs;
-		ev2::BindingSlot R1;
-		ev2::BindingSlot R2;
-		ev2::BindingSlot tmp_lhs_id;
-	} down_slots;
-
-	struct {
-		ev2::BindingSlot ubo;
-		ev2::BindingSlot out_lhs;
-		ev2::BindingSlot tmp_lhs_id;
-		ev2::BindingSlot R1;
-		ev2::BindingSlot R2;
-	} up_slots;
 
 	struct Uniforms {
 		uint32_t N;
@@ -124,24 +108,23 @@ int PressureSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 	R1 = ev2::create_image(ctx, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, usage, N); 
 	R2 = ev2::create_image(ctx, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_32F, usage, N); 
 
-	lhs_tmp = ev2::create_image(ctx, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, usage);
+	tmp_lhs = ev2::create_image(ctx, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, usage);
 
 	multigrid_down = ev2::load_compute_pipeline(ctx, "shader/multigrid_down.comp.spv");
-
-	down_slots.ubo = ev2::find_binding(down_layout, "ubo");
-	down_slots.in_lhs = ev2::find_binding(down_layout, "in_lhs");
-	down_slots.in_rhs = ev2::find_binding(down_layout, "in_rhs");
-	down_slots.R1 = ev2::find_binding(down_layout, "R1");
-	down_slots.R2 = ev2::find_binding(down_layout, "R2");
-	down_slots.tmp_lhs_id = ev2::find_binding(down_layout, "tmp_lhs");
-
 	multigrid_up = ev2::load_compute_pipeline(ctx, "shader/multigrid_up.comp.spv");
 
-	up_slots.ubo = ev2::find_binding(up_layout, "ubo");
-	up_slots.out_lhs = ev2::find_binding(up_layout, "out_lhs");
-	up_slots.tmp_lhs_id = ev2::find_binding(up_layout, "tmp_lhs");
-	up_slots.R1 = ev2::find_binding(up_layout, "R1");
-	up_slots.R2 = ev2::find_binding(up_layout, "R2");
+	//down_slots.ubo = ev2::find_binding(down_layout, "ubo");
+	//down_slots.in_lhs = ev2::find_binding(down_layout, "in_lhs");
+	//down_slots.in_rhs = ev2::find_binding(down_layout, "in_rhs");
+	//down_slots.R1 = ev2::find_binding(down_layout, "R1");
+	//down_slots.R2 = ev2::find_binding(down_layout, "R2");
+	//down_slots.tmp_lhs_id = ev2::find_binding(down_layout, "tmp_lhs");
+
+	//up_slots.ubo = ev2::find_binding(up_layout, "ubo");
+	//up_slots.out_lhs = ev2::find_binding(up_layout, "out_lhs");
+	//up_slots.tmp_lhs_id = ev2::find_binding(up_layout, "tmp_lhs");
+	//up_slots.R1 = ev2::find_binding(up_layout, "R1");
+	//up_slots.R2 = ev2::find_binding(up_layout, "R2");
 
 	//--------------------------------------------------------------------
 	// create ubo
@@ -160,7 +143,7 @@ int PressureSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 
 	size_t ubo_size = (N + 1) * sizeof(Uniforms);
 
-	ubo = ev2::create_buffer(ctx, ubo_size);
+	ubo = ev2::create_buffer(ctx, ubo_size, ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
 	ev2::UploadContext uc = ev2::begin_upload(ctx, ubo_size, alignof(Uniforms));
 	memcpy(uc.ptr, uniforms.data(), uniforms.size()*sizeof(Uniforms));
@@ -168,6 +151,21 @@ int PressureSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 		.size = ubo_size
 	};
 	uint64_t sync = ev2::commit_buffer_uploads(ctx, uc, ubo, &up, 1);
+
+	//-----------------------------------------------------------------------------
+	// setup bindings
+
+	bindings0 = ev2::create_bindings(ctx, multigrid_down, 0, ev2::BINDING_MODE_STATIC);
+	ev2::bind_buffer(ctx, bindings0, "ubo", ubo, 0, sizeof(uniforms)); 
+	ev2::bind_image(ctx, bindings0, "tmp_lhs", tmp_lhs); 
+
+	for (uint32_t i = 0; i < N; ++i) {
+		ev2::bind_image_indexed(ctx, bindings0, "R1", i, R1, i);
+		ev2::bind_image_indexed(ctx, bindings0, "R2", i, R1, i);
+	}
+	ev2::flush_bindings(ctx, bindings0);
+
+	bindings1 = ev2::create_bindings(ctx, multigrid_down, 1, ev2::BINDING_MODE_DYNAMIC);
 
 	return EXIT_SUCCESS;
 }
@@ -180,40 +178,51 @@ void PressureSolver::destroy(ev2::GfxContext *ctx)
 	ev2::destroy_buffer(ctx, ubo);
 }
 
-void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::GfxContext *ctx, ev2::ImageID lhs, ev2::ImageID rhs)
+void PressureSolver::v_cycle(ev2::PassID pass, ev2::GfxContext *ctx, ev2::ImageID lhs, ev2::ImageID rhs)
 {
-	GLuint phi_final_id = ev2::get_image_gpu_handle(ctx, lhs);
-	GLuint f_id = ev2::get_image_gpu_handle(ctx, rhs);
-	GLuint tmp_lhs_id = ev2::get_image_gpu_handle(ctx, lhs_tmp);
+	//GLuint phi_final_id = ev2::get_image_gpu_handle(ctx, lhs);
+	//GLuint f_id = ev2::get_image_gpu_handle(ctx, rhs);
+	//GLuint tmp_lhs_id = ev2::get_image_gpu_handle(ctx, lhs_tmp);
 
-	GLuint R1_id = ev2::get_image_gpu_handle(ctx, R1);
-	GLuint R2_id = ev2::get_image_gpu_handle(ctx, R2);
+	//GLuint R1_id = ev2::get_image_gpu_handle(ctx, R1);
+	//GLuint R2_id = ev2::get_image_gpu_handle(ctx, R2);
 
 	GLuint ubo_id = ev2::get_buffer_gpu_handle(ctx, ubo);
 
 	const uint32_t groups = 32;
 
+	ev2::reset_bindings(ctx, bindings1);
+	ev2::bind_image(ctx, bindings1, "in_lhs", lhs); 
+	ev2::bind_image(ctx, bindings1, "in_rhs", rhs); 
+	ev2::bind_image(ctx, bindings1, "out_lhs", lhs); 
+	ev2::flush_bindings(ctx, bindings1);
+
+	ev2::cmd_bind_resources(pass, bindings0);
+	ev2::cmd_bind_resources(pass, bindings1);
+
 	//-------------------------------------------------------------------
 	// 'down' stage
 
-	glBindImageTexture(down_slots.in_lhs.id, phi_final_id, 
-		0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F
-	);
-	glBindImageTexture(down_slots.in_rhs.id, f_id, 
-		0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F
-	);
-	glBindImageTexture(down_slots.tmp_lhs_id.id, tmp_lhs_id, 
-		0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F
-	);
+	//glBindImageTexture(down_slots.in_lhs.id, phi_final_id, 
+	//	0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F
+	//);
+	//glBindImageTexture(down_slots.in_rhs.id, f_id, 
+	//	0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F
+	//);
+	//glBindImageTexture(down_slots.tmp_lhs_id.id, tmp_lhs_id, 
+	//	0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F
+	//);
+	//glBindImageTexture(up_slots.out_lhs.id, phi_final_id,
+	//	0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
 
-	for (uint32_t i = 0; i < N; ++i) {
-		glBindImageTexture(down_slots.R1.id + i, R1_id,
-			i, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
-		glBindImageTexture(down_slots.R2.id + i, R2_id,
-			i, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
-	}
+	//for (uint32_t i = 0; i < N; ++i) {
+	//	glBindImageTexture(down_slots.R1.id + i, R1_id,
+	//		i, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+	//	glBindImageTexture(down_slots.R2.id + i, R2_id,
+	//		i, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+	//}
 
-	ev2::cmd_bind_compute_pipeline(rec, multigrid_down);
+	ev2::cmd_bind_compute_pipeline(pass, multigrid_down);
 
 
 	// Downwards pass has 0 upto N passes inclusive: One pass of jacobi iterations
@@ -228,7 +237,7 @@ void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::GfxContext *ctx, ev2::Ima
 		glBindBufferRange(GL_UNIFORM_BUFFER, down_slots.ubo.id, ubo_id, 
 					i*sizeof(Uniforms), sizeof(Uniforms));
 
-		ev2::cmd_dispatch(rec, 1 + (tw - 1)/output_w, 1 + (th - 1)/output_w, 1);
+		ev2::cmd_dispatch(pass, 1 + (tw - 1)/output_w, 1 + (th - 1)/output_w, 1);
 		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
 		tw = 1 + (tw - 1)/2;
@@ -238,20 +247,7 @@ void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::GfxContext *ctx, ev2::Ima
 	//-------------------------------------------------------------------
 	// 'up' stage
 	
-	glBindImageTexture(up_slots.out_lhs.id, phi_final_id,
-		0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
-
-	//glBindImageTexture(up_slots.tmp_lhs_id.id, tmp_lhs_id,
-	//	0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
-
-	//for (uint32_t i = 0; i < N; ++i) {
-	//	glBindImageTexture(up_slots.R1.id + i, R1_id,
-	//		i, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
-	//	glBindImageTexture(up_slots.R2.id + i, R2_id,
-	//		i, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
-	//}
-
-	ev2::cmd_bind_compute_pipeline(rec, multigrid_up);
+	ev2::cmd_bind_compute_pipeline(pass, multigrid_up);
 
 	tw *= 2;
 	th *= 2;
@@ -264,7 +260,7 @@ void PressureSolver::v_cycle(ev2::RecorderID rec, ev2::GfxContext *ctx, ev2::Ima
 					(N - 1 - i)*sizeof(Uniforms), sizeof(Uniforms));
 		tw *= 2;
 		th *= 2;
-		ev2::cmd_dispatch(rec, 1 + (tw - 1)/output_w, 1 + (th - 1)/output_w, 1);
+		ev2::cmd_dispatch(pass, 1 + (tw - 1)/output_w, 1 + (th - 1)/output_w, 1);
 
 		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 	}

@@ -43,6 +43,11 @@ __attribute__((noinline)) Type *get_##TypeLower##_unchecked(Type##ID h) {\
 
 namespace ev2 {
 
+MAKE_POOL_ID_CONVERSION(Buffer)
+MAKE_POOL_ID_CONVERSION(Image)
+MAKE_POOL_ID_CONVERSION(Texture)
+MAKE_POOL_ID_CONVERSION(Bindings)
+
 //------------------------------------------------------------------------------
 // Misc Vulkan support
 
@@ -189,10 +194,6 @@ struct PassBarrier
 	}
 };
 
-static inline uint64_t hash_combine(uint64_t a, uint64_t b) {
-    return a ^ (b * 0x9e3779b97f4a7c15ULL + (a << 6) + (a >> 2));
-}
-
 struct PassEdge
 {
 	uint32_t src_node;
@@ -330,16 +331,10 @@ static constexpr uint32_t PASS_NODE_INDEX_OUT_OF_FRAME = UINT32_MAX;
 //------------------------------------------------------------------------------
 // Graphics context
 
-MAKE_POOL_ID_CONVERSION(Buffer)
-MAKE_POOL_ID_CONVERSION(Image)
-MAKE_POOL_ID_CONVERSION(Texture)
-MAKE_POOL_ID_CONVERSION(Bindings)
-
 struct GfxContext
 {
 	//-----------------------------------------------------------------------------
-	// Vulkan data 
-
+	
     VkInstance                  instance;
     VkDebugUtilsMessengerEXT    debugMessenger;
 
@@ -374,14 +369,12 @@ struct GfxContext
 	VkSemaphore frame_semaphore;
 
 	//-----------------------------------------------------------------------------
-	// Important things 
 	
 	struct {
 		uint32_t max_workers;
 		VkPhysicalDeviceLimits limits;
 	} caps;
 	
-	// set on initialization
 	std::thread::id main_thread_id;
 
 	uint32_t physical_device_index;
@@ -398,6 +391,8 @@ struct GfxContext
 
 	bool is_swap_chain_valid;
 
+	//-----------------------------------------------------------------------------
+	
 	// Workers
 	std::unique_ptr<ThreadPool> worker_pool;
 
@@ -433,24 +428,19 @@ struct GfxContext
 	void assert_outside_frame();
 	bool is_inside_frame() {return get_current_frame()->index >= frame_counter;}
 	
-	double seconds_since_start(struct timespec ts) {
-		uint64_t time_ns = (uint64_t)ts.tv_sec + (uint64_t)ts.tv_nsec; 
-		return (double)(time_ns - start_time_ns)/1e9;
-	}
-
 	VkDescriptorSetLayout get_base_descriptor_set_layout(uint32_t level);
 	VkPipelineLayout get_base_pipeline_layout(uint32_t level);
 
 	ev2::Result reset_swap_chain();
-
 	ev2::Result wait_for_frame(uint64_t frame_index);
 
-	inline FrameContext *get_current_frame() {
-		return &frames[frame_counter % max_frames_in_flight];
+	constexpr double seconds_since_start(struct timespec ts) {
+		uint64_t time_ns = (uint64_t)ts.tv_sec + (uint64_t)ts.tv_nsec; 
+		return (double)(time_ns - start_time_ns)/1e9;
 	}
-	inline FrameContext *get_previous_frame() {
-		uint64_t idx = frame_counter ? frame_counter - 1 : 0;
-		return &frames[idx % max_frames_in_flight];
+
+	constexpr FrameContext *get_current_frame() {
+		return &frames[frame_counter % max_frames_in_flight];
 	}
 
 	MAKE_VERSIONED_HANDLE_ACCESS(Buffer, buffer);

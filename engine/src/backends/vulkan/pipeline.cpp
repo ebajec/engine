@@ -81,7 +81,7 @@ static std::string get_shader_info(ev2::Shader *shader)
 
 	std::string info;
 	info += "\tstage : " + std::string(stage) + "\n";
-	info += get_layout_string(*shader->layout_index);
+	info += get_layout_string(*shader->layout_map);
 
 	return info;
 
@@ -160,24 +160,27 @@ static VkShaderStageFlags get_vk_shader_stage_flags(ev2::ShaderStage stage)
 	}
 }
 
-static ev2::Result initialize_shader_bindings(ev2::Shader *shader, 
-									  const void* code, size_t size)
+static ev2::Result parse_shader_bindings(
+	ev2::Shader *shader,
+	const SpvReflectShaderModule *p_module
+)
 {
-	SpvReflectShaderModule module;
-
-	SpvReflectResult result = spvReflectCreateShaderModule(size, code, &module);
-	
-	if (result != SPV_REFLECT_RESULT_SUCCESS)
-		return ev2::ELOAD_FAILED;
+	SpvReflectResult result = SPV_REFLECT_RESULT_SUCCESS;
 
 	std::vector<SpvReflectDescriptorBinding*> bindings;
 	uint32_t binding_count = 0;
 
 	result = spvReflectEnumerateDescriptorBindings(
-		&module,&binding_count,nullptr); 
+		p_module,&binding_count,nullptr); 
 	bindings.resize(binding_count);
+	if (result != SPV_REFLECT_RESULT_SUCCESS)
+		return set_error(ev2::ELOAD_FAILED, "spvReflectEnumerateDescriptorBindings failed");
+
 	result = spvReflectEnumerateDescriptorBindings(
-		&module,&binding_count,bindings.data()); 
+		p_module,&binding_count,bindings.data()); 
+
+	if (result != SPV_REFLECT_RESULT_SUCCESS)
+		return set_error(ev2::ELOAD_FAILED, "spvReflectEnumerateDescriptorBindings failed");
 
 	for (uint32_t i = 0; i < binding_count; ++i) {
 		SpvReflectDescriptorBinding *binding = bindings[i];
@@ -186,7 +189,7 @@ static ev2::Result initialize_shader_bindings(ev2::Shader *shader,
 			binding->set < EV2_BASE_SET_COUNT && 
 			shader->stage != ev2::STAGE_COMPUTE
 		) {
-			shader->layout_index->bindings[binding->set] = {};
+			shader->layout_map->bindings[binding->set] = {};
 			continue;
 		}
 
@@ -215,9 +218,9 @@ static ev2::Result initialize_shader_bindings(ev2::Shader *shader,
 		}
 
 		std::vector<VkDescriptorSetLayoutBinding> &layout_bindings = 
-			shader->layout_index->bindings[binding->set];
+			shader->layout_map->bindings[binding->set];
 
-		shader->layout_index->binding_names[name] = {
+		shader->layout_map->binding_names[name] = {
 			.set = binding->set,
 			.idx = (uint32_t)layout_bindings.size()
 		};
@@ -231,13 +234,66 @@ static ev2::Result initialize_shader_bindings(ev2::Shader *shader,
 		});		
 	}
 
-	spvReflectDestroyShaderModule(&module);
-
-
-	return result == SPV_REFLECT_RESULT_SUCCESS ? 
-		ev2::SUCCESS : set_error(ev2::ELOAD_FAILED, "Failed to generate shader bindings");
+	return ev2::SUCCESS;
 }
 
+static ev2::Result parse_shader_push_constants(
+	ev2::Shader *shader, const SpvReflectShaderModule *p_module)
+{
+	uint32_t block_count;
+	std::vector<SpvReflectBlockVariable*> blocks;
+
+	spvReflectEnumeratePushConstantBlocks(p_module, &block_count, nullptr);
+	blocks.resize(block_count);
+	spvReflectEnumeratePushConstantBlocks(p_module, &block_count, blocks.data());
+
+	std::vector<VkPushConstantRange> &ranges = shader->layout_map->push_constant_ranges;
+
+	for (uint32_t i = 0; i < block_count; ++i) {
+		const SpvReflectBlockVariable *block = blocks[i];
+
+		VkPushConstantRange range = {
+			.stageFlags = get_vk_shader_stage_flags(shader->stage),
+			.offset = block->offset,
+			.size = block->size,
+		};
+
+		ranges.push_back(range);
+	}
+
+	std::sort(ranges.begin(), ranges.end(),
+		[](const VkPushConstantRange &r1, const VkPushConstantRange &r2) -> bool
+		{
+			return r1.offset < r2.offset;
+		});
+
+	return ev2::SUCCESS;
+}
+
+static ev2::Result parse_shader_reflection(ev2::Shader *shader, 
+									  const void* code, size_t size)
+{
+	SpvReflectShaderModule module;
+
+	SpvReflectResult spv_result = spvReflectCreateShaderModule(size, code, &module);
+	
+	if (spv_result != SPV_REFLECT_RESULT_SUCCESS)
+		return set_error(ev2::ELOAD_FAILED, "spvReflectCreateShaderModule failed");
+
+	ev2::Result result = parse_shader_bindings(shader, &module);
+
+	if (result != ev2::SUCCESS)
+		return result;
+
+	result = parse_shader_push_constants(shader, &module);
+
+	if (result != ev2::SUCCESS)
+		return result;
+
+	spvReflectDestroyShaderModule(&module);
+
+	return result; 
+}
 
 static ev2::Result load_shader_file(ev2::GfxContext *ctx, const char *path, ev2::Shader* out)
 {
@@ -264,7 +320,7 @@ static ev2::Result load_shader_file(ev2::GfxContext *ctx, const char *path, ev2:
 
 	ev2::Shader shader {
 		.stage = stage,
-		.layout_index = std::make_shared<ev2::ShaderLayoutMapping>()
+		.layout_map = std::make_shared<ev2::ShaderLayoutMapping>()
 	};
 
 	VkShaderModuleCreateInfo createInfo{};
@@ -278,7 +334,7 @@ static ev2::Result load_shader_file(ev2::GfxContext *ctx, const char *path, ev2:
         return set_error(ev2::ELOAD_FAILED, "failed to create shader module!");
     }
 
-	result = initialize_shader_bindings(&shader, code.data(), code.size()*sizeof(uint32_t));
+	result = parse_shader_reflection(&shader, code.data(), code.size()*sizeof(uint32_t));
 
 	if (result != ev2::SUCCESS)
 		return result;
@@ -527,6 +583,43 @@ static ev2::Result merge_shader_layouts(
 		}
 	}
 
+	out.push_constant_ranges.reserve(
+		a.push_constant_ranges.size() + b.push_constant_ranges.size());
+
+	VkShaderStageFlags stage_mask = 0;
+
+	auto insert_ranges = [&stage_mask, &out]
+		(const std::vector<VkPushConstantRange> &ranges) -> ev2::Result
+	{
+		ev2::Result result = ev2::SUCCESS;
+		for (const VkPushConstantRange &range : ranges) {
+			if (stage_mask & range.stageFlags) {
+				result = set_error(
+					ev2::EBAD_SHADER, "Overlapping stage flags on push constant range");
+				break;
+			}
+			out.push_constant_ranges.push_back(range);
+		}
+
+		return result;
+	};
+
+	result = insert_ranges(a.push_constant_ranges);
+
+	if (result != ev2::SUCCESS)
+		return result;
+
+	result = insert_ranges(b.push_constant_ranges);
+
+	if (result != ev2::SUCCESS)
+		return result;
+
+	std::sort(out.push_constant_ranges.begin(), out.push_constant_ranges.end(),
+		[](const VkPushConstantRange &r1, const VkPushConstantRange &r2) -> bool
+		{
+			return r1.offset < r2.offset;
+		});
+
 	return result;
 }
 
@@ -600,8 +693,8 @@ static ev2::Result initialize_base_pipeline(
     	.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
     	.setLayoutCount = (uint32_t)final_layouts.size(),
     	.pSetLayouts =  final_layouts.data(),
-    	.pushConstantRangeCount = 0,
-    	.pPushConstantRanges = nullptr,
+    	.pushConstantRangeCount = (uint32_t)shader_layout->push_constant_ranges.size(),
+    	.pPushConstantRanges = shader_layout->push_constant_ranges.data(),
 	};
 
 	VkResult vk_result = 
@@ -613,7 +706,7 @@ static ev2::Result initialize_base_pipeline(
     }
 
 	base->set_layouts = std::move(final_layouts); 
-	base->layout_index = shader_layout;
+	base->layout_map = shader_layout;
 cleanup:
 	for (VkDescriptorSetLayout layout : final_layouts) {
 		if (layout)
@@ -838,7 +931,7 @@ static ev2::Result initialize_gfx_pipeline(
 	std::shared_ptr<ev2::ShaderLayoutMapping> merged_layout = 
 		std::make_shared<ev2::ShaderLayoutMapping>();
 
-	result = merge_shader_layouts(*vert->layout_index, *frag->layout_index, *merged_layout);
+	result = merge_shader_layouts(*vert->layout_map, *frag->layout_map, *merged_layout);
 
 	if (result)
 		return set_error(result, "Incompatible shader layouts:\n\tvert=%s\n\tfrag=%s",
@@ -846,6 +939,10 @@ static ev2::Result initialize_gfx_pipeline(
 
 	result = initialize_base_pipeline(
 		ctx, &pipeline.base, merged_layout, USE_BASE_DESCRIPTOR_SETS);
+
+	pipeline.base.stage_mask = 
+		VK_SHADER_STAGE_VERTEX_BIT |
+		VK_SHADER_STAGE_FRAGMENT_BIT;
 
 	if (result)
 		return result;
@@ -1003,7 +1100,10 @@ static ev2::Result compute_pipeline_create_callback(
 	ev2::Shader *shader = ctx->get_shader(shader_handle);
 
 	ev2::Result result = initialize_base_pipeline(
-		ctx, &pipeline->base, shader->layout_index, 0);
+		ctx, &pipeline->base, shader->layout_map, 0);
+
+	pipeline->base.stage_mask = 
+		VK_SHADER_STAGE_COMPUTE_BIT;
 
 	if (result)
 		return result;
@@ -1188,25 +1288,19 @@ static BindingsID create_bindings_internal(
 	GfxContext *ctx, BasePipeline &pipeline, 
 	uint32_t index, BindingMode mode, VkPipelineBindPoint bind_point)
 {
-	Bindings out_bindings = Bindings{
-		.layout_index = pipeline.layout_index,
-		.pipeline_layout = pipeline.layout,
-		.bind_point = bind_point,
-		.set_layout = pipeline.set_layouts[index],
-		.index = index,
-		.mode = mode,
-	};
+	VkDescriptorSetLayout set_layout = pipeline.set_layouts[index]; 
+	VkDescriptorSet set = VK_NULL_HANDLE;
 
 	if (mode == BINDING_MODE_STATIC) {
 		VkDescriptorSetAllocateInfo alloc_info = {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 			.descriptorPool = ctx->static_descriptor_pool,
 			.descriptorSetCount = 1,
-			.pSetLayouts = &out_bindings.set_layout,
+			.pSetLayouts = &set_layout,
 		};
 
 		VkResult vk_result = 
-			vkAllocateDescriptorSets(ctx->device, &alloc_info, &out_bindings.descriptor_set); 
+			vkAllocateDescriptorSets(ctx->device, &alloc_info, &set); 
 
 		if (vk_result != VK_SUCCESS) {
 			log_error("Failed to allocate descriptor sets from static pool");
@@ -1214,7 +1308,15 @@ static BindingsID create_bindings_internal(
 		}
 	}
 
-	BindingsID id = ctx->emplace_bindings(std::move(out_bindings)); 
+	BindingsID id = ctx->emplace_bindings(Bindings{
+		.layout_map = pipeline.layout_map,
+		.pipeline_layout = pipeline.layout,
+		.bind_point = bind_point,
+		.set_layout = set_layout,
+		.descriptor_set = set,
+		.index = index,
+		.mode = mode,
+	});
 	pipeline.active_bindings.push_back(id);
 	return id;
 }
@@ -1236,7 +1338,7 @@ BindingsID create_bindings(GfxContext *ctx, GfxPipelineID pipeline_id,
 		return EV2_NULL_HANDLE(Bindings);
 	}
 
-	if (!pipeline->base.layout_index->bindings.contains(index)) {
+	if (!pipeline->base.layout_map->bindings.contains(index)) {
 		log_error("Descriptor set index %d does not exist for graphics pipeline %lld", 
 			index, (unsigned long long)pipeline_id.id);
 		return EV2_NULL_HANDLE(Bindings);
@@ -1254,7 +1356,7 @@ BindingsID create_bindings(GfxContext *ctx, ComputePipelineID pipeline_id,
 	if (!pipeline)
 		return EV2_NULL_HANDLE(Bindings);
 
-	if (!pipeline->base.layout_index->bindings.contains(index)) {
+	if (!pipeline->base.layout_map->bindings.contains(index)) {
 		log_error("Descriptor set index %d does not exist for compute pipeline %lld", 
 			index, (unsigned long long)pipeline_id.id);
 		return EV2_NULL_HANDLE(Bindings);
@@ -1333,7 +1435,7 @@ ev2::Result bind_buffer(
 	uint32_t set;
 	VkDescriptorSetLayoutBinding binding; 
 
-	if (!bindings->layout_index->find(name, &set, &binding)) {
+	if (!bindings->layout_map->find(name, &set, &binding)) {
 		return set_error(ev2::EINVALID_BINDING, "binding does not exist : %s", name);
 	}
 
@@ -1377,12 +1479,12 @@ ev2::Result bind_texture(
 {
 	Bindings *bindings = ctx->get_bindings(id);
 	const Texture *texture = ctx->get_texture(texture_handle);
-	const Image *image = ctx->get_image(texture->img);
+	Image *image = ctx->get_image(texture->img);
 
 	uint32_t set;
 	VkDescriptorSetLayoutBinding binding; 
 
-	if (!bindings->layout_index->find(name, &set, &binding)) {
+	if (!bindings->layout_map->find(name, &set, &binding)) {
 		return set_error(ev2::EINVALID_BINDING, "binding does not exist : %s", name);
 	}
 
@@ -1396,7 +1498,7 @@ ev2::Result bind_texture(
 
 	VkDescriptorImageInfo image_info = {
 		.sampler = texture->sampler,
-		.imageView = image->base_view,
+		.imageView = texture->view,
 		.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 	};
 
@@ -1417,20 +1519,23 @@ ev2::Result bind_texture(
 	return ev2::SUCCESS;
 }
 
-ev2::Result bind_image(
+static ev2::Result bind_image_internal(
 	GfxContext *ctx,
 	BindingsID id,
 	const char *name, 
-	ImageID image_handle
+	uint32_t dst_index,
+	ImageID image_handle,
+	uint32_t level,
+	uint32_t layer
 )
 {
 	Bindings *bindings = ctx->get_bindings(id);
-	const Image *image = ctx->get_image(image_handle);
+	Image *image = ctx->get_image(image_handle);
 
 	uint32_t set;
 	VkDescriptorSetLayoutBinding binding; 
 
-	if (!bindings->layout_index->find(name, &set, &binding)) {
+	if (!bindings->layout_map->find(name, &set, &binding)) {
 		return set_error(ev2::EINVALID_BINDING, "binding does not exist : %s", name);
 	}
 
@@ -1442,9 +1547,26 @@ ev2::Result bind_image(
 		);
 	}
 
+	if (image->format == VK_FORMAT_UNDEFINED) {
+		return set_error(ev2::EINVALID_BINDING, "image %d has format VK_FORMAT_UNDEFINED",
+				   image_handle.id);
+	}
+	
+	ImageViewKey view_key = {
+		.type = VK_IMAGE_VIEW_TYPE_2D,
+		.aspectMask = image->aspect_mask,
+		.baseMipLevel = level,
+		.levelCount = 1,
+		.baseArrayLayer = layer,
+		.layerCount = 1,
+		.format = image->format
+	};
+
+	VkImageView view = get_image_view(ctx, image, view_key);
+
 	VkDescriptorImageInfo image_info = {
 		.sampler = nullptr,
-		.imageView = image->base_view,
+		.imageView = view,
 		.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 	};
 
@@ -1452,7 +1574,7 @@ ev2::Result bind_image(
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 		.dstSet = bindings->descriptor_set,
 		.dstBinding = binding.binding,
-		.dstArrayElement = 0,
+		.dstArrayElement = dst_index,
 		.descriptorCount = 1,
 		.descriptorType = binding.descriptorType,
 	};
@@ -1464,6 +1586,31 @@ ev2::Result bind_image(
 	});
 
 	return ev2::SUCCESS;
+}
+	
+ev2::Result bind_image_indexed(
+	GfxContext *ctx,
+	BindingsID id,
+	const char *name,
+	uint32_t dst_index,
+	ImageID image_handle,
+	uint32_t level,
+	uint32_t layer
+)
+{
+	return bind_image_internal(ctx, id, name, dst_index, image_handle, level, layer);
+}
+
+ev2::Result bind_image(
+	GfxContext *ctx,
+	BindingsID id,
+	const char *name, 
+	ImageID image_handle,
+	uint32_t level,
+	uint32_t layer
+)
+{
+	return bind_image_internal(ctx, id, name, 0, image_handle, level, layer);
 }
 
 void flush_bindings(GfxContext *ctx, BindingsID id)

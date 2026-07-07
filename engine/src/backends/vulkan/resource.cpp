@@ -77,13 +77,14 @@ ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, ImageF
 
 	VkImageType type = d <= 1 ?  
 		VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_3D;
+	VkFormat format = image_format_to_vk(fmt); 
 
 	VkImageCreateInfo img_ci = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
 		.pNext = nullptr,
 		.flags = 0,
 		.imageType = type,
-		.format = image_format_to_vk(fmt),
+		.format = format,
 		.extent = {
 			.width = w,
 			.height = h,
@@ -116,37 +117,11 @@ ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, ImageF
 	if (result != VK_SUCCESS)
 		return EV2_NULL_HANDLE(Image);
 
-	VkImageView image_view;
-
-	VkImageViewCreateInfo viewInfo = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-		.pNext = nullptr,
-		.flags = 0,
-		.image = image,
-		.viewType = (VkImageViewType)img_ci.imageType,
-		.format = img_ci.format,
-		.components = {},
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.baseMipLevel = 0,
-			.levelCount = levels,
-			.baseArrayLayer = 0,
-			.layerCount = d,
-		},
-	};
-
-	result = vkCreateImageView(ctx->device, &viewInfo, nullptr, &image_view);
-
-	if (result != VK_SUCCESS) {
-		vmaDestroyImage(ctx->allocator, image, allocation);
-		return EV2_NULL_HANDLE(Image);
-	}
-
 	return ctx->emplace_image(Image{
 		.image = image,
 		.allocation = allocation,
-		.base_view = image_view,
 		.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT,
+		.format = format,
 		.w = w,
 		.h = h, 
 		.d = d,
@@ -171,12 +146,6 @@ void destroy_image(GfxContext *ctx, ImageID h)
 
 	vmaDestroyImage(ctx->allocator, img->image, img->allocation);
 	ctx->image_pool->deallocate(to_pool_id(h));
-}
-
-uint64_t get_image_gpu_handle(GfxContext *ctx, ImageID h)
-{
-	Image *img = ctx->get_image(h);
-	return (uint64_t)img->image;
 }
 
 //------------------------------------------------------------------------------
@@ -222,8 +191,23 @@ ev2::Result wait_complete(GfxContext *ctx, uint64_t sync)
 //------------------------------------------------------------------------------
 // Textures
 
-TextureID create_texture(GfxContext *ctx, ImageID img, TextureFilter filter)
+TextureID create_texture(GfxContext *ctx, ImageID img, TextureFilter filter,
+						 uint32_t level, uint32_t layer)
 {
+	Image *image = ctx->get_image(img);
+
+	ImageViewKey view_key = {
+		.type = VK_IMAGE_VIEW_TYPE_2D,
+		.aspectMask = image->aspect_mask,
+		.baseMipLevel = level,
+		.levelCount = 1,
+		.baseArrayLayer = layer,
+		.layerCount = 1,
+		.format = image->format,
+	};
+
+	VkImageView view = get_image_view(ctx, image, view_key);
+
 	VkSampler sampler;
 
 	VkSamplerCreateInfo create_info = {
@@ -253,7 +237,8 @@ TextureID create_texture(GfxContext *ctx, ImageID img, TextureFilter filter)
 	return ctx->emplace_texture(Texture{
 		.img = img,
 		.filter = filter,
-		.sampler = sampler
+		.sampler = sampler,
+		.view = view
 	});
 }
 
@@ -265,15 +250,53 @@ void destroy_texture(GfxContext *ctx, TextureID h)
 void get_texture_gpu_handle(GfxContext *ctx, TextureID h, VkImageView *view)
 {
 	Texture *tex = ctx->get_texture(h);
-	Image *img = ctx->get_image(tex->img);
-
-	*view = img->base_view;
+	*view = tex->view;
 }
 
 void get_texture_dims(GfxContext *ctx, TextureID h_tex, uint32_t *w, uint32_t *h, uint32_t*d)
 {
 	Texture *tex = ctx->get_texture(h_tex);
 	get_image_dims(ctx, tex->img, w, h, d);
+}
+
+//-----------------------------------------------------------------------------
+// Image view caching + creation
+
+VkImageView get_image_view(GfxContext *ctx, Image *image, const ImageViewKey &key)
+{
+	assert(key.format == image->format);
+	assert(key.aspectMask & image->aspect_mask);
+
+	auto [it, inserted] = image->view_cache.emplace(key, VK_NULL_HANDLE);
+
+	VkImageView &out_view = it->second;
+
+	if (!inserted) {
+		return out_view;
+	}
+
+	VkImageViewCreateInfo create_info = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+		.flags = 0,
+		.image = image->image,
+		.viewType = VK_IMAGE_VIEW_TYPE_2D,
+		.format = key.format,
+		.subresourceRange = VkImageSubresourceRange{
+			.aspectMask = key.aspectMask,
+			.baseMipLevel = key.baseMipLevel,
+			.levelCount = key.levelCount,
+			.baseArrayLayer = key.baseArrayLayer,
+			.layerCount = key.layerCount,
+		},
+	};
+
+	VkResult result = vkCreateImageView(ctx->device, &create_info, nullptr, &out_view);
+	if (result != VK_SUCCESS) {
+		log_error("Failed to create image view");
+		return VK_NULL_HANDLE;
+	}
+
+	return out_view;
 }
 
 };

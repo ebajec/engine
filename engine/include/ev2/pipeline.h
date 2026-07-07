@@ -69,7 +69,10 @@ BindingsID create_bindings(GfxContext *ctx, ComputePipelineID pipeline_id,
 void destroy_bindings(GfxContext *ctx, BindingsID bindings);
 
 ev2::Result reset_bindings(GfxContext *ctx, BindingsID bindings);
+void flush_bindings(GfxContext *ctx, BindingsID bindings_id);
 
+/// @brief Bind a buffer to the binding given by name.
+/// The binding is assumed to not be an array type.
 ev2::Result bind_buffer(
 	GfxContext *ctx, 
 	BindingsID binding_handle, 
@@ -79,6 +82,8 @@ ev2::Result bind_buffer(
 	size_t size
 );
 
+/// @brief Bind a texture to the binding given by name.
+/// The binding is assumed to not be an array type.
 ev2::Result bind_texture(
 	GfxContext *ctx, 
 	BindingsID binding_handle,
@@ -86,14 +91,26 @@ ev2::Result bind_texture(
 	TextureID texture_handle  
 ); 
 
+/// @brief Bind a single mip level + layer of an image to the binding
+/// given by name.  The binding is assumed to not be an array type.
 ev2::Result bind_image(
 	GfxContext *ctx,
 	BindingsID binding_handle,
 	const char *name,
-	ImageID image_handle
+	ImageID image_handle,
+	uint32_t level = 0,
+	uint32_t layer = 0
 );
 
-void flush_bindings(GfxContext *ctx, BindingsID bindings_id);
+ev2::Result bind_image_indexed(
+	GfxContext *ctx,
+	BindingsID binding_handle,
+	const char *name,
+	uint32_t dst_index,
+	ImageID image_handle,
+	uint32_t level = 0,
+	uint32_t layer = 0
+);
 
 //------------------------------------------------------------------------------
 // rendering
@@ -204,6 +221,11 @@ void cmd_dispatch(PassID pass_id, uint32_t countx, uint32_t county, uint32_t cou
 
 void cmd_use_buffer(PassID pass_id, BufferID buf_id, Usage usage);
 void cmd_use_image(PassID pass_id, ImageID img_id, Usage usage);
+
+void cmd_push_constant(PassID pass_id, GfxPipelineID pipeline_id, 
+					   uint32_t offset, uint32_t size, void *data);
+void cmd_push_constant(PassID pass_id, ComputePipelineID pipeline_id, 
+					   uint32_t offset, uint32_t size, void *data);
 
 void cmd_custom(PassID pass_id, std::function<void(VkCommandBuffer)>&& callback);
 };

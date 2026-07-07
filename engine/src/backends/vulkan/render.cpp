@@ -84,12 +84,14 @@ VkResult create_depth_stencil_image(GfxContext *ctx, uint32_t w, uint32_t h,
 		VK_IMAGE_ASPECT_DEPTH_BIT |
 		VK_IMAGE_ASPECT_STENCIL_BIT;
 
+	VkFormat format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+
 	VkImageViewCreateInfo view_info {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 		.flags = 0, 
 		.image = vk_image,
 		.viewType = VK_IMAGE_VIEW_TYPE_2D,
-		.format = VK_FORMAT_D32_SFLOAT_S8_UINT,
+		.format = format,
 		.components = {},
 		.subresourceRange = {
 			.aspectMask = aspect_mask,
@@ -112,8 +114,8 @@ VkResult create_depth_stencil_image(GfxContext *ctx, uint32_t w, uint32_t h,
 	Image image = {
 		.image = vk_image,
 		.allocation = allocation,
-		.base_view = VK_NULL_HANDLE,
 		.aspect_mask = aspect_mask,
+		.format = format,
 		.w = w,
 		.h = h,
 		.d = 1,
@@ -189,7 +191,6 @@ static VkResult create_color_image(GfxContext *ctx, uint32_t w, uint32_t h,
 	Image image = {
 		.image = vk_image,
 		.allocation = allocation,
-		.base_view = VK_NULL_HANDLE,
 		.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT,
 		.w = w,
 		.h = h,
@@ -444,10 +445,10 @@ PassID begin_gfx_pass(
 		.queue_family = ctx->graphics_family->index
 	});
 
-	Rect scissor;
+	Rect scissor = in_scissor;
 
 	if (in_scissor.h == 0 || in_scissor.w == 0) {
-		in_scissor = in_viewport;
+		scissor = in_viewport;
 	}
 
 	std::unique_ptr<RenderPass> gfx (new RenderPass{
@@ -746,6 +747,78 @@ void cmd_bind_compute_pipeline(PassID pass_id, ComputePipelineID pipeline_id)
 	});
 }
 
+static void cmd_push_constant_internal(
+	Pass* pass, 
+	BasePipeline *pipeline, 
+	uint32_t offset, 
+	uint32_t size, 
+	void *data
+)
+{
+	uint32_t max_size = pass->ctx->caps.limits.maxPushConstantsSize; 
+
+	if (offset & 0x3) {
+		log_error("Push constant byte offset must be a multiple of 4");
+		return;
+	}
+
+	if (size & 0x3) {
+		log_error("Push constant size must be a multiple of 4");
+		return;
+	}
+
+	if (offset >= max_size) {
+		log_error("Push constant byte offset must be less than %d (offset=%d)", 
+			max_size, offset);
+		return;
+	}
+
+	if (size > max_size - offset) {
+		log_error("Push constant size exceed range limits (offset=%d, size=%d, max=%d",
+			offset, size, max_size);
+		return;
+	}
+
+	uint32_t src_offset = pass->push_constant_data.size();
+
+	pass->push_constant_data.push_range((char*)data, size);
+	pass->cmds.push_back(Command{
+		.push_constant = CmdPushConstant{
+			.pipeline = pipeline,
+			.src_offset = src_offset,
+			.offset = offset,
+			.size = size,
+		},
+		.type = PushConstant
+	});
+}
+
+void cmd_push_constant(
+	PassID pass_id, 
+	ComputePipelineID pipeline_id, 
+	uint32_t offset, 
+	uint32_t size, 
+	void *data
+)
+{
+	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
+	ComputePipeline *pipeline = pass->ctx->get_compute_pipeline(pipeline_id);
+	cmd_push_constant_internal(pass, &pipeline->base, offset, size, data);
+}
+
+void cmd_push_constant(
+	PassID pass_id, 
+	GfxPipelineID pipeline_id, 
+	uint32_t offset, 
+	uint32_t size, 
+	void *data
+)
+{
+	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
+	GfxPipeline *pipeline = pass->ctx->get_gfx_pipeline(pipeline_id);
+	cmd_push_constant_internal(pass, &pipeline->base, offset, size, data);
+}
+
 void cmd_dispatch(
 	PassID pass_id,
 	uint32_t countx, 
@@ -1017,7 +1090,7 @@ Result begin_frame(GfxContext *ctx)
 		.dst_offset = 0,
 		.size = sizeof(GPUFramedata),
 	};
-	uint64_t sync = commit_buffer_uploads(ctx, uc, frame->ubo, &up, 1);
+	commit_buffer_uploads(ctx, uc, frame->ubo, &up, 1);
 	flush_uploads(ctx);
 
 	return SUCCESS;
@@ -1190,6 +1263,7 @@ static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 				case BindVertexBuffer:
 				case BindIndexBuffer:
 				case BindIndirectBuffer:
+				case PushConstant:
 				case Custom:
 				case Dispatch: {
 					rg_new_pass_command(node, cmd);
@@ -1653,6 +1727,43 @@ static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBu
 			case BindIndirectBuffer: {
 				break;
 			}
+			case PushConstant: {
+				CmdPushConstant cmd = pass_cmd.base.push_constant;
+				const char *bytes = &node.pass->push_constant_data[cmd.src_offset];
+
+				const BasePipeline *pipeline = cmd.pipeline;
+
+				const std::vector<VkPushConstantRange> &ranges = 
+					pipeline->layout_map->push_constant_ranges;
+
+				auto it = std::lower_bound(
+					ranges.begin(), 
+					ranges.end(),
+					VkPushConstantRange{
+						.offset = cmd.offset
+					},
+					[](const VkPushConstantRange &r1, const VkPushConstantRange &r2) -> bool
+					{
+						return r1.offset < r2.offset;
+					});
+
+				VkShaderStageFlags stage_mask = 0;
+
+				for(; it != ranges.end() && it->offset == cmd.offset; ++it) {
+					stage_mask |= it->stageFlags;
+				}
+
+				VkPushConstantsInfo info = {
+					.sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO,
+					.layout = pipeline->layout,
+					.stageFlags = stage_mask,
+					.offset = cmd.offset,
+					.pValues = (void*)bytes,
+				};
+
+				vkCmdPushConstants2(cmds, &info);
+				break;
+			}
 			case Dispatch: {
 				CmdDispatch cmd = pass_cmd.base.dispatch;
 				vkCmdDispatch(cmds, cmd.counts[0], cmd.counts[1], cmd.counts[2]);
@@ -1661,6 +1772,7 @@ static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBu
 			case Custom: {
 				CmdCustom cmd = pass_cmd.base.custom;
 				node.pass->custom_callbacks[cmd.callback_id](cmds);
+
 				break;
 			}
 			case UseBuffer:

@@ -148,7 +148,6 @@ void BoxDebugView::update()
 
 void BoxDebugView::draw(ev2::PassID pass)
 {
-	ev2::wait_complete(ctx, upload_index);
 	if (!vbo.id || !ibo.id)
 		return;
 

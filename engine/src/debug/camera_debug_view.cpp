@@ -39,9 +39,6 @@ CameraDebugView::CameraDebugView(ev2::GfxContext *_ctx) : ctx(_ctx)
 	};
 	uint64_t sync = ev2::commit_buffer_uploads(ctx, uc, ibo, &up, 1);
 	ev2::flush_uploads(ctx);
-
-	ev2::wait_complete(ctx, sync);
-
 }
 
 CameraDebugView::~CameraDebugView()

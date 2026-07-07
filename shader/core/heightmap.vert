@@ -56,7 +56,7 @@ void main()
 	vec2 pix = vec2(tx, ty) + vec2(0.5);
 	vec2 uv = pix/vec2(size + vec2(1));
 
-	float scale = 0.7f;
+	float scale = 2.f;
 	vec4 tex = texture(u_tex, uv)*scale; 
 
 	tgrad_t grad = tex_grad2(uv);

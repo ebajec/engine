@@ -2,6 +2,9 @@
 #define EV2_RESOURCE_IMPL_H
 
 #include "ev2/resource.h"
+#include "utils/common.h"
+
+#include <robin_hood.h>
 
 #include "def_vulkan.h"
 #include "vk_mem_alloc.h"
@@ -9,7 +12,10 @@
 #include <cstdint>
 #include <cstddef>
 #include <cassert>
+#include <cstring>
 #include <vector>
+
+namespace ev2 {
 
 struct ResourceSync {
 	uint64_t 				wait_value;
@@ -150,28 +156,86 @@ union TaggedResource {
 	}
 };
 
-namespace ev2 {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wbitfield-enum-conversion"
+struct ImageViewKey
+{
+	// This produces a warning because the vulkan spec
+	// puts MAX_ENUM at 0x7FFFFFFF
+    VkImageViewType 	type : 16;
+
+	// This produces a warning because the vulkan spec
+	// puts MAX_ENUM at 0x7FFFFFFF
+    VkImageAspectFlags 	aspectMask : 16;
+
+    uint32_t 			baseMipLevel;
+    uint32_t 			levelCount;
+    uint32_t 			baseArrayLayer;
+    uint32_t 			layerCount;
+	VkFormat 			format;
+
+	constexpr bool operator == (const ImageViewKey &other) const {
+		return 
+			type == other.type &&
+			baseMipLevel == other.baseMipLevel &&
+			levelCount == other.levelCount &&
+			baseArrayLayer == other.baseArrayLayer && 
+			layerCount == other.layerCount && 
+			format == other.format;
+	};
+
+	struct Hash {
+		inline size_t operator()(const ImageViewKey &key) const {
+			size_t h1 = hash_combine(
+				robin_hood::hash<uint64_t>{}(
+					(uint64_t)key.baseMipLevel << 32 | 
+					(uint64_t)key.levelCount
+				), 
+				robin_hood::hash<uint64_t>{}(
+					(uint64_t)key.baseArrayLayer << 32 | 
+					(uint64_t)key.layerCount
+				)
+			);
+
+			size_t h2 = robin_hood::hash<uint64_t>{}(
+				(uint64_t)key.format << 32 | 
+				(uint64_t) key.aspectMask << 16 | 
+				(uint64_t) key.type
+			);
+
+			return hash_combine(h1, h2);
+		}
+	};
+};
+#pragma clang diagnostic pop
+
+//------------------------------------------------------------------------------
 
 struct Buffer
 {
+	ResourceState state;
+
 	VkBuffer buffer;
 	VmaAllocation allocation;
 	size_t size;
-
-	ResourceState state;
 };
 
 struct Image
 {
+	ResourceState state;
+
 	VkImage image;
 	VmaAllocation allocation;
 
-	// optional
-	VkImageView base_view = VK_NULL_HANDLE;
-
-	ResourceState state;
+	robin_hood::unordered_flat_map<
+		ImageViewKey, 
+		VkImageView, 
+		ImageViewKey::Hash
+	> view_cache;
 
 	VkImageAspectFlags aspect_mask;
+	VkFormat format;
+
 	uint32_t w;
 	uint32_t h;
 	uint32_t d;
@@ -183,6 +247,7 @@ struct Texture
 	ImageID img;
 	TextureFilter filter;
 	VkSampler sampler;
+	VkImageView view;
 };
 
 struct ImageAsset
@@ -203,6 +268,8 @@ static inline VkFormat image_format_to_vk(ev2::ImageFormat fmt)
 			return VK_FORMAT_R8_UNORM;
 	}
 }
+
+extern VkImageView get_image_view(GfxContext *ctx, Image *image, const ImageViewKey &key);
 
 };
 

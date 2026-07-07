@@ -5,6 +5,8 @@
 
 #include "ev2/resource.h"
 #include "ev2/pipeline.h"
+#include "robin_hood.h"
+#include "utils/array.h"
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/mat4x4.hpp>
@@ -43,21 +45,23 @@ struct ShaderLayoutMapping
 		*out_binding = bindings.at(it->second.set)[it->second.idx]; 
 		return true;
 	}
+	std::vector<VkPushConstantRange> push_constant_ranges;
 };
 
 struct Shader
 {
 	VkShaderModule 	shader_module;
 	ShaderStage stage;
-	std::shared_ptr<ShaderLayoutMapping> layout_index;
+	std::shared_ptr<ShaderLayoutMapping> layout_map;
 };
 
 struct BasePipeline
 {
-	std::shared_ptr<const ShaderLayoutMapping> layout_index;
+	std::shared_ptr<const ShaderLayoutMapping> layout_map;
 	std::vector<VkDescriptorSetLayout> set_layouts;
 	VkPipelineLayout layout;
 	VkPipeline pipeline;
+	VkShaderStageFlags stage_mask;
 
 	// Used to allow reloading at runtime.
 	std::vector<BindingsID> active_bindings;
@@ -93,7 +97,7 @@ struct Bindings
 		BindType type;
 	};
 
-	std::shared_ptr<const ShaderLayoutMapping> layout_index;
+	std::shared_ptr<const ShaderLayoutMapping> layout_map;
 
 	std::vector<Info> info;
 	std::vector<VkWriteDescriptorSet> writes;
@@ -151,15 +155,25 @@ struct CmdBindResources{
 };
 struct CmdBindIndexBuffer{
 	BufferID buffer;
-	size_t offset;
+	VkDeviceSize offset;
 };
 struct CmdBindVertexBuffer{
 	BufferID buffer;
-	size_t offset;
+	VkDeviceSize offset;
 };
 struct CmdBindIndirectBuffer{
 	BufferID buffer;
-	size_t offset;
+	VkDeviceSize offset;
+};
+
+struct CmdPushConstant{
+	BasePipeline *pipeline;
+
+ 	// offset into the push constant data buffer of the associated pass
+	uint32_t src_offset;
+
+	uint32_t offset;
+	uint32_t size;
 };
 struct CmdDispatch{
 	uint32_t counts[3];
@@ -184,6 +198,7 @@ enum CmdType
 	BindIndexBuffer,
 	BindVertexBuffer,
 	BindIndirectBuffer,
+	PushConstant,
 	Dispatch,
 	UseBuffer,
 	UseImage,
@@ -198,6 +213,7 @@ struct Command {
 		CmdBindIndexBuffer		bind_index_buffer;
 		CmdBindVertexBuffer		bind_vertex_buffer;
 		CmdBindIndirectBuffer	bind_indirect_buffer;
+		CmdPushConstant			push_constant;
 		CmdDispatch 			dispatch;
 		CmdUseBuffer 			use_buffer; 
 		CmdUseImage 			use_image;
@@ -226,7 +242,10 @@ struct Pass
 	GfxContext *ctx;
 
 	std::vector<std::function<void(VkCommandBuffer)>> custom_callbacks;
-	std::vector<Command> cmds;
+
+	Array<Command, uint32_t, 32> cmds;
+	Array<char, uint32_t, 256> push_constant_data;
+
 	uint32_t queue_family;
 
 	std::unique_ptr<RenderPass> gfx;

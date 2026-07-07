@@ -12,6 +12,7 @@
 #include "stb_image.h"
 
 #include <cstdarg>
+#include <csignal>
 #include <algorithm>
 #include <sstream>
 #include <set>
@@ -662,8 +663,8 @@ static ev2::Result create_swap_chain(ev2::GfxContext *ctx, uint32_t w, uint32_t 
 		ctx->swap_chain.image_ids[i] = ctx->emplace_image(Image{
 			.image = ctx->swap_chain.images[i],
 			.allocation = VK_NULL_HANDLE,
-			.base_view = VK_NULL_HANDLE,
 			.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.format = ctx->swap_chain.image_format,
 			.w = extent.width, 
 			.h = extent.height,
 			.d = 1,

@@ -11,6 +11,7 @@ external/spirv-reflect/spirv-reflect
 external/stb/stb
 
 resource/shader/*.spv
+resource/shader/*.d
 samples/boxes/
 samples/hopf/
 

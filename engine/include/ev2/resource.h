@@ -103,15 +103,15 @@ ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d,
 void destroy_image(GfxContext *ctx, ImageID img);
 
 void get_image_dims(GfxContext *ctx, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d);
-uint64_t get_image_gpu_handle(GfxContext *ctx, ImageID img);
 
 //--------------------------------------------------------------------
 // Texture
 
-TextureID create_texture(GfxContext *ctx, ImageID img, TextureFilter filter);
+TextureID create_texture(GfxContext *ctx, ImageID img, TextureFilter filter,
+						 uint32_t level = 0, uint32_t layer = 0);
 void destroy_texture(GfxContext *ctx, TextureID tex);
-void get_texture_gpu_handle(GfxContext *ctx, TextureID h, VkImageView *view);
 
+void get_texture_gpu_handle(GfxContext *ctx, TextureID h, VkImageView *view);
 void get_texture_dims(GfxContext *ctx, TextureID tex, uint32_t *w, uint32_t *h, uint32_t*d);
 
 //------------------------------------------------------------------------------
