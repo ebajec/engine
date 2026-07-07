@@ -18,7 +18,7 @@ struct timespec monotonic_clock_time()
 Result sleep_until(struct timespec *ts)
 {
 #ifdef _WIN32
-    #error "ev2::platform::sleep_unit is not implemented on Windows"
+    #error "ev2::platform::sleep_until is not implemented on Windows"
 #endif
 
 #ifdef __APPLE__
