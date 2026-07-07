@@ -401,11 +401,9 @@ void App::imgui()
 	ImVec2 work_pos  = vp->WorkPos;
 	ImVec2 work_size = vp->WorkSize;
 
-	float panel_w = 200.f;
-
 	ImGui::SetNextWindowPos(ImVec2(0,0),ImGuiCond_Always);
 	ImGui::SetNextWindowPos(work_pos);
-	ImGui::SetNextWindowSize(ImVec2(panel_w, work_size.y));
+	ImGui::SetNextWindowSize(ImVec2(EDITOR_PANEL_WIDTH, work_size.y));
 
 	ImGui::Begin("Editor"); 
 

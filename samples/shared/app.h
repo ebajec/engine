@@ -21,6 +21,8 @@
 
 #include <functional>
 
+static constexpr float EDITOR_PANEL_WIDTH = 200.f;
+
 struct InputData
 {
 	glm::dvec2 mouse_pos[2];

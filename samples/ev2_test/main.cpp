@@ -252,7 +252,7 @@ int FluidApp::initialize(int argc, char **argv)
 
 	sim.reset(new WaveSim);
 
-	main_panel.reset(new TextureViewerPanel(this, 0, 0, 500, 500));
+	main_panel.reset(new TextureViewerPanel(this, EDITOR_PANEL_WIDTH, 0, 500, 500));
 	heightmap_panel.reset(new HeightmapViewerPanel);
 
 	result = sim->init(ctx);
