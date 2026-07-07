@@ -18,5 +18,6 @@ target_link_libraries(engine
 		Vulkan::Vulkan
 	PRIVATE
 		vulkan_memory_allocator
+		robin_hood
 )
 

@@ -27,8 +27,8 @@ struct ShaderLayoutMapping
 		uint32_t set;
 		uint32_t idx;
 	};
-	std::unordered_map<std::string, BindingEntry> binding_names;
-	std::unordered_map<uint32_t, 
+	robin_hood::unordered_map<std::string, BindingEntry> binding_names;
+	robin_hood::unordered_map<uint32_t, 
 		std::vector<VkDescriptorSetLayoutBinding>
 	> bindings;
 
