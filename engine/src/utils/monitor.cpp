@@ -412,3 +412,120 @@ void monitor::interrupt()
 
 };
 #endif
+
+// Apple implementation
+#ifdef __APPLE__
+
+// Apple
+#include <CoreServices/CoreServices.h>
+#include <dispatch/dispatch.h>
+
+// C++
+#include <mutex>
+#include <condition_variable>
+#include <string>
+
+namespace utils {
+
+/// @brief Helper to map filesystem changes to monitor flags
+static uint8_t to_monitor_flags(FSEventStreamEventFlags f) {
+    uint8_t out = 0x0;
+
+    if (f & kFSEventStreamEventFlagItemCreated)  
+        out |= MONITOR_FLAGS_CREATE;
+    if (f & kFSEventStreamEventFlagItemRemoved)  
+        out |= MONITOR_FLAGS_DELETE;
+    if (f & kFSEventStreamEventFlagItemModified) 
+        out |= MONITOR_FLAGS_MODIFY;
+    if (f & kFSEventStreamEventFlagItemRenamed)  
+        out |= (MONITOR_FLAGS_CREATE | MONITOR_FLAGS_DELETE);
+    if (f & kFSEventStreamEventFlagItemIsDir)     
+        out |= MONITOR_FLAGS_ISDIR;
+
+    return out;
+}
+
+void monitor::FSEventsCallback(ConstFSEventStreamRef, void* clientCallBackInfo, size_t numEvents,
+    void* eventPaths, const FSEventStreamEventFlags eventFlags[], const FSEventStreamEventId[])
+{
+    monitor* self = (monitor*)clientCallBackInfo; // Retrieve this from ctx
+    if (!self) return;
+
+    char** paths = (char**)eventPaths;
+    for (size_t i = 0; i < numEvents; ++i) {
+        const char* p = paths[i];
+        int flags = to_monitor_flags(eventFlags[i]); // whatever you implemented
+        if (self->m_callback) {
+            monitor_event_t ev{p, flags};
+            self->m_callback(self->m_usr, ev);
+        }
+    }
+}
+
+void monitor::watch()
+{
+    CFStringRef dir = CFStringCreateWithCString(NULL, m_dir.c_str(), kCFStringEncodingUTF8);
+    CFArrayRef pathsToWatch = CFArrayCreate(NULL, (const void**)&dir, 1, &kCFTypeArrayCallBacks);
+    FSEventStreamCreateFlags flags = kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagWatchRoot; // Types of events to listen to
+    constexpr CFTimeInterval latency = 0.05;
+    FSEventStreamContext ctx{
+        .info = this
+    };
+
+    FSEventStreamRef stream = FSEventStreamCreate(
+        NULL,
+        FSEventsCallback,
+        &ctx,
+        pathsToWatch,
+        kFSEventStreamEventIdSinceNow,
+        latency,
+        flags
+    );
+
+    if (!stream) {
+        CFRelease(pathsToWatch);
+        CFRelease(dir);
+        return;
+    }
+
+    // Deliver callbacks on a GCD queue (no run loop needed)
+    dispatch_queue_t q = dispatch_queue_create("engine.fsmonitor", DISPATCH_QUEUE_SERIAL);
+    FSEventStreamSetDispatchQueue(stream, q);
+
+    m_watching = true;
+
+    if (!FSEventStreamStart(stream)) 
+    {
+        FSEventStreamInvalidate(stream);
+        FSEventStreamRelease(stream);
+        CFRelease(pathsToWatch);
+        CFRelease(dir);
+#if !OS_OBJECT_USE_OBJC
+        dispatch_release(q);
+#endif
+        return;
+    }
+
+    // Block this watch thread until interrupt() flips m_watching.
+    std::mutex m;
+    std::unique_lock<std::mutex> lk(m);
+    std::condition_variable cv;
+    while (m_watching) cv.wait_for(lk, std::chrono::milliseconds(250));
+
+    // Stop stream and cleanup
+    FSEventStreamStop(stream);
+    FSEventStreamInvalidate(stream);
+    FSEventStreamRelease(stream);
+    CFRelease(pathsToWatch);
+    CFRelease(dir);
+#if !OS_OBJECT_USE_OBJC
+    dispatch_release(q);
+#endif
+}
+
+void monitor::interrupt()
+{
+    m_watching = false;
+}
+};
+#endif // __APPLE__

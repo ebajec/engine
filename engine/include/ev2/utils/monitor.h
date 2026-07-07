@@ -8,6 +8,10 @@
 #include <atomic>
 #endif 
 
+#ifdef __APPLE__
+#include <CoreServices/CoreServices.h>
+#endif
+
 #define MONITOR_FLAGS_CREATE 0x01
 #define MONITOR_FLAGS_DELETE 0x02
 #define MONITOR_FLAGS_MODIFY 0x04
@@ -79,6 +83,10 @@ private:
     void*             m_watchEvent;   
 #endif
 
+#ifdef __APPLE__
+    static void FSEventsCallback(ConstFSEventStreamRef, void* clientCallBackInfo, size_t numEvents, 
+        void* eventPaths, const FSEventStreamEventFlags eventFlags[], const FSEventStreamEventId eventIds[]);
+#endif
 };
 
 };

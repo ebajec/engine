@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.27)
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(PROJECT_NAME "engine")
 project(${PROJECT_NAME})
@@ -52,6 +53,12 @@ if(WIN32)
   set(GLFW_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
 
   FetchContent_MakeAvailable(glfw3) 
+elseif(APPLE)
+    list(APPEND ${CMAKE_PREFIX_PATH} "/opt/homebrew") # Ensure homebrew packages are discoverable
+
+    find_package(glm CONFIG REQUIRED)
+    find_package(yaml-cpp REQUIRED)
+    find_package(GLFW3 REQUIRED)
 else()
   find_package(glm CONFIG REQUIRED)
   find_package(yaml-cpp REQUIRED)
@@ -63,8 +70,11 @@ find_package(Vulkan REQUIRED)
 
 add_compile_options(-g)
 
-set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -mavx2")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
+if(NOT WIN32 AND NOT APPLE)
+    # Processor specific flags
+    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -mavx2")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
+endif()
 
 add_subdirectory(external)
 add_subdirectory(engine)

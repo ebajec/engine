@@ -16,6 +16,8 @@ add_library(imgui STATIC ${SOURCES})
 
 if(WIN32)
     target_link_libraries(imgui PUBLIC glfw)
+elseif(APPLE)
+    target_link_libraries(imgui PUBLIC glfw Vulkan::Vulkan)
 endif()
 
 target_include_directories(imgui PUBLIC imgui implot)

@@ -21,7 +21,7 @@
 #include <csignal>
 #include <atomic>
 
-#ifdef __linux__
+#if defined (__linux__) || defined(__APPLE__)
 
 // posix
 #include <unistd.h>
