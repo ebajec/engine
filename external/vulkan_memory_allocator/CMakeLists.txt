@@ -7,6 +7,10 @@ project(vulkan_memory_allocator)
 add_library(vulkan_memory_allocator STATIC vk_mem_alloc.cpp)
 target_include_directories(vulkan_memory_allocator PUBLIC include)
 
+if(APPLE)
+    target_link_libraries(vulkan_memory_allocator PUBLIC Vulkan::Vulkan)
+endif()
+
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR
     CMAKE_C_COMPILER_ID  MATCHES "Clang")
 	target_compile_options(vulkan_memory_allocator PUBLIC

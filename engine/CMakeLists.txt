@@ -36,6 +36,11 @@ target_link_libraries(${TARGET} PUBLIC
     glm::glm
 )
 
+if(APPLE)
+    find_library(CORESERVICES_FRAMEWORK CoreServices REQUIRED)
+    target_link_libraries(${TARGET} PUBLIC ${CORESERVICES_FRAMEWORK})
+endif()
+
 #add_subdirectory(src/backends/opengl)
 add_subdirectory(src/backends/vulkan)
 
