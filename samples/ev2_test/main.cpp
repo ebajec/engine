@@ -187,14 +187,14 @@ int WaveSim::update(ev2::GfxContext *ctx)
 	ev2::PassID pass = ev2::begin_compute_pass(ctx);
 
 	ev2::cmd_use_image(pass, swap_img[img_A], ev2::USAGE_STORAGE_READ_COMPUTE);
-	ev2::cmd_use_image(pass, swap_img[img_B], ev2::USAGE_STORAGE_RW_COMPUTE);
+	ev2::cmd_use_image(pass, swap_img[img_B], ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 
 	ev2::cmd_bind_resources(pass, sim0_bindings);
 	ev2::cmd_bind_compute_pipeline(pass, sim_pipelines[0]);
 	ev2::cmd_dispatch(pass, grps_x, grps_y, grps_z);
 
 	ev2::cmd_use_image(pass, swap_img[img_B], ev2::USAGE_STORAGE_READ_COMPUTE);
-	ev2::cmd_use_image(pass, swap_img[img_A], ev2::USAGE_STORAGE_RW_COMPUTE);
+	ev2::cmd_use_image(pass, swap_img[img_A], ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 
 	ev2::cmd_bind_resources(pass, sim1_bindings);
 	ev2::cmd_bind_compute_pipeline(pass, sim_pipelines[1]);

@@ -7,7 +7,6 @@
 
 layout (local_size_x = GROUPS, local_size_y = GROUPS, local_size_z = 1) in;
 
-// Initial guess for phi (lhs)
 layout (set = 0, r32f, binding = 1) uniform image2D tmp_lhs;
 layout (set = 0, binding = 2) uniform sampler2D bd_mask;
 // Layout [R1_0, R1_1, ... R1_N]
@@ -16,6 +15,7 @@ layout (set = 0, r32f, binding = 3) uniform image2D R1[];
 // Layout [R2_1, ... R2_N+1]
 layout (set = 0, r32f, binding = 4) uniform image2D R2[];
 
+// Initial guess for phi (lhs)
 layout (set = 1, r32f, binding = 0) readonly uniform image2D in_lhs;
 layout (set = 1, r32f, binding = 1) readonly uniform image2D in_rhs;
 layout (set = 1, r32f, binding = 2) writeonly uniform image2D out_lhs;
@@ -24,9 +24,9 @@ shared float block[GROUPS][GROUPS];
 shared bool boundary[GROUPS][GROUPS];
 
 layout (push_constant, std430) uniform Inputs {
+	uint N;
 	uint in_level;
 	uint in_iterations;
-	uint N;
 };
 
 layout (binding = 0) uniform ubo {

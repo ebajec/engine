@@ -607,7 +607,7 @@ static ResourceStateFlags usage_to_state_flags(Usage usage)
 				.access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
 				.stage = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
 			};
-		case USAGE_STORAGE_RW_COMPUTE:
+		case USAGE_STORAGE_READ_WRITE_COMPUTE:
 			return ResourceStateFlags{
 				.access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
 				.stage = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
@@ -651,7 +651,7 @@ static uint8_t usage_to_rw_flags(Usage usage)
 			return PASS_WRITE | PASS_READ;
 		case USAGE_STORAGE_READ_COMPUTE:
 			return PASS_READ;
-		case USAGE_STORAGE_RW_COMPUTE:
+		case USAGE_STORAGE_READ_WRITE_COMPUTE:
 			return PASS_READ | PASS_WRITE;
 		case USAGE_MAX_ENUM:
 		case USAGE_UNDEFINED:
