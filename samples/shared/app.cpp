@@ -1,5 +1,7 @@
 #include "app.h"
 
+#include "imgui_internal.h"
+
 #include "ev2/utils/log.h"
 
 #include "ev2/context.h"
@@ -334,7 +336,9 @@ int App::initialize(int argc, char *argv[])
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable keyboard controls
+	io.ConfigFlags |= 
+		ImGuiConfigFlags_NavEnableKeyboard |
+		ImGuiConfigFlags_DockingEnable;
 	io.FontGlobalScale = 1.0f; 
 
 	// Set ImGui style
@@ -386,27 +390,77 @@ void App::terminate()
 	glfwTerminate();
 }
 
-void App::imgui()
+static void build_default_layout(ImGuiID dockspaceID)
+{
+    ImGuiID mainNodeID;
+
+	ImGuiDockNode* rootNode = ImGui::DockBuilderGetNode(dockspaceID);
+	if (!rootNode) {
+		ImGui::DockBuilderAddNode(dockspaceID, ImGuiDockNodeFlags_DockSpace);
+        ImGui::DockBuilderSetNodeSize(dockspaceID, ImGui::GetMainViewport()->WorkSize);
+
+        ImGuiID dockMainID = dockspaceID;
+
+        mainNodeID = dockMainID;
+	} else {
+		mainNodeID = dockspaceID;
+	}
+
+	ImGuiID dockLeftID = ImGui::DockBuilderSplitNode(mainNodeID, ImGuiDir_Left, 0.25f, nullptr, &mainNodeID);
+	ImGuiID dockDownID = ImGui::DockBuilderSplitNode(dockLeftID, ImGuiDir_Down, 0.5f, nullptr, &dockLeftID);
+
+	ImGui::DockBuilderDockWindow("Editor", dockLeftID);
+	ImGui::DockBuilderDockWindow("Inspector", dockDownID);
+	ImGui::DockBuilderFinish(dockspaceID);
+}
+
+static void setup_root_dockspace()
 {
 	ImGuiViewport* vp = ImGui::GetMainViewport();
 	ImVec2 work_pos  = vp->WorkPos;
 	ImVec2 work_size = vp->WorkSize;
 
-	ImGui::SetNextWindowPos(ImVec2(0,0),ImGuiCond_Always);
 	ImGui::SetNextWindowPos(work_pos);
-	ImGui::SetNextWindowSize(ImVec2(EDITOR_PANEL_WIDTH, work_size.y));
+	ImGui::SetNextWindowSize(work_size);
+	ImGui::SetNextWindowViewport(vp->ID);
 
-	ImGui::Begin("Editor"); 
+	ImGuiWindowFlags hostFlags =
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
+        ImGuiWindowFlags_NoBackground;
 
-	ImGuiWindowFlags flags =
-		ImGuiWindowFlags_NoMove |
-		ImGuiWindowFlags_NoResize |
-		ImGuiWindowFlags_NoCollapse |
-		ImGuiWindowFlags_NoSavedSettings;
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
 
-	if (ImGui::CollapsingHeader("Frame times")) {
+    ImGui::Begin("EditorRoot", nullptr, hostFlags);
+    ImGui::PopStyleVar(3);
+
+    ImGuiID dockspaceID = ImGui::GetID("EditorRootDockspace");
+    ImGui::DockSpace(dockspaceID, ImVec2(0, 0), ImGuiDockNodeFlags_None);
+
+    ImGui::End();
+
+	// Setup initial layout
+
+	static bool initial_layout_setup = false;
+	if (!initial_layout_setup) {
+		build_default_layout(dockspaceID);
+		initial_layout_setup = true;
+	}
+}
+
+void App::imgui()
+{
+	setup_root_dockspace();
+
+	if (frame_counter) {
 		plot_frame_times(input.dt);
 	}
+
+	ImGui::Begin("Inspector");
+
 	ImGui::End();
 }
 

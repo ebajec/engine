@@ -50,14 +50,11 @@ Panel::~Panel()
 
 void Panel::imgui()
 {
-	ImGuiWindowFlags flags = ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove;
+	ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove;
 
-	if (m_bar_selected) 
+	if (m_bar_selected) { 
 		flags &= ~ImGuiWindowFlags_NoMove;
-
-	if (!EV2_VALID(m_target)) {
-		ImGui::SetNextWindowPos(ImVec2(m_pos.x, m_pos.y));
-		ImGui::SetNextWindowSize(ImVec2(m_size.x, m_size.y));
+		flags = 0;
 	}
 
 	if (ImGuiWindow* window = ImGui::FindWindowByName(m_name.c_str())) {

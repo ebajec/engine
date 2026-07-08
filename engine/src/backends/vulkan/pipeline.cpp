@@ -1467,7 +1467,8 @@ Result reset_bindings(GfxContext *ctx, BindingsID bindings_handle)
 		ctx->device, &alloc_info, &bindings->descriptor_set); 
 
 	if (vk_result != VK_SUCCESS)
-		return set_error(ev2::EINVALID_BINDING, "Failed to reset bindings");
+		return set_error(ev2::EINVALID_BINDING, 
+			"vkAllocateDescriptorSets failed!");
 
 	return ev2::SUCCESS;
 }
@@ -1682,14 +1683,16 @@ void flush_bindings(GfxContext *ctx, BindingsID id)
 		}
 	}
 
-	vkUpdateDescriptorSets(
-		ctx->device, 
-		(uint32_t)bindings->writes.size(),
-		bindings->writes.data(),
-		0, nullptr);
+	if (bindings->writes.size()) {
+		vkUpdateDescriptorSets(
+			ctx->device, 
+			(uint32_t)bindings->writes.size(),
+			bindings->writes.data(),
+			0, nullptr);
 
-	bindings->writes.clear();
-	bindings->info.clear();
+		bindings->writes.clear();
+		bindings->info.clear();
+	}
 }
 
 //------------------------------------------------------------------------------

@@ -45,6 +45,8 @@ struct InputData
 	glm::dvec2 get_mouse_delta() {
 		return mouse_pos[0] - mouse_pos[1];
 	}
+
+	ImGuiID dockspace_id = 0;
 };
 
 struct WindowData 
@@ -174,19 +176,34 @@ static inline void plot_frame_times(float delta)
 
 	avg = 0.99*avg + 0.01*delta;
 
-	if (ImPlot::BeginPlot("Frame times (ms)",ImVec2(200,200))) {
-		ImPlot::SetupAxesLimits(times[scroll], 
-		   times[scroll  ? scroll - 1 : samples - 1], 
-		   0, 2*avg,ImPlotCond_Always);
+	ImGui::Begin("Editor"); 
 
-		ImPlotSpec spec;
-		spec.Offset = scroll;
-		spec.Flags = ImPlotCond_Always;
+	ImGuiWindowFlags flags =
+		ImGuiWindowFlags_NoMove |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoCollapse |
+		ImGuiWindowFlags_NoSavedSettings;
 
-		ImPlot::PlotLine("time", times.data(), 
-			deltas.data(), samples, spec);
-		ImPlot::EndPlot();
+	if (ImGui::CollapsingHeader("Frame times")) {
+		if (ImPlot::BeginPlot("Frame times (ms)",ImVec2(200,200))) {
+			ImPlot::SetupAxesLimits(
+				times[scroll], 
+				times[scroll ? scroll - 1 : samples - 1], 
+				0, 
+				2*avg,
+				ImPlotCond_Always
+			);
+
+			ImPlotSpec spec;
+			spec.Offset = scroll;
+			spec.Flags = ImPlotCond_Always;
+
+			ImPlot::PlotLine("time", times.data(), 
+				deltas.data(), samples, spec);
+			ImPlot::EndPlot();
+		}
 	}
+	ImGui::End();
 }
 
 
