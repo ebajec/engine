@@ -60,7 +60,7 @@ struct PressureSolver
 	ev2::ImageID R1; // level 0 upto N
 	ev2::ImageID R2; // level 1 upto N + 1
 	
-	ev2::BufferID ubo;
+	//ev2::BufferID ubo;
 
 	ev2::ComputePipelineID multigrid_down;
 	ev2::ComputePipelineID multigrid_up;
@@ -141,22 +141,22 @@ int PressureSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 
 	uniforms[0].iterations = 4;
 
-	size_t ubo_size = (N + 1) * sizeof(Uniforms);
+	//size_t ubo_size = (N + 1) * sizeof(Uniforms);
 
-	ubo = ev2::create_buffer(ctx, ubo_size, ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	//ubo = ev2::create_buffer(ctx, ubo_size, ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
-	ev2::UploadContext uc = ev2::begin_upload(ctx, ubo_size, alignof(Uniforms));
-	memcpy(uc.ptr, uniforms.data(), uniforms.size()*sizeof(Uniforms));
-	ev2::BufferUpload up = {
-		.size = ubo_size
-	};
-	uint64_t sync = ev2::commit_buffer_uploads(ctx, uc, ubo, &up, 1);
+	//ev2::UploadContext uc = ev2::begin_upload(ctx, ubo_size, alignof(Uniforms));
+	//memcpy(uc.ptr, uniforms.data(), uniforms.size()*sizeof(Uniforms));
+	//ev2::BufferUpload up = {
+	//	.size = ubo_size
+	//};
+	//uint64_t sync = ev2::commit_buffer_uploads(ctx, uc, ubo, &up, 1);
 
 	//-----------------------------------------------------------------------------
 	// setup bindings
 
 	bindings0 = ev2::create_bindings(ctx, multigrid_down, 0, ev2::BINDING_MODE_STATIC);
-	ev2::bind_buffer(ctx, bindings0, "ubo", ubo, 0, sizeof(uniforms)); 
+	//ev2::bind_buffer(ctx, bindings0, "ubo", ubo, 0, sizeof(uniforms)); 
 	ev2::bind_image(ctx, bindings0, "tmp_lhs", tmp_lhs); 
 
 	for (uint32_t i = 0; i < N; ++i) {
@@ -175,7 +175,7 @@ void PressureSolver::destroy(ev2::GfxContext *ctx)
 	ev2::destroy_image(ctx, R1);
 	ev2::destroy_image(ctx, R2);
 
-	ev2::destroy_buffer(ctx, ubo);
+	//ev2::destroy_buffer(ctx, ubo);
 }
 
 void PressureSolver::v_cycle(ev2::PassID pass, ev2::GfxContext *ctx, ev2::ImageID lhs, ev2::ImageID rhs)
@@ -187,7 +187,7 @@ void PressureSolver::v_cycle(ev2::PassID pass, ev2::GfxContext *ctx, ev2::ImageI
 	//GLuint R1_id = ev2::get_image_gpu_handle(ctx, R1);
 	//GLuint R2_id = ev2::get_image_gpu_handle(ctx, R2);
 
-	GLuint ubo_id = ev2::get_buffer_gpu_handle(ctx, ubo);
+	//GLuint ubo_id = ev2::get_buffer_gpu_handle(ctx, ubo);
 
 	const uint32_t groups = 32;
 
@@ -320,12 +320,14 @@ int MeanSubtractor::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 	width = w;
 	height = h;
 	levels = (uint32_t)(ceil(std::max(log((double)w),log((double)h))/log(16.)));
-	
+
+	ev2::ImageUsageFlags usage = ev2::IMAGE_USAGE_STORAGE_BIT |
+	                   ev2::IMAGE_USAGE_SAMPLED_BIT;
+
 	for (uint32_t i = 0; i < levels; ++i) {
 		w = 1 + (w - 1)/16;
 		h = 1 + (h - 1)/16;
-		downsamples[i] = ev2::create_image(ctx, w, h, 1, ev2::IMAGE_FORMAT_32F,
-									 ev2::IMAGE_USAGE_STORAGE_BIT);
+		downsamples[i] = ev2::create_image(ctx, w, h, 1, ev2::IMAGE_FORMAT_32F, usage);
 	}
 
 	assert(w == 1 && h == 1);
@@ -349,6 +351,7 @@ int MeanSubtractor::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 		ev2::bind_image(ctx, accumulate_set[i], "img_out", downsamples[i]);
 		ev2::flush_bindings(ctx, accumulate_set[i - 1]);
 	}
+	ev2::flush_bindings(ctx, accumulate_set[levels - 1]);
 
 	//ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, subtract_img);
 	//ev2::BindingSlot in_slot = ev2::find_binding(layout, "img_in");
@@ -603,36 +606,50 @@ int FluidSim::update(ev2::GfxContext *ctx)
 
 	ev2::PassID pass = ev2::begin_compute_pass(ctx);
 
+	ev2::cmd_use_buffer(pass, ubo, ev2::USAGE_UNIFORM_READ);
+	ev2::cmd_use_image(pass, q_img_1, ev2::USAGE_STORAGE_READ_COMPUTE);
+	ev2::cmd_use_image(pass, q_img_2, ev2::USAGE_STORAGE_WRITE_COMPUTE);
+
 	ev2::cmd_bind_compute_pipeline(pass, nvs_advect);
 	ev2::cmd_bind_resources(pass, advect_set);
 	ev2::cmd_dispatch(pass, gx, gy, 1);
 
-	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+	ev2::cmd_use_image(pass, q_img_1, ev2::USAGE_STORAGE_WRITE_COMPUTE);
+	ev2::cmd_use_image(pass, q_img_2, ev2::USAGE_STORAGE_READ_COMPUTE);
+
+	//glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
 	ev2::cmd_bind_compute_pipeline(pass, nvs_diffuse);
 	ev2::cmd_bind_resources(pass, diffuse_set);
 	ev2::cmd_dispatch(pass, gx, gy, 1);
 
-	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+	ev2::cmd_use_image(pass, q_img_1, ev2::USAGE_SAMPLED_COMPUTE);
+	ev2::cmd_use_image(pass, lap_p_img, ev2::USAGE_STORAGE_WRITE_COMPUTE);
+
+	//glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
 	ev2::cmd_bind_compute_pipeline(pass, nvs_pressure);
 	ev2::cmd_bind_resources(pass, pressure_set);
 	ev2::cmd_dispatch(pass, gx, gy, 1);
 
-	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+	//glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
 	mean_subtractor->record(pass);
 	
 	for (int i = 0; i < ((step == 0) ? 16 : 8); ++i) 
 		pressure_solver->v_cycle(pass, ctx, p_img, lap_p_img);
 
-	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+	//glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+	ev2::cmd_use_image(pass, q_img_1, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
+	ev2::cmd_use_image(pass, p_img, ev2::USAGE_SAMPLED_COMPUTE);
+	ev2::cmd_use_image(pass, lap_p_img, ev2::USAGE_SAMPLED_COMPUTE);
 
 	ev2::cmd_bind_compute_pipeline(pass, nvs_project);
 	ev2::cmd_bind_resources(pass, project_set);
 	ev2::cmd_dispatch(pass, gx, gy, 1);
 
-	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+	//glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
 	//mean_subtractor->set_image(ctx, p_img);
 	//mean_subtractor->record(rec);
@@ -806,18 +823,18 @@ void FluidApp::render()
 		vkCmdDraw(cmds, 6, 1, 0, 0);
 	});
 
-	ev2::cmd_bind_gfx_pipeline(pass, vector_field_pipe);
-	ev2::cmd_bind_resources(pass, vector_field_set);
+	//ev2::cmd_bind_gfx_pipeline(pass, vector_field_pipe);
+	//ev2::cmd_bind_resources(pass, vector_field_set);
 
-	glDisable(GL_DEPTH_TEST);
-	glEnable(GL_BLEND);
-	glBlendEquation(GL_FUNC_ADD);
-	glBlendFunc(GL_ONE, GL_ONE);	
+	//glDisable(GL_DEPTH_TEST);
+	//glEnable(GL_BLEND);
+	//glBlendEquation(GL_FUNC_ADD);
+	//glBlendFunc(GL_ONE, GL_ONE);	
 
-	size_t count = sim->grid_w * sim->grid_h;
-	const uint32_t indices[] = {0, 1};
-	glDrawElementsInstanced(GL_LINES, 2, GL_UNSIGNED_INT, indices, count);
-	glDisable(GL_BLEND);
+	//size_t count = sim->grid_w * sim->grid_h;
+	//const uint32_t indices[] = {0, 1};
+	//glDrawElementsInstanced(GL_LINES, 2, GL_UNSIGNED_INT, indices, count);
+	//glDisable(GL_BLEND);
 
 	ev2::end_pass(ctx, pass);
 

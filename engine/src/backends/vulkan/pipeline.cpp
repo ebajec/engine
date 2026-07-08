@@ -57,9 +57,9 @@ static std::string get_layout_string(const ev2::ShaderLayoutMapping& layout)
 {
 	std::string info;
 	for (const auto &[name, entry] : layout.binding_names) {
-		auto it = layout.bindings.find(entry.set);
+		auto it = layout.set_binding_infos.find(entry.set);
 		info += "\t(set " + std::to_string(entry.set) 
-			+ ", binding " + std::to_string(it->second[entry.idx].binding) + ") : " 
+			+ ", binding " + std::to_string(it->second.bindings[entry.idx].binding) + ") : " 
 			 + name + "\n";	
 	}
 	if (!info.empty())
@@ -190,7 +190,7 @@ static ev2::Result parse_shader_bindings(
 			binding->set < EV2_BASE_SET_COUNT && 
 			shader->stage != ev2::STAGE_COMPUTE
 		) {
-			shader->layout_map->bindings[binding->set] = {};
+			shader->layout_map->set_binding_infos[binding->set] = {};
 			continue;
 		}
 
@@ -198,7 +198,7 @@ static ev2::Result parse_shader_bindings(
 
 		const char *name = binding->name;
 
-		bool no_instance = !name || *name == '\0'; 
+		const bool no_instance = !name || *name == '\0'; 
 
 		if (no_instance && 
 			binding->type_description &&
@@ -212,18 +212,29 @@ static ev2::Result parse_shader_bindings(
 				"binding" + std::to_string(binding->binding);
 		}
 
+		const bool is_variable_sized = 
+			binding->array.dims_count > 0 && 
+			binding->array.dims[binding->array.dims_count - 1] == 0;
+
 		uint32_t descriptor_count = 1; 
 
-		for (uint32_t j = 0; j < binding->array.dims_count; ++j) {
-			descriptor_count *= binding->array.dims[j];
+		if (is_variable_sized) {
+			descriptor_count = EV2_MAX_BINDLESS_DESCRIPTORS;
+		} else {
+			for (uint32_t j = 0; j < binding->array.dims_count; ++j) {
+				descriptor_count *= binding->array.dims[j];
+			}
 		}
 
-		std::vector<VkDescriptorSetLayoutBinding> &layout_bindings = 
-			shader->layout_map->bindings[binding->set];
+		ev2::SetBindingInfo &binding_info = 
+			shader->layout_map->set_binding_infos[binding->set]; 
+
+		std::vector<VkDescriptorSetLayoutBinding> &layout_bindings = binding_info.bindings; 
+		std::vector<ev2::ShaderBindingInfo> &layout_infos = binding_info.infos;
 
 		shader->layout_map->binding_names[name] = {
 			.set = binding->set,
-			.idx = (uint32_t)layout_bindings.size()
+			.idx = (uint32_t)layout_bindings.size(),
 		};
 
 		layout_bindings.push_back(VkDescriptorSetLayoutBinding{
@@ -233,6 +244,10 @@ static ev2::Result parse_shader_bindings(
 			.stageFlags = get_vk_shader_stage_flags(shader->stage),
 			.pImmutableSamplers = nullptr,
 		});		
+
+		layout_infos.push_back(ev2::ShaderBindingInfo{
+			.is_variable_sized = is_variable_sized
+		});
 	}
 
 	return ev2::SUCCESS;
@@ -540,7 +555,7 @@ static ev2::Result merge_shader_layouts(
 	ev2::ShaderLayoutMapping &out
 ) 
 {
-	out.bindings = a.bindings;
+	out.set_binding_infos = a.set_binding_infos;
 	out.binding_names = a.binding_names;
 
 	ev2::Result result = ev2::SUCCESS;
@@ -550,7 +565,7 @@ static ev2::Result merge_shader_layouts(
 	for (const auto &[b_name, b_ent] : b.binding_names) {
 
 		const VkDescriptorSetLayoutBinding &b_layout_binding = 
-			b.bindings.at(b_ent.set)[b_ent.idx];
+			b.set_binding_infos.at(b_ent.set).bindings[b_ent.idx];
 
 		auto it = out.binding_names.find(b_name);
 		if (it != out.binding_names.end()) {
@@ -560,7 +575,8 @@ static ev2::Result merge_shader_layouts(
 				return ev2::EBAD_SHADER;
 			}
 
-			VkDescriptorSetLayoutBinding &a_layout_binding = out.bindings[a_ent.set][a_ent.idx];
+			VkDescriptorSetLayoutBinding &a_layout_binding = 
+				out.set_binding_infos[a_ent.set].bindings[a_ent.idx];
 
 			a_layout_binding.stageFlags |= b_layout_binding.stageFlags;
 
@@ -574,12 +590,12 @@ static ev2::Result merge_shader_layouts(
 				return ev2::EBAD_SHADER;
 			}
 		} else {
-			auto it_binding = out.bindings.emplace(b_ent.set, std::vector<VkDescriptorSetLayoutBinding>{});
-			it_binding.first->second.push_back(b_layout_binding);
+			auto it_binding = out.set_binding_infos.emplace(b_ent.set, std::vector<VkDescriptorSetLayoutBinding>{});
+			it_binding.first->second.bindings.push_back(b_layout_binding);
 
 			out.binding_names[b_name] = {
 				.set = b_ent.set,
-				.idx = (uint32_t)it_binding.first->second.size()
+				.idx = (uint32_t)it_binding.first->second.bindings.size()
 			};
 		}
 	}
@@ -639,36 +655,58 @@ static ev2::Result generate_shader_descriptor_layouts(
 )
 {
 	uint32_t max_set = 0;
-	for (const auto &[set, layout_bindings] : shader_layout.bindings) {
+	for (const auto &[set, layout_bindings] : shader_layout.set_binding_infos) {
 		max_set = std::max(set, max_set);
 	}
 
 	layouts.resize(max_set + 1, VK_NULL_HANDLE);
 
 	// For unused slots, create an 'empty' descriptor layout
-	for (uint32_t i = 0; i <= max_set; ++i) {
+	for (uint32_t set = 0; set <= max_set; ++set) {
+		std::vector<VkDescriptorBindingFlags> binding_flags;
+
+		VkDescriptorSetLayoutBindingFlagsCreateInfo flag_info = {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+		};
+
 		VkDescriptorSetLayoutCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 		};
 
-		if (auto it = shader_layout.bindings.find(i); 
-			it != shader_layout.bindings.end()) {
+		if (auto it = shader_layout.set_binding_infos.find(set); 
+			it != shader_layout.set_binding_infos.end()) {
 
-			if ((flags & USE_BASE_DESCRIPTOR_SETS) && i < EV2_BASE_SET_COUNT) {
-				layouts[i] = ctx->get_base_descriptor_set_layout(i);
+			if ((flags & USE_BASE_DESCRIPTOR_SETS) && set < EV2_BASE_SET_COUNT) {
+				layouts[set] = ctx->get_base_descriptor_set_layout(set);
 				continue;
 			} else {
-				const std::vector<VkDescriptorSetLayoutBinding> &bindings = it->second;
+				const std::vector<VkDescriptorSetLayoutBinding> &bindings = it->second.bindings;
+				uint32_t binding_count = (uint32_t)bindings.size();
+
 				create_info.pBindings = bindings.data();
-				create_info.bindingCount = (uint32_t)bindings.size();
+				create_info.bindingCount = binding_count;
 				create_info.flags = 0;
+
+				binding_flags.resize(binding_count, 0);
+				
+				for (uint32_t b = 0; b < binding_count; ++b) {
+					const ev2::ShaderBindingInfo &info = it->second.infos[b];
+
+					//if (info.is_variable_sized)
+					//	binding_flags[b] |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+				}
+
+				flag_info.pBindingFlags = binding_flags.data();
+				flag_info.bindingCount = (uint32_t)binding_flags.size();
+
+				create_info.pNext = &flag_info;
 			}	
 		} else {
 			create_info.flags = 0;
 		}
 
 		VkResult result = vkCreateDescriptorSetLayout(
-			ctx->device, &create_info, nullptr, &layouts[i]);
+			ctx->device, &create_info, nullptr, &layouts[set]);
 
 		if (result != VK_SUCCESS)
 			return set_error(ev2::ELOAD_FAILED, "Failed to create descriptor set layout");
@@ -1292,6 +1330,12 @@ static BindingsID create_bindings_internal(
 	VkDescriptorSetLayout set_layout = pipeline.set_layouts[index]; 
 	VkDescriptorSet set = VK_NULL_HANDLE;
 
+	VkDescriptorSetVariableDescriptorCountAllocateInfo variable_info = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
+	};
+
+	VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+
 	if (mode == BINDING_MODE_STATIC) {
 		VkDescriptorSetAllocateInfo alloc_info = {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -1339,7 +1383,7 @@ BindingsID create_bindings(GfxContext *ctx, GfxPipelineID pipeline_id,
 		return EV2_NULL_HANDLE(Bindings);
 	}
 
-	if (!pipeline->base.layout_map->bindings.contains(index)) {
+	if (!pipeline->base.layout_map->set_binding_infos.contains(index)) {
 		log_error("Descriptor set index %d does not exist for graphics pipeline '%s'", 
 			index, ctx->get_gfx_pipeline_name(pipeline_id));
 		return EV2_NULL_HANDLE(Bindings);
@@ -1357,7 +1401,7 @@ BindingsID create_bindings(GfxContext *ctx, ComputePipelineID pipeline_id,
 	if (!pipeline)
 		return EV2_NULL_HANDLE(Bindings);
 
-	if (!pipeline->base.layout_map->bindings.contains(index)) {
+	if (!pipeline->base.layout_map->set_binding_infos.contains(index)) {
 		log_error("Descriptor set index %d does not exist for compute pipeline '%s'", 
 			index, ctx->get_compute_pipeline_name(pipeline_id));
 		return EV2_NULL_HANDLE(Bindings);

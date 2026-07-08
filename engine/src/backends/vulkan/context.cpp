@@ -155,38 +155,92 @@ static void populateDebugMessengerCreateInfo(
 {
 } 
 
+struct QueueFamilyScorer
+{
+	struct ScoredIndex {
+		int score;
+		std::optional<uint32_t> queue_family_index;
+
+		void update(int new_score, uint32_t new_queue) {
+			if (new_score > score) {
+				queue_family_index = new_queue;
+				score = new_score;
+			}
+		}
+	};
+
+	ScoredIndex graphics_family;
+	ScoredIndex compute_family;
+	ScoredIndex transfer_family;
+	ScoredIndex present_family;
+};
+
+static int score_for_graphics(VkPhysicalDevice device, const VkQueueFamilyProperties &queue_family)
+{
+	if (!(queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT))
+		return -1;
+	return 1;
+}
+
+static int score_for_transfer(VkPhysicalDevice device, const VkQueueFamilyProperties &queue_family)
+{
+	if (!(queue_family.queueFlags & VK_QUEUE_TRANSFER_BIT))
+		return -1;
+	return 1;
+}
+
+static int score_for_compute(VkPhysicalDevice device, const VkQueueFamilyProperties &queue_family)
+{
+	if (!(queue_family.queueFlags & VK_QUEUE_COMPUTE_BIT))
+		return -1;
+	return 1;
+}
+
+static int score_for_present(VkPhysicalDevice device, 
+							 const VkQueueFamilyProperties &queue_family)
+{
+	return 1;
+}
+
 static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, 
 											VkSurfaceKHR surface) 
 {
-    QueueFamilyIndices indices;
-    
-    uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+    uint32_t queue_family_count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
 
-    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+    std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
     vkGetPhysicalDeviceQueueFamilyProperties(device,
-											 &queueFamilyCount, queueFamilies.data());
+											 &queue_family_count, queue_families.data());
 
-    int i = 0;
-    for (const auto& queueFamily : queueFamilies) {
-        VkBool32 presentSupport = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+	QueueFamilyScorer scorer {};
 
-        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            indices.graphicsFamily = i;
-        }   
-        if (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) {
-            indices.computeFamily = i;
-        }   
-        if (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT) {
-            indices.transferFamily = i;
-        }   
-        if (presentSupport) {
-            indices.presentFamily = i;
-        }
+    for (uint32_t i = 0; i < queue_family_count; ++i) {
+		const VkQueueFamilyProperties &queue_family = queue_families[i];
 
-        i++;
+		VkBool32 present_support = false;
+		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &present_support);
+
+		int graphics_score = score_for_graphics(device, queue_family);
+		scorer.graphics_family.update(graphics_score, i);
+
+		int compute_score = score_for_compute(device, queue_family);
+		scorer.compute_family.update(compute_score, i);
+
+		int transfer_score = score_for_transfer(device, queue_family);
+		scorer.transfer_family.update(transfer_score, i);
+
+		if (present_support) {
+			int present_score = score_for_present(device, queue_family);
+			scorer.present_family.update(present_score, i);
+		}
     }
+
+    QueueFamilyIndices indices = {
+		.graphicsFamily = scorer.graphics_family.queue_family_index,
+		.computeFamily = scorer.compute_family.queue_family_index,
+		.transferFamily = scorer.transfer_family.queue_family_index,
+		.presentFamily = scorer.present_family.queue_family_index,
+	};
     
     return indices;
 }
@@ -468,6 +522,7 @@ static ev2::Result pick_logical_device(ev2::GfxContext *ctx,
 	VkPhysicalDeviceVulkan12Features features12{
 		.sType             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
 		.timelineSemaphore = VK_TRUE,
+		.runtimeDescriptorArray = VK_TRUE,
 	};
 
 	VkPhysicalDeviceVulkan13Features features13{

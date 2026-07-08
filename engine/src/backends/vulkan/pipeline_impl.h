@@ -23,16 +23,25 @@
 
 namespace ev2 {
 
+struct ShaderBindingInfo 
+{
+	bool is_variable_sized : 1 = false;
+};
+
+struct SetBindingInfo {
+	std::vector<VkDescriptorSetLayoutBinding> bindings;
+	std::vector<ShaderBindingInfo> infos;
+};
+
 struct ShaderLayoutMapping
 {
 	struct BindingEntry {
 		uint32_t set;
 		uint32_t idx;
 	};
-	robin_hood::unordered_map<std::string, BindingEntry> binding_names;
-	robin_hood::unordered_map<uint32_t, 
-		std::vector<VkDescriptorSetLayoutBinding>
-	> bindings;
+
+	robin_hood::unordered_flat_map<std::string, BindingEntry> binding_names;
+	robin_hood::unordered_flat_map<uint32_t, SetBindingInfo> set_binding_infos;
 
 	bool find(const char *name, 
 			 uint32_t * out_set,
@@ -42,7 +51,7 @@ struct ShaderLayoutMapping
 			return false;
 
 		*out_set = it->second.set;
-		*out_binding = bindings.at(it->second.set)[it->second.idx]; 
+		*out_binding = set_binding_infos.at(it->second.set).bindings[it->second.idx]; 
 		return true;
 	}
 	std::vector<VkPushConstantRange> push_constant_ranges;
@@ -243,7 +252,8 @@ struct Pass
 
 	std::vector<std::function<void(VkCommandBuffer)>> custom_callbacks;
 
-	Array<Command, uint32_t, 32> cmds;
+	//Array<Command, uint32_t, 32> cmds;
+	std::vector<Command> cmds;
 	Array<char, uint32_t, 256> push_constant_data;
 
 	uint32_t queue_family;

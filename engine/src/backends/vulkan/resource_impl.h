@@ -84,8 +84,6 @@ struct ResourceState {
 	inline ResourceStateFlags set_read(VkAccessFlags2 access, VkPipelineStageFlags2 stage, 
 									uint32_t queue_family)
 	{
-		assert(write.layout);
-
 		read.access |= access;
 		read.stage |= stage;
 		read.queue_family_index = queue_family;

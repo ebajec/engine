@@ -55,7 +55,7 @@ public:
 	{
 		const IndexType old_size = _size;
 		grow_to(old_size + count);
-		memcpy(&_data[_size], start, count * sizeof(T)); 
+		memcpy(&_data[old_size], start, count * sizeof(T)); 
 	}
 
 	inline void reserve(IndexType capacity)

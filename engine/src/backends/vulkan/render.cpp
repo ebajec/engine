@@ -583,11 +583,25 @@ static ResourceStateFlags usage_to_state_flags(Usage usage)
 				.access = VK_ACCESS_2_TRANSFER_WRITE_BIT, 
 				.stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT
 			};
+		case USAGE_UNIFORM_READ:
+			return ResourceStateFlags{
+				.access = VK_ACCESS_2_UNIFORM_READ_BIT, 
+				.stage = 
+					VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | 
+					VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | 
+					VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
+			};
 		case USAGE_SAMPLED_GRAPHICS:
 			return ResourceStateFlags{
 				.access = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, 
 				.stage = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT
 			};
+		case USAGE_SAMPLED_COMPUTE:
+			return ResourceStateFlags{
+				.access = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, 
+				.stage = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
+			};
+			
 		case USAGE_COLOR_ATTACHMENT:
 			return ResourceStateFlags{
 				.access = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, 
@@ -605,6 +619,11 @@ static ResourceStateFlags usage_to_state_flags(Usage usage)
 		case USAGE_STORAGE_READ_COMPUTE:
 			return ResourceStateFlags{
 				.access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+				.stage = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
+			};
+		case USAGE_STORAGE_WRITE_COMPUTE:
+			return ResourceStateFlags{
+				.access = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
 				.stage = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
 			};
 		case USAGE_STORAGE_READ_WRITE_COMPUTE:
@@ -640,19 +659,23 @@ static uint8_t usage_to_rw_flags(Usage usage)
 {
 	switch(usage) {
 		case USAGE_TRANSFER_SRC:
-			return PASS_READ;
-		case USAGE_TRANSFER_DST:
-			return PASS_WRITE;
+		case USAGE_UNIFORM_READ:
+		case USAGE_VERTEX_INPUT:
+		case USAGE_INDEX_INPUT:
 		case USAGE_SAMPLED_GRAPHICS:
-			return PASS_READ;
-		case USAGE_COLOR_ATTACHMENT:
-			return PASS_WRITE;
-		case USAGE_DEPTH_ATTACHMENT:
-			return PASS_WRITE | PASS_READ;
 		case USAGE_STORAGE_READ_COMPUTE:
+		case USAGE_SAMPLED_COMPUTE:
 			return PASS_READ;
+
+		case USAGE_TRANSFER_DST:
+		case USAGE_COLOR_ATTACHMENT:
+		case USAGE_STORAGE_WRITE_COMPUTE:
+			return PASS_WRITE;
+
+		case USAGE_DEPTH_ATTACHMENT:
 		case USAGE_STORAGE_READ_WRITE_COMPUTE:
 			return PASS_READ | PASS_WRITE;
+
 		case USAGE_MAX_ENUM:
 		case USAGE_UNDEFINED:
 		default:
@@ -1757,15 +1780,9 @@ static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBu
 					stage_mask |= it->stageFlags;
 				}
 
-				VkPushConstantsInfo info = {
-					.sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO,
-					.layout = pipeline->layout,
-					.stageFlags = stage_mask,
-					.offset = cmd.offset,
-					.pValues = (void*)bytes,
-				};
+				vkCmdPushConstants(
+					cmds, pipeline->layout, stage_mask, cmd.offset, cmd.size, (const void*)bytes);
 
-				vkCmdPushConstants2(cmds, &info);
 				break;
 			}
 			case Dispatch: {
