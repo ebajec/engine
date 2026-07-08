@@ -1299,6 +1299,10 @@ static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 				.queue_index = queue_family_index
 			});
 
+		if (!rg->queues[submission.queue_index]) {
+			return set_error(ev2::ERENDER_GRAPH, "Render graph queue index %d is invalid");
+		}
+
 		uint32_t submission_index = (uint32_t)rg->submissions.size() - 1;
 
 		// Add image layout transition barrier for swapchain image, and
@@ -1891,7 +1895,7 @@ static VkResult rg_submit(GfxContext *ctx, const RenderGraph *rg)
 		const RenderGraphSubmission &submission = rg->submissions[i];
 
 		auto [it, exists] = submission_map.emplace(
-			submission.queue_index,std::vector<VkSubmitInfo2>());
+			submission.queue_index, std::vector<VkSubmitInfo2>());
 
 		std::vector<VkSubmitInfo2>& submissions = it->second;
 
@@ -1977,11 +1981,15 @@ static RenderGraph *rg_create(GfxContext *ctx)
 
 	uint32_t queue_family_count = (uint32_t)ctx->queue_families.size(); 
 
-	rg->queues.resize(queue_family_count);
+	rg->queues.resize(queue_family_count, nullptr);
 
 	for (uint32_t i = 0; i < queue_family_count; ++i) {
 		QueueFamily &queue_family = ctx->queue_families[i];
-		rg->queues[i] = queue_family.queues ? 
+
+		if (!queue_family.queues)
+			continue;
+
+		rg->queues[queue_family.index] = queue_family.queues ? 
 			&queue_family.queues[0] : nullptr;
 	}
 

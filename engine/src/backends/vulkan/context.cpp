@@ -598,12 +598,16 @@ static ev2::Result create_swap_chain(ev2::GfxContext *ctx, uint32_t w, uint32_t 
     QueueFamilyIndices indices = findQueueFamilies(ctx->physicalDevice, 
 												   ctx->surface);
     uint32_t queueFamilyIndices[] = {
-		indices.graphicsFamily.value(), indices.presentFamily.value()};
+		indices.graphicsFamily.value(), 
+		indices.presentFamily.value()
+	};
 
     if (indices.graphicsFamily != indices.presentFamily) {
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         createInfo.queueFamilyIndexCount = 2;
         createInfo.pQueueFamilyIndices = queueFamilyIndices;
+		log_info("Separate graphics (%d) and present (%d) queue families detected",
+		   indices.graphicsFamily.value(), indices.presentFamily.value());
     } else {
         createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         createInfo.queueFamilyIndexCount = 0; // Optional
