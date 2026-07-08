@@ -1,13 +1,6 @@
 #!/bin/bash
 
-WORKSPACE = $pwd
-
-git clone git@github.com:KhronosGroup/SPIRV-Reflect.git ./external/spirv-reflect/spirv-reflect &
-git clone git@github.com:ocornut/imgui.git ./external/imgui/imgui &
-git clone git@github.com:epezent/implot.git ./external/imgui/implot &
-git clone git@github.com:nothings/stb.git ./external/stb/stb & 
-
-wait
+git submodule update --init
 
 # Detect Ubuntu
 if [ -f /etc/os-release ]; then
