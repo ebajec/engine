@@ -247,6 +247,12 @@ void destroy_texture(GfxContext *ctx, TextureID h)
 	ctx->texture_pool->deallocate(to_pool_id(h));
 }
 
+ImageID get_backing_image(GfxContext *ctx, TextureID h)
+{
+	Texture *tex = ctx->get_texture(h);
+	return tex->img;
+}
+
 void get_texture_gpu_handle(GfxContext *ctx, TextureID h, VkImageView *view)
 {
 	Texture *tex = ctx->get_texture(h);

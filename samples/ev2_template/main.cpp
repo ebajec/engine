@@ -88,10 +88,9 @@ int main(int argc, char *argv[])
 		return EXIT_FAILURE;
 
 	while (
-		app->update() == App::OK &&
+		app->begin_frame() == App::OK &&
 		data.update(ctx) == App::OK
 	) {
-		app->begin_frame();
 		data.render(ctx);
 		app->end_frame();
 	}

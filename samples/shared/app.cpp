@@ -171,7 +171,7 @@ int App::resize(int width, int height)
 		App::OK : App::ERROR;
 }
 
-int App::update()
+int App::begin_frame()
 {
 	if (glfwWindowShouldClose(win.ptr))
 		return SHOULD_CLOSE;
@@ -219,15 +219,6 @@ int App::update()
 		return App::ERROR;
 
 	return result;
-}
-
-int App::begin_frame()
-{
-	ev2::Result result = ev2::begin_frame(ctx);
-
-	if (result != ev2::SUCCESS)
-		return App::ERROR;
-	return App::OK;
 }
 
 int App::end_frame()

@@ -184,6 +184,9 @@ struct CmdPushConstant{
 	uint32_t offset;
 	uint32_t size;
 };
+struct CmdClear{
+	ImageID image;
+};
 struct CmdDispatch{
 	uint32_t counts[3];
 };
@@ -208,11 +211,18 @@ enum CmdType
 	BindVertexBuffer,
 	BindIndirectBuffer,
 	PushConstant,
+	Clear,
 	Dispatch,
 	UseBuffer,
 	UseImage,
 	Custom
 };
+
+#define COMMAND_UNION_CONVERSION(Name, NameLower)\
+Command(Cmd##Name in_cmd) {\
+	NameLower = in_cmd;\
+	type = Name;\
+}
 
 struct Command {
 	union {
@@ -223,42 +233,26 @@ struct Command {
 		CmdBindVertexBuffer		bind_vertex_buffer;
 		CmdBindIndirectBuffer	bind_indirect_buffer;
 		CmdPushConstant			push_constant;
+		CmdClear				clear;
 		CmdDispatch 			dispatch;
 		CmdUseBuffer 			use_buffer; 
 		CmdUseImage 			use_image;
 		CmdCustom				custom;
 	};
 	CmdType type;
-};
 
-struct RenderPass
-{
-	RenderTargetID target;
-	ViewID view;
-	Rect viewport;
-	Rect scissor;
-
-	// Contains UBO with view data.
-	VkDescriptorSet descriptor_set;
-
-	bool render_to_swapchain() {
-		return !target.is_valid();
-	}
-};
-
-struct Pass
-{
-	GfxContext *ctx;
-
-	std::vector<std::function<void(VkCommandBuffer)>> custom_callbacks;
-
-	//Array<Command, uint32_t, 32> cmds;
-	std::vector<Command> cmds;
-	Array<char, uint32_t, 256> push_constant_data;
-
-	uint32_t queue_family;
-
-	std::unique_ptr<RenderPass> gfx;
+	COMMAND_UNION_CONVERSION(BindComputePipeline, bind_compute_pipeline)
+	COMMAND_UNION_CONVERSION(BindGfxPipeline, bind_gfx_pipeline)
+	COMMAND_UNION_CONVERSION(BindResources, bind_resources)
+	COMMAND_UNION_CONVERSION(BindIndexBuffer, bind_index_buffer)
+	COMMAND_UNION_CONVERSION(BindVertexBuffer, bind_vertex_buffer)
+	COMMAND_UNION_CONVERSION(BindIndirectBuffer, bind_indirect_buffer)
+	COMMAND_UNION_CONVERSION(PushConstant, push_constant)
+	COMMAND_UNION_CONVERSION(Clear, clear)
+	COMMAND_UNION_CONVERSION(Dispatch, dispatch)
+	COMMAND_UNION_CONVERSION(UseBuffer, use_buffer) 
+	COMMAND_UNION_CONVERSION(UseImage, use_image)
+	COMMAND_UNION_CONVERSION(Custom, custom)
 };
 
 static inline ViewData view_data_from_matrices(float view[], float proj[])

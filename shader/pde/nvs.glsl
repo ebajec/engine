@@ -6,7 +6,7 @@
 #define NU 0.0
 #define RHO 1.f
 
-layout (binding = 0) uniform ubo {
+layout (set = 0, binding = 0) uniform ubo {
 	vec2 u_cursor;
 	vec2 u_cursor_prev;
 	uint u_cursor_flags;

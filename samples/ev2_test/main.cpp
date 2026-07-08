@@ -58,7 +58,7 @@ struct WaveSim
 
 	uint32_t grid_w, grid_h;
 
-	struct alignas(16) {
+	struct alignas(8) {
 		alignas(8) glm::vec2 cursor1 = glm::vec2(0);
 		alignas(8) glm::vec2 cursor2 = glm::vec2(0);
 
@@ -71,7 +71,7 @@ struct WaveSim
 		uint32_t active = 0;
 	} uniforms {};
 
-	ev2::BufferID ubo;
+	//ev2::BufferID ubo;
 
 	ev2::ImageID swap_img[2] {};
 	ev2::TextureID swap_tex[2] {};
@@ -116,8 +116,8 @@ int WaveSim::init(ev2::GfxContext *ctx)
 	swap_tex[0] = ev2::create_texture(ctx, swap_img[0], ev2::FILTER_BILINEAR);
 	swap_tex[1] = ev2::create_texture(ctx, swap_img[1], ev2::FILTER_BILINEAR);
 
-	ubo = ev2::create_buffer(ctx, sizeof(uniforms),
-		ev2::BUFFER_USAGE_TRANSFER_DST_BIT | ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	//ubo = ev2::create_buffer(ctx, sizeof(uniforms),
+	//	ev2::BUFFER_USAGE_TRANSFER_DST_BIT | ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
 	//------------------------------------------------------------------------------
 	// Get shader resource locations and create descriptor sets
@@ -152,17 +152,17 @@ int WaveSim::update(ev2::GfxContext *ctx)
 	}
 
 	ImGui::End();
-	ev2::UploadContext uc = ev2::begin_upload(ctx,
-		sizeof(uniforms), alignof(decltype(uniforms)));
+	//ev2::UploadContext uc = ev2::begin_upload(ctx,
+	//	sizeof(uniforms), alignof(decltype(uniforms)));
 
-	memcpy(uc.ptr, &uniforms, sizeof(uniforms));
-	ev2::BufferUpload upload = {
-		.src_offset = 0,
-		.dst_offset = 0,
-		.size = sizeof(uniforms),
-	};
+	//memcpy(uc.ptr, &uniforms, sizeof(uniforms));
+	//ev2::BufferUpload upload = {
+	//	.src_offset = 0,
+	//	.dst_offset = 0,
+	//	.size = sizeof(uniforms),
+	//};
 
-	sync = ev2::commit_buffer_uploads(ctx, uc, ubo, &upload, 1);
+	//sync = ev2::commit_buffer_uploads(ctx, uc, ubo, &upload, 1);
 
 	int img_A = 0;
 	int img_B = 1;
@@ -173,13 +173,13 @@ int WaveSim::update(ev2::GfxContext *ctx)
 	uint32_t grps_x = grid_w/32, grps_y = grid_h/32, grps_z = 1;
 
 	ev2::reset_bindings(ctx, sim0_bindings);
-	ev2::bind_buffer(ctx, sim0_bindings, "Uniforms", ubo, 0, sizeof(uniforms));
+	//ev2::bind_buffer(ctx, sim0_bindings, "Uniforms", ubo, 0, sizeof(uniforms));
 	ev2::bind_texture(ctx, sim0_bindings, "img_in", swap_tex[img_A]);
 	ev2::bind_image(ctx, sim0_bindings, "img_out", swap_img[img_B]);
 	ev2::flush_bindings(ctx, sim0_bindings);
 
 	ev2::reset_bindings(ctx, sim1_bindings);
-	ev2::bind_buffer(ctx, sim1_bindings, "Uniforms", ubo, 0, sizeof(uniforms));
+	//ev2::bind_buffer(ctx, sim1_bindings, "Uniforms", ubo, 0, sizeof(uniforms));
 	ev2::bind_texture(ctx, sim1_bindings, "img_in", swap_tex[img_B]);
 	ev2::bind_image(ctx, sim1_bindings, "img_out", swap_img[img_A]);
 	ev2::flush_bindings(ctx, sim1_bindings);
@@ -198,6 +198,7 @@ int WaveSim::update(ev2::GfxContext *ctx)
 
 	ev2::cmd_bind_resources(pass, sim1_bindings);
 	ev2::cmd_bind_compute_pipeline(pass, sim_pipelines[1]);
+	ev2::cmd_push_constant(pass, sim_pipelines[1], 0, sizeof(uniforms), (void*)&uniforms);
 	ev2::cmd_dispatch(pass, grps_x, grps_y, grps_z);
 
 	ev2::cmd_use_image(pass, swap_img[img_B], ev2::USAGE_SAMPLED_GRAPHICS);
@@ -274,9 +275,6 @@ int FluidApp::update()
 {
 	int result = EXIT_SUCCESS;
 
-	if ((result = App::update()))
-		return result;
-
 	if ((result = main_panel->update(ctx)))
 		return result;
 
@@ -317,15 +315,26 @@ int main(int argc, char *argv[])
 	if (app->initialize(argc, argv) != App::OK)
 		return EXIT_FAILURE;
 
-	while (
-		app->update() == App::OK
-	) {
+	int status;
+
+	for (;;)
+	{
+		status = app->begin_frame();
+		if (should_exit(status))
+			break;
+
+		status = app->update();
+		if (should_exit(status))
+			break;
+
 		app->render();
-		if (app->end_frame() != ev2::SUCCESS)
-			return EXIT_FAILURE;
+
+		status = app->end_frame();
+		if (should_exit(status))
+			break;
 	}
 
 	app->destroy();
 
-	return EXIT_SUCCESS;
+	return status;
 }

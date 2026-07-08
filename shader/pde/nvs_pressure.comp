@@ -5,8 +5,8 @@
 
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-layout (binding = 1) uniform sampler2D q_in;
-layout(r32f, binding = 2) writeonly uniform image2D f_out;
+layout (set = 0, binding = 1) uniform sampler2D q_in;
+layout (set = 0, r32f, binding = 2) writeonly uniform image2D f_out;
 
 vec4 get_q(ivec2 idx)
 {

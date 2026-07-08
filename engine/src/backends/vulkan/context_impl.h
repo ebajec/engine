@@ -176,10 +176,6 @@ struct FrameContext
 
 	// Destroy any semaphores for resources not used by this frame
 	void cull_unused_syncs();
-
-	Pass * new_pass(Pass &&pass) {
-		return &passes.emplace_back(std::move(pass));
-	}
 };
 
 struct GPUFramedata
@@ -281,9 +277,25 @@ struct PassCommand
 	uint32_t barrier_count;
 };
 
+struct RenderPass
+{
+	RenderTargetID target;
+	ViewID view;
+	Rect viewport;
+	Rect scissor;
+
+	// Contains UBO with view data.
+	VkDescriptorSet descriptor_set;
+
+	bool render_to_swapchain() {
+		return !target.is_valid();
+	}
+};
+
 struct PassNode
 {
 	std::vector<PassCommand> commands;
+
 	std::vector<PassBarrier> barriers;
 	std::vector<PassBarrier> pre_barriers;
 	std::vector<PassBarrier> post_barriers;
@@ -292,13 +304,27 @@ struct PassNode
 
 	const ev2::Pass *pass;
 
+	std::vector<std::function<void(VkCommandBuffer)>> custom_callbacks;
+	Array<char, uint32_t, 256> push_constant_data;
+
+	std::unique_ptr<RenderPass> gfx;
+
+	std::string name;
+
 	uint32_t submission_idx;
 	uint32_t barrier_offset;
 	uint32_t queue_family_index;
 
 	bool is_gfx_node() const {
-		return pass->gfx.get();
+		return gfx.get();
 	}
+};
+
+struct Pass
+{
+	GfxContext *ctx;
+	PassNode *node;
+	std::vector<Command> cmds;
 };
 
 struct RenderGraphSubmission
@@ -319,10 +345,10 @@ struct RenderGraph
 
 	std::vector<RenderGraphSubmission> submissions;
 
-	// Satisfies a valid topological given by the order out the input passes
-	std::vector<PassNode> nodes;
+	// Satisfies a valid topological order given by the order out the input passes
+	std::deque<PassNode> nodes;
 
-	// Satisfies a valid topological given by the order out the input passes
+	// Satisfies a valid topological order given by the order out the input passes
 	std::vector<PassEdge> edges;
 
 	std::unordered_map<
@@ -336,6 +362,9 @@ struct RenderGraph
 	std::unordered_map<uint64_t, uint32_t> image_passes;
 
 	std::vector<QueueSubmitter *> queues;
+
+	uint32_t gfx_counter;
+	uint32_t compute_counter;
 };
 
 static constexpr uint32_t PASS_NODE_INDEX_OUT_OF_FRAME = UINT32_MAX;
@@ -439,6 +468,7 @@ struct GfxContext
 	void assert_inside_frame();
 	void assert_outside_frame();
 	bool is_inside_frame() {return get_current_frame()->index >= frame_counter;}
+	bool is_outside_frame() {return !frame_counter || get_current_frame()->index < frame_counter;}
 	
 	VkDescriptorSetLayout get_base_descriptor_set_layout(uint32_t level);
 	VkPipelineLayout get_base_pipeline_layout(uint32_t level);

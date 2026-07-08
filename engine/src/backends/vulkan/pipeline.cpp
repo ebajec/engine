@@ -219,7 +219,7 @@ static ev2::Result parse_shader_bindings(
 		uint32_t descriptor_count = 1; 
 
 		if (is_variable_sized) {
-			descriptor_count = EV2_MAX_BINDLESS_DESCRIPTORS;
+			descriptor_count = 0;//EV2_MAX_BINDLESS_DESCRIPTORS;
 		} else {
 			for (uint32_t j = 0; j < binding->array.dims_count; ++j) {
 				descriptor_count *= binding->array.dims[j];
@@ -718,7 +718,8 @@ static ev2::Result initialize_base_pipeline(
 	ev2::GfxContext *ctx, 
 	ev2::BasePipeline *base, 
 	std::shared_ptr<const ev2::ShaderLayoutMapping> shader_layout,
-	BasePipelineInitFlags flags
+	BasePipelineInitFlags flags,
+	VkShaderStageFlags stage
 )
 {
 	std::vector<VkDescriptorSetLayout> final_layouts;
@@ -728,12 +729,18 @@ static ev2::Result initialize_base_pipeline(
 	if (result)
 		return result;
 
+	VkPushConstantRange push_constant_range = {
+		.stageFlags = stage,
+		.offset = 0,
+		.size = ctx->caps.limits.maxPushConstantsSize, 
+	};
+
 	VkPipelineLayoutCreateInfo layout_info = {
     	.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
     	.setLayoutCount = (uint32_t)final_layouts.size(),
     	.pSetLayouts =  final_layouts.data(),
-    	.pushConstantRangeCount = (uint32_t)shader_layout->push_constant_ranges.size(),
-    	.pPushConstantRanges = shader_layout->push_constant_ranges.data(),
+    	.pushConstantRangeCount = 1,
+    	.pPushConstantRanges = &push_constant_range,
 	};
 
 	VkResult vk_result = 
@@ -744,8 +751,11 @@ static ev2::Result initialize_base_pipeline(
 		goto cleanup;
     }
 
+	base->stage_mask = stage;
 	base->set_layouts = std::move(final_layouts); 
 	base->layout_map = shader_layout;
+	return result;
+
 cleanup:
 	for (VkDescriptorSetLayout layout : final_layouts) {
 		if (layout)
@@ -977,11 +987,9 @@ static ev2::Result initialize_gfx_pipeline(
 				   info->vert_path.c_str(), info->frag_path.c_str());
 
 	result = initialize_base_pipeline(
-		ctx, &pipeline.base, merged_layout, USE_BASE_DESCRIPTOR_SETS);
-
-	pipeline.base.stage_mask = 
-		VK_SHADER_STAGE_VERTEX_BIT |
-		VK_SHADER_STAGE_FRAGMENT_BIT;
+		ctx, &pipeline.base, merged_layout, USE_BASE_DESCRIPTOR_SETS,
+		VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT
+	);
 
 	if (result)
 		return result;
@@ -1139,10 +1147,9 @@ static ev2::Result compute_pipeline_create_callback(
 	ev2::Shader *shader = ctx->get_shader(shader_handle);
 
 	ev2::Result result = initialize_base_pipeline(
-		ctx, &pipeline->base, shader->layout_map, 0);
-
-	pipeline->base.stage_mask = 
-		VK_SHADER_STAGE_COMPUTE_BIT;
+		ctx, &pipeline->base, shader->layout_map, 0,
+		VK_SHADER_STAGE_COMPUTE_BIT
+	);
 
 	if (result)
 		return result;

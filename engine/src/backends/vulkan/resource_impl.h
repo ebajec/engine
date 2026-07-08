@@ -36,7 +36,8 @@ struct ResourceState {
 	ResourceSync write_sync;
 	std::vector<ResourceSync> read_syncs;
 
-	uint64_t last_used_by_frame;
+	uint64_t last_used_by_frame : 63;
+	bool written : 1;
 
 	inline ResourceStateFlags get_current() {
 		return read.stage ? read : write;
@@ -77,7 +78,6 @@ struct ResourceState {
 			.wait_value = wait_value,
 			.semaphore = semaphore,
 		};
-
 		return;
 	}
 
@@ -104,6 +104,8 @@ struct ResourceState {
 		write.stage = stage;
 		write.queue_family_index = queue_family;
 		write.layout = VK_IMAGE_LAYOUT_GENERAL;
+
+		written = true;
 
 		return old;
 	}
@@ -151,6 +153,22 @@ union TaggedResource {
 
 	constexpr ev2::ImageID to_image() const {
 		return ev2::ImageID{.id = handle, .gen = generation};
+	}
+
+	uint32_t id() {
+		switch(type) {
+			case RESOURCE_TYPE_BUFFER: return to_buffer().id;
+			case RESOURCE_TYPE_IMAGE: return to_image().id;
+			default: return 0;
+		}
+	}
+
+	const char *type_str() const {
+		switch(type) {
+			case RESOURCE_TYPE_BUFFER: return "Buffer";
+			case RESOURCE_TYPE_IMAGE: return "Image";
+			default: return "";
+		}
 	}
 };
 
@@ -238,6 +256,16 @@ struct Image
 	uint32_t h;
 	uint32_t d;
 	uint32_t levels;
+
+	VkImageSubresourceRange whole_image_range() {
+		return VkImageSubresourceRange{
+			.aspectMask = aspect_mask,
+			.baseMipLevel = 0,
+			.levelCount = levels,
+			.baseArrayLayer = 0, 
+			.layerCount = d,
+		};
+	}
 };
 
 struct Texture

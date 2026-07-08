@@ -5,9 +5,9 @@
 
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-layout (rgba32f, binding = 1) uniform image2D q_img; // state vector, rgba32f
-layout (binding = 2) uniform sampler2D p_in; // pressure, r32f
-layout (binding = 3) uniform sampler2D lap_p_in; // lap_p, r32f
+layout (set = 0, rgba32f, binding = 1) uniform image2D q_img; // state vector, rgba32f
+layout (set = 0, binding = 2) uniform sampler2D p_in; // pressure, r32f
+layout (set = 0, binding = 3) uniform sampler2D lap_p_in; // lap_p, r32f
 
 
 ivec2 neumann(ivec2 idx, ivec2 size)

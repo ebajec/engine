@@ -983,14 +983,21 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 			return ev2::EINIT_FAILED;
 	}
 
+	VkPushConstantRange base_push_constant_range = {
+		.stageFlags = 
+			VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+		.offset = 0,
+		.size = ctx->caps.limits.maxPushConstantsSize
+	};
+
 	for (uint32_t i = 0; i < EV2_BASE_SET_COUNT; ++i) {
 		VkPipelineLayoutCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 			.flags = 0,
 			.setLayoutCount = 1 + i, 
 			.pSetLayouts = ctx->base_descriptor_set_layouts,
-			.pushConstantRangeCount = 0,
-			.pPushConstantRanges = nullptr,
+			.pushConstantRangeCount = 1,
+			.pPushConstantRanges = &base_push_constant_range,
 		};
 
 		vk_result = vkCreatePipelineLayout(
@@ -1075,9 +1082,9 @@ VkPipelineLayout GfxContext::get_base_pipeline_layout(uint32_t set)
 
 void GfxContext::assert_outside_frame()
 {
-	bool inside = is_inside_frame();
+	bool outside = is_outside_frame();
 
-	if (inside) {
+	if (!outside) {
 		log_error("Inside of frame!"); 
 		abort();
 	}

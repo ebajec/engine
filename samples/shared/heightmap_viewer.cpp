@@ -83,6 +83,7 @@ int HeightmapViewerPanel::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
 	}
 	ev2::flush_bindings(ctx, rd.bindings);
 
+	rd.tex = tex;
 	rd.w = w;
 	rd.h = h;
 
@@ -122,6 +123,9 @@ void HeightmapViewerPanel::render(ev2::GfxContext *ctx)
 	};
 	ev2::PassID pass = ev2::begin_gfx_pass(ctx, panel->get_target(), rd.camera, rect);
 	ev2::cmd_use_buffer(pass, rd.ibo, ev2::USAGE_INDEX_INPUT);
+
+	ev2::ImageID image = ev2::get_backing_image(ctx, rd.tex);
+	ev2::cmd_use_image(pass, image, ev2::USAGE_SAMPLED_GRAPHICS);
 
 	ev2::cmd_bind_gfx_pipeline(pass, rd.pipeline);
 	ev2::cmd_bind_resources(pass, rd.bindings);

@@ -154,10 +154,9 @@ int main(int argc, char *argv[])
 		return EXIT_FAILURE;
 
 	while (
-		app->update() == App::OK &&
+		app->begin_frame() == App::OK &&
 		sim.update() == App::OK
 	) {
-		app->begin_frame();
 		sim.render();
 		app->end_frame();
 	}

@@ -86,7 +86,6 @@ struct App
 	
 	int resize(int width, int height);
 
-	int update();
 	int begin_frame();
 	int end_frame();
 
@@ -112,6 +111,11 @@ struct App
 	static void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos);
 	static void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 };
+
+static bool should_exit(int status)
+{
+	return status == App::SHOULD_CLOSE || status < 0; 
+}
 
 static inline void glfw_wasd_to_motion(glm::vec3& dir, int key, int action) 
 {

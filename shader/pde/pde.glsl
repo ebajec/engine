@@ -1,7 +1,8 @@
 #ifndef DIFFUSION_GLSL
 #define DIFFUSION_GLSL
 
-layout (set = 0, std140, binding = 1) uniform Uniforms
+//layout (set = 0, std140, binding = 1) uniform Uniforms
+layout (push_constant, std140) uniform Uniforms
 {
 	vec2 cursor1;
 	vec2 cursor2;
@@ -14,6 +15,5 @@ layout (set = 0, std140, binding = 1) uniform Uniforms
 
 	uint flags;
 };
-
 
 #endif // DIFFUSION_GLSL

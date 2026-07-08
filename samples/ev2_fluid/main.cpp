@@ -607,7 +607,7 @@ int FluidSim::update(ev2::GfxContext *ctx)
 	ev2::PassID pass = ev2::begin_compute_pass(ctx);
 
 	ev2::cmd_use_buffer(pass, ubo, ev2::USAGE_UNIFORM_READ);
-	ev2::cmd_use_image(pass, q_img_1, ev2::USAGE_STORAGE_READ_COMPUTE);
+	ev2::cmd_use_image(pass, q_img_1, ev2::USAGE_SAMPLED_COMPUTE);
 	ev2::cmd_use_image(pass, q_img_2, ev2::USAGE_STORAGE_WRITE_COMPUTE);
 
 	ev2::cmd_bind_compute_pipeline(pass, nvs_advect);
@@ -743,12 +743,12 @@ int FluidApp::initialize(int argc, char **argv)
 	if (result)
 		return result;
 
-	result = right_panel->init(ctx, phi_tex); 
-	if (result)
-		return result;
-
 	result = heightmap_panel->init(this, ctx, sim->q_tex_1); 
 	if(result)
+		return result;
+
+	result = right_panel->init(ctx, phi_tex); 
+	if (result)
 		return result;
 
 	return result;
@@ -757,9 +757,6 @@ int FluidApp::update()
 {
 	int result = EXIT_SUCCESS;
 	uint64_t current_step = m_step;
-
-	if ((result = App::update()))
-		return result;
 
 	ImGui::Begin("Editor");
 
@@ -815,14 +812,8 @@ void FluidApp::render()
 {
 	main_panel->render(ctx);
 
-	ev2::PassID pass = main_panel->begin_pass(ctx);
-	ev2::cmd_bind_gfx_pipeline(pass, main_panel->rd.pipeline);
-	ev2::cmd_bind_resources(pass, main_panel->rd.bindings);
-	//ev2::cmd_draw_screen_quad(pass.rec);
-	ev2::cmd_custom(pass, [](VkCommandBuffer cmds) {
-		vkCmdDraw(cmds, 6, 1, 0, 0);
-	});
-
+	//vector field arrows
+	//ev2::PassID pass = main_panel->begin_pass(ctx);
 	//ev2::cmd_bind_gfx_pipeline(pass, vector_field_pipe);
 	//ev2::cmd_bind_resources(pass, vector_field_set);
 
@@ -836,7 +827,7 @@ void FluidApp::render()
 	//glDrawElementsInstanced(GL_LINES, 2, GL_UNSIGNED_INT, indices, count);
 	//glDisable(GL_BLEND);
 
-	ev2::end_pass(ctx, pass);
+	//ev2::end_pass(ctx, pass);
 
 	right_panel->render(ctx);
 	heightmap_panel->render(ctx);
@@ -859,12 +850,23 @@ int main(int argc, char *argv[])
 	if (app->initialize(argc, argv) != App::OK)
 		return EXIT_FAILURE;
 
-	while (
-		app->update() == App::OK
-	) {
-		app->begin_frame();
+	int status = App::OK;
+
+	for(;;)
+	{
+		status = app->begin_frame();
+		if (should_exit(status))
+			break;
+
+		status = app->update();
+		if (should_exit(status))
+			break;
+		
 		app->render();
-		app->end_frame();
+
+		status = app->end_frame();
+		if (should_exit(status))
+			break;
 	}
 
 	app->destroy();
