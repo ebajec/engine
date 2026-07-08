@@ -251,7 +251,7 @@ ev2::Result AssetReloader::update()
 	ev2::Result res = ev2::SUCCESS;
 
 	if (!updates.empty()) {
-		tbl->ctx->wait_for_frame(tbl->ctx->frame_counter - 1);
+		tbl->ctx->wait_for_frame_completion(tbl->ctx->frame_counter - 1);
 	}
 
 	for (const std::string &key : updates) {

@@ -63,7 +63,9 @@ tgrad_t tex_grad2(vec2 uv)
 
 	vec4 dfdv = (fv2 - fv1)/(v2 - v1);
 
-	return tgrad_t(dfdu,dfdv);
+	float scale = 10/sqrt(size.x*size.y);
+
+	return tgrad_t(scale*dfdu,scale*dfdv);
 }
 
 void main()

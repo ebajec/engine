@@ -220,7 +220,7 @@ void WaveSim::destroy(ev2::GfxContext *ctx)
 	ev2::destroy_image(ctx, swap_img[1]);
 }
 
-struct FluidApp : public App
+struct TestApp : public App
 {
 	std::unique_ptr<WaveSim> sim;
 	std::unique_ptr<TextureViewerPanel> main_panel;
@@ -236,7 +236,7 @@ struct FluidApp : public App
 	} uniforms;
 	ev2::BufferID ubo;
 
-	FluidApp() : App(1200, 500, "fluid") {
+	TestApp() : App(1200, 500, "fluid") {
 	}
 
 	int initialize(int argc, char **argv);
@@ -245,7 +245,7 @@ struct FluidApp : public App
 	void destroy();
 };
 
-int FluidApp::initialize(int argc, char **argv)
+int TestApp::initialize(int argc, char **argv)
 {
 	int result = App::initialize(argc, argv);
 	if (result)
@@ -271,7 +271,7 @@ int FluidApp::initialize(int argc, char **argv)
 
 	return result;
 }
-int FluidApp::update()
+int TestApp::update()
 {
 	int result = EXIT_SUCCESS;
 
@@ -294,12 +294,12 @@ int FluidApp::update()
 
 	return result;
 }
-void FluidApp::render()
+void TestApp::render()
 {
 	main_panel->render(ctx);
 	heightmap_panel->render(ctx);
 }
-void FluidApp::destroy()
+void TestApp::destroy()
 {
 	heightmap_panel->destroy(ctx);
 	main_panel->destroy(ctx);
@@ -310,7 +310,7 @@ void FluidApp::destroy()
 
 int main(int argc, char *argv[])
 {
-	std::unique_ptr<FluidApp> app (new FluidApp{});
+	std::unique_ptr<TestApp> app (new TestApp{});
 
 	if (app->initialize(argc, argv) != App::OK)
 		return EXIT_FAILURE;

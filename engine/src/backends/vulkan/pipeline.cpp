@@ -1422,7 +1422,7 @@ void destroy_bindings(GfxContext *ctx, BindingsID bindings_id)
 {
 	Bindings *bindings = ctx->get_bindings(bindings_id); 
 
-	ctx->wait_for_frame(ctx->frame_counter ? ctx->frame_counter - 1 : 0);
+	ctx->wait_for_frame_completion(ctx->frame_counter ? ctx->frame_counter - 1 : 0);
 
 	if (bindings->mode == BINDING_MODE_STATIC) {
 		VkResult vk_result = vkFreeDescriptorSets(

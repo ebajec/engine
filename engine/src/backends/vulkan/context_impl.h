@@ -474,7 +474,7 @@ struct GfxContext
 	VkPipelineLayout get_base_pipeline_layout(uint32_t level);
 
 	ev2::Result reset_swap_chain();
-	ev2::Result wait_for_frame(uint64_t frame_index);
+	ev2::Result wait_for_frame_completion(uint64_t frame_index);
 
 	constexpr double seconds_since_start(struct timespec ts) {
 		uint64_t time_ns = (uint64_t)ts.tv_sec + (uint64_t)ts.tv_nsec; 

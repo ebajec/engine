@@ -75,7 +75,6 @@ int HeightmapViewerPanel::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
 		memcpy(uc.ptr, indices.data(), indices_size); 
 		ev2::BufferUpload up = {.size = indices_size};
 		uint64_t sync = ev2::commit_buffer_uploads(ctx, uc, rd.ibo, &up, 1);
-		ev2::wait_complete(ctx, sync);
 	}
 
 	if (ev2::bind_texture(ctx, rd.bindings, "u_tex", tex) != ev2::SUCCESS) {

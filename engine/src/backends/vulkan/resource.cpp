@@ -51,7 +51,7 @@ void destroy_buffer(GfxContext *ctx, BufferID h)
 {
 	Buffer* buf = ctx->get_buffer(h);
 
-	ctx->wait_for_frame(buf->state.last_used_by_frame);
+	ctx->wait_for_frame_completion(buf->state.last_used_by_frame);
 
 	vmaDestroyBuffer(ctx->allocator, buf->buffer, buf->allocation);
 	ctx->buffer_pool->deallocate(to_pool_id(h));
@@ -142,7 +142,7 @@ void destroy_image(GfxContext *ctx, ImageID h)
 {
 	Image *img = ctx->get_image(h);
 
-	ctx->wait_for_frame(img->state.last_used_by_frame);
+	ctx->wait_for_frame_completion(img->state.last_used_by_frame);
 
 	vmaDestroyImage(ctx->allocator, img->image, img->allocation);
 	ctx->image_pool->deallocate(to_pool_id(h));

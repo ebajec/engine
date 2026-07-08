@@ -95,6 +95,7 @@ int TextureViewerPanel::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
 int TextureViewerPanel::update(ev2::GfxContext *ctx)
 {
 	ImGui::Begin("Editor");
+	ImGui::BeginChild("HeaderConstraint", ImVec2(300, 0), false, ImGuiChildFlags_AutoResizeY);
 	ImGui::PushID(panel_idx);
 	if (ImGui::CollapsingHeader(panel->get_name().c_str())) {
 		char path[PATH_MAX] {};
@@ -118,6 +119,7 @@ int TextureViewerPanel::update(ev2::GfxContext *ctx)
 		}
 	}
 	ImGui::PopID();
+	ImGui::EndChild();
 	ImGui::End();
 
 	panel->imgui(); 

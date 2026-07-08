@@ -56,7 +56,7 @@ void main()
 	vec2 pix = vec2(tx, ty) + vec2(0.5);
 	vec2 uv = pix/vec2(size + vec2(1));
 
-	float scale = 2.f;
+	float scale = 0.7f;
 	vec4 tex = texture(u_tex, uv)*scale; 
 
 	tgrad_t grad = tex_grad2(uv);
@@ -64,8 +64,8 @@ void main()
 	grad.dv *= scale;
 
 	float s = 1;
-	float z = s*tex.w;
-	vec3 n = normalize(vec3(grad.du.w, grad.dv.w, 1/s));
+	float z = s*tex.z;
+	vec3 n = normalize(vec3(grad.du.z, grad.dv.z, 1/s));
 
 	out_pos = vec3(uv,z);
 	out_uv = uv;

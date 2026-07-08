@@ -1007,7 +1007,7 @@ Result begin_frame(GfxContext *ctx)
 		return result;
 
 	if (ctx->frame_counter >= ctx->max_frames_in_flight)
-		result = ctx->wait_for_frame(old_frame_index);
+		result = ctx->wait_for_frame_completion(old_frame_index);
 
 
 	//----------------------------------------------------------------------------

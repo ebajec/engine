@@ -1126,7 +1126,7 @@ failure:
 	return result;
 }
 
-ev2::Result GfxContext::wait_for_frame(uint64_t frame_index)
+ev2::Result GfxContext::wait_for_frame_completion(uint64_t frame_index)
 {
 	if (!frame_counter)
 		return ev2::SUCCESS;
