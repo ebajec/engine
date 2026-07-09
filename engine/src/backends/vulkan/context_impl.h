@@ -106,6 +106,7 @@ struct QueueFamily
 // Frame context
 
 struct RenderGraph;
+struct PassNode;
 struct Pass;
 
 struct SyncKey {
@@ -137,6 +138,13 @@ struct TransientCommands
 	void destroy();
 	VkResult reset();
 	VkResult get_cmds(uint32_t count, VkCommandBuffer *out_cmds);
+};
+
+struct Pass
+{
+	GfxContext *ctx;
+	PassNode *node;
+	std::vector<Command> cmds;
 };
 
 struct FrameContext
@@ -319,13 +327,6 @@ struct PassNode
 	bool is_gfx_node() const {
 		return gfx.get();
 	}
-};
-
-struct Pass
-{
-	GfxContext *ctx;
-	PassNode *node;
-	std::vector<Command> cmds;
 };
 
 struct RenderGraphSubmission
