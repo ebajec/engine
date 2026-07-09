@@ -16,7 +16,7 @@
 
 #include <glm/mat4x4.hpp>
 
-#define EV2_MAX_FRAMES_IN_FLIGHT 3
+#define EV2_MAX_FRAMES_IN_FLIGHT 2
 #define EV2_FRAME_TIMEOUT 1e9
 
 #define MAKE_VERSIONED_HANDLE_ACCESS(Type, TypeLower)\

@@ -885,7 +885,7 @@ static ev2::Result create_frame_context(ev2::GfxContext *ctx,
 									ev2::BUFFER_USAGE_TRANSFER_DST_BIT);
 
 	uint32_t pool_count = 1;
-frame->commands.resize(pool_count);
+	frame->commands.resize(pool_count);
 
 	for (uint32_t i = 0; i < pool_count; ++i) {
 		vk_result = frame->commands[i].init(
@@ -932,12 +932,17 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 	//-----------------------------------------------------------------------------
 	// important things
 	
-	ctx->max_frames_in_flight = 2;
-	ctx->caps.max_workers = 2; 
-	//std::max(
-	//	std::min(std::thread::hardware_concurrency() - 1, 2U), 
-	//	1U
-	//);
+	assert(ctx->swap_chain.images.size());
+	
+	ctx->max_frames_in_flight = 
+		std::min(
+			std::max((uint32_t)ctx->swap_chain.images.size(),2U),
+			(uint32_t)EV2_MAX_FRAMES_IN_FLIGHT
+		);
+	ctx->caps.max_workers = std::max(
+		std::min(std::thread::hardware_concurrency() - 1, 2U), 
+		1U
+	);
 
 	ctx->worker_pool.reset(new ThreadPool(ctx->caps.max_workers, "gfx_worker"));
 	ctx->start_time_ns = 
@@ -1014,12 +1019,6 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 
 	if (result)
 		return result;
-
-	// Resource pools
-	ctx->buffer_pool.reset(Pool<ev2::Buffer>::create());
-	ctx->image_pool.reset(Pool<ev2::Image>::create());
-	ctx->texture_pool.reset(Pool<ev2::Texture>::create());
-	ctx->bindings_pool.reset(Pool<ev2::Bindings>::create());
 
 	// Per-frame updated uniforms
 	uint64_t ubo_offset_alignment = 
@@ -1260,11 +1259,19 @@ GfxContext *create_context_for_vulkan(const char *path,
 
 	log_info("initialized vulkan");
 
+	// Resource pools
+	ctx->buffer_pool.reset(Pool<ev2::Buffer>::create());
+	ctx->image_pool.reset(Pool<ev2::Image>::create());
+	ctx->texture_pool.reset(Pool<ev2::Texture>::create());
+	ctx->bindings_pool.reset(Pool<ev2::Bindings>::create());
+
+	// Call before init_device_resources so the number of swapchain
+	// images can be obtained
+	ctx->reset_swap_chain();
+
 	result = init_device_resources(path, ctx);
 	if (result)
 		goto error;
-
-	ctx->reset_swap_chain();
 	
 	return ctx;
 

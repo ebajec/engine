@@ -10,6 +10,8 @@ layout (set = PER_DRAW_SET, binding = 0) uniform sampler2D u_tex;
 layout (location = 0) out vec2 frag_pos;
 layout (location = 1) out vec2 frag_uv;
 
+layout(constant_id = 0) const int PADDING = 4;
+
 void main()
 {
 	uint id = gl_VertexIndex; 
@@ -32,10 +34,14 @@ void main()
 		uv = corners_ccw[1 + id % 3].zw;
 	}
 
-
 	ivec2 size = textureSize(u_tex, 0);
-	float aspect = float(size.x)/float(size.y);
+	vec2 h = vec2(1.f)/size;
+	float pad = 100;
 
+	uv = PADDING * (-h) + uv * (vec2(1) + 2*PADDING*h); 
+	pos *= vec2(1) + 2*PADDING*h; 
+
+	float aspect = float(size.x)/float(size.y);
 	pos.x *= aspect;
 
 	frag_pos = pos;

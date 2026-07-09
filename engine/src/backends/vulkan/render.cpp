@@ -373,7 +373,7 @@ static void populate_rendering_info(
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 			.clearValue = VkClearValue{
 				.color = {
-					.float32 = {rgb[0],rgb[0],rgb[0],1.f}
+					.float32 = {rgb[0],rgb[0],rgb[0],0.f}
 				}
 			},
 		};

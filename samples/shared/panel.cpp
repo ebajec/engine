@@ -72,6 +72,7 @@ void Panel::imgui()
 		glm::ivec2 size = glm::ivec2(window->Size.x, window->Size.y);
 	}
 
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
 	if (ImGui::Begin(m_name.c_str(), NULL)) {
 		ImVec2 win_size = ImGui::GetWindowSize();
 		ImVec2 win_pos = ImGui::GetWindowPos();
@@ -108,6 +109,6 @@ void Panel::imgui()
 		ImVec2 content = ImGui::GetContentRegionAvail();
 		ImGui::Image((ImTextureID)imgui_texture, content, ImVec2(0,1), ImVec2(1,0));
 	}
-
 	ImGui::End();
+	ImGui::PopStyleColor();
 }

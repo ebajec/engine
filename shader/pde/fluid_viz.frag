@@ -20,27 +20,6 @@ struct tgrad_t
 	vec4 dv;
 };
 
-tgrad_t tex_grad(vec2 uv, float h)
-{
-	float u1 = max(uv.x - h,h);
-	float u2 = min(uv.x + h,1.0 - h);
-
-	vec4 fu1 = texture(u_tex, vec2(u1,uv.y));
-	vec4 fu2 = texture(u_tex, vec2(u2,uv.y));
-
-	vec4 dfdu = (fu2 - fu1)/(u2 - u1);
-
-	float v1 = max(uv.y - h,h);
-	float v2 = min(uv.y + h,1.0 - h);
-
-	vec4 fv1 = texture(u_tex, vec2(uv.x, v1));
-	vec4 fv2 = texture(u_tex, vec2(uv.x, v2));
-
-	vec4 dfdv = (fv2 - fv1)/(v2 - v1);
-
-	return tgrad_t(dfdu,dfdv);
-}
-
 tgrad_t tex_grad2(vec2 uv)
 {
 	ivec2 size = textureSize(u_tex, 0);
@@ -75,17 +54,6 @@ void main()
 	vec2 uv = frag_uv;
 	tgrad_t grad = tex_grad2(uv);
 
-	ivec2 texel = ivec2(uv*vec2(size) + 0.5);
-
-	vec4 samp[4] = {
-		texelFetch(u_tex,texel + ivec2(0,0),0),
-		texelFetch(u_tex,texel + ivec2(1,0),0),
-		texelFetch(u_tex,texel + ivec2(0,0),0),
-		texelFetch(u_tex,texel + ivec2(0,1),0)
-	};
-
-	vec4 avg = 1.0/4.0 * (samp[0] + samp[1] + samp[2] + samp[3]);
-
 	vec4 val = texture(u_tex,uv);
 
 	vec2 grad_x = vec2(grad.du.w,grad.dv.w);
@@ -101,7 +69,6 @@ void main()
 
 	vec4 color = vec4(color_val,0.2*speed, speed, color_val);
 
-	//color = vec4(0);
 	color *= 0.6;
 	color.r = speed*color.b;
 
