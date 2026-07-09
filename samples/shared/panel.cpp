@@ -20,7 +20,7 @@ bool Panel::is_hovered() {
 }
 
 bool Panel::is_content_selected() {
-	return m_content_selected;
+	return m_content_hovered && m_focused;
 }
 
 bool Panel::is_focused() {
@@ -50,13 +50,6 @@ Panel::~Panel()
 
 void Panel::imgui()
 {
-	ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove;
-
-	if (m_bar_selected) { 
-		flags &= ~ImGuiWindowFlags_NoMove;
-		flags = 0;
-	}
-
 	if (ImGuiWindow* window = ImGui::FindWindowByName(m_name.c_str())) {
 		bool isDraggingThisWindow = ImGui::GetCurrentContext()->MovingWindow == window;
 
@@ -75,18 +68,23 @@ void Panel::imgui()
 				window->Pos = clamped;
 			}
 		}
+
+		glm::ivec2 size = glm::ivec2(window->Size.x, window->Size.y);
 	}
 
-	if (ImGui::Begin(m_name.c_str(), NULL, flags)) {
+	if (ImGui::Begin(m_name.c_str(), NULL)) {
 		ImVec2 win_size = ImGui::GetWindowSize();
 		ImVec2 win_pos = ImGui::GetWindowPos();
 
-		m_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_None);
+		m_hovered = ImGui::GetIO().WantCaptureMouse;
 		m_focused = ImGui::IsWindowFocused(); 
-		m_bar_selected = ImGui::IsItemHovered();
 
-		m_content_selected = m_focused && m_hovered && 
+		m_content_hovered = m_hovered && 
 			ImGui::GetMousePos().y >= ImGui::GetCursorScreenPos().y;
+
+		if (m_content_hovered) {
+			ImGui::GetCurrentWindow()->Flags |= ImGuiWindowFlags_NoMove;
+		}
 
 		m_pos = glm::ivec2(win_pos.x, win_pos.y);
 		glm::ivec2 size = glm::ivec2(win_size.x,win_size.y);
@@ -106,7 +104,6 @@ void Panel::imgui()
 				VK_IMAGE_LAYOUT_GENERAL
 			);
 		}
-
 		m_app->use_image_for_gui(ev2::get_render_target_color_image(m_target));
 		ImVec2 content = ImGui::GetContentRegionAvail();
 		ImGui::Image((ImTextureID)imgui_texture, content, ImVec2(0,1), ImVec2(1,0));

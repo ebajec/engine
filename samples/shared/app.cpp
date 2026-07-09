@@ -414,7 +414,7 @@ static void build_default_layout(ImGuiID dockspaceID)
 	ImGui::DockBuilderFinish(dockspaceID);
 }
 
-static void setup_root_dockspace()
+void App::setup_root_dockspace()
 {
 	ImGuiViewport* vp = ImGui::GetMainViewport();
 	ImVec2 work_pos  = vp->WorkPos;
@@ -441,6 +441,8 @@ static void setup_root_dockspace()
     ImGui::DockSpace(dockspaceID, ImVec2(0, 0), ImGuiDockNodeFlags_None);
 
     ImGui::End();
+
+	root_dockspace = dockspaceID;
 
 	// Setup initial layout
 

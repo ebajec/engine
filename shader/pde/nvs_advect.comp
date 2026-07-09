@@ -164,18 +164,17 @@ vec4 jet(vec2 c, vec2 O, vec2 P)
 
 	bool is_zero = length(R) < 1e-3 ; 
 
-	float S = 2.5;
+	float S = 1;
 	vec2 V = is_zero ? vec2(0) : normalize(R);
 	vec2 X = vec2(V.y, -V.x);
 
 	mat2 frame = is_zero ? mat2(1) : mat2(V/(S),2*X/(S));
 	vec2 r = (c - O)*frame;
-
-	vec2 rc = vec2(r.x, r.y)*0.3;
+	vec2 rc = r*0.3;
 
 	return 
 		vec4(S * V,0,0) * exp(-dot(r,r)) + 
-		vec4(0,0,0,0.1) * exp(-dot(rc,rc));
+		vec4(0,0,0,0.8) * exp(-dot(rc,rc));
 }
 
 vec4 cursor_jet(vec2 c)
@@ -187,20 +186,26 @@ vec4 cursor_jet(vec2 c)
 	vec2 cursor = u_cursor*size;
 	vec2 vcursor = (u_cursor - u_cursor_prev) * size;
 
-	vec2 O = u_cursor*size;
+	vec2 O = u_cursor*size - vcursor*0.5;
 
-	bool valid = length(vcursor) > 1e-3; 
+	float speed = length(vcursor);
 
-	float S = 5;
+	if (speed > size.x/10)
+		return vec4(0);
+
+	bool valid = speed > 1e-3; 
+
+	float S = sqrt((valid ? 3*speed : 1.f));
 	vec2 V = valid ? normalize(vcursor) : vec2(0);
 	vec2 X = vec2(V.y, -V.x);
 
 	mat2 frame = valid ? mat2(V/(2*S),2*X/S) : mat2(1/S);
 	vec2 r = (c - O)*frame;
+	vec2 rv = vec2(r.x, r.y);
 
 	return 
 		vec4(S*V,0,0.00) * exp(-dot(r,r)) +
-		vec4(0,0,0,1.0) * exp(-dot(r,r));
+		vec4(0,0,0,1) * exp(-dot(r,r));
 }
 
 void main()

@@ -1187,6 +1187,7 @@ ResourceSync *FrameContext::get_resource_sync(TaggedResource resource, VkQueue q
 
 void FrameContext::cull_unused_syncs()
 {
+#if 0
 	std::vector<SyncKey> old;
 	for (auto &[key, sync] : sync_map) {
 		const ResourceState *state = nullptr;
@@ -1200,7 +1201,7 @@ void FrameContext::cull_unused_syncs()
 		}
 		assert(state);
 
-		if (state->last_used_by_frame < this->index) {
+		if (state->last_used_by_frame + ctx->max_frames_in_flight < this->index) {
 			vkDestroySemaphore(ctx->device, sync.semaphore, nullptr);
 			old.push_back(key);
 		}
@@ -1208,6 +1209,7 @@ void FrameContext::cull_unused_syncs()
 
 	for (const SyncKey &key : old)
 		sync_map.erase(key);
+#endif
 }
 
 //------------------------------------------------------------------------------

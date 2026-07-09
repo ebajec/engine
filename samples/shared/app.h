@@ -82,6 +82,8 @@ struct App
 
 	std::vector<ev2::ImageID> imgui_images;
 
+	ImGuiID root_dockspace;
+
 	//-----------------------------------------------------------------------------
 	
 	App(int width, int height, const char *title);
@@ -91,6 +93,7 @@ struct App
 	int begin_frame();
 	int end_frame();
 
+	void setup_root_dockspace();
 	void imgui();
 
 	void update_input();

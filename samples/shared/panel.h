@@ -29,7 +29,7 @@ class Panel
 		ev2::RENDER_TARGET_CREATE_DEPTH_BIT;
 
 	bool m_hovered : 1 = false;
-	bool m_content_selected : 1 = false;
+	bool m_content_hovered : 1 = false;
 	bool m_focused : 1 = false;
 	bool m_bar_selected : 1 = false;
 public:
