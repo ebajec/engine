@@ -12,7 +12,6 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
-#include <unordered_map>
 #include <string>
 #include <vector>
 #include <memory>
@@ -147,8 +146,6 @@ struct RenderTarget
 
 	RenderTargetFlags flags;
 };
-
-struct Pass;
 
 //------------------------------------------------------------------------------
 // Pipeline commands

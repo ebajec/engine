@@ -106,6 +106,7 @@ struct QueueFamily
 // Frame context
 
 struct RenderGraph;
+struct Pass;
 
 struct SyncKey {
 	TaggedResource resource;
