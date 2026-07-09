@@ -12,11 +12,13 @@ file(GLOB CORE_SOURCES
 	"src/debug/*.cpp" 
 	"src/utils/*.cpp" 
 	"src/globe/*.cpp" 
+	"src/imgui/*.cpp" 
 )
 
 add_library(${TARGET})
 
 target_compile_definitions(engine PUBLIC -DRESOURCE_PATH="${RESOURCE_PATH}")
+target_compile_definitions(engine PUBLIC -DEV2_ENABLE_IMGUI)
 
 target_include_directories(${TARGET} PUBLIC include)
 target_include_directories(${TARGET} PRIVATE 

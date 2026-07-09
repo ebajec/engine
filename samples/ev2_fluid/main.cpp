@@ -100,6 +100,8 @@ void PressureSolver::setup_bindings(ev2::GfxContext *ctx, ev2::ImageID lhs, ev2:
 	ev2::flush_bindings(ctx, bindings1);
 }
 
+constexpr uint32_t MAX_PRESSURE_SOLVER_MIPS = 6;
+
 int PressureSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 {
 	sim_w = w; 
@@ -108,7 +110,7 @@ int PressureSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 	if (!is_pow2(sim_w) || !is_pow2(sim_h))
 		return EXIT_FAILURE;
 
-	N = std::min((int)ceil(log2((double)w)), 6);
+	N = std::min((int)ceil(log2((double)w)), 8);
 
 	ev2::ImageUsageFlags usage = 
 		ev2::IMAGE_USAGE_STORAGE_BIT | 
@@ -119,8 +121,8 @@ int PressureSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 
 	tmp_lhs = ev2::create_image(ctx, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, usage);
 
-	multigrid_down = ev2::load_compute_pipeline(ctx, "shader/multigrid_down.comp.spv");
-	multigrid_up = ev2::load_compute_pipeline(ctx, "shader/multigrid_up.comp.spv");
+	multigrid_down = ev2::load_compute_pipeline(ctx, "shader/multigrid_down");
+	multigrid_up = ev2::load_compute_pipeline(ctx, "shader/multigrid_up");
 
 	//--------------------------------------------------------------------
 	// create ubo
@@ -256,8 +258,8 @@ struct MeanSubtractor
 
 int MeanSubtractor::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 {
-	accumulate16 = ev2::load_compute_pipeline(ctx, "shader/accumulate16.comp.spv");
-	subtract_img = ev2::load_compute_pipeline(ctx, "shader/subtract_img.comp.spv");
+	accumulate16 = ev2::load_compute_pipeline(ctx, "shader/accumulate16");
+	subtract_img = ev2::load_compute_pipeline(ctx, "shader/subtract_img");
 
 	width = w;
 	height = h;
@@ -444,10 +446,10 @@ int FluidSim::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 		return result;
 	}
 
-	nvs_advect = ev2::load_compute_pipeline(ctx, "shader/nvs_advect.comp.spv");
-	nvs_diffuse = ev2::load_compute_pipeline(ctx, "shader/nvs_diffuse.comp.spv");
-	nvs_pressure = ev2::load_compute_pipeline(ctx, "shader/nvs_pressure.comp.spv");
-	nvs_project = ev2::load_compute_pipeline(ctx, "shader/nvs_project.comp.spv");
+	nvs_advect = ev2::load_compute_pipeline(ctx, "shader/nvs_advect");
+	nvs_diffuse = ev2::load_compute_pipeline(ctx, "shader/nvs_diffuse");
+	nvs_pressure = ev2::load_compute_pipeline(ctx, "shader/nvs_pressure");
+	nvs_project = ev2::load_compute_pipeline(ctx, "shader/nvs_project");
 
 	update_advect_set(ctx);
 	update_diffuse_set(ctx);
@@ -554,7 +556,7 @@ int FluidSim::update(ev2::GfxContext *ctx)
 	mean_subtractor->record(pass);
 	
 	pressure_solver->record_bind(pass);
-	for (int i = 0; i < ((step == 0) ? 128 : 6); ++i) 
+	for (int i = 0; i < ((step == 0) ? 64 : 5); ++i) 
 		pressure_solver->record_v_cycle(pass, ctx, p_img, lap_p_img);
 
 	ev2::cmd_use_image(pass, q_img_1, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
@@ -638,7 +640,8 @@ int FluidApp::initialize(int argc, char **argv)
 
 	sim.reset(new FluidSim);
 
-	main_panel.reset(new TextureViewerPanel(this, 200, 0, 500, 500));
+	main_panel.reset(new TextureViewerPanel(this, 200, 0, 500, 500,
+				  "pipelines/fluid_viz.yaml"));
 	right_panel.reset(new TextureViewerPanel(this, 700, 0, 500, 500, 
 										  "pipelines/pressure_viz.yaml"));
 	heightmap_panel.reset(new HeightmapViewerPanel());

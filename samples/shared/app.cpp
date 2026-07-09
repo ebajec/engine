@@ -2,10 +2,14 @@
 
 #include "imgui_internal.h"
 
+#include "texture_viewer.h"
+
 #include "ev2/utils/log.h"
 
 #include "ev2/context.h"
 #include "ev2/pipeline.h"
+
+#include <ev2/imgui/inspector.h>
 
 // imgui
 #include <imgui.h>
@@ -452,6 +456,29 @@ void App::setup_root_dockspace()
 		initial_layout_setup = true;
 	}
 }
+void App::image_viewer_open_callback(void *usr, ev2::ImageID image)
+{
+	App *app = static_cast<App*>(usr);
+
+	auto [it, inserted] = app->image_viewers.emplace(image, nullptr);
+
+	if (!inserted)
+		return;
+
+	static int width = 500;
+	static int height = 500;
+
+	glm::ivec2 pos = glm::ivec2(0.5f*(
+		glm::vec2(app->win.width, app->win.height) -
+		glm::vec2(width, height)
+	));
+
+	it->second.reset(new TextureViewerPanel(app, pos.x, pos.y, width, height, ""));
+}
+void App::image_viewer_close_callback(void *usr, ev2::ImageID image)
+{
+
+}
 
 void App::imgui()
 {
@@ -461,8 +488,7 @@ void App::imgui()
 		plot_frame_times(input.dt);
 	}
 
-	ImGui::Begin("Inspector");
+	ev2::inspector_panel_imgui(ctx);
 
-	ImGui::End();
 }
 

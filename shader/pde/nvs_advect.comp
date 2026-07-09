@@ -229,7 +229,7 @@ void main()
 
 	vec2 v_hat = vec2(get_v(cx).x,get_v(cy).y);
 
-	vec2 O = u_cursor * size;//vec2(size.x/2, size.y/2);
+	vec2 O = u_cursor * size;
 
 	vec4 qx = vec4(0); 
 	vec4 qy = vec4(0);
@@ -253,10 +253,6 @@ void main()
 		qx += cursor_jet(pos_x);
 		qy += cursor_jet(pos_y);
 	}
-	if (false) {
-		qx += jet(pos_x,O,u_cursor*size);
-		qy += jet(pos_y,O,u_cursor*size);
-	}
 
 	v_hat += vec2(qx.x, qy.y);
 
@@ -274,8 +270,6 @@ void main()
 
 	if (idx.y > 0 && idx.y < size.y - 1) {
 		v_hat.y += -0.1*u_gravity*(mix(RHO, 2, q_hat.w) - RHO);
-		//v_hat.x += cos(cpos.y*0.04)*u_gravity*q_hat.w;
-		//v_hat.y += cos(cpos.x*0.04)*u_gravity*q_hat.w;
 	}
 
 	q_hat.w += 0.5*(qx.w + qy.w) + 0.00*lap_w - 0.004*q_hat.w;

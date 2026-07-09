@@ -37,7 +37,6 @@ TextureViewerPanel::TextureViewerPanel(App *app,
 	std::string name = "Texture" + std::to_string(panel_idx);
 	panel.reset(new Panel(app, app->ctx, name.c_str(), x, y, w, h));
 
-
 	pipeline_path = pipeline;
 }
 
@@ -45,15 +44,17 @@ int TextureViewerPanel::update_pipeline(const char *path)
 {
 	ev2::GfxPipelineID pipeline = ev2::load_graphics_pipeline(app->ctx, path);
 
+	if (rd.pipeline.id == pipeline.id)
+		return 0;
+
 	if (!EV2_VALID(pipeline))
-		return EXIT_FAILURE;
+		return App::ERROR;
 
 	ev2::BindingsID bindings = ev2::create_bindings(
 		app->ctx, pipeline, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_STATIC);
 	ev2::Result res = ev2::bind_texture(app->ctx, bindings, "u_tex", rd.tex);
-
 	if (res != ev2::SUCCESS)
-		return EXIT_FAILURE;
+		return App::ERROR;
 
 	ev2::flush_bindings(app->ctx, bindings);
 
@@ -61,7 +62,7 @@ int TextureViewerPanel::update_pipeline(const char *path)
 	rd.bindings = bindings;
 	pipeline_path = path;
 
-	return EXIT_SUCCESS;
+	return App::OK;
 }
 
 int TextureViewerPanel::init(ev2::GfxContext *ctx, ev2::TextureID tex) 
@@ -78,18 +79,6 @@ int TextureViewerPanel::init(ev2::GfxContext *ctx, ev2::TextureID tex)
 		return result;
 
 	return 0;
-}
-
-int TextureViewerPanel::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
-{
-	ev2::Result res = ev2::bind_texture(ctx, rd.bindings, "u_tex", tex);
-
-	if (res)
-		return EXIT_FAILURE;
-
-	rd.tex = tex;
-
-	return EXIT_SUCCESS;
 }
 
 int TextureViewerPanel::update(ev2::GfxContext *ctx)
@@ -130,9 +119,11 @@ int TextureViewerPanel::update(ev2::GfxContext *ctx)
 	if (panel->is_content_selected()) {
 
 		float aspect = (float)panel_size.y/(float)panel_size.x;
-		rd.zoom *= pow(2, app->input.scroll_delta.y);
 
-		rd.proj = camera_proj_2d(aspect, rd.zoom);
+		if (panel->is_hovered()) {
+			rd.zoom *= pow(2, app->input.scroll_delta.y);
+			rd.proj = camera_proj_2d(aspect, rd.zoom);
+		}
 
 		glm::mat4 p_inv = glm::inverse(rd.proj);
 

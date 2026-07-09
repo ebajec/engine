@@ -20,6 +20,9 @@
 #include <implot.h>
 
 #include <functional>
+#include <memory>
+
+struct TextureViewerPanel;
 
 static constexpr float EDITOR_PANEL_WIDTH = 200.f;
 
@@ -81,6 +84,10 @@ struct App
 	std::vector<key_callback_t> key_callbacks;
 
 	std::vector<ev2::ImageID> imgui_images;
+	std::unordered_map<
+		ev2::ImageID, 
+		std::shared_ptr<TextureViewerPanel>
+	> image_viewers;
 
 	ImGuiID root_dockspace;
 
@@ -103,6 +110,9 @@ struct App
 	int initialize(int argc, char *argv[]);
 	void terminate();
 
+	std::shared_ptr<TextureViewerPanel> open_image_viewer(ev2::ImageID image);
+	void close_image_viewer(ev2::ImageID image);
+
 	//-----------------------------------------------------------------------------
 	// GLFW callbacks
 	
@@ -115,6 +125,9 @@ struct App
 	static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 	static void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos);
 	static void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+
+	static void image_viewer_open_callback(void *usr, ev2::ImageID image);
+	static void image_viewer_close_callback(void *usr, ev2::ImageID image);
 };
 
 static bool should_exit(int status)

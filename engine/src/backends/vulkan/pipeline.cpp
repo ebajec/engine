@@ -361,16 +361,22 @@ static ev2::Result load_shader_file(ev2::GfxContext *ctx, const char *path, ev2:
 }
 
 
-static ev2::Result shader_create_callback(ev2::GfxContext *ctx, ev2::Shader *p_shader, const char *path)
+static ev2::Result shader_create_callback(ev2::GfxContext *ctx, ev2::Shader **pp_shader, const char *path)
 {
+	ev2::Shader *p_shader = new ev2::Shader{};
+
 	std::string syspath = ctx->assets->get_system_path(path);
 	ev2::Result res = load_shader_file(ctx, syspath.c_str(), p_shader);
 
-	if (res != ev2::SUCCESS)
+	if (res != ev2::SUCCESS) {
+		delete p_shader;
 		return res;
+	}
 
 	std::string info_str = get_shader_info(p_shader);
 	log_info("Shader : " COLORIZE_PATH(%s)"\n%s",path, info_str.c_str());
+
+	*pp_shader = p_shader;
 
 	return res;
 }
@@ -390,7 +396,7 @@ static void shader_destroy_callback(ev2::GfxContext *ctx, void *usr)
 
 static ev2::Result shader_reload_callback(ev2::GfxContext *ctx, void **usr, const char *path)
 {
-	ev2::Shader new_shader{};
+	ev2::Shader *new_shader;
 
 	ev2::Result res = shader_create_callback(ctx, &new_shader, path);
 
@@ -398,11 +404,9 @@ static ev2::Result shader_reload_callback(ev2::GfxContext *ctx, void **usr, cons
 		return res;
 	
 	ev2::Shader *shader = static_cast<ev2::Shader*>(*usr);
+	shader_destroy_callback(ctx, shader);
 
-	if (shader->shader_module)
-		vkDestroyShaderModule(ctx->device, shader->shader_module, nullptr);
-
-	*shader = std::move(new_shader);
+	*usr = new_shader;
 	return res;
 }
 
@@ -722,6 +726,11 @@ static ev2::Result initialize_base_pipeline(
 	VkShaderStageFlags stage
 )
 {
+	if (!shader_layout) {
+		log_error("No shader layout");
+		return ev2::EBAD_SHADER;
+	}
+
 	std::vector<VkDescriptorSetLayout> final_layouts;
 
 	ev2::Result result = 
@@ -1032,7 +1041,7 @@ static void destroy_gfx_pipeline(ev2::GfxContext *ctx, ev2::GfxPipeline *pipelin
 
 static ev2::Result gfx_pipeline_create_callback(
 	ev2::GfxContext *ctx, 
-	ev2::GfxPipeline *p_pipeline, 
+	ev2::GfxPipeline **pp_pipeline, 
 	const char *path
 )
 {
@@ -1043,6 +1052,8 @@ static ev2::Result gfx_pipeline_create_callback(
 		log_error("File does not exist: %s", syspath.c_str());
 		return ev2::ELOAD_FAILED;
 	}
+
+	std::unique_ptr<ev2::GfxPipeline> p_pipeline(new ev2::GfxPipeline{});
 
 	GfxPipelineInfo gfx_info;
 	try {
@@ -1061,7 +1072,7 @@ static ev2::Result gfx_pipeline_create_callback(
 	result = initialize_gfx_pipeline(
 		ctx, 
 		&gfx_info,
-		p_pipeline 
+		p_pipeline.get() 
 	);
 
 	if (result) {
@@ -1069,8 +1080,10 @@ static ev2::Result gfx_pipeline_create_callback(
 		return result;
 	}
 
-	std::string info = get_gfx_pipeline_info(ctx, p_pipeline);
+	std::string info = get_gfx_pipeline_info(ctx, p_pipeline.get());
 	log_info("Graphics pipeline : " COLORIZE_PATH(%s)"\n%s", path, info.c_str());
+
+	*pp_pipeline = p_pipeline.release();
 
 	return result;
 }
@@ -1109,7 +1122,7 @@ static void gfx_pipeline_destroy_callback(ev2::GfxContext *ctx, void* usr)
 
 static ev2::Result gfx_pipeline_reload_callback(ev2::GfxContext *ctx, void** usr, const char *path)
 {
-	ev2::GfxPipeline new_pipeline{};
+	ev2::GfxPipeline *new_pipeline;
 	ev2::Result res = gfx_pipeline_create_callback(ctx, &new_pipeline, path);
 
 	if (res != ev2::SUCCESS)
@@ -1117,16 +1130,16 @@ static ev2::Result gfx_pipeline_reload_callback(ev2::GfxContext *ctx, void** usr
 
 	ev2::GfxPipeline *pipeline = static_cast<ev2::GfxPipeline*>(*usr);
 
-	res = base_pipeline_post_reload(ctx, &pipeline->base, &new_pipeline.base);
+	res = base_pipeline_post_reload(ctx, &pipeline->base, &new_pipeline->base);
 
 	if (res != ev2::SUCCESS) {
-		destroy_gfx_pipeline(ctx, &new_pipeline);
+		destroy_gfx_pipeline(ctx, new_pipeline);
 		return res;
 	}
 
 	destroy_gfx_pipeline(ctx, pipeline);
+	*usr = new_pipeline;
 
-	*pipeline = std::move(new_pipeline);
 	return res;
 }
 
@@ -1135,16 +1148,28 @@ static ev2::Result gfx_pipeline_reload_callback(ev2::GfxContext *ctx, void** usr
 
 static ev2::Result compute_pipeline_create_callback(
 	ev2::GfxContext *ctx, 
-	ev2::ComputePipeline *pipeline, 
+	ev2::ComputePipeline **pp_pipeline, 
 	const char *path
 )
 {
-	ev2::ShaderID shader_handle = ev2::load_shader(ctx, path);
+	ev2::ShaderID shader_handle = EV2_NULL_HANDLE(Shader);
+
+	std::string path_str = path;
+	bool is_from_config = path_str.ends_with(".yaml");
+
+	if (!is_from_config) {
+		path_str += ".comp.spv";
+		shader_handle = ev2::load_shader(ctx, path_str.c_str());
+	} else {
+		log_error("Compute pipeline .yaml configs are not yet supported; must load as shader directly");
+	}
 
 	if (!EV2_VALID(shader_handle))
 		return ev2::ELOAD_FAILED;
 	
 	ev2::Shader *shader = ctx->get_shader(shader_handle);
+
+	std::unique_ptr<ev2::ComputePipeline> pipeline (new ev2::ComputePipeline);
 
 	ev2::Result result = initialize_base_pipeline(
 		ctx, &pipeline->base, shader->layout_map, 0,
@@ -1183,6 +1208,10 @@ static ev2::Result compute_pipeline_create_callback(
 		goto cleanup;
 	}
 
+	pipeline->shader = shader_handle;
+
+	*pp_pipeline = pipeline.release();
+
 	return ev2::SUCCESS;
 cleanup:
 	destroy_base_pipeline(ctx, &pipeline->base);
@@ -1196,6 +1225,8 @@ static void destroy_compute_pipeline(ev2::GfxContext *ctx, ev2::ComputePipeline 
 	}
 	destroy_base_pipeline(ctx, &pipeline->base);
 	ev2::unload_shader(ctx, pipeline->shader);
+
+	delete pipeline;
 }
 
 static void compute_pipeline_destroy_callback(ev2::GfxContext *ctx, void* usr) 
@@ -1206,7 +1237,7 @@ static void compute_pipeline_destroy_callback(ev2::GfxContext *ctx, void* usr)
 
 static ev2::Result compute_pipeline_reload_callback(ev2::GfxContext *ctx, void** usr, const char *path)
 {
-	ev2::ComputePipeline new_pipeline{};
+	ev2::ComputePipeline* new_pipeline = nullptr;
 
 	ev2::Result res = compute_pipeline_create_callback(ctx, &new_pipeline, path);
 
@@ -1215,13 +1246,14 @@ static ev2::Result compute_pipeline_reload_callback(ev2::GfxContext *ctx, void**
 	
 	ev2::ComputePipeline *pipeline = static_cast<ev2::ComputePipeline*>(*usr);
 
-	res = base_pipeline_post_reload(ctx, &pipeline->base, &new_pipeline.base);
+	res = base_pipeline_post_reload(ctx, &pipeline->base, &new_pipeline->base);
+
 	if (res != ev2::SUCCESS) {
-		destroy_compute_pipeline(ctx, &new_pipeline);
+		destroy_compute_pipeline(ctx, new_pipeline);
 		return res;
 	}
 	
-	*pipeline = std::move(new_pipeline);
+	*usr = new_pipeline;
 
 	return res;
 }
@@ -1245,15 +1277,14 @@ ShaderID load_shader(GfxContext *ctx, const char *path)
 		.destroy = shader_destroy_callback,
 	};
 
-	ev2::Shader *shader = new ev2::Shader{}; 
+	ev2::Shader *shader = nullptr; 
 
-	ev2::Result res = shader_create_callback(ctx, shader, path);
+	ev2::Result res = shader_create_callback(ctx, &shader, path);
 
 	if (res == ev2::SUCCESS) {
 		id = ctx->assets->allocate(&vtbl, shader, path); 
 		return ShaderID{id};
 	}
-	delete shader;
 
 	return EV2_NULL_HANDLE(Shader);
 }
@@ -1276,8 +1307,8 @@ GfxPipelineID load_graphics_pipeline(GfxContext *ctx, const char *path)
 		.destroy = gfx_pipeline_destroy_callback,
 	};
 
-	ev2::GfxPipeline *pipeline = new ev2::GfxPipeline{}; 
-	ev2::Result res = gfx_pipeline_create_callback(ctx, pipeline, path);
+	ev2::GfxPipeline *pipeline = nullptr;
+	ev2::Result res = gfx_pipeline_create_callback(ctx, &pipeline, path);
 
 	if (res == ev2::SUCCESS) {
 		id = ctx->assets->allocate(&vtbl, pipeline, path);
@@ -1290,7 +1321,6 @@ GfxPipelineID load_graphics_pipeline(GfxContext *ctx, const char *path)
 		return GfxPipelineID{id};
 	}
 
-	delete pipeline;
 	return EV2_NULL_HANDLE(GfxPipeline);
 }
 
@@ -1302,6 +1332,11 @@ void unload_graphics_pipeline(GfxContext *ctx, GfxPipelineID pipe)
 
 ComputePipelineID load_compute_pipeline(GfxContext *ctx, const char *path)
 {
+	std::string_view path_str (path);
+	if (path_str.ends_with(".comp.spv") || path_str.ends_with(".comp")) {
+		log_warn("Compute pipeline loaded via shader file path: internal name will be different");
+	}
+
 	AssetID id = ctx->assets->load(path);
 
 	if (id)
@@ -1312,15 +1347,19 @@ ComputePipelineID load_compute_pipeline(GfxContext *ctx, const char *path)
 		.destroy = compute_pipeline_destroy_callback,
 	};
 
-	ev2::ComputePipeline *pipeline = new ev2::ComputePipeline{}; 
-	ev2::Result res = compute_pipeline_create_callback(ctx, pipeline, path);
+	ev2::ComputePipeline *pipeline = nullptr;
+	ev2::Result res = compute_pipeline_create_callback(ctx, &pipeline, path);
 
 	if (res == ev2::SUCCESS) {
 		id = ctx->assets->allocate(&vtbl, pipeline, path);
+
+		if (ctx->assets->reloader) {
+			ctx->assets->reloader->add_dependency((AssetID)pipeline->shader.id, id);
+		}
+
 		return ComputePipelineID{id};
 	}
 
-	delete pipeline;
 	return EV2_NULL_HANDLE(ComputePipeline);
 }
 
@@ -1340,8 +1379,6 @@ static BindingsID create_bindings_internal(
 	VkDescriptorSetVariableDescriptorCountAllocateInfo variable_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
 	};
-
-	VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
 
 	if (mode == BINDING_MODE_STATIC) {
 		VkDescriptorSetAllocateInfo alloc_info = {

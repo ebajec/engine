@@ -4,11 +4,11 @@
 #include "ev2/defines.h"
 #include "ev2/context.h"
 
-namespace ev2 {
-
 MAKE_HANDLE_VERSIONED(Buffer);
 MAKE_HANDLE_VERSIONED(Image);
 MAKE_HANDLE_VERSIONED(Texture);
+
+namespace ev2 {
 
 MAKE_ASSET_HANDLE(ImageAsset);
 

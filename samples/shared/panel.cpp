@@ -77,7 +77,7 @@ void Panel::imgui()
 		ImVec2 win_size = ImGui::GetWindowSize();
 		ImVec2 win_pos = ImGui::GetWindowPos();
 
-		m_hovered = ImGui::GetIO().WantCaptureMouse;
+		m_hovered = ImGui::IsWindowHovered();
 		m_focused = ImGui::IsWindowFocused(); 
 
 		m_content_hovered = m_hovered && 

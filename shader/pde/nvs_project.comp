@@ -97,7 +97,7 @@ void main()
 		float lap = pressure_lap(idx);
 		float r = rhs - lap;
 		float p = get_p(idx);
-		q.z = p;
+		q.z = r;
 	}
 	//q.z = length(grad_p);
 	imageStore(q_img, idx, q);

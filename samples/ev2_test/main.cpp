@@ -95,13 +95,13 @@ struct WaveSim
 int WaveSim::init(ev2::GfxContext *ctx)
 {
 	sim_pipelines[0] = ev2::load_compute_pipeline(ctx, 
-		"shader/pde0.comp.spv");
+		"shader/pde0");
 
 	if (!EV2_VALID(sim_pipelines[0]))
 		return EXIT_FAILURE;
 
 	sim_pipelines[1] = ev2::load_compute_pipeline(ctx, 
-		"shader/pde1.comp.spv");
+		"shader/pde1");
 
 	if (!EV2_VALID(sim_pipelines[1]))
 		return EXIT_FAILURE;

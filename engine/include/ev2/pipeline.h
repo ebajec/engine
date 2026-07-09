@@ -9,6 +9,8 @@
 
 #define EV2_MAX_BINDLESS_DESCRIPTORS 1024
 
+MAKE_HANDLE_VERSIONED(Bindings);
+
 namespace ev2 {
 
 MAKE_ASSET_HANDLE(GfxPipeline);
@@ -16,9 +18,6 @@ MAKE_ASSET_HANDLE(ComputePipeline);
 MAKE_ASSET_HANDLE(Shader);
 
 MAKE_HANDLE(ShaderLayout);
-
-MAKE_HANDLE_VERSIONED(Bindings);
-
 enum ShaderStage
 {
 	STAGE_VERTEX,

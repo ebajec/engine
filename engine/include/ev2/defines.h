@@ -4,6 +4,8 @@
 #include "stddef.h"
 #include "stdint.h"
 
+#include <functional>
+
 #define MAKE_HANDLE(name)\
 struct name##ID {\
 	uint64_t id = 0;\
@@ -17,15 +19,27 @@ struct name##ID {\
 }
 
 #define MAKE_HANDLE_VERSIONED(name)\
-struct alignas(uintptr_t) name##ID {\
-	uint32_t id = 0;\
-	uint16_t gen = 0;\
-	constexpr bool is_valid() const{return id;}\
-	constexpr uint64_t uint64() const{return (uint64_t)id|((uint64_t)gen << 32);}\
-	constexpr bool operator == (const name##ID &other) const {\
-		return other.id == id && other.gen == gen;\
-	}\
-}
+namespace ev2 {\
+	struct alignas(uintptr_t) name##ID {\
+		uint32_t id = 0;\
+		uint16_t gen = 0;\
+		constexpr bool is_valid() const{return id;}\
+		constexpr uint64_t uint64() const{return (uint64_t)id|((uint64_t)gen << 32);}\
+		constexpr bool operator == (const name##ID &other) const {\
+			return other.id == id && other.gen == gen;\
+		}\
+	};\
+}\
+namespace std {\
+    template<>\
+    struct hash<ev2::name##ID> {\
+        size_t operator()(const ev2::name##ID& id) const noexcept {\
+            return std::hash<uint64_t>{}(\
+                (static_cast<uint64_t>(id.id) << 32) | id.gen\
+            );\
+        }\
+    };\
+};\
 
 #define EV2_HANDLE_CAST(ty, val)\
 ev2::ty##ID{.id = (uint64_t)val}

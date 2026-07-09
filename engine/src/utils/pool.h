@@ -52,8 +52,10 @@ struct Pool {
 	static_assert(PageAlign <= PageSize);
 	static_assert(PageAlign >= alignof(T));
 
+	static constexpr size_t PageSizeValue = PageSize;
 	static constexpr size_t PageSizeBytes = PageSize * sizeof(T);
 	static constexpr unsigned LogPageSize = std::bit_width(PageSize) - 1;
+	static constexpr uint16_t MaxGeneration = 0x7FFF;
 
 	struct EntryRef {
 		T *val;
@@ -65,6 +67,10 @@ struct Pool {
 	struct Page {
 		uint16_t generation[PageSize];
 		alignas(PageAlign) T values[PageSize];
+
+		constexpr bool in_use(uint32_t idx) const {
+			return !(generation[idx] & (~MaxGeneration));
+		}
 	};
 
 	static void delete_page(Page *page) {
@@ -155,6 +161,9 @@ PoolID Pool<T, PageSize, PageAlign>::allocate(T&& val)
 
 	EntryRef ent = entry_at(slot);
 	*ent.val = std::move(val); 
+	
+	// zero the top bit
+	*ent.generation &= MaxGeneration;
 
 	assert(slot);
 
@@ -172,7 +181,10 @@ void Pool<T, PageSize, PageAlign>::deallocate(PoolID id)
 	}
 
 	*ent.val = T{};
-	++(*ent.generation);
+	uint16_t gen = *ent.generation;
+
+	// set top bit to one
+	*ent.generation = ((1 + gen) & MaxGeneration) | (~MaxGeneration);
 
 	std::unique_lock<std::mutex> lock(sync);
 	free_list.push_back(id.slot);
