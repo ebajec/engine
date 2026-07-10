@@ -32,23 +32,30 @@ Panel::Panel(
 	ev2::GfxContext *ctx,
 	const char *name, 
 	uint32_t x, uint32_t y,
-	uint32_t w, uint32_t h)
+	uint32_t w, uint32_t h,
+	ev2::RenderTargetFlags flags
+)
 {
 	m_ctx = ctx;
 	m_app = app;
 
+	m_target_flags = flags;
+
 	m_pos = glm::ivec2(x,y);
 	m_size = glm::ivec2(w,h);
 	m_name = name;
+	m_settings_name = m_name + "_Settings";
 }
 
 Panel::~Panel()
 {
-	if (EV2_VALID(m_target))
+	if (m_target.is_valid()) {
+		ImGui_ImplVulkan_RemoveTexture(imgui_texture);
 		ev2::destroy_render_target(m_ctx, m_target);
+	}
 }
 
-void Panel::imgui()
+bool Panel::imgui()
 {
 	if (ImGuiWindow* window = ImGui::FindWindowByName(m_name.c_str())) {
 		bool isDraggingThisWindow = ImGui::GetCurrentContext()->MovingWindow == window;
@@ -72,8 +79,29 @@ void Panel::imgui()
 		glm::ivec2 size = glm::ivec2(window->Size.x, window->Size.y);
 	}
 
-	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-	if (ImGui::Begin(m_name.c_str(), NULL)) {
+	ImGui::SetNextWindowPos(ImVec2(m_pos.x, m_pos.y), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(m_size.x, m_size.y), ImGuiCond_FirstUseEver);
+
+	bool open = true;
+
+	if (ImGui::Begin(m_name.c_str(), m_closable ? &open : nullptr, ImGuiWindowFlags_MenuBar)) {
+		if (ImGui::BeginMenuBar()) {
+			// right-align a settings button
+			float button_w = ImGui::GetFrameHeight(); // square icon button
+			ImGui::SetCursorPosX(ImGui::GetWindowWidth() - button_w - ImGui::GetStyle().ItemSpacing.x);
+
+			if (ImGui::Button("...##settings", ImVec2(button_w, 0))) {
+				ImGui::OpenPopup("panel_settings");
+			}
+			if (ImGui::BeginPopup("panel_settings")) {
+				ImGui::Text("Settings");
+				if (settings_callback)
+					settings_callback();
+				ImGui::EndPopup();
+			}
+			ImGui::EndMenuBar();
+		}
+
 		ImVec2 win_size = ImGui::GetWindowSize();
 		ImVec2 win_pos = ImGui::GetWindowPos();
 
@@ -90,8 +118,8 @@ void Panel::imgui()
 		m_pos = glm::ivec2(win_pos.x, win_pos.y);
 		glm::ivec2 size = glm::ivec2(win_size.x,win_size.y);
 
-		if ((EV2_IS_NULL(m_target) || m_size != size)) {
-			if (!EV2_IS_NULL(m_target))
+		if (!m_target.is_valid() || m_size != size) {
+			if (m_target.is_valid())
 				ev2::destroy_render_target(m_ctx, m_target);
 
 			m_target = ev2::create_render_target(m_ctx, (uint32_t)size.x, (uint32_t)size.y,
@@ -105,10 +133,23 @@ void Panel::imgui()
 				VK_IMAGE_LAYOUT_GENERAL
 			);
 		}
-		m_app->use_image_for_gui(ev2::get_render_target_color_image(m_target));
-		ImVec2 content = ImGui::GetContentRegionAvail();
-		ImGui::Image((ImTextureID)imgui_texture, content, ImVec2(0,1), ImVec2(1,0));
+
+		// If the window is closed and this code executes, the frame will be left holding
+		// an invalid image id since the render target gets destroyed
+		if (open) {
+			m_app->use_image_for_gui(ev2::get_render_target_color_image(m_target));
+			ImVec2 content = ImGui::GetContentRegionAvail();
+			ImGui::ImageWithBg(
+				(ImTextureID)imgui_texture, 
+				content, 
+				ImVec2(0,1), 
+				ImVec2(1,0), 
+				ImVec4(0.f,0.f,0.f,0.f), 
+				ImVec4(1.f,1.f,1.f,1.f)
+			);
+		}
 	}
 	ImGui::End();
-	ImGui::PopStyleColor();
+
+	return open;
 }

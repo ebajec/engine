@@ -223,7 +223,7 @@ void WaveSim::destroy(ev2::GfxContext *ctx)
 struct TestApp : public App
 {
 	std::unique_ptr<WaveSim> sim;
-	std::unique_ptr<TextureViewerPanel> main_panel;
+	std::unique_ptr<ImageViewerPanel> main_panel;
 	std::unique_ptr<HeightmapViewerPanel> heightmap_panel;
 
 	ev2::TextureID phi_tex;
@@ -253,14 +253,14 @@ int TestApp::initialize(int argc, char **argv)
 
 	sim.reset(new WaveSim);
 
-	main_panel.reset(new TextureViewerPanel(this, EDITOR_PANEL_WIDTH, 0, 500, 500));
+	main_panel.reset(new ImageViewerPanel(this, EDITOR_PANEL_WIDTH, 0, 500, 500));
 	heightmap_panel.reset(new HeightmapViewerPanel);
 
 	result = sim->init(ctx);
 	if (result)
 		return result;
 
-	result = main_panel->init(ctx, sim->swap_tex[1]); 
+	result = main_panel->init(ctx, sim->swap_img[1]); 
 	if (result)
 		return result;
 

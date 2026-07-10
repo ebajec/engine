@@ -8,7 +8,7 @@
 
 #include <imgui.h>
 
-namespace ev2 
+namespace ev2::imgui 
 {
 
 constexpr const char *INSPECTOR_PANEL_NAME = "Inspector";

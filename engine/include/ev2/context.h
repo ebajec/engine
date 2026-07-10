@@ -55,6 +55,7 @@ struct VulkanInitOptions
 	size_t instanceExtensionCount;
 
 	bool enableValidationLayers = true;
+	bool allowResourceInspection = false;
 };
 
 struct GfxContextVulkanInfo

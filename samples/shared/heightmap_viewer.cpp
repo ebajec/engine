@@ -25,7 +25,9 @@ int HeightmapViewerPanel::init(App *app_, ev2::GfxContext *ctx, ev2::TextureID t
 {
 	app = app_;
 
-	panel = std::make_unique<Panel>(app_, ctx, "3D view", 700, 0, 500, 500);
+	panel = std::make_unique<Panel>(app_, ctx, "3D view", 700, 0, 500, 500, 
+		 ev2::RENDER_TARGET_CREATE_DEPTH_BIT | ev2::RENDER_TARGET_CREATE_COLOR_BIT
+	 );
 
 	//-----------------------------------------------------------------------------
 	// Input

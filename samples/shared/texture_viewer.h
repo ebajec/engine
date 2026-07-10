@@ -9,7 +9,7 @@
 
 #include <memory>
 
-struct TextureViewerPanel
+struct ImageViewerPanel
 {
 	App *app;
 
@@ -18,6 +18,8 @@ struct TextureViewerPanel
 	std::string pipeline_path;
 
 	uint32_t panel_idx;
+
+	ev2::ImageID image;
 
 	struct RenderData {
 		ev2::TextureID tex {};
@@ -36,16 +38,14 @@ struct TextureViewerPanel
 	} rd;
 
 	glm::vec2 world_cursor;
-	TextureViewerPanel(App *app, uint32_t x, uint32_t y, uint32_t w, uint32_t h, 
-					const char * pipeline = "pipelines/screen_quad.yaml");
+	ImageViewerPanel(App *app, uint32_t x, uint32_t y, uint32_t w, uint32_t h, 
+					const char * pipeline = "pipelines/screen_quad.yaml", const char *name = nullptr);
 
-	int update_pipeline(const char *path);
-
-	int set_texture(ev2::GfxContext *ctx, ev2::TextureID tex);
+	int set_pipeline(const char *path);
 
 	ev2::PassID begin_pass(ev2::GfxContext *ctx);
 
-	int init(ev2::GfxContext *ctx, ev2::TextureID tex);
+	int init(ev2::GfxContext *ctx, ev2::ImageID image);
 	int update(ev2::GfxContext *ctx);
 	void render(ev2::GfxContext *ctx);
 	void destroy(ev2::GfxContext *ctx);

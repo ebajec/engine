@@ -25,6 +25,7 @@ namespace ev2 {
 VkInstance g_vk_instance = VK_NULL_HANDLE;
 VkDebugUtilsMessengerEXT g_vk_messenger = VK_NULL_HANDLE;
 
+struct VulkanGlobals g_vk;
 //------------------------------------------------------------------------------
 
 struct QueueFamilyIndices {
@@ -1182,6 +1183,8 @@ ResourceSync *FrameContext::get_resource_sync(TaggedResource resource, VkQueue q
 
 		if (result != VK_SUCCESS)
 			return nullptr;
+
+		log_info("Allocated new VkSemaphore %x", sync.semaphore);
 	}
 
 	return &sync;

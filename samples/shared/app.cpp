@@ -194,16 +194,18 @@ int App::begin_frame()
 		input.t0 = glfwGetTime();
 	}
 
+#ifdef ENABLE_IMGUI
+	if (frame_counter <= 1) {
+		ImGui_ImplVulkan_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+	}
+#endif
+
 	input.t1 = input.t0;
 	input.t0 = glfwGetTime();
 	input.dt = input.t0 - input.t1;
 	input.scroll_delta = glm::vec2(0);
-
-#ifdef ENABLE_IMGUI
-	ImGui_ImplVulkan_NewFrame();
-	ImGui_ImplGlfw_NewFrame();
-	ImGui::NewFrame();
-#endif
 
 	glfwPollEvents();
 
@@ -220,6 +222,18 @@ int App::begin_frame()
 	imgui();
 #endif
 
+	std::vector<ev2::ImageID> delete_list;
+
+	for (const auto&[image, viewer] : image_viewers) {
+		if (viewer->update(ctx) == App::SHOULD_CLOSE) {
+			delete_list.push_back(image);
+		}
+	}
+	
+	for (ev2::ImageID image : delete_list) {
+		close_image_viewer(image);
+	}
+
 	ev2::Result ev2_result = ev2::begin_frame(ctx);
 	if (ev2_result != ev2::SUCCESS)
 		return App::ERROR;
@@ -229,10 +243,20 @@ int App::begin_frame()
 
 int App::end_frame()
 {
+	for (const auto &[image, viewer] : image_viewers) {
+		viewer->render(ctx);
+	}
+
 #ifdef ENABLE_IMGUI
 	ImGui::Render();
-#endif
 
+	ImDrawData *draw_data = ImGui::GetDrawData();
+
+	ImGui_ImplVulkan_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+
+#endif
 	ev2::PassID gui_pass = ev2::begin_gfx_pass(
 		ctx, 
 		{}, {}, 
@@ -243,14 +267,13 @@ int App::end_frame()
 		ev2::cmd_use_image(gui_pass, image, ev2::USAGE_SAMPLED_GRAPHICS);
 	}
 
-	ev2::cmd_custom(gui_pass, [](VkCommandBuffer cmds) {
-		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmds);
+	ev2::cmd_custom(gui_pass, [draw_data](VkCommandBuffer cmds) {
+		ImGui_ImplVulkan_RenderDrawData(draw_data, cmds);
 	});
 	ev2::end_pass(ctx, gui_pass);
 
 	imgui_images.clear();
 
-	ImGui::EndFrame();
 	ev2::end_frame(ctx);
 	return App::OK;
 }
@@ -363,6 +386,9 @@ int App::initialize(int argc, char *argv[])
 	ImPlot::CreateContext();
 #endif
 
+	ev2::imgui::set_image_viewer_close_callback(this, image_viewer_close_callback);
+	ev2::imgui::set_image_viewer_open_callback(this, image_viewer_open_callback);
+
 	glfwSetKeyCallback(win.ptr,&App::key_callback);
 	glfwSetMouseButtonCallback(win.ptr,&App::mouse_button_callback);
 	glfwSetScrollCallback(win.ptr,&App::scroll_callback);
@@ -371,9 +397,6 @@ int App::initialize(int argc, char *argv[])
 	glfwSetWindowUserPointer(win.ptr, this);
 
 	std::signal(SIGINT, handle_sigint);
-
-	if (!ctx)
-		return EXIT_FAILURE;
 
 	return EXIT_SUCCESS;
 }
@@ -459,25 +482,54 @@ void App::setup_root_dockspace()
 void App::image_viewer_open_callback(void *usr, ev2::ImageID image)
 {
 	App *app = static_cast<App*>(usr);
+	app->open_image_viewer(image);
+}
+void App::image_viewer_close_callback(void *usr, ev2::ImageID image)
+{
+	App *app = static_cast<App*>(usr);
+	app->close_image_viewer(image);
+}
 
-	auto [it, inserted] = app->image_viewers.emplace(image, nullptr);
-
-	if (!inserted)
-		return;
+std::shared_ptr<ImageViewerPanel> App::open_image_viewer(ev2::ImageID image)
+{
+	auto it = image_viewers.find(image);
+	if (it != image_viewers.end())
+		return it->second;
 
 	static int width = 500;
 	static int height = 500;
 
 	glm::ivec2 pos = glm::ivec2(0.5f*(
-		glm::vec2(app->win.width, app->win.height) -
+		glm::vec2(win.width, win.height) -
 		glm::vec2(width, height)
 	));
 
-	it->second.reset(new TextureViewerPanel(app, pos.x, pos.y, width, height, ""));
-}
-void App::image_viewer_close_callback(void *usr, ev2::ImageID image)
-{
+	std::string name = "Image" + std::to_string(image.id);
 
+	std::shared_ptr<ImageViewerPanel> panel( 
+		new ImageViewerPanel(this, pos.x, pos.y, width, height, 
+			"pipelines/screen_quad.yaml", name.c_str())
+	);
+
+	if (panel->init(ctx, image) != App::OK) {
+		return nullptr;
+	}
+
+	image_viewers[image] = panel;
+	return panel;
+}
+
+void App::close_image_viewer(ev2::ImageID image)
+{
+	auto it = image_viewers.find(image);
+
+	if (it == image_viewers.end())
+		return;
+
+	it->second->destroy(ctx);
+	it->second.reset();
+	
+	image_viewers.erase(it);
 }
 
 void App::imgui()
@@ -488,7 +540,6 @@ void App::imgui()
 		plot_frame_times(input.dt);
 	}
 
-	ev2::inspector_panel_imgui(ctx);
-
+	ev2::imgui::inspector_panel_imgui(ctx);
 }
 

@@ -22,7 +22,7 @@
 #include <functional>
 #include <memory>
 
-struct TextureViewerPanel;
+struct ImageViewerPanel;
 
 static constexpr float EDITOR_PANEL_WIDTH = 200.f;
 
@@ -86,7 +86,7 @@ struct App
 	std::vector<ev2::ImageID> imgui_images;
 	std::unordered_map<
 		ev2::ImageID, 
-		std::shared_ptr<TextureViewerPanel>
+		std::shared_ptr<ImageViewerPanel>
 	> image_viewers;
 
 	ImGuiID root_dockspace;
@@ -110,7 +110,7 @@ struct App
 	int initialize(int argc, char *argv[]);
 	void terminate();
 
-	std::shared_ptr<TextureViewerPanel> open_image_viewer(ev2::ImageID image);
+	std::shared_ptr<ImageViewerPanel> open_image_viewer(ev2::ImageID image);
 	void close_image_viewer(ev2::ImageID image);
 
 	//-----------------------------------------------------------------------------

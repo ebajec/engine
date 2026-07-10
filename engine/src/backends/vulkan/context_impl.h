@@ -63,6 +63,11 @@ MAKE_POOL_ID_CONVERSION(Bindings)
 //------------------------------------------------------------------------------
 // Misc Vulkan support
 
+extern struct VulkanGlobals
+{
+	bool allow_resource_inspection = false;
+} g_vk;
+
 struct VulkanOptions
 {
     std::vector<const char*> deviceExtensions = {
@@ -309,7 +314,8 @@ struct PassNode
 	std::vector<PassBarrier> pre_barriers;
 	std::vector<PassBarrier> post_barriers;
 
-	std::unordered_map<uint64_t, ResourceStateFlags> final_states;
+	robin_hood::unordered_flat_map<uint64_t, ResourceStateFlags> 
+		final_states;
 
 	const ev2::Pass *pass;
 
@@ -323,6 +329,7 @@ struct PassNode
 	uint32_t submission_idx;
 	uint32_t barrier_offset;
 	uint32_t queue_family_index;
+	bool has_outgoing_edge : 1 = false;
 
 	bool is_gfx_node() const {
 		return gfx.get();
@@ -353,7 +360,7 @@ struct RenderGraph
 	// Satisfies a valid topological order given by the order out the input passes
 	std::vector<PassEdge> edges;
 
-	std::unordered_map<
+	robin_hood::unordered_map<
 		PassEdge::Key,
 		uint32_t,
 		PassEdge::KeyHash,

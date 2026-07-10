@@ -65,7 +65,7 @@ struct Pool {
 	};
 
 	struct Page {
-		uint16_t generation[PageSize];
+		uint16_t generation[PageSize] = {};
 		alignas(PageAlign) T values[PageSize];
 
 		constexpr bool in_use(uint32_t idx) const {

@@ -487,8 +487,6 @@ int FluidSim::update_diffuse_set(ev2::GfxContext *ctx)
 
 int FluidSim::update_pressure_set(ev2::GfxContext *ctx)
 {
-	//ev2::ShaderLayoutID layout = ev2::get_compute_pipeline_layout(ctx, nvs_pressure);
-
 	ev2::BindingsID set = ev2::create_bindings(ctx, nvs_pressure, 0, ev2::BINDING_MODE_STATIC);
 	ev2::bind_texture(ctx, set, "q_in", q_tex_1);
 	ev2::bind_image(ctx, set, "f_out", lap_p_img);
@@ -604,8 +602,8 @@ void FluidSim::destroy(ev2::GfxContext *ctx)
 struct FluidApp : public App
 {
 	std::unique_ptr<FluidSim> sim;
-	std::unique_ptr<TextureViewerPanel> main_panel;
-	std::unique_ptr<TextureViewerPanel> right_panel;
+	std::unique_ptr<ImageViewerPanel> main_panel;
+	std::unique_ptr<ImageViewerPanel> right_panel;
 	std::unique_ptr<HeightmapViewerPanel> heightmap_panel;
 
 	ev2::GfxPipelineID vector_field_pipe;
@@ -620,6 +618,7 @@ struct FluidApp : public App
 
 	bool m_stopped = false;
 	uint64_t m_step = 0;
+	float m_rate = 1.f;
 
 	FluidApp() : App(1200, 1200, "fluid") {
 	}
@@ -640,10 +639,13 @@ int FluidApp::initialize(int argc, char **argv)
 
 	sim.reset(new FluidSim);
 
-	main_panel.reset(new TextureViewerPanel(this, 200, 0, 500, 500,
-				  "pipelines/fluid_viz.yaml"));
-	right_panel.reset(new TextureViewerPanel(this, 700, 0, 500, 500, 
-										  "pipelines/pressure_viz.yaml"));
+	main_panel.reset(new ImageViewerPanel(this, 200, 0, 500, 500,
+				  "pipelines/fluid_viz.yaml", "Interactive Simulation")
+				  );
+	right_panel.reset(new ImageViewerPanel(this, 700, 0, 500, 500, 
+										  "pipelines/pressure_viz.yaml", 
+										"Pressure Debug"));
+
 	heightmap_panel.reset(new HeightmapViewerPanel());
 
 	result = sim->init(ctx, 512, 512);
@@ -661,17 +663,20 @@ int FluidApp::initialize(int argc, char **argv)
 		ev2::flush_bindings(ctx, vector_field_set);
 	}
 
-	result = main_panel->init(ctx, f_tex); 
+	result = main_panel->init(ctx, sim->q_img_1); 
 	if (result)
 		return result;
+	main_panel->panel->set_closable(false);
+
+	result = right_panel->init(ctx, sim->q_img_1); 
+	if (result)
+		return result;
+	right_panel->panel->set_closable(false);
 
 	result = heightmap_panel->init(this, ctx, sim->q_tex_1); 
 	if(result)
 		return result;
-
-	result = right_panel->init(ctx, phi_tex); 
-	if (result)
-		return result;
+	heightmap_panel->panel->set_closable(false);
 
 	reset_images();
 
@@ -683,6 +688,8 @@ void FluidApp::reset_images()
 	upload_img_data(ctx, sim->p_img, sim->grid_w, sim->grid_h);
 	upload_img_data(ctx, sim->q_img_1, 1 + sim->grid_w, 1 + sim->grid_h);
 	upload_img_data(ctx, sim->q_img_2, 1 + sim->grid_w, 1 + sim->grid_h);
+
+	ev2::flush_uploads(ctx);
 
 	sim->uniforms.cursor = sim->uniforms.cursor_prev = glm::vec2(1,0.5);
 }
@@ -703,6 +710,8 @@ int FluidApp::update()
 		++m_step;
 	}
 
+	ImGui::SliderFloat("Sim update rate", &m_rate, 1.f/256.f, 1.f);
+
 	if (ImGui::Button("Reset")) {
 		reset_images();
 	}
@@ -711,18 +720,22 @@ int FluidApp::update()
 
 	ImGui::End();
 
-	if (current_step != m_step) {
+	int skip = std::max((int)(1/m_rate), 1);
+
+	if (m_step % skip == 0 && current_step != m_step) {
 		if ((result = sim->update(ctx)))
 			return result;
 	}
-
-	if ((result = main_panel->update(ctx)))
+	result = main_panel->update(ctx);
+	if (result < App::OK)
 		return result;
 
-	if ((result = right_panel->update(ctx)))
+	result = right_panel->update(ctx);
+	if (result < App::OK)
 		return result;
-
-	if ((result = heightmap_panel->update(ctx)))
+	
+	result = heightmap_panel->update(ctx);
+	if (result < App::OK)
 		return result;
 
 	bool is_panel_clicked = this->input.right_mouse_pressed && 

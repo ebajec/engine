@@ -4,8 +4,8 @@
 #include "backends/vulkan/pipeline_impl.h"
 
 #include <glm/gtc/type_ptr.hpp>
+#include "imgui/inspector_impl.h"
 
-#include <optional>
 #include <cstring>
 
 #define DEFAULT_DEVICE_INDEX 0
@@ -63,7 +63,9 @@ VkResult create_depth_stencil_image(GfxContext *ctx, uint32_t w, uint32_t h,
     	.arrayLayers = 1,
     	.samples = VK_SAMPLE_COUNT_1_BIT,
     	.tiling = VK_IMAGE_TILING_OPTIMAL,
-    	.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+    	.usage = 
+			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+			VK_IMAGE_USAGE_SAMPLED_BIT,
     	.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     	.queueFamilyIndexCount = 0,
     	.pQueueFamilyIndices = nullptr,
@@ -721,12 +723,17 @@ static ResourceStateFlags update_resource_state(ResourceState *state, Usage usag
 	return {};
 }
 
+#define check_input(input) assert(input.is_valid())
+
 void cmd_use_buffer(
 	PassID pass_id,
 	BufferID buf_id,
 	Usage usage
 )
 {
+	check_input(pass_id);
+	check_input(buf_id);
+
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 
 	pass->cmds.push_back(CmdUseBuffer{
@@ -741,6 +748,9 @@ void cmd_use_image(
 	Usage usage
 )
 {
+	check_input(pass_id);
+	check_input(img_id);
+
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 
 	pass->cmds.push_back(CmdUseImage{
@@ -751,6 +761,9 @@ void cmd_use_image(
 
 void cmd_bind_resources(PassID pass_id, BindingsID bindings_id)
 {
+	check_input(pass_id);
+	check_input(bindings_id);
+
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 
 	Bindings *bindings = pass->ctx->get_bindings(bindings_id);
@@ -766,6 +779,9 @@ void cmd_bind_resources(PassID pass_id, BindingsID bindings_id)
 
 void cmd_bind_compute_pipeline(PassID pass_id, ComputePipelineID pipeline_id)
 {
+	check_input(pass_id);
+	check_input(pipeline_id);
+
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 	ComputePipeline *pipeline = pass->ctx->get_compute_pipeline(pipeline_id);
 
@@ -832,6 +848,9 @@ void cmd_push_constant(
 	void *data
 )
 {
+	check_input(pass_id);
+	check_input(pipeline_id);
+
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 	ComputePipeline *pipeline = pass->ctx->get_compute_pipeline(pipeline_id);
 	cmd_push_constant_internal(pass, &pipeline->base, offset, size, data);
@@ -845,6 +864,9 @@ void cmd_push_constant(
 	void *data
 )
 {
+	check_input(pass_id);
+	check_input(pipeline_id);
+
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 	GfxPipeline *pipeline = pass->ctx->get_gfx_pipeline(pipeline_id);
 	cmd_push_constant_internal(pass, &pipeline->base, offset, size, data);
@@ -857,6 +879,8 @@ void cmd_dispatch(
 	uint32_t countz
 )
 {
+	check_input(pass_id);
+
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 
 	pass->cmds.push_back(CmdDispatch{
@@ -871,6 +895,8 @@ void cmd_custom(
 	std::function<void(VkCommandBuffer)>&& callback
 ) 
 {
+	check_input(pass_id);
+
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 
 	pass->cmds.push_back(CmdCustom{
@@ -896,6 +922,9 @@ void cmd_bind_gfx_pipeline(PassID pass_id, GfxPipelineID pipeline_id)
 
 void cmd_bind_index_buffer(PassID pass_id, BufferID buf_id, size_t offset)
 {
+	check_input(pass_id);
+	check_input(buf_id);
+
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 	pass->cmds.push_back(CmdBindIndexBuffer{
 		.buffer = buf_id,
@@ -905,6 +934,9 @@ void cmd_bind_index_buffer(PassID pass_id, BufferID buf_id, size_t offset)
 
 void cmd_bind_vertex_buffer(PassID pass_id, BufferID buf_id, size_t offset)
 {
+	check_input(pass_id);
+	check_input(buf_id);
+
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 	pass->cmds.push_back(CmdBindVertexBuffer{
 		.buffer = buf_id,
@@ -914,6 +946,9 @@ void cmd_bind_vertex_buffer(PassID pass_id, BufferID buf_id, size_t offset)
 
 void cmd_bind_indirect_buffer(PassID pass_id, BufferID buf_id, size_t offset)
 {
+	check_input(pass_id);
+	check_input(buf_id);
+
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 	pass->cmds.push_back(CmdBindIndirectBuffer{
 		.buffer = buf_id,
@@ -1118,7 +1153,11 @@ static void rg_use_image(RenderGraph &rg, GfxContext *ctx, uint32_t pass_idx, co
 
 static PassEdge *get_or_insert_edge(RenderGraph *rg, const PassEdge& edge)
 {
-	auto [it, inserted] = rg->edge_idx_map.emplace(edge.get_key(), rg->edges.size());
+	auto [it, inserted] = rg->edge_idx_map.emplace(edge.get_key(), (uint32_t)rg->edges.size());
+
+	if (edge.src_node != PASS_NODE_INDEX_OUT_OF_FRAME) {
+		rg->nodes[edge.src_node].has_outgoing_edge = true;
+	}
 
 	if (inserted) {
 		rg->edges.push_back(edge);
@@ -1203,7 +1242,8 @@ static void use_resource_internal(
 		final_barrier->dst_state.access |= barrier.dst_state.access;
 		final_barrier->dst_state.stage |= barrier.dst_state.stage;
 
-		// update the barrier for the edge
+		// update the barrier for the edge. Note that this is only for subsequent
+		// reads at the beginning.
 		if (edge) {
 			edge->dst_state = final_barrier->dst_state;
 			edge->src_state = final_barrier->src_state;
@@ -1258,17 +1298,6 @@ void rg_use_image(RenderGraph &rg, GfxContext *ctx, uint32_t dst_node_idx, const
 		it->second = dst_node_idx;
 
 	ResourceState *state = &img->state;
-
-	VkImageLayout old_layout = state->get_current().layout;
-
-	PassNode &dst_node = rg.nodes[dst_node_idx];
-
-	if (!dst_node.gfx && old_layout == VK_IMAGE_LAYOUT_UNDEFINED) {
-		//use_resource_internal(rg, src_node_idx, dst_node_idx, state, cmd.image, USAGE_TRANSFER_DST);
-		//rg_new_pass_command(dst_node, CmdClear{
-		//	.image = cmd.image
-		//});
-	}
 
 	use_resource_internal(rg, src_node_idx, dst_node_idx, state, cmd.image, cmd.usage);
 
@@ -1418,6 +1447,25 @@ static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 		return set_error(ev2::ERENDER_GRAPH, "Incomplete render graph: does not render to display");
 	}
 
+	for (uint32_t node_idx = 0; node_idx < rg->nodes.size(); ++node_idx) {
+		const PassNode &node = rg->nodes[node_idx];
+
+		if (!node.has_outgoing_edge) {
+			for (auto [resource_id, src_flags] : node.final_states) {
+				get_or_insert_edge(rg, PassEdge{
+					.src_node = node_idx,
+					.dst_node = PASS_NODE_INDEX_OUT_OF_FRAME,
+
+					.src_state = src_flags,
+
+					.resource = resource_id,
+
+					.src_write = access_contains_write(src_flags.access),
+				});
+			}
+		}
+	}
+
 	//------------------------------------------------------------------------------
 	// Populate semaphores
 
@@ -1439,49 +1487,108 @@ static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 		}
 		assert(state);
 
-		PassNode &dst_node = rg->nodes[edge.dst_node];
-		RenderGraphSubmission &dst_submission = rg->submissions[dst_node.submission_idx];
-		
-		ResourceSync *sync = nullptr;
+		// Assigns semaphore waits to the destination submission of the edge,
+		// and signals to the source submission.  The synchronization state
+		// of the resource is updated to the state at the end of the src
+		// submission.
+		//
+		// If the src node is outside of the frame, the dst node waits on the
+		// semaphores held by the resource at the beginning of the frame,
+		// otherwise, we only add the SINGLE semaphore signaled by the src
+		// submission for this edge.
+		//
+		// i.e., if we two edges requiring a semaphore: 
+		//
+		// 	(read A on pass 0, write A on pass 2), 
+		// 	(read A on pass 1, write A on pass 2),
+		//
+		// this would signal two different semaphores at the end of pass 0 and 1,
+		// and both of these would be waited on by pass 2. Assuming pass 2 is the
+		// last one in the frame, there would be an edge:
+		//
+		// 	(write A on pass 2, OUT_OF_FRAME),
+		//
+		// and this would signal another semaphore a the end of pass 2 and add
+		// it to A's state tracking, which would then be picked up at the 
+		// beginning of the next frame.
+		//
+		// If the resource stays on the same queue, the destination does not 
+		// need to wait on anything because the appropriate barriers will have 
+		// been inserted.
 
-		if (edge.src_node == PASS_NODE_INDEX_OUT_OF_FRAME) {
-			sync = frame->get_resource_sync(
-				edge.resource, 
-				rg->queues[dst_submission.queue_index]->queue
-			);
-		} else if (is_cross_queue_edge) {
-			PassNode &src_node = rg->nodes[edge.src_node];
-			RenderGraphSubmission &src_submission = rg->submissions[src_node.submission_idx];
+		PassNode *src_node = edge.src_node == PASS_NODE_INDEX_OUT_OF_FRAME ? 
+			nullptr : &rg->nodes[edge.src_node];
+		PassNode *dst_node = edge.dst_node == PASS_NODE_INDEX_OUT_OF_FRAME ? 
+			nullptr : &rg->nodes[edge.dst_node];
 
-			sync = frame->get_resource_sync(
+		RenderGraphSubmission *dst_submission = dst_node ? 
+			&rg->submissions[dst_node->submission_idx] : nullptr;
+		RenderGraphSubmission *src_submission = src_node ? 
+			&rg->submissions[src_node->submission_idx] : nullptr;
+
+		if (!(src_node || dst_node)) {
+			return set_error(ERENDER_GRAPH, "Render graph edge does not have a src or dst node!");	
+		}
+
+		std::vector<ResourceSync> wait_buf;
+
+		uint32_t dst_wait_count = 0;
+		const ResourceSync *dst_waits = nullptr;
+
+		if (!src_node) {
+			if (edge.src_write) {
+				state->get_wait_syncs_for_write(wait_buf);
+				dst_wait_count = (uint32_t)wait_buf.size();
+				dst_waits = wait_buf.data();
+			} else {
+				state->get_wait_syncs_for_read(&dst_wait_count, &dst_waits);
+			}
+		} else if (!dst_node || is_cross_queue_edge) {
+			assert(src_submission != dst_submission);
+
+			ResourceSync *sync = frame->get_resource_sync(
 				edge.resource, 
-				rg->queues[src_submission.queue_index]->queue
+				rg->queues[src_submission->queue_index]->queue
 			);
 
 			++sync->wait_value;
 
-			src_submission.signal.push_back(VkSemaphoreSubmitInfo{
+			src_submission->signal.push_back(VkSemaphoreSubmitInfo{
 				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
 				.semaphore = sync->semaphore,
 				.value = sync->wait_value,
 				.stageMask = edge.src_state.stage,
 				.deviceIndex = DEFAULT_DEVICE_INDEX,
 			});
-		}
 
-		if (sync) {
-			dst_submission.wait.push_back(VkSemaphoreSubmitInfo{
-				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-				.semaphore = sync->semaphore,
-				.value = sync->wait_value,
-				.stageMask = edge.dst_state.stage,
-				.deviceIndex = DEFAULT_DEVICE_INDEX,
-			});
 			if (edge.src_write) {
 				state->sync_write(sync->semaphore, sync->wait_value);
 			} else {
 				state->sync_read(sync->semaphore, sync->wait_value);
 			}
+
+			if (dst_node && is_cross_queue_edge) {
+				dst_wait_count = 1;
+				dst_waits = sync;
+			}
+		}
+
+		assert(!dst_wait_count || dst_node);
+
+		//if (dst_wait_count)
+		//	log_info("%s %d: %d waits", 
+		//   		edge.resource.type_str(), edge.resource.id(), dst_wait_count);
+
+		for (uint32_t i = 0; i < dst_wait_count; ++i) {
+			assert(!src_node || is_cross_queue_edge);
+
+			dst_submission->wait.push_back(VkSemaphoreSubmitInfo{
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+				.semaphore = dst_waits[i].semaphore,
+				.value = dst_waits[i].wait_value,
+				.stageMask = edge.dst_state.stage,
+				.deviceIndex = DEFAULT_DEVICE_INDEX,
+		  });
 		}
 	}
 
@@ -1932,20 +2039,27 @@ static VkResult rg_submit(GfxContext *ctx, const RenderGraph *rg)
 
 		std::vector<VkSubmitInfo2>& submissions = it->second;
 
+		uint32_t wait_count = (uint32_t)submission.wait.size();
+		uint32_t signal_count =(uint32_t)submission.signal.size(); 
+
 		submissions.emplace_back(VkSubmitInfo2{
 			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
 			.flags = 0,
 
-			.waitSemaphoreInfoCount = (uint32_t)submission.wait.size(),
+			.waitSemaphoreInfoCount = wait_count,
 			.pWaitSemaphoreInfos = submission.wait.data(),
 
 			.commandBufferInfoCount = 1,
 			.pCommandBufferInfos = &cmd_infos[i],
 
-			.signalSemaphoreInfoCount = (uint32_t)submission.signal.size(),
+			.signalSemaphoreInfoCount = signal_count,
 			.pSignalSemaphoreInfos = submission.signal.data()
 		});
 	}
+
+	ev2::imgui::post_frame_submission_stats(
+		rg->submissions.data(), (uint32_t)rg->submissions.size()
+	);
 
 	VkResult result = VK_SUCCESS;
 
@@ -1960,6 +2074,7 @@ static VkResult rg_submit(GfxContext *ctx, const RenderGraph *rg)
 			submit_infos.data(), 
 			VK_NULL_HANDLE
 		);
+
 
 		if (result != VK_SUCCESS) {
 			break;

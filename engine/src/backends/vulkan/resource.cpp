@@ -1,6 +1,8 @@
 #include "context_impl.h"
 #include "resource_impl.h"
 
+#include "imgui/inspector_impl.h"
+
 namespace ev2 {
 
 BufferID create_buffer(GfxContext *ctx, size_t size, BufferUsageFlags usage, size_t align)
@@ -75,6 +77,10 @@ ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, ImageF
 
 	usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
+	if (g_vk.allow_resource_inspection) {
+		usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+	}
+
 	VkImageType type = d <= 1 ?  
 		VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_3D;
 	VkFormat format = image_format_to_vk(fmt); 
@@ -143,6 +149,10 @@ void destroy_image(GfxContext *ctx, ImageID h)
 	Image *img = ctx->get_image(h);
 
 	ctx->wait_for_frame_completion(img->state.last_used_by_frame);
+
+#ifdef EV2_ENABLE_IMGUI
+	ev2::imgui::on_destroy_image(h);
+#endif
 
 	vmaDestroyImage(ctx->allocator, img->image, img->allocation);
 	ctx->image_pool->deallocate(to_pool_id(h));
@@ -281,6 +291,13 @@ VkImageView get_image_view(GfxContext *ctx, Image *image, const ImageViewKey &ke
 		return out_view;
 	}
 
+	VkImageAspectFlags aspect_mask = key.aspectMask;
+
+	if ((aspect_mask & VK_IMAGE_ASPECT_DEPTH_BIT) && 
+		(aspect_mask & VK_IMAGE_ASPECT_STENCIL_BIT)) {
+		aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT;
+	}
+
 	VkImageViewCreateInfo create_info = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 		.flags = 0,
@@ -288,7 +305,7 @@ VkImageView get_image_view(GfxContext *ctx, Image *image, const ImageViewKey &ke
 		.viewType = VK_IMAGE_VIEW_TYPE_2D,
 		.format = key.format,
 		.subresourceRange = VkImageSubresourceRange{
-			.aspectMask = key.aspectMask,
+			.aspectMask = aspect_mask,
 			.baseMipLevel = key.baseMipLevel,
 			.levelCount = key.levelCount,
 			.baseArrayLayer = key.baseArrayLayer,

@@ -594,9 +594,10 @@ uint64_t UploadPool::post_commit_sync(entry_t *ent, ResourceState *state)
 		queue_family->index
 	);
 
-	uint32_t sync_count;
-	const ResourceSync *syncs;
-	state->get_current_sync(&sync_count, &syncs);
+	std::vector<ResourceSync> syncs;
+	state->get_wait_syncs_for_write(syncs);
+
+	uint32_t sync_count = (uint32_t)syncs.size();
 
 	const bool has_semaphore = sync_count && old_state.queue_family_index == queue_family->index; 
 

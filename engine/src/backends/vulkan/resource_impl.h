@@ -34,7 +34,7 @@ struct ResourceState {
 	ResourceStateFlags write;
 
 	ResourceSync write_sync;
-	std::vector<ResourceSync> read_syncs;
+	robin_hood::unordered_flat_map<VkSemaphore, uint64_t> read_syncs;
 
 	uint64_t last_used_by_frame : 63;
 	bool written : 1;
@@ -43,14 +43,30 @@ struct ResourceState {
 		return read.stage ? read : write;
 	}
 
-	void get_current_sync(uint32_t *count, const ResourceSync **syncs)
+	// @brief Return the syncs for the work that needs to complete
+	// before the next write.
+	void get_wait_syncs_for_write(std::vector<ResourceSync> &out)
 	{
 		if (!read_syncs.empty()) {
-			assert(write_sync.semaphore);
-			*count = (uint32_t)read_syncs.size();
-			*syncs = read_syncs.data();
+			out.reserve(read_syncs.size());
+			for (auto [sem, wait] : read_syncs) {
+				out.push_back(ResourceSync{
+					.wait_value = wait,
+					.semaphore = sem,
+				});
+			}
 			return;
 		} else if (write_sync.semaphore) {
+			out.push_back(write_sync);
+			return;
+		}
+	}
+
+	// @brief Return the syncs for the work that needs to complete
+	// before the next write.
+	void get_wait_syncs_for_read(uint32_t *count, const ResourceSync **syncs)
+	{
+		if (write_sync.semaphore) {
 			*count = 1;
 			*syncs = &write_sync;
 			return;
@@ -59,16 +75,21 @@ struct ResourceState {
 		*syncs = nullptr;
 	}
 
+	// @brief Update the synchronization state of a resource as being 
+	// read by a submission which signals semaphore and wait_value
 	inline void sync_read(VkSemaphore semaphore, uint64_t wait_value)
 	{
 		assert(semaphore);
 
-		read_syncs.push_back(ResourceSync{
-			.wait_value = wait_value,
-			.semaphore = semaphore,
-		});
+		auto [it, inserted] = read_syncs.emplace(semaphore, wait_value);
+
+		if (!inserted) {
+			assert(wait_value > it->second);
+		}
 	}
 
+	// @brief Update the synchronization state of a resource as being 
+	// written by a submission which signals semaphore and wait_value
 	inline void sync_write(VkSemaphore semaphore, uint64_t wait_value)
 	{
 		assert(semaphore);
@@ -155,7 +176,7 @@ union TaggedResource {
 		return ev2::ImageID{.id = handle, .gen = generation};
 	}
 
-	uint32_t id() {
+	uint32_t id() const {
 		switch(type) {
 			case RESOURCE_TYPE_BUFFER: return to_buffer().id;
 			case RESOURCE_TYPE_IMAGE: return to_image().id;
