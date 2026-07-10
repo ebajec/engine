@@ -10,7 +10,7 @@ layout (set = PER_DRAW_SET, binding = 0) uniform sampler2D u_tex;
 layout (location = 0) out vec2 frag_pos;
 layout (location = 1) out vec2 frag_uv;
 
-layout(constant_id = 0) const int PADDING = 4;
+layout(constant_id = 0) const int PADDING = 0;
 
 void main()
 {

@@ -167,7 +167,7 @@ vec4 cursor_jet(vec2 c)
 
 	float speed = length(vcursor);
 
-	if (speed > size.x/10)
+	if (speed > size.x/4)
 		return vec4(0);
 
 	bool valid = speed > 1e-3; 
