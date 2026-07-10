@@ -364,8 +364,11 @@ static void create_queue_family(
 {
 	QueueFamily *family = &ctx->queue_families[index];
 
+	if (family->queues)
+		return;
+
 	family->queue_count = props.queueCount;
-	family->queues.reset(new QueueSubmitter[props.queueCount]);
+	family->queues.reset(new QueueSubmitter[props.queueCount]{});
 	family->index = index;
 
 	for (uint32_t i = 0; i < props.queueCount; ++i) {
