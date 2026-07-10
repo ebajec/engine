@@ -154,29 +154,6 @@ vec2 RK4(vec2 x0, float dt)
 	return (1./6.) * dt * (k1 + 2.*k2 + 2.*k3 + k4);
 }
 
-vec4 jet(vec2 c, vec2 O, vec2 P)
-{
-	if (!bool(u_cursor_flags))
-		return vec4(0);
-	ivec2 size = imageSize(q_out);
-
-	vec2 R = P - O;
-
-	bool is_zero = length(R) < 1e-3 ; 
-
-	float S = 1;
-	vec2 V = is_zero ? vec2(0) : normalize(R);
-	vec2 X = vec2(V.y, -V.x);
-
-	mat2 frame = is_zero ? mat2(1) : mat2(V/(S),2*X/(S));
-	vec2 r = (c - O)*frame;
-	vec2 rc = r*0.3;
-
-	return 
-		vec4(S * V,0,0) * exp(-dot(r,r)) + 
-		vec4(0,0,0,0.8) * exp(-dot(rc,rc));
-}
-
 vec4 cursor_jet(vec2 c)
 {
 	if (!bool(u_cursor_flags))
@@ -234,25 +211,8 @@ void main()
 	vec4 qx = vec4(0); 
 	vec4 qy = vec4(0);
 
-	if (false) {
-		//const int N = 16;
-
-		//float t = fract(0.2*(u_frame.t_seconds + u_frame.t_fract));
-
-		//for (int i = 0;  i < N; ++i) {
-		//	float tht = (float(i)/N - t) * TWOPI;
-		//	vec2 R = 30*vec2(cos(tht), sin(tht));
-		//	vec2 Oi = O + R;
-		//	vec2 D = u_cursor_prev*size + R;
-
-		//	qx += 4*jet(pos_x,Oi,D)/N;
-		//	qy += 4*jet(pos_y,Oi,D)/N;
-		//}
-	}
-	if (true) {
-		qx += cursor_jet(pos_x);
-		qy += cursor_jet(pos_y);
-	}
+	qx += cursor_jet(pos_x);
+	qy += cursor_jet(pos_y);
 
 	v_hat += vec2(qx.x, qy.y);
 

@@ -66,7 +66,7 @@ void main()
 	float t = ftime();
 
 	vec2 uv = frag_uv;
-	vec4 c0 = texture(u_tex,uv);
+	vec4 c0 = 10*texture(u_tex,uv);
 
 	vec3 sun = normalize(vec3(0.2,0.2,1));
 	vec3 n = frag_normal;

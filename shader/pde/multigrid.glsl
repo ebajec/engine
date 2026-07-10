@@ -1,5 +1,5 @@
 #define MAX_MIPS 8
-#define GROUPS 32
+#define GROUPS 16
 #define OMEGA 0.67
 #define DELTA_X 0.5f
 

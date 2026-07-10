@@ -171,7 +171,7 @@ void PressureSolver::record_bind(ev2::PassID pass)
 
 void PressureSolver::record_v_cycle(ev2::PassID pass, ev2::GfxContext *ctx, ev2::ImageID lhs, ev2::ImageID rhs)
 {
-	const uint32_t groups = 32;
+	const uint32_t groups = 16;
 
 	//-------------------------------------------------------------------
 	// 'down' stage
@@ -556,7 +556,7 @@ int FluidSim::update(ev2::GfxContext *ctx)
 	mean_subtractor->record(pass);
 	
 	pressure_solver->record_bind(pass);
-	for (int i = 0; i < ((step == 0) ? 64 : 6); ++i) 
+	for (int i = 0; i < ((step == 0) ? 64 : 5); ++i) 
 		pressure_solver->record_v_cycle(pass, ctx, p_img, lap_p_img);
 
 	ev2::cmd_use_image(pass, q_img_1, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
