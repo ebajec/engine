@@ -10,12 +10,18 @@
 struct name##ID {\
 	uint64_t id = 0;\
 	inline bool is_valid() const{return (bool)id;}\
+	constexpr bool operator == (const name##ID &other) const {\
+		return other.id == id;\
+	}\
 }
 
 #define MAKE_ASSET_HANDLE(name)\
 struct name##ID {\
 	uint64_t id = 0;\
 	inline bool is_valid() const{return id;}\
+	constexpr bool operator == (const name##ID &other) const {\
+		return other.id == id;\
+	}\
 }
 
 #define MAKE_HANDLE_VERSIONED(name)\

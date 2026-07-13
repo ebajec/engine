@@ -47,20 +47,18 @@ int ImageViewerPanel::set_pipeline(const char *path)
 {
 	ev2::GfxPipelineID pipeline = ev2::load_graphics_pipeline(app->ctx, path);
 
-	if (rd.pipeline.id == pipeline.id)
+	if (rd.pipeline.is_valid() && rd.pipeline == pipeline)
 		return 0;
 
 	if (!EV2_VALID(pipeline))
 		return App::ERROR;
 
+	if (rd.bindings.is_valid()) {
+		ev2::destroy_bindings(app->ctx, rd.bindings);
+	}
+
 	ev2::BindingsID bindings = ev2::create_bindings(
-		app->ctx, pipeline, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_STATIC);
-	ev2::Result res = ev2::bind_texture(app->ctx, bindings, "u_tex", rd.tex);
-	if (res != ev2::SUCCESS)
-		return App::ERROR;
-
-	ev2::flush_bindings(app->ctx, bindings);
-
+		app->ctx, pipeline, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_DYNAMIC);
 	rd.pipeline = pipeline;
 	rd.bindings = bindings;
 	pipeline_path = path;
@@ -72,7 +70,7 @@ int ImageViewerPanel::init(ev2::GfxContext *ctx, ev2::ImageID image)
 {
 	this->image = image;
 	rd.camera = ev2::create_view(ctx, nullptr, nullptr);
-	rd.tex = ev2::create_texture(ctx, image, ev2::FILTER_BILINEAR);
+	rd.tex = ev2::create_texture(ctx, image, ev2::FILTER_NEAREST);
 
 	int result = App::OK;
 
@@ -85,8 +83,42 @@ int ImageViewerPanel::init(ev2::GfxContext *ctx, ev2::ImageID image)
 	if (result)
 		goto error;;
 
-	panel->set_settings([this]{
-		ImGui::BeginChild("FixedWidthWrapper", ImVec2(250, 0), ImGuiChildFlags_AutoResizeY); // fixed width, auto height
+	panel->set_settings([this, ctx]{
+		ImGui::BeginChild("FixedWidthWrapper", ImVec2(250, 0), ImGuiChildFlags_AutoResizeY);
+
+		uint32_t max_levels = 0, max_layers = 0;
+		uint32_t sel_level = level, sel_layer = layer;
+
+		ev2::get_image_dims(ctx, this->image, nullptr, nullptr, &max_layers, &max_levels);
+
+		if (ImGui::CollapsingHeader("Mip level selector")) {
+			for (int i = 0; i <= max_levels - 1; ++i) {
+				char namebuf[100];
+				sprintf(namebuf, "level_%d", i);
+
+				if (ImGui::Selectable(namebuf, this->level == i)) {
+					sel_level = i;
+				}
+			}
+		}
+
+		if (ImGui::CollapsingHeader("Layer selector")) {
+			for (int i = 0; i <= max_layers - 1; ++i) {
+				char namebuf[100];
+				sprintf(namebuf, "layer_%d", i);
+
+				if (ImGui::Selectable(namebuf, this->layer == i)) {
+					sel_layer = i;
+				}
+			}
+		}
+
+		if (sel_level != level || sel_layer == layer) {
+			this->level = sel_level;
+			this->layer = sel_layer;
+
+			this->set_image(ctx, this->image, sel_level, sel_layer);
+		}
 		if (ImGui::CollapsingHeader("Pipeline", ImGuiTreeNodeFlags_DefaultOpen)) {
 
 			ImGui::PushID(this->panel_idx);
@@ -133,6 +165,16 @@ int ImageViewerPanel::update(ev2::GfxContext *ctx)
 		return App::SHOULD_CLOSE;
 	}
 
+	ev2::Result res = ev2::reset_bindings(ctx, rd.bindings);
+	if (res != ev2::SUCCESS)
+		return App::ERROR;
+
+	res = ev2::bind_texture(app->ctx, rd.bindings, "u_tex", rd.tex);
+	if (res != ev2::SUCCESS)
+		return App::ERROR;
+
+	ev2::flush_bindings(app->ctx, rd.bindings);
+
 	glm::ivec2 panel_size = panel->get_size();
 	glm::ivec2 panel_pos = panel->get_pos();
 
@@ -153,12 +195,25 @@ int ImageViewerPanel::update(ev2::GfxContext *ctx)
 	return EXIT_SUCCESS;
 }
 
+int ImageViewerPanel::set_image(ev2::GfxContext *ctx, 
+	ev2::ImageID image, uint32_t level, uint32_t layer)
+{
+	if (rd.tex.is_valid())
+		ev2::destroy_texture(ctx, rd.tex);
+
+	rd.tex = ev2::create_texture(ctx, image, ev2::FILTER_NEAREST, level, layer);
+
+	return rd.tex.is_valid();
+}
+
 ev2::PassID ImageViewerPanel::begin_pass(ev2::GfxContext *ctx)
 {
 	glm::ivec2 win_size = panel->get_size(); 
 
 	ev2::RenderTargetID window_target = panel->get_target();
-	ev2::Rect view_rect = {0,0, (uint32_t)win_size.x, (uint32_t)win_size.y};
+	ev2::Rect view_rect = {0,0, 
+		(uint32_t)std::max(win_size.x, 1), 
+		(uint32_t)std::max(win_size.y, 1)};
 
 	return ev2::begin_gfx_pass(ctx, window_target, rd.camera, view_rect);
 }

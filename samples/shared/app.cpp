@@ -220,6 +220,10 @@ int App::begin_frame()
 	imgui();
 #endif
 
+	ev2::Result ev2_result = ev2::begin_frame(ctx);
+	if (ev2_result != ev2::SUCCESS)
+		return App::ERROR;
+
 	std::vector<ev2::ImageID> delete_list;
 
 	for (const auto&[image, viewer] : image_viewers) {
@@ -231,10 +235,6 @@ int App::begin_frame()
 	for (ev2::ImageID image : delete_list) {
 		close_image_viewer(image);
 	}
-
-	ev2::Result ev2_result = ev2::begin_frame(ctx);
-	if (ev2_result != ev2::SUCCESS)
-		return App::ERROR;
 
 	return result;
 }
@@ -248,7 +248,7 @@ int App::end_frame()
 #ifdef ENABLE_IMGUI
 	ImGui::Render();
 	ImDrawData *draw_data = ImGui::GetDrawData();
-#endif
+#endif 
 	ev2::PassID gui_pass = ev2::begin_gfx_pass(
 		ctx, 
 		{}, {}, 
@@ -492,11 +492,17 @@ std::shared_ptr<ImageViewerPanel> App::open_image_viewer(ev2::ImageID image)
 		glm::vec2(width, height)
 	));
 
-	std::string name = "Image" + std::to_string(image.id);
+	const char *name = ev2::get_image_name(ctx, image);
+
+	std::string panel_name = "Viewer: "; 
+	if (name)
+		panel_name += name;
+	else 
+		panel_name += "Image" + std::to_string(image.id);
 
 	std::shared_ptr<ImageViewerPanel> panel( 
 		new ImageViewerPanel(this, pos.x, pos.y, width, height, 
-			"pipelines/screen_quad.yaml", name.c_str())
+			"pipelines/screen_quad.yaml", panel_name.c_str())
 	);
 
 	if (panel->init(ctx, image) != App::OK) {

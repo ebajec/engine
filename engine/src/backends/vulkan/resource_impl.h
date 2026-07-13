@@ -274,6 +274,8 @@ struct Image
 	uint32_t d;
 	uint32_t levels;
 
+	const char *name;
+
 	VkImageSubresourceRange whole_image_range() {
 		return VkImageSubresourceRange{
 			.aspectMask = aspect_mask,

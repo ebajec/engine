@@ -1101,6 +1101,7 @@ static ev2::Result base_pipeline_post_reload(ev2::GfxContext *ctx,
 
 	  	ev2::Bindings *bindings = ctx->get_bindings(id); 
 		bindings->pipeline_layout = new_pipeline->layout;
+		bindings->set_layout = new_pipeline->set_layouts[bindings->index];
 
 		new_pipeline->active_bindings.push_back(id);
 	}
@@ -1525,6 +1526,11 @@ ev2::Result bind_buffer(
 	uint32_t set;
 	VkDescriptorSetLayoutBinding binding; 
 
+	if (!bindings->descriptor_set) {
+		return set_error(EINVALID_BINDING,
+				   "descriptor set is VK_NULL_HANDLE, did you remember to call 'flush_bindings'?");
+	}
+
 	if (!bindings->layout_map->find(name, &set, &binding)) {
 		return set_error(ev2::EINVALID_BINDING, "binding does not exist : %s", name);
 	}
@@ -1569,11 +1575,14 @@ ev2::Result bind_texture(
 {
 	Bindings *bindings = ctx->get_bindings(id);
 	const Texture *texture = ctx->get_texture(texture_handle);
-	Image *image = ctx->get_image(texture->img);
 
 	uint32_t set;
 	VkDescriptorSetLayoutBinding binding; 
 
+	if (!bindings->descriptor_set) {
+		return set_error(EINVALID_BINDING,
+				   "descriptor set is VK_NULL_HANDLE, did you remember to call 'flush_bindings'?");
+	}
 	if (!bindings->layout_map->find(name, &set, &binding)) {
 		return set_error(ev2::EINVALID_BINDING, "binding does not exist : %s", name);
 	}
@@ -1625,6 +1634,10 @@ static ev2::Result bind_image_internal(
 	uint32_t set;
 	VkDescriptorSetLayoutBinding binding; 
 
+	if (!bindings->descriptor_set) {
+		return set_error(EINVALID_BINDING,
+				   "descriptor set is VK_NULL_HANDLE, did you remember to call 'flush_bindings'?");
+	}
 	if (!bindings->layout_map->find(name, &set, &binding)) {
 		return set_error(ev2::EINVALID_BINDING, "binding does not exist : %s", name);
 	}

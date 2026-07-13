@@ -62,6 +62,11 @@ int Panel::update(bool *was_resized)
 				ev2::get_render_target_color_image(m_target));
 			ev2::destroy_render_target(m_ctx, m_target);
 			imgui_texture = VK_NULL_HANDLE;
+			m_target = EV2_NULL_HANDLE(RenderTarget);
+		}
+
+		if (m_size.x <= 0 || m_size.y <= 0) {
+			return App::OK;
 		}
 
 		m_target = ev2::create_render_target(m_ctx, (uint32_t)m_size.x, (uint32_t)m_size.y,
@@ -153,7 +158,7 @@ bool Panel::imgui()
 			}
 
 			m_pos = glm::ivec2(cursor.x, cursor.y);
-			glm::ivec2 size = glm::ivec2(content.x,content.y);
+			glm::ivec2 size = glm::max(glm::ivec2(content.x,content.y), glm::ivec2(0));
 
 			if (m_size != size) {
 				m_needs_resize = true;

@@ -20,6 +20,8 @@ struct ImageViewerPanel
 	uint32_t panel_idx;
 
 	ev2::ImageID image;
+	uint32_t level = 0;
+	uint32_t layer = 0;
 
 	struct RenderData {
 		ev2::TextureID tex {};
@@ -42,6 +44,8 @@ struct ImageViewerPanel
 					const char * pipeline = "pipelines/screen_quad.yaml", const char *name = nullptr);
 
 	int set_pipeline(const char *path);
+
+	int set_image(ev2::GfxContext *ctx, ev2::ImageID image, uint32_t level, uint32_t layer);
 
 	ev2::PassID begin_pass(ev2::GfxContext *ctx);
 

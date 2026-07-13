@@ -24,14 +24,15 @@ struct ImageCallback {
 
 extern struct InspectorPanelState
 {
-	std::vector<ev2::ImageID> selected_images;
-
 	PoolID selected;
 
 	ImageCallback image_viewer_open;
 	ImageCallback image_viewer_close;
 
 	bool render_graph_window_open;
+	uint32_t selected_edge;
+	uint32_t hovered_edge;
+	std::string hovered_edge_name;
 } g_state;
 
 extern void on_destroy_image(ev2::ImageID image);

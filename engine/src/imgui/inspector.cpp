@@ -34,9 +34,11 @@ static void image_entry_imgui(PoolID id, const Image *image)
 	bool isSelected = (g_state.selected == id);
 
 	char namebuf[100];
-	sprintf(namebuf, "image_%d", id.slot);
+	if (!image->name) {
+		sprintf(namebuf, "image_%d", id.slot);
+	}
 
-	if (ImGui::Selectable(namebuf, isSelected)) {
+	if (ImGui::Selectable(image->name ? image->name : namebuf, isSelected)) {
 		g_state.selected = id;
 	}
 
@@ -210,6 +212,31 @@ constexpr ImVec2 ImVec2_Sub(const ImVec2& a, const ImVec2 &b)
 	return ImVec2(a.x - b.x, a.y - b.y);
 }
 
+static void resource_state_text(const char *header, const ResourceStateFlags &state)
+{
+	std::string access = string_VkAccessFlags2(state.access);
+	std::string stage = string_VkAccessFlags2(state.stage);
+
+	ImGui::Text(
+		"%s:\n"
+		"\tAccess: %s\n"
+		"\tStage: %s",
+		header,
+		access.c_str(),
+		stage.c_str()
+	);
+}
+
+static void edge_tooltip(const RenderGraph *rg, const PassEdge *edge, const char *name)
+{
+	ImGui::BeginTooltip();
+	ImGui::Text("%s", name);
+	ImGui::Separator();
+	resource_state_text("Producer", edge->src_state);
+	resource_state_text("Consumer", edge->dst_state);
+	ImGui::EndTooltip();
+}
+
 void render_graph_imgui(const RenderGraph *rg)
 {
 
@@ -262,6 +289,7 @@ void render_graph_imgui(const RenderGraph *rg)
 	struct EdgeDrawData {
 		ImVec2 src_pos;
 		ImVec2 dst_pos;
+		TaggedResource resource;
 	};
 
 	std::vector<NodeDrawData> node_data (node_count);
@@ -330,13 +358,15 @@ void render_graph_imgui(const RenderGraph *rg)
 				dst_pos.y
 			); 		
 		}	
+
+		edge_data[e].resource = edge.resource;
 	}
 
 	static ImVec2 pan = ImVec2(0,0);
 	const ImGuiIO &io = ImGui::GetIO();
 
 	static float scale = 1.f;
-	
+
 	if (ImGui::Begin("RenderGraph", &g_state.render_graph_window_open,
 				  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)
 	) {
@@ -367,6 +397,7 @@ void render_graph_imgui(const RenderGraph *rg)
 		
 		constexpr uint32_t node_color = 0xAA333333;
 		constexpr uint32_t border_color = 0xBB000000;
+		constexpr uint32_t selected_border_color = 0xFFFFFFFF;
 		constexpr uint32_t text_color = 0xFFFFFFFF;
 		constexpr uint32_t edge_color = 0xFFCCCCCC;
 
@@ -380,6 +411,13 @@ void render_graph_imgui(const RenderGraph *rg)
 			dl->AddText(ImVec2_Add(p_min , ImVec2(6,6)), text_color, node.name);
 		}
 
+		std::string name;
+
+		constexpr uint32_t selected_bg_color = 0xDD663333;
+		constexpr uint32_t hover_bg_color = 0xDD994444;
+		constexpr uint32_t resource_bg_color = 0xDD000000;
+
+		bool has_hovered_edge = false;
 		
 		for (uint32_t e = 0; e < edge_count; ++e) {
 			if (rg->edges[e].dst_node == PASS_NODE_INDEX_OUT_OF_FRAME)
@@ -398,12 +436,65 @@ void render_graph_imgui(const RenderGraph *rg)
 				edge_color, 
 				2.0f
 			);
+
+			name += edge.resource.type_str() + std::to_string(edge.resource.id());
+
+			ImVec2 mid = ImVec2(0.5f*(p1.x + p2.x), 0.5f*(p1.y + p2.y));
+			ImVec2 text_size = ImGui::CalcTextSize(name.c_str());
+			ImVec2 pad(4.0f, 2.0f);
+			ImVec2 box_min = ImVec2_Sub(mid, ImVec2_Add(ImVec2(text_size.x * 0.5f, text_size.y * 0.5f), pad));
+			ImVec2 box_max = ImVec2_Add(mid, ImVec2_Add(ImVec2(text_size.x * 0.5f, text_size.y * 0.5f), pad));
+
+			dl->ChannelsSetCurrent(1);
+
+			// hit-test / selection
+			ImGui::SetCursorScreenPos(box_min);
+			ImGui::PushID((int)e);
+			ImGui::InvisibleButton("resource_box", ImVec2_Sub(box_max, box_min));
+			bool hovered = ImGui::IsItemHovered();
+			bool clicked = ImGui::IsItemClicked();
+			bool double_clicked = ImGui::IsMouseDoubleClicked(0);
+			ImGui::PopID();
+
+			if (clicked)
+				g_state.selected_edge = e;
+			if (hovered) {
+				g_state.hovered_edge = e;
+				g_state.hovered_edge_name = name;
+				has_hovered_edge = true;
+
+				if (hovered) {
+					edge_tooltip(rg, &rg->edges[e], name.c_str());
+				}
+			}
+
+			bool name_matches = name == g_state.hovered_edge_name;
+
+			bool is_selected = (g_state.selected_edge == e);
+			ImU32 box_bg = is_selected ? selected_bg_color
+						 : (hovered || name_matches) ? hover_bg_color
+										: resource_bg_color;
+
+			dl->AddRectFilled(box_min, box_max, box_bg, 3.0f);
+			dl->AddRect(box_min, box_max, is_selected ? selected_border_color : border_color, 3.0f);
+			dl->AddText(ImVec2_Add(box_min, pad), text_color, name.c_str());
+
+			name.clear();
 		}
 
 		dl->ChannelsMerge();
 
+		if (!has_hovered_edge) {
+			g_state.hovered_edge = UINT32_MAX;
+			g_state.hovered_edge_name = "";
+		}
 	}
-	ImGui::End();
+
+	//if (ImGui::BeginChild("Images", ImVec2(0, 300), true)) {
+	//}
+	//ImGui::EndChild();
+	ImGui::End(); 
+
 }
 
 void inspector_panel_imgui(GfxContext *ctx)

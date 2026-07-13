@@ -139,13 +139,27 @@ ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, ImageF
 	});
 }
 
-void get_image_dims(GfxContext *ctx, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d)
+void get_image_dims(GfxContext *ctx, ImageID h_img, uint32_t *w, uint32_t *h, 
+					uint32_t *d, uint32_t *levels)
 {
 	Image *img = ctx->get_image(h_img);
 
 	if (w) *w = img->w;
 	if (h) *h = img->h;
 	if (d) *d = img->d;
+	if (levels) *levels = img->levels;
+}
+
+void set_image_name(GfxContext *ctx, ImageID h, const char *name)
+{
+	Image *img = ctx->get_image(h);
+	img->name = name;
+}
+
+const char *get_image_name(GfxContext *ctx, ImageID h)
+{
+	Image *img = ctx->get_image(h);
+	return img->name;
 }
 
 void pre_destroy_callback(GfxContext *ctx, ImageID img,
@@ -237,11 +251,24 @@ TextureID create_texture(GfxContext *ctx, ImageID img, TextureFilter filter,
 
 	VkSampler sampler;
 
+	VkFilter min_filt, mag_filt;
+
+	switch(filter) {
+		case ev2::FILTER_BILINEAR:
+			min_filt = VK_FILTER_LINEAR;
+			mag_filt = VK_FILTER_LINEAR;
+			break;
+		case ev2::FILTER_NEAREST:
+			min_filt = VK_FILTER_NEAREST;
+			mag_filt = VK_FILTER_NEAREST;
+			break;
+	}
+
 	VkSamplerCreateInfo create_info = {
 		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
 		.flags = 0,
-		.magFilter = VK_FILTER_LINEAR,
-		.minFilter = VK_FILTER_LINEAR,
+		.magFilter = mag_filt,
+		.minFilter = min_filt,
 		.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
 		.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 		.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,

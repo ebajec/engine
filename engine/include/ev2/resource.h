@@ -109,7 +109,12 @@ void destroy_image(GfxContext *ctx, ImageID img);
 /// @brief Callback to be executed before destroying this resource 
 void pre_destroy_callback(GfxContext *ctx, ImageID img, std::function<void()> &&callback);
 
-void get_image_dims(GfxContext *ctx, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d);
+void get_image_dims(GfxContext *ctx, ImageID h_img, 
+					uint32_t *w, uint32_t *h, uint32_t*d, uint32_t *levels = nullptr);
+
+/// @brief Debug helper
+void set_image_name(GfxContext *ctx, ImageID img, const char *name);
+const char *get_image_name(GfxContext *ctx, ImageID img);
 
 //--------------------------------------------------------------------
 // Texture
