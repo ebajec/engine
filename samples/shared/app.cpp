@@ -403,6 +403,10 @@ int App::initialize(int argc, char *argv[])
 
 void App::terminate()
 {
+	image_viewers.clear();
+	for (auto [image, set] : imgui_images) {
+		ImGui_ImplVulkan_RemoveTexture(set);
+	}
 #ifdef ENABLE_IMGUI
 	ImGui_ImplVulkan_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
