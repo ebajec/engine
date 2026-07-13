@@ -83,7 +83,8 @@ struct App
 
 	std::vector<key_callback_t> key_callbacks;
 
-	std::vector<ev2::ImageID> imgui_images;
+	std::unordered_map<ev2::ImageID, VkDescriptorSet> imgui_images;
+
 	std::unordered_map<
 		ev2::ImageID, 
 		std::shared_ptr<ImageViewerPanel>
@@ -105,7 +106,8 @@ struct App
 
 	void update_input();
 
-	void use_image_for_gui(ev2::ImageID image);
+	void acquire_image_for_gui(ev2::ImageID image);
+	void release_image_for_gui(ev2::ImageID image);
 
 	int initialize(int argc, char *argv[]);
 	void terminate();

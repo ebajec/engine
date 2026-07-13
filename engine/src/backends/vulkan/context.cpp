@@ -383,9 +383,6 @@ static void destroy_swap_chain_targets(ev2::GfxContext *ctx)
 	if (ctx->depth_buffer.is_valid())
 		destroy_image(ctx, ctx->depth_buffer);
 
-	if (ctx->depth_buffer_view)
-		vkDestroyImageView(ctx->device, ctx->depth_buffer_view, nullptr);
-
 	for (ev2::RenderTarget *target : ctx->swap_chain.targets)
 		if (target)
 			ev2::destroy_render_target_internal(ctx, target);
@@ -1184,7 +1181,7 @@ ResourceSync *FrameContext::get_resource_sync(TaggedResource resource, VkQueue q
 		if (result != VK_SUCCESS)
 			return nullptr;
 
-		log_info("Allocated new VkSemaphore %x", sync.semaphore);
+		//log_info("Allocated new VkSemaphore %llx", sync.semaphore);
 	}
 
 	return &sync;
@@ -1192,21 +1189,21 @@ ResourceSync *FrameContext::get_resource_sync(TaggedResource resource, VkQueue q
 
 void FrameContext::cull_unused_syncs()
 {
-#if 0
 	std::vector<SyncKey> old;
 	for (auto &[key, sync] : sync_map) {
-		const ResourceState *state = nullptr;
+		bool should_delete = false;
+
 		switch (key.resource.type){
 			case RESOURCE_TYPE_BUFFER:
-				state = &ctx->get_buffer_unchecked(key.resource.to_buffer())->state;
+				should_delete = !ctx->is_valid_buffer(key.resource.to_buffer());
 				break;
 			case RESOURCE_TYPE_IMAGE:
-				state = &ctx->get_image_unchecked(key.resource.to_image())->state;
+				should_delete = !ctx->is_valid_image(key.resource.to_image());
 				break;
 		}
-		assert(state);
-
-		if (state->last_used_by_frame + ctx->max_frames_in_flight < this->index) {
+		
+		if (should_delete) {
+			//log_info("Destroyed VkSemaphore %llx", sync.semaphore);
 			vkDestroySemaphore(ctx->device, sync.semaphore, nullptr);
 			old.push_back(key);
 		}
@@ -1214,7 +1211,131 @@ void FrameContext::cull_unused_syncs()
 
 	for (const SyncKey &key : old)
 		sync_map.erase(key);
+}
+
+void DeferredDeleteQueue::enqueue(GfxContext *ctx,TaggedResource resource)
+{
+	ResourceState *state = nullptr;
+	switch(resource.type) {
+		case RESOURCE_TYPE_IMAGE:
+			state = &ctx->get_image(resource.to_image())->state;
+			break;
+		case RESOURCE_TYPE_BUFFER:
+			state = &ctx->get_buffer(resource.to_buffer())->state;
+			break;
+	}
+
+	if (state->deleted) {
+		log_error("Double delete on %s %d", resource.type_str(), resource.id());
+	}
+	state->deleted = true;
+
+	std::vector<ResourceSync> syncs;
+	state->get_wait_syncs_for_write(syncs);
+
+	queue.push_back(
+		Entry{
+		.resource = resource,
+		.sync_count = (uint32_t)syncs.size()
+	});
+
+	for (const ResourceSync &sync : syncs) {
+		queue.push_back(Entry{.sync = sync});
+	}
+}
+
+Result DeferredDeleteQueue::process(GfxContext *ctx)
+{
+	uint64_t current_frame;
+	VkResult result = 
+		vkGetSemaphoreCounterValue(ctx->device, ctx->frame_semaphore, &current_frame);
+
+	if (result < VK_SUCCESS)
+		return EUNKNOWN;
+
+	using ItType = decltype(queue)::iterator; 
+	ItType it = queue.begin();
+	while (it != queue.end()) {
+		TaggedResource resource = it->resource;
+		uint32_t sync_count = it->sync_count;
+
+		bool can_delete = true;
+
+		ItType start = it;
+
+		//if (!sync_count)
+		//	log_warn("no syncs!");
+
+#if EV2_USE_FINE_GRAINED_DELETION
+#else
+		ResourceState *state = nullptr;
+		switch(resource.type) {
+			case RESOURCE_TYPE_IMAGE:
+				state = &ctx->get_image(resource.to_image())->state;
+				break;
+			case RESOURCE_TYPE_BUFFER:
+				state = &ctx->get_buffer(resource.to_buffer())->state;
+				break;
+		}
 #endif
+
+		++it;
+		for (uint32_t i = 0; i < sync_count; ++i) {
+
+			ResourceSync sync = it->sync;
+			++it;
+
+#if EV2_USE_FINE_GRAINED_DELETION
+			if (!can_delete)
+				continue;
+
+			uint64_t current;
+			VkResult result = 
+				vkGetSemaphoreCounterValue(ctx->device, sync.semaphore, &current);
+
+			if (result != VK_SUCCESS)
+				return ev2::EUNKNOWN;
+
+			if (current < sync.wait_value)
+				can_delete = false;
+#endif
+		}
+
+#if not EV2_USE_FINE_GRAINED_DELETION
+		if (state->last_used_by_frame >= current_frame)
+			can_delete = false;
+#endif
+
+		if (can_delete) {
+			queue.erase(start, it);
+
+			if (auto callback_it = callbacks.find(resource);
+				callback_it != callbacks.end()) {
+				callback_it->second();
+				callbacks.erase(callback_it);
+			}
+
+			switch (resource.type) {
+				case RESOURCE_TYPE_IMAGE: 
+					destroy_image_internal(ctx, resource.to_image());
+					break;
+				case RESOURCE_TYPE_BUFFER: 
+					destroy_buffer_internal(ctx, resource.to_buffer());
+					break;
+			}
+		}
+	}
+
+	return SUCCESS;
+}
+
+void GfxContext::queue_delete(TaggedResource resource)
+{
+	deferred_delete.enqueue(this, resource);
+}
+void GfxContext::process_deferred_deletions()
+{
+	deferred_delete.process(this);
 }
 
 //------------------------------------------------------------------------------

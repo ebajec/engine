@@ -87,8 +87,6 @@ struct Pool {
 
 	size_t cap = 0;
 
-	// TODO: Eventually want to not use a mutex and have pages of 
-	// atomic counters
 	mutable std::mutex sync;
 
 	PoolID allocate(T&& val);

@@ -6,6 +6,7 @@
 
 namespace ev2 {
 	struct RenderGraphSubmission;
+	struct RenderGraph;
 };
 
 namespace ev2::imgui {
@@ -29,11 +30,14 @@ extern struct InspectorPanelState
 
 	ImageCallback image_viewer_open;
 	ImageCallback image_viewer_close;
+
+	bool render_graph_window_open;
 } g_state;
 
 extern void on_destroy_image(ev2::ImageID image);
 
 extern void post_frame_submission_stats(const RenderGraphSubmission *submissions, uint32_t count);
+extern void render_graph_imgui(const RenderGraph *rg);
 
 }
 

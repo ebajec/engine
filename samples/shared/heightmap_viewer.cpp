@@ -93,6 +93,7 @@ int HeightmapViewerPanel::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
 
 int HeightmapViewerPanel::update(ev2::GfxContext *ctx)
 {
+	panel->update();
 	panel->imgui();
 
 	glm::ivec2 panel_size = panel->get_size();

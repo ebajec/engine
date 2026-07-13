@@ -22,13 +22,14 @@ class Panel
 	std::string m_settings_name;
 
 	glm::ivec2 m_pos;
-	glm::ivec2 m_size;
+	glm::ivec2 m_size = glm::ivec2(0);
 
 	ev2::RenderTargetID m_target = 
 		EV2_NULL_HANDLE(RenderTarget);
 
 	ev2::RenderTargetFlags m_target_flags;
 
+	bool m_needs_resize : 1 = false;
 	bool m_hovered : 1 = false;
 	bool m_content_hovered : 1 = false;
 	bool m_focused : 1 = false;
@@ -59,6 +60,10 @@ public:
 	   	ev2::RenderTargetFlags flags = ev2::RENDER_TARGET_CREATE_COLOR_BIT);
 
 	~Panel();
+
+	int update(bool *was_resized = nullptr);
+
+	 //@return whether this window should close
 	 bool imgui();
 };
 

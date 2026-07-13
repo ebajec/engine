@@ -36,19 +36,20 @@ struct ResourceState {
 	ResourceSync write_sync;
 	robin_hood::unordered_flat_map<VkSemaphore, uint64_t> read_syncs;
 
-	uint64_t last_used_by_frame : 63;
+	uint64_t last_used_by_frame : 62;
 	bool written : 1;
+	bool deleted : 1;
 
 	inline ResourceStateFlags get_current() {
 		return read.stage ? read : write;
 	}
 
-	// @brief Return the syncs for the work that needs to complete
-	// before the next write.
+	// @brief Append the syncs for the work that needs to complete
+	// before the next write onto out.
 	void get_wait_syncs_for_write(std::vector<ResourceSync> &out)
 	{
 		if (!read_syncs.empty()) {
-			out.reserve(read_syncs.size());
+			out.reserve(out.size() + read_syncs.size());
 			for (auto [sem, wait] : read_syncs) {
 				out.push_back(ResourceSync{
 					.wait_value = wait,
@@ -137,6 +138,17 @@ enum ResourceType : uint8_t {
 	RESOURCE_TYPE_IMAGE
 };
 
+#define TAGGED_RESOURCE_CONVERSIONS(Type, TypeLower, TypeUpper)\
+constexpr TaggedResource(Type##ID h) {\
+	handle = h.id;\
+	generation = h.gen;\
+	type = RESOURCE_TYPE_##TypeUpper;\
+}\
+constexpr Type##ID to_##TypeLower() const {\
+	assert(type == RESOURCE_TYPE_##TypeUpper);\
+	return Type##ID{.id = handle, .gen = generation};\
+}
+
 union TaggedResource {
 	struct {
 		uint64_t handle : 32;
@@ -146,34 +158,18 @@ union TaggedResource {
 	uint64_t u64;
 
 	TaggedResource() {}
-	TaggedResource(ev2::BufferID buffer) {
-		handle = buffer.id;
-		generation = buffer.gen;
-		type = RESOURCE_TYPE_BUFFER;
-	}
-
-	TaggedResource(ev2::ImageID image) {
-		handle = image.id;
-		generation = image.gen;
-		type = RESOURCE_TYPE_IMAGE;
-	}
 
 	TaggedResource(uint64_t value) {
 		u64 = value;
 	}
 
+	TAGGED_RESOURCE_CONVERSIONS(Buffer, buffer, BUFFER);
+	TAGGED_RESOURCE_CONVERSIONS(Image, image, IMAGE);
+
 	operator uint64_t () const {return u64;} 
 
 	constexpr bool operator == (const TaggedResource &other) const {
 		return u64 == other.u64;
-	}
-
-	constexpr ev2::BufferID to_buffer() const {
-		return ev2::BufferID{.id = handle, .gen = generation};
-	}
-
-	constexpr ev2::ImageID to_image() const {
-		return ev2::ImageID{.id = handle, .gen = generation};
 	}
 
 	uint32_t id() const {
@@ -318,7 +314,21 @@ static inline VkFormat image_format_to_vk(ev2::ImageFormat fmt)
 
 extern VkImageView get_image_view(GfxContext *ctx, Image *image, const ImageViewKey &key);
 
+void destroy_image_internal(GfxContext *ctx, ImageID image);
+void destroy_buffer_internal(GfxContext *ctx, BufferID buffer);
+
 };
+
+namespace robin_hood {
+	template<>
+    struct hash<ev2::TaggedResource> {
+        size_t operator()(const ev2::TaggedResource& resource) const noexcept {
+			return robin_hood::hash<uint64_t>{}(resource.u64);
+        }
+    };
+	
+};
+
 
 #endif //EV2_RESOURCE_IMPL_H
 

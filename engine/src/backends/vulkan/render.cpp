@@ -96,31 +96,6 @@ VkResult create_depth_stencil_image(GfxContext *ctx, uint32_t w, uint32_t h,
 
 	VkFormat format = VK_FORMAT_D32_SFLOAT_S8_UINT;
 
-	VkImageViewCreateInfo view_info {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-		.flags = 0, 
-		.image = vk_image,
-		.viewType = VK_IMAGE_VIEW_TYPE_2D,
-		.format = format,
-		.components = {},
-		.subresourceRange = {
-			.aspectMask = aspect_mask,
-			.baseMipLevel = 0,
-			.levelCount = 1,
-			.baseArrayLayer = 0,
-			.layerCount = 1,
-		}
-	};
-
-	VkImageView view = VK_NULL_HANDLE;
-
-	result = vkCreateImageView(ctx->device, &view_info, nullptr, &view);
-
-	if (result != VK_SUCCESS) {
-		log_error("Failed to create depth + stencil image view");
-		return result;
-	}
-
 	Image image = {
 		.image = vk_image,
 		.allocation = allocation,
@@ -133,6 +108,25 @@ VkResult create_depth_stencil_image(GfxContext *ctx, uint32_t w, uint32_t h,
 	};
 
 	*out_image = ctx->emplace_image(std::move(image));
+
+	Image *p_image = ctx->get_image_unchecked(*out_image);
+
+	ImageViewKey view_key = {
+		.type = VK_IMAGE_VIEW_TYPE_2D,
+		.aspectMask = aspect_mask,
+		.baseMipLevel = 0,
+		.levelCount = 1,
+		.baseArrayLayer = 0,
+		.layerCount = 1,
+		.format = format,
+	};
+
+	VkImageView view = get_image_view(ctx, p_image, view_key);
+	if (view == VK_NULL_HANDLE) {
+		log_error("Failed to create depth + stencil image view");
+		return result;
+	}
+
 	*out_view = view;
 
 	return result;
@@ -175,33 +169,18 @@ static VkResult create_color_image(GfxContext *ctx, uint32_t w, uint32_t h,
 	VkResult result = 
 		vmaCreateImage(ctx->allocator, &create_info, &alloc_info, &vk_image, &allocation, nullptr);
 
-	if (result != VK_SUCCESS)
+	if (result != VK_SUCCESS) {
+		log_error("Failed to create color image");
 		return result;
+	}
 
-	VkImageViewCreateInfo view_info {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-		.flags = 0, 
-		.image = vk_image,
-		.viewType = VK_IMAGE_VIEW_TYPE_2D,
-		.format = create_info.format,
-		.components = {},
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.baseMipLevel = 0,
-			.levelCount = 1,
-			.baseArrayLayer = 0,
-			.layerCount = 1,
-		}
-	};
-
-	VkImageView view = VK_NULL_HANDLE;
-
-	result = vkCreateImageView(ctx->device, &view_info, nullptr, &view);
+	VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
 
 	Image image = {
 		.image = vk_image,
 		.allocation = allocation,
 		.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT,
+		.format = create_info.format,
 		.w = w,
 		.h = h,
 		.d = 1,
@@ -211,6 +190,25 @@ static VkResult create_color_image(GfxContext *ctx, uint32_t w, uint32_t h,
 	ImageID handle = ctx->emplace_image(std::move(image));
 
 	*out_image = handle;
+
+	Image *p_image = ctx->get_image_unchecked(*out_image);
+
+	ImageViewKey view_key = {
+		.type = VK_IMAGE_VIEW_TYPE_2D,
+		.aspectMask = aspect,
+		.baseMipLevel = 0,
+		.levelCount = 1,
+		.baseArrayLayer = 0,
+		.layerCount = 1,
+		.format = create_info.format,
+	};
+
+	VkImageView view = get_image_view(ctx, p_image, view_key);
+	if (view == VK_NULL_HANDLE) {
+		log_error("Failed to create depth + stencil image view");
+		return result;
+	}
+
 	*out_view = view;
 
 	return result;
@@ -263,7 +261,24 @@ RenderTarget *create_render_target_internal(
 
 	return target;
 cleanup:
-	destroy_render_target_internal(ctx, target);
+	log_error(
+		"Failed to create render target:\n"
+		"\t w=%d\n"
+		"\t h=%d\n",
+		"\t color=%b\n",
+		"\t depth=%b\n",
+		w, h, 
+		flags & RENDER_TARGET_CREATE_COLOR_BIT, 
+		flags & RENDER_TARGET_CREATE_DEPTH_BIT 
+	);
+
+	if (target->flags & RENDER_TARGET_CREATE_DEPTH_BIT &&
+		target->depth_img.is_valid())
+			destroy_image_internal(ctx, target->depth_img);
+
+	if (target->flags & RENDER_TARGET_CREATE_COLOR_BIT &&
+		target->color_img.is_valid())
+			destroy_image_internal(ctx, target->color_img);
 	return {};
 }
 
@@ -272,18 +287,14 @@ void destroy_render_target_internal(
 	RenderTarget* target
 )
 {
-	if (target->depth_img.is_valid() && target->flags & RENDER_TARGET_CREATE_DEPTH_BIT) {
+	if (target->flags & RENDER_TARGET_CREATE_DEPTH_BIT) {
 		if (target->depth_img.is_valid())
 			destroy_image(ctx, target->depth_img);
-		if (target->depth_view)
-			vkDestroyImageView(ctx->device, target->depth_view, nullptr);
 	}
 
 	if (target->flags & RENDER_TARGET_CREATE_COLOR_BIT) {
 		if (target->color_img.is_valid())
 			destroy_image(ctx, target->color_img);
-		if (target->color_view)
-			vkDestroyImageView(ctx->device, target->color_view, nullptr);
 	}
 
 	delete target;
@@ -325,6 +336,7 @@ VkImageView get_render_target_color_view(RenderTargetID handle)
 ImageID get_render_target_color_image(RenderTargetID handle)
 {
 	RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget, handle);
+	assert(target);
 	return target->color_img;
 }
 
@@ -1447,6 +1459,8 @@ static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 		return set_error(ev2::ERENDER_GRAPH, "Incomplete render graph: does not render to display");
 	}
 
+	// Node with no outgoing edges get an edge going to 'OUT_OF_FRAME'
+	// so the appropriate semaphore can be signaled.
 	for (uint32_t node_idx = 0; node_idx < rg->nodes.size(); ++node_idx) {
 		const PassNode &node = rg->nodes[node_idx];
 
@@ -2057,10 +2071,6 @@ static VkResult rg_submit(GfxContext *ctx, const RenderGraph *rg)
 		});
 	}
 
-	ev2::imgui::post_frame_submission_stats(
-		rg->submissions.data(), (uint32_t)rg->submissions.size()
-	);
-
 	VkResult result = VK_SUCCESS;
 
 	for (const auto& [queue_index, submit_infos] : submission_map) {
@@ -2153,9 +2163,14 @@ ev2::Result end_frame(GfxContext *ctx)
 		return set_error(ev2::ERENDER_GRAPH,"Failed to submit render graph");
 	}
 
-	// After recording the render graph, any semaphores not reused from the 
-	// previous frame are destroyed 
+	// After recording the render graph, any semaphores corresponding to deleted
+	// resources are cleaned up.
+	//
+	// TODO: Investigate if it's worth making this more aggressive by tracking 
+	// semaphore usage
 	frame->cull_unused_syncs();
+
+	ctx->process_deferred_deletions();
 
 	++ctx->frame_counter;
 	return ev2::SUCCESS;

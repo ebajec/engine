@@ -195,11 +195,9 @@ int App::begin_frame()
 	}
 
 #ifdef ENABLE_IMGUI
-	if (frame_counter <= 1) {
-		ImGui_ImplVulkan_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
-	}
+	ImGui_ImplVulkan_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
 #endif
 
 	input.t1 = input.t0;
@@ -249,13 +247,7 @@ int App::end_frame()
 
 #ifdef ENABLE_IMGUI
 	ImGui::Render();
-
 	ImDrawData *draw_data = ImGui::GetDrawData();
-
-	ImGui_ImplVulkan_NewFrame();
-	ImGui_ImplGlfw_NewFrame();
-	ImGui::NewFrame();
-
 #endif
 	ev2::PassID gui_pass = ev2::begin_gfx_pass(
 		ctx, 
@@ -263,7 +255,7 @@ int App::end_frame()
 		ev2::Rect{0,0,(uint32_t)win.width, (uint32_t)win.height}
 	);
 
-	for (ev2::ImageID image : imgui_images) {
+	for (const auto[image, _] : imgui_images) {
 		ev2::cmd_use_image(gui_pass, image, ev2::USAGE_SAMPLED_GRAPHICS);
 	}
 
@@ -278,9 +270,17 @@ int App::end_frame()
 	return App::OK;
 }
 
-void App::use_image_for_gui(ev2::ImageID image)
+void App::acquire_image_for_gui(ev2::ImageID image)
 {
-	imgui_images.push_back(image);
+	auto [it, inserted] = imgui_images.emplace(image, VK_NULL_HANDLE);
+
+	if (!inserted)
+		return;
+}
+
+void App::release_image_for_gui(ev2::ImageID image)
+{
+	imgui_images.erase(image);
 }
 
 int App::initialize(int argc, char *argv[])
@@ -419,26 +419,21 @@ void App::terminate()
 
 static void build_default_layout(ImGuiID dockspaceID)
 {
-    ImGuiID mainNodeID;
-
-	ImGuiDockNode* rootNode = ImGui::DockBuilderGetNode(dockspaceID);
-	if (!rootNode) {
+	// Check FIRST, before creating anything
+	if (ImGui::DockBuilderGetNode(dockspaceID) == nullptr)
+	{
 		ImGui::DockBuilderAddNode(dockspaceID, ImGuiDockNodeFlags_DockSpace);
-        ImGui::DockBuilderSetNodeSize(dockspaceID, ImGui::GetMainViewport()->WorkSize);
+		ImGui::DockBuilderSetNodeSize(dockspaceID, ImGui::GetMainViewport()->WorkSize);
 
-        ImGuiID dockMainID = dockspaceID;
+		ImGuiID dockMainID = dockspaceID;
+		ImGuiID dockLeftID = ImGui::DockBuilderSplitNode(dockMainID, ImGuiDir_Left, 0.25f, nullptr, &dockMainID);
+		ImGuiID dockDownID = ImGui::DockBuilderSplitNode(dockLeftID, ImGuiDir_Down, 0.5f, nullptr, &dockLeftID);
 
-        mainNodeID = dockMainID;
-	} else {
-		mainNodeID = dockspaceID;
+		ImGui::DockBuilderDockWindow("Editor", dockLeftID);
+		ImGui::DockBuilderDockWindow(ev2::imgui::INSPECTOR_PANEL_NAME, dockDownID);
+		ImGui::DockBuilderFinish(dockspaceID);
 	}
-
-	ImGuiID dockLeftID = ImGui::DockBuilderSplitNode(mainNodeID, ImGuiDir_Left, 0.25f, nullptr, &mainNodeID);
-	ImGuiID dockDownID = ImGui::DockBuilderSplitNode(dockLeftID, ImGuiDir_Down, 0.5f, nullptr, &dockLeftID);
-
-	ImGui::DockBuilderDockWindow("Editor", dockLeftID);
-	ImGui::DockBuilderDockWindow("Inspector", dockDownID);
-	ImGui::DockBuilderFinish(dockspaceID);
+    ImGui::DockSpace(dockspaceID, ImVec2(0, 0), ImGuiDockNodeFlags_None);
 }
 
 void App::setup_root_dockspace()
@@ -465,19 +460,12 @@ void App::setup_root_dockspace()
     ImGui::PopStyleVar(3);
 
     ImGuiID dockspaceID = ImGui::GetID("EditorRootDockspace");
-    ImGui::DockSpace(dockspaceID, ImVec2(0, 0), ImGuiDockNodeFlags_None);
-
-    ImGui::End();
 
 	root_dockspace = dockspaceID;
 
 	// Setup initial layout
-
-	static bool initial_layout_setup = false;
-	if (!initial_layout_setup) {
-		build_default_layout(dockspaceID);
-		initial_layout_setup = true;
-	}
+	build_default_layout(dockspaceID);
+    ImGui::End();
 }
 void App::image_viewer_open_callback(void *usr, ev2::ImageID image)
 {

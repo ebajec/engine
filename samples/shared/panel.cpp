@@ -50,9 +50,46 @@ Panel::Panel(
 Panel::~Panel()
 {
 	if (m_target.is_valid()) {
-		ImGui_ImplVulkan_RemoveTexture(imgui_texture);
 		ev2::destroy_render_target(m_ctx, m_target);
 	}
+}
+
+int Panel::update(bool *was_resized)
+{
+	if (m_needs_resize) {
+		if (m_target.is_valid()) {
+			m_app->release_image_for_gui(
+				ev2::get_render_target_color_image(m_target));
+			ev2::destroy_render_target(m_ctx, m_target);
+			imgui_texture = VK_NULL_HANDLE;
+		}
+
+		m_target = ev2::create_render_target(m_ctx, (uint32_t)m_size.x, (uint32_t)m_size.y,
+						 m_target_flags);
+		if (!m_target.is_valid()) {
+			return App::ERROR;
+		}
+
+		ev2::ImageID color_img = ev2::get_render_target_color_image(m_target);
+
+		VkImageView view = ev2::get_render_target_color_view(m_target);
+		imgui_texture = ImGui_ImplVulkan_AddTexture(
+			view,
+			VK_IMAGE_LAYOUT_GENERAL
+		);
+
+		ev2::pre_destroy_callback(m_app->ctx, color_img, [tex = imgui_texture]{
+			ImGui_ImplVulkan_RemoveTexture(tex);
+		});
+
+		m_app->acquire_image_for_gui(color_img);
+
+		if (was_resized)
+			*was_resized = true;
+		m_needs_resize = false;
+	}
+
+	return App::OK;
 }
 
 bool Panel::imgui()
@@ -86,8 +123,7 @@ bool Panel::imgui()
 
 	if (ImGui::Begin(m_name.c_str(), m_closable ? &open : nullptr, ImGuiWindowFlags_MenuBar)) {
 		if (ImGui::BeginMenuBar()) {
-			// right-align a settings button
-			float button_w = ImGui::GetFrameHeight(); // square icon button
+			float button_w = ImGui::GetFrameHeight();
 			ImGui::SetCursorPosX(ImGui::GetWindowWidth() - button_w - ImGui::GetStyle().ItemSpacing.x);
 
 			if (ImGui::Button("...##settings", ImVec2(button_w, 0))) {
@@ -102,51 +138,40 @@ bool Panel::imgui()
 			ImGui::EndMenuBar();
 		}
 
-		ImVec2 win_size = ImGui::GetWindowSize();
-		ImVec2 win_pos = ImGui::GetWindowPos();
+		if (!ImGui::IsWindowAppearing()) {
+			ImVec2 cursor = ImGui::GetCursorScreenPos();
+			ImVec2 content = ImGui::GetContentRegionAvail();
 
-		m_hovered = ImGui::IsWindowHovered();
-		m_focused = ImGui::IsWindowFocused(); 
+			m_hovered = ImGui::IsWindowHovered();
+			m_focused = ImGui::IsWindowFocused(); 
 
-		m_content_hovered = m_hovered && 
-			ImGui::GetMousePos().y >= ImGui::GetCursorScreenPos().y;
+			m_content_hovered = m_hovered && 
+				ImGui::GetMousePos().y >= cursor.y;
 
-		if (m_content_hovered) {
-			ImGui::GetCurrentWindow()->Flags |= ImGuiWindowFlags_NoMove;
-		}
+			if (m_content_hovered) {
+				ImGui::GetCurrentWindow()->Flags |= ImGuiWindowFlags_NoMove;
+			}
 
-		m_pos = glm::ivec2(win_pos.x, win_pos.y);
-		glm::ivec2 size = glm::ivec2(win_size.x,win_size.y);
+			m_pos = glm::ivec2(cursor.x, cursor.y);
+			glm::ivec2 size = glm::ivec2(content.x,content.y);
 
-		if (!m_target.is_valid() || m_size != size) {
-			if (m_target.is_valid())
-				ev2::destroy_render_target(m_ctx, m_target);
-
-			m_target = ev2::create_render_target(m_ctx, (uint32_t)size.x, (uint32_t)size.y,
-							 m_target_flags);
+			if (m_size != size) {
+				m_needs_resize = true;
+			}
 			m_size = size;
 
-			VkImageView view = ev2::get_render_target_color_view(m_target);
-			ImGui_ImplVulkan_RemoveTexture(imgui_texture);
-			imgui_texture = ImGui_ImplVulkan_AddTexture(
-				view,
-				VK_IMAGE_LAYOUT_GENERAL
-			);
-		}
-
-		// If the window is closed and this code executes, the frame will be left holding
-		// an invalid image id since the render target gets destroyed
-		if (open) {
-			m_app->use_image_for_gui(ev2::get_render_target_color_image(m_target));
-			ImVec2 content = ImGui::GetContentRegionAvail();
-			ImGui::ImageWithBg(
-				(ImTextureID)imgui_texture, 
-				content, 
-				ImVec2(0,1), 
-				ImVec2(1,0), 
-				ImVec4(0.f,0.f,0.f,0.f), 
-				ImVec4(1.f,1.f,1.f,1.f)
-			);
+			// If the window is closed and this code executes, the frame will be left holding
+			// an invalid image id since the render target gets destroyed
+			if (open && imgui_texture) {
+				ImGui::ImageWithBg(
+					(ImTextureID)imgui_texture, 
+					content, 
+					ImVec2(0,1), 
+					ImVec2(1,0), 
+					ImVec4(0.f,0.f,0.f,0.f), 
+					ImVec4(1.f,1.f,1.f,1.f)
+				);
+			}
 		}
 	}
 	ImGui::End();

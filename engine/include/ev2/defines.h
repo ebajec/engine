@@ -9,7 +9,7 @@
 #define MAKE_HANDLE(name)\
 struct name##ID {\
 	uint64_t id = 0;\
-	inline bool is_valid() const{return id;}\
+	inline bool is_valid() const{return (bool)id;}\
 }
 
 #define MAKE_ASSET_HANDLE(name)\

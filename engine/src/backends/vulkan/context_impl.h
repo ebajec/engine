@@ -15,6 +15,7 @@
 #include "backends/vulkan/upload_pool.h"
 
 #include <glm/mat4x4.hpp>
+#include <list>
 
 #define EV2_MAX_FRAMES_IN_FLIGHT 2
 #define EV2_FRAME_TIMEOUT 1e9
@@ -35,6 +36,9 @@ inline Type *get_##TypeLower(Type##ID h) {\
 		throw std::runtime_error("Invalid handle");\
 	}\
 	return ptr;\
+}\
+inline bool is_valid_##TypeLower(Type##ID h) {\
+	return TypeLower##_pool->is_valid(to_pool_id(h));\
 }\
 __attribute__((noinline)) Type *get_##TypeLower##_unchecked(Type##ID h) {\
 	PoolID id = {.slot = h.id, .gen = h.gen};\
@@ -202,6 +206,8 @@ struct GPUFramedata
 //------------------------------------------------------------------------------
 // Render graph
 
+static constexpr uint32_t PASS_NODE_INDEX_OUT_OF_FRAME = UINT32_MAX;
+
 struct PassBarrier 
 {
 	ResourceStateFlags src_state;
@@ -283,6 +289,12 @@ struct PassEdge
 		return 
 			src_state.queue_family_index != dst_state.queue_family_index;
 	}
+
+	bool is_out_of_frame() const {
+		return 
+			src_node == PASS_NODE_INDEX_OUT_OF_FRAME ||
+			dst_node == PASS_NODE_INDEX_OUT_OF_FRAME;
+	}
 };
 
 struct PassCommand
@@ -357,7 +369,6 @@ struct RenderGraph
 	// Satisfies a valid topological order given by the order out the input passes
 	std::deque<PassNode> nodes;
 
-	// Satisfies a valid topological order given by the order out the input passes
 	std::vector<PassEdge> edges;
 
 	robin_hood::unordered_map<
@@ -376,10 +387,24 @@ struct RenderGraph
 	uint32_t compute_counter;
 };
 
-static constexpr uint32_t PASS_NODE_INDEX_OUT_OF_FRAME = UINT32_MAX;
-
 //------------------------------------------------------------------------------
 // Graphics context
+
+struct DeferredDeleteQueue
+{
+	union Entry {
+		struct {
+			TaggedResource resource;
+			uint32_t sync_count;
+		};
+		ResourceSync sync;
+	};
+	std::list<Entry> queue;
+	robin_hood::unordered_map<TaggedResource, std::function<void()>> callbacks; 
+
+	void enqueue(GfxContext *ctx, TaggedResource resource);
+	Result process(GfxContext *ctx);
+};
 
 struct GfxContext
 {
@@ -465,6 +490,8 @@ struct GfxContext
 	std::unique_ptr<Pool<Texture>> texture_pool;
 	std::unique_ptr<Pool<Bindings>> bindings_pool;
 
+	DeferredDeleteQueue deferred_delete;
+
 	// Special GPU Resources
 	GPUTTable<ViewData> view_data;
 	GPUTTable<glm::mat4> transforms;
@@ -478,7 +505,7 @@ struct GfxContext
 	void assert_outside_frame();
 	bool is_inside_frame() {return get_current_frame()->index >= frame_counter;}
 	bool is_outside_frame() {return !frame_counter || get_current_frame()->index < frame_counter;}
-	
+
 	VkDescriptorSetLayout get_base_descriptor_set_layout(uint32_t level);
 	VkPipelineLayout get_base_pipeline_layout(uint32_t level);
 
@@ -493,6 +520,13 @@ struct GfxContext
 	constexpr FrameContext *get_current_frame() {
 		return &frames[frame_counter % max_frames_in_flight];
 	}
+
+	constexpr FrameContext *get_frame(uint64_t idx) {
+		return &frames[idx % max_frames_in_flight];
+	}
+
+	void queue_delete(TaggedResource resource);
+	void process_deferred_deletions();
 
 	MAKE_VERSIONED_HANDLE_ACCESS(Buffer, buffer);
 	MAKE_VERSIONED_HANDLE_ACCESS(Image, image);

@@ -50,6 +50,9 @@ struct ImageViewerPanel
 	void render(ev2::GfxContext *ctx);
 	void destroy(ev2::GfxContext *ctx);
 
+	// @return Whether this panel should close;
+	bool imgui();
+
 	glm::vec2 get_world_cursor_pos();
 };
 

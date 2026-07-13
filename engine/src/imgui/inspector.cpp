@@ -1,12 +1,14 @@
 
 #include <ev2/imgui/inspector.h>
 #include "inspector_impl.h"
+#include "backends/vulkan/context_impl.h"
 
 #include <vulkan/vk_enum_string_helper.h>
 
 #ifdef EV2_ENABLE_IMGUI
 
 #include <imgui.h>
+#include "imgui_internal.h"
 
 #include "backends/vulkan/context_impl.h"
 
@@ -199,13 +201,235 @@ void set_image_viewer_close_callback(void* usr, void (*callback)(void *, ev2::Im
 	};
 }
 
-void inspector_panel_imgui(GfxContext *ctx)
+constexpr ImVec2 ImVec2_Add(const ImVec2& a, const ImVec2 &b)
 {
-	if (ImGui::Begin(INSPECTOR_PANEL_NAME)) {
-		image_list_imgui(ctx);
-		buffer_list_imgui(ctx);
+	return ImVec2(a.x + b.x, a.y + b.y);
+}
+constexpr ImVec2 ImVec2_Sub(const ImVec2& a, const ImVec2 &b)
+{
+	return ImVec2(a.x - b.x, a.y - b.y);
+}
+
+void render_graph_imgui(const RenderGraph *rg)
+{
+
+	if (!g_state.render_graph_window_open)
+		return;
+
+	uint32_t node_count = (uint32_t)rg->nodes.size(); 
+	uint32_t edge_count = (uint32_t)rg->edges.size(); 
+	std::vector<std::vector<uint32_t>> incoming(node_count);
+
+	for (uint32_t e = 0; e < rg->edges.size(); ++e) {
+		const PassEdge &edge = rg->edges[e];
+
+		if (edge.dst_node == PASS_NODE_INDEX_OUT_OF_FRAME)
+			continue;
+		incoming[edge.dst_node].push_back(e);
+	}
+
+	std::vector<uint32_t> depths(node_count, 0);
+
+	uint32_t longest_chain = 0;
+
+	for (uint32_t n = 0; n < node_count; ++n) {
+		if (incoming[n].empty())
+			continue;
+
+		uint32_t max_depth = 0;
+		for (uint32_t e : incoming[n]) {
+			const PassEdge &edge = rg->edges[e];
+			if (edge.src_node != PASS_NODE_INDEX_OUT_OF_FRAME)
+				max_depth = std::max(max_depth, depths[edge.src_node]);
+		}
+		uint32_t depth = 1 + max_depth; 
+		depths[n] = depth;
+		longest_chain = std::max(depth, longest_chain);
+	}
+
+	std::vector<std::vector<uint32_t>> levels (1 + longest_chain);
+
+	for (uint32_t n = 0; n < node_count; ++n) {
+		levels[depths[n]].push_back(n);
+	}
+
+	struct NodeDrawData {
+		ImVec2 pos;
+		ImVec2 size;
+		const char *name;
+	};
+
+	struct EdgeDrawData {
+		ImVec2 src_pos;
+		ImVec2 dst_pos;
+	};
+
+	std::vector<NodeDrawData> node_data (node_count);
+	std::vector<EdgeDrawData> edge_data (edge_count);
+
+	constexpr float node_x_spacing = 300.f;
+	constexpr float node_y_spacing = 125.f;
+
+	float x_level = 0;
+	for (const std::vector<uint32_t> &level : levels) {
+		float h = 0;
+
+		for (uint32_t n : level) {
+			const PassNode &node = rg->nodes[n];
+
+			ImVec2 size (100, 100);
+
+			NodeDrawData data{
+				.pos = ImVec2_Sub(
+					ImVec2(x_level, h),
+					ImVec2(0.5f*size.x, 0.5f*size.y)
+				),
+				.size = size,
+				.name = node.name.c_str(),
+			};
+
+			node_data[n] = data;
+
+			uint32_t in_count = (uint32_t)incoming[n].size();
+
+			float dy = size.y/(float)in_count;
+			float y = data.pos.y + 0.5f*dy;
+
+			for (uint32_t e : incoming[n]) {
+				edge_data[e].dst_pos = ImVec2(
+					data.pos.x,
+					y
+				);
+
+				y += dy;
+			}
+
+			h += node_y_spacing;
+		}
+
+		x_level += node_x_spacing;
+	}
+
+	for (uint32_t e = 0; e < edge_count; ++e) {
+		const PassEdge &edge = rg->edges[e];
+		
+		const NodeDrawData *src_node = edge.src_node == PASS_NODE_INDEX_OUT_OF_FRAME ?
+			nullptr : &node_data[edge.src_node];
+		const NodeDrawData *dst_node = edge.dst_node == PASS_NODE_INDEX_OUT_OF_FRAME ?
+			nullptr : &node_data[edge.dst_node];
+
+		if (src_node && dst_node) {
+			edge_data[e].src_pos = ImVec2_Add(
+				src_node->pos,
+				ImVec2(src_node->size.x, 0.5f*src_node->size.y)
+			); 		
+		} else if (dst_node) {
+			ImVec2 dst_pos = edge_data[e].dst_pos;
+			edge_data[e].src_pos = ImVec2(
+				dst_pos.x - dst_node->size.x - 0.025f*node_x_spacing,
+				dst_pos.y
+			); 		
+		}	
+	}
+
+	static ImVec2 pan = ImVec2(0,0);
+	const ImGuiIO &io = ImGui::GetIO();
+
+	static float scale = 1.f;
+	
+	if (ImGui::Begin("RenderGraph", &g_state.render_graph_window_open,
+				  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)
+	) {
+
+		ImVec2 origin = ImGui::GetCursorScreenPos();
+		ImVec2 content = ImGui::GetContentRegionAvail();
+
+		if (ImGui::IsWindowHovered() && ImGui::GetMousePos().y >= origin.y) {
+			ImGui::GetCurrentWindow()->Flags |= ImGuiWindowFlags_NoMove;
+
+			scale *= powf(1.5f, io.MouseWheel);
+			
+			if (io.MouseDown[0]) {
+				pan.x -= io.MouseDelta.x/scale;
+				pan.y -= io.MouseDelta.y/scale;
+			}
+		} 
+
+		auto to_screen = [=](ImVec2 graph_pos) -> ImVec2 {
+			return ImVec2(
+				origin.x + 0.5f*content.x + (graph_pos.x  - pan.x) * scale,
+				origin.y + 0.5f*content.y + (graph_pos.y  - pan.y) * scale
+			);
+		};
+
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		dl->ChannelsSplit(2); // 0 = links, 1 = nodes
+		
+		constexpr uint32_t node_color = 0xAA333333;
+		constexpr uint32_t border_color = 0xBB000000;
+		constexpr uint32_t text_color = 0xFFFFFFFF;
+		constexpr uint32_t edge_color = 0xFFCCCCCC;
+
+		for (const NodeDrawData &node : node_data) {
+
+			dl->ChannelsSetCurrent(1);
+			ImVec2 p_min = to_screen(node.pos);
+			ImVec2 p_max = to_screen(ImVec2_Add(node.pos, node.size));
+			dl->AddRectFilled(p_min, p_max, node_color, 4.0f);
+			dl->AddRect(p_min, p_max, border_color, 4.0f);
+			dl->AddText(ImVec2_Add(p_min , ImVec2(6,6)), text_color, node.name);
+		}
+
+		
+		for (uint32_t e = 0; e < edge_count; ++e) {
+			if (rg->edges[e].dst_node == PASS_NODE_INDEX_OUT_OF_FRAME)
+				continue;
+
+			const EdgeDrawData &edge = edge_data[e];
+
+			dl->ChannelsSetCurrent(0);
+			ImVec2 p1 = to_screen(edge.src_pos);
+			ImVec2 p2 = to_screen(edge.dst_pos);
+			float dx = std::max(50.0f, fabsf(p2.x - p1.x) * 0.5f);
+			dl->AddBezierCubic(p1, 
+				ImVec2_Add(p1 , ImVec2(dx,0)), 
+				ImVec2_Sub(p2 , ImVec2(dx,0)), 
+				p2, 
+				edge_color, 
+				2.0f
+			);
+		}
+
+		dl->ChannelsMerge();
+
 	}
 	ImGui::End();
+}
+
+void inspector_panel_imgui(GfxContext *ctx)
+{
+	const FrameContext *prev_frame = ctx->frame_counter ? 
+		ctx->get_frame(ctx->frame_counter - 1) : nullptr;
+
+	if (ImGui::Begin(INSPECTOR_PANEL_NAME)) {
+		if (prev_frame) {
+			ev2::imgui::post_frame_submission_stats(
+				prev_frame->render_graph->submissions.data(), 
+				(uint32_t)prev_frame->render_graph->submissions.size()
+			);
+		}
+		image_list_imgui(ctx);
+		buffer_list_imgui(ctx);
+
+		if (ImGui::RadioButton("Show render graph", g_state.render_graph_window_open)) {
+			g_state.render_graph_window_open = !g_state.render_graph_window_open;
+		}
+	}
+	ImGui::End();
+
+	if (prev_frame) {
+		render_graph_imgui(prev_frame->render_graph.get());
+	}
 }
 
 }

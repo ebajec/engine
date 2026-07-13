@@ -46,14 +46,18 @@ BufferID create_buffer(GfxContext *ctx, size_t size, BufferUsageFlags usage, siz
 
 	buf.size = size;
 
-	return ctx->emplace_buffer(std::move(buf));
+	BufferID id = ctx->emplace_buffer(std::move(buf)); 
+	return id; 
 }
 
 void destroy_buffer(GfxContext *ctx, BufferID h)
 {
-	Buffer* buf = ctx->get_buffer(h);
+	ctx->queue_delete(h);
+}
 
-	ctx->wait_for_frame_completion(buf->state.last_used_by_frame);
+void destroy_buffer_internal(GfxContext *ctx, BufferID h)
+{
+	Buffer* buf = ctx->get_buffer(h);
 
 	vmaDestroyBuffer(ctx->allocator, buf->buffer, buf->allocation);
 	ctx->buffer_pool->deallocate(to_pool_id(h));
@@ -144,18 +148,31 @@ void get_image_dims(GfxContext *ctx, ImageID h_img, uint32_t *w, uint32_t *h, ui
 	if (d) *d = img->d;
 }
 
+void pre_destroy_callback(GfxContext *ctx, ImageID img,
+						  std::function<void()> &&callback)
+{
+	ctx->deferred_delete.callbacks[img] = std::move(callback);
+}
+
 void destroy_image(GfxContext *ctx, ImageID h)
 {
-	Image *img = ctx->get_image(h);
-
-	ctx->wait_for_frame_completion(img->state.last_used_by_frame);
-
 #ifdef EV2_ENABLE_IMGUI
 	ev2::imgui::on_destroy_image(h);
 #endif
+	ctx->queue_delete(h);
+}
+
+void destroy_image_internal(GfxContext *ctx, ImageID image)
+{
+	Image *img = ctx->get_image(image);
+
+	for (const auto &[key, view] : img->view_cache) {
+		vkDestroyImageView(ctx->device, view, nullptr);
+	}
 
 	vmaDestroyImage(ctx->allocator, img->image, img->allocation);
-	ctx->image_pool->deallocate(to_pool_id(h));
+
+	ctx->image_pool->deallocate(to_pool_id(image));
 }
 
 //------------------------------------------------------------------------------

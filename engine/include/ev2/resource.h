@@ -101,7 +101,13 @@ uint64_t get_buffer_gpu_handle(GfxContext *ctx, BufferID h);
 
 ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, 
 					 ImageFormat fmt, ImageUsageFlags usage, uint32_t levels = 1);
+
+/// @brief Queue this resource for deletion after it is no longer in
+/// use by the GPU
 void destroy_image(GfxContext *ctx, ImageID img);
+
+/// @brief Callback to be executed before destroying this resource 
+void pre_destroy_callback(GfxContext *ctx, ImageID img, std::function<void()> &&callback);
 
 void get_image_dims(GfxContext *ctx, ImageID h_img, uint32_t *w, uint32_t *h, uint32_t*d);
 
