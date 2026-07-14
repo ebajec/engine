@@ -19,7 +19,7 @@ void main()
 	uint L = 0;
 	vec4 tex = textureLod(u_tex, in_uv, 0);
 
-	float r = 1000*abs(tex.r);
+	float r = 400*abs(tex.r);
 	
 	vec3 rgb = jet_palette(r);
 

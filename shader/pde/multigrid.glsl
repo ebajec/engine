@@ -29,12 +29,6 @@ layout (push_constant, std430) uniform Inputs {
 	uint u_iterations;
 };
 
-//layout (binding = 0) uniform ubo {
-//	uint N;
-//	uint u_level;
-//	uint u_iterations;
-//};
-
 bool test_boundary(ivec2 idx, uint level)
 {
 	ivec2 size = imageSize(in_lhs) / (1 << level);
@@ -45,7 +39,6 @@ bool test_boundary(ivec2 idx, uint level)
 
 	return outside; 
 }
-
 
 float jacobi_it(ivec2 idx, float rhs, float h)
 {

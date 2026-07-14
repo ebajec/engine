@@ -73,16 +73,6 @@ float residual(ivec2 idx, float rhs, float h)
 	return rhs - lap;
 }
 
-float jacobi_lhs(vec4 nbr, bvec4 bd, float rhs, float h)
-{
-	float denom = dot(vec4(not(bd)), vec4(1));
-
-	if (denom == 0)
-		return 0;
-
-	return (dot(nbr, vec4(not(bd))) - h*h*rhs)/denom;
-}
-
 float fetch_lhs(ivec2 grid_idx, float rhs, float h)
 {
 	if (u_level > 0)
@@ -188,7 +178,7 @@ void main()
 
 	block[idx.x][idx.y] = lhs;  
 
-	for (int i = 0; i < u_iterations; ++i) {
+	for (int i = 0; i < u_iterations - 1; ++i) {
 		barrier();
 
 		lhs = jacobi_it(idx, rhs, h);

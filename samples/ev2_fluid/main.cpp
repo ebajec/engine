@@ -53,7 +53,7 @@ uint64_t upload_img_data(ev2::GfxContext *ctx, ev2::ImageID img,
 	return ev2::commit_image_uploads(ctx, uc, img, &upload, 1);
 }
 
-struct PressureSolver
+struct PoissonSolver
 {
 	ev2::ImageID tmp_lhs; // intermediate image
 
@@ -76,8 +76,6 @@ struct PressureSolver
 		uint32_t iterations;
 	};
 
-	std::vector<Uniforms> uniforms;
-
 	int init(ev2::GfxContext *ctx, uint32_t w, uint32_t h);
 	void destroy(ev2::GfxContext *ctx);
 
@@ -91,7 +89,7 @@ static inline constexpr bool is_pow2(size_t x)
 	return !x || (((x - 1) & x) == 0);
 }
 
-void PressureSolver::setup_bindings(ev2::GfxContext *ctx, ev2::ImageID lhs, ev2::ImageID rhs)
+void PoissonSolver::setup_bindings(ev2::GfxContext *ctx, ev2::ImageID lhs, ev2::ImageID rhs)
 {
 	ev2::reset_bindings(ctx, bindings1);
 	ev2::bind_image(ctx, bindings1, "in_lhs", lhs); 
@@ -100,9 +98,9 @@ void PressureSolver::setup_bindings(ev2::GfxContext *ctx, ev2::ImageID lhs, ev2:
 	ev2::flush_bindings(ctx, bindings1);
 }
 
-constexpr uint32_t MAX_PRESSURE_SOLVER_MIPS = 6;
+constexpr uint32_t MAX_PRESSURE_SOLVER_MIPS = 8;
 
-int PressureSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
+int PoissonSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 {
 	sim_w = w; 
 	sim_h = h;
@@ -110,34 +108,22 @@ int PressureSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 	if (!is_pow2(sim_w) || !is_pow2(sim_h))
 		return EXIT_FAILURE;
 
-	N = std::min((int)ceil(log2((double)w)), 8);
+	N = std::min((uint32_t)ceil(log2((double)w)), MAX_PRESSURE_SOLVER_MIPS);
 
 	ev2::ImageUsageFlags usage = 
 		ev2::IMAGE_USAGE_STORAGE_BIT | 
 		ev2::IMAGE_USAGE_SAMPLED_BIT;
 
 	R1 = ev2::create_image(ctx, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, usage, N); 
+	ev2::set_image_name(ctx, R1, "R1");
 	R2 = ev2::create_image(ctx, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_32F, usage, N); 
+	ev2::set_image_name(ctx, R2, "R2");
 
 	tmp_lhs = ev2::create_image(ctx, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, usage);
+	ev2::set_image_name(ctx, tmp_lhs, "tmp_lhs");
 
 	multigrid_down = ev2::load_compute_pipeline(ctx, "shader/multigrid_down");
 	multigrid_up = ev2::load_compute_pipeline(ctx, "shader/multigrid_up");
-
-	//--------------------------------------------------------------------
-	// create ubo
-	
-	uniforms.resize(N + 1);
-	for (uint32_t i = 0; i <= N; ++i) {
-		uint32_t its = 4;
-		uniforms[i] = Uniforms{
-			.N = N,
-			.level = i,
-			.iterations = 4
-		};
-	}
-
-	uniforms[0].iterations = 4;
 
 	//-----------------------------------------------------------------------------
 	// setup bindings
@@ -148,7 +134,7 @@ int PressureSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 
 	for (uint32_t i = 0; i < N; ++i) {
 		ev2::bind_image_indexed(ctx, bindings0, "R1", i, R1, i);
-		ev2::bind_image_indexed(ctx, bindings0, "R2", i, R1, i);
+		ev2::bind_image_indexed(ctx, bindings0, "R2", i, R2, i);
 	}
 	ev2::flush_bindings(ctx, bindings0);
 
@@ -157,19 +143,19 @@ int PressureSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 	return EXIT_SUCCESS;
 }
 
-void PressureSolver::destroy(ev2::GfxContext *ctx)
+void PoissonSolver::destroy(ev2::GfxContext *ctx)
 {
 	ev2::destroy_image(ctx, R1);
 	ev2::destroy_image(ctx, R2);
 }
 
-void PressureSolver::record_bind(ev2::PassID pass)
+void PoissonSolver::record_bind(ev2::PassID pass)
 {
 	ev2::cmd_bind_resources(pass, bindings0);
 	ev2::cmd_bind_resources(pass, bindings1);
 }
 
-void PressureSolver::record_v_cycle(ev2::PassID pass, ev2::GfxContext *ctx, ev2::ImageID lhs, ev2::ImageID rhs)
+void PoissonSolver::record_v_cycle(ev2::PassID pass, ev2::GfxContext *ctx, ev2::ImageID lhs, ev2::ImageID rhs)
 {
 	const uint32_t groups = 16;
 
@@ -186,17 +172,26 @@ void PressureSolver::record_v_cycle(ev2::PassID pass, ev2::GfxContext *ctx, ev2:
 	// Downwards pass has 0 upto N passes inclusive: One pass of jacobi iterations
 	// on original, then N smooth + downsample passes on the residuals
 
+	constexpr uint its[] = {
+		4, 3, 3, 3, 2, 2, 1, 1
+	};
+
 	uint32_t tw = sim_w;
 	uint32_t th = sim_h;
 	for (uint32_t i = 0; i <= N; ++i) {
-		uint32_t its = uniforms[i].iterations;
-		uint32_t output_w = groups - 2*its;
 		uint32_t idx = i;
+		Uniforms pc{
+			.N = N,
+			.level = idx,
+			.iterations = its[idx]
+		};
+
+		uint32_t output_w = groups - 2*pc.iterations;
 
 		ev2::cmd_use_image(pass, R1, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 		ev2::cmd_use_image(pass, R2, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 
-		ev2::cmd_push_constant(pass, multigrid_down, 0, sizeof(Uniforms), &uniforms[idx]);
+		ev2::cmd_push_constant(pass, multigrid_down, 0, sizeof(pc), &pc);
 		ev2::cmd_dispatch(pass, 1 + (tw - 1)/output_w, 1 + (th - 1)/output_w, 1);
 
 		tw = 1 + (tw - 1)/2;
@@ -215,15 +210,18 @@ void PressureSolver::record_v_cycle(ev2::PassID pass, ev2::GfxContext *ctx, ev2:
 
 	// N-1, N-2, ... 0
 	for (uint32_t i = 0; i < N; ++i) {
-		uint32_t its = uniforms[i].iterations;
-		uint32_t output_w = groups - 2*its;
+		uint32_t idx = (N - 1 - i); 
+		Uniforms pc{
+			.N = N,
+			.level = idx,
+			.iterations = its[idx]
+		};
+		uint32_t output_w = groups - 2*pc.iterations;
 
 		ev2::cmd_use_image(pass, R1, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 		ev2::cmd_use_image(pass, R2, ev2::USAGE_STORAGE_READ_COMPUTE);
 
-		uint32_t idx = (N - 1 - i); 
-
-		ev2::cmd_push_constant(pass, multigrid_down, 0, sizeof(Uniforms), &uniforms[idx]);
+		ev2::cmd_push_constant(pass, multigrid_down, 0, sizeof(pc), &pc);
 
 		tw *= 2;
 		th *= 2;
@@ -382,7 +380,7 @@ struct FluidSim
 	ev2::BindingsID pressure_set;
 	ev2::BindingsID project_set;
 
-	std::unique_ptr<PressureSolver> pressure_solver;
+	std::unique_ptr<PoissonSolver> pressure_solver;
 	std::unique_ptr<MeanSubtractor> mean_subtractor;
 
 	uint64_t step = 0;
@@ -420,19 +418,22 @@ int FluidSim::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 	q_img_2 = ev2::create_image(ctx, 1 + grid_w, 1 + grid_h, 1, ev2::IMAGE_FORMAT_RGBA32F, usage);
 
 	lap_p_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F, usage);
+	ev2::set_image_name(ctx, lap_p_img, "lap_p");
+
 	p_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F, usage);
+	ev2::set_image_name(ctx, p_img, "p");
 
 	mask_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_R8_UNORM, usage);
 
 	q_tex_1 = ev2::create_texture(ctx, q_img_1, ev2::FILTER_BILINEAR);
 	q_tex_2 = ev2::create_texture(ctx, q_img_2, ev2::FILTER_BILINEAR);
 
-	lap_p_tex = ev2::create_texture(ctx, lap_p_img, ev2::FILTER_NEAREST);
-	p_tex = ev2::create_texture(ctx, p_img, ev2::FILTER_NEAREST);
+	lap_p_tex = ev2::create_texture(ctx, lap_p_img, ev2::FILTER_BILINEAR);
+	p_tex = ev2::create_texture(ctx, p_img, ev2::FILTER_BILINEAR);
 
 	ubo = ev2::create_buffer(ctx, sizeof(uniforms), ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
-	pressure_solver.reset(new PressureSolver);
+	pressure_solver.reset(new PoissonSolver);
 
 	int result = EXIT_SUCCESS;
 
@@ -551,7 +552,7 @@ int FluidSim::update(ev2::GfxContext *ctx)
 	ev2::cmd_bind_resources(pass, pressure_set);
 	ev2::cmd_dispatch(pass, gx, gy, 1);
 
-	mean_subtractor->record(pass);
+	//mean_subtractor->record(pass);
 	
 	pressure_solver->record_bind(pass);
 	for (int i = 0; i < ((step == 0) ? 64 : 5); ++i) 

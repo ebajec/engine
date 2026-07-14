@@ -17,7 +17,7 @@ void main()
 	uint L = 0;
 	vec4 tex = textureLod(u_tex, in_uv, 0);
 
-	float k = tanh(0.2*tex.z);
+	float k = tanh(tex.z);
 	
 	vec3 rgb = vec3(k,-k,-k) + vec3(0.02);
 

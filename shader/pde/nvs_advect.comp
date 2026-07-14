@@ -17,10 +17,9 @@ bool within_cursor(vec2 p)
 		float power = 1.5;
 		float sigma = 0.2f;
 
-		vec2 cursor = u_cursor*out_size;
-		vec2 vcursor = (u_cursor - u_cursor_prev) * out_size;
-
-		vec2 r = p - cursor;
+		//vec2 c = u_cursor*out_size;
+		vec2 c = 0.5*out_size;
+		vec2 r = p - c;
 
 		return abs(r.x) < 40 && abs(r.y) < 40;
 
