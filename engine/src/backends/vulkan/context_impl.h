@@ -381,6 +381,9 @@ struct RenderGraph
 	std::unordered_map<uint64_t, uint32_t> buffer_passes;
 	std::unordered_map<uint64_t, uint32_t> image_passes;
 
+	robin_hood::unordered_map<TaggedResource, uint32_t> 
+		last_written_by_node;
+
 	std::vector<QueueSubmitter *> queues;
 
 	uint32_t gfx_counter;
@@ -455,7 +458,7 @@ struct GfxContext
 	uint32_t physical_device_index;
 	
 	uint32_t max_frames_in_flight;
-	uint32_t framerate_hz = 240;
+	int framerate_hz = 240;
 
 	uint64_t start_time_ns;
 	struct timespec last_frame_ts;

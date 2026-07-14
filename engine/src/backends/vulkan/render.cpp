@@ -1196,9 +1196,19 @@ static void use_resource_internal(
 	ResourceStateFlags src_flags = update_resource_state(state, usage, dst_node.queue_family_index);
 	ResourceStateFlags dst_flags = state->get_current();
 
-	const bool is_write_barrier = (bool)(usage_to_rw_flags(usage) & PASS_WRITE);
+	const bool is_dst_write = (bool)(usage_to_rw_flags(usage) & PASS_WRITE);
 
-	if (!state->written && !is_write_barrier) {
+	auto [it, inserted] = rg.last_written_by_node.emplace(
+		resource, PASS_NODE_INDEX_OUT_OF_FRAME
+	);
+
+	src_node_idx = it->second;
+
+	if (is_dst_write) {
+		it->second = dst_node_idx;
+	}
+
+	if (!state->written && !is_dst_write) {
 		log_warn("Pass %s reads from %s %d with no prior write; likely needs intialization!", 
 		   dst_node.name.c_str(), resource.type_str(), resource.id());
 	}
@@ -1207,7 +1217,7 @@ static void use_resource_internal(
 		.src_state = src_flags,
 		.dst_state = dst_flags,
 		.resource = resource,
-		.is_write = is_write_barrier 
+		.is_write = is_dst_write 
 	};
 
 	bool needs_queue_transfer = 
@@ -1248,7 +1258,7 @@ static void use_resource_internal(
 	if (
 		final_barrier = dst_node.barriers.empty() ? nullptr : &dst_node.barriers.back();
 
-		!is_write_barrier && final_barrier && 
+		!is_dst_write && final_barrier && 
 		!final_barrier->is_write && final_barrier->resource == resource
 	) {
 		final_barrier->dst_state.access |= barrier.dst_state.access;
@@ -1266,7 +1276,7 @@ static void use_resource_internal(
 	}
 
 	if (edge) {
-		edge->dst_write = is_write_barrier;
+		edge->dst_write = is_dst_write;
 	}
 	dst_node.final_states[resource] = final_barrier->dst_state;
 }

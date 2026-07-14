@@ -215,7 +215,7 @@ constexpr ImVec2 ImVec2_Sub(const ImVec2& a, const ImVec2 &b)
 static void resource_state_text(const char *header, const ResourceStateFlags &state)
 {
 	std::string access = string_VkAccessFlags2(state.access);
-	std::string stage = string_VkAccessFlags2(state.stage);
+	std::string stage = string_VkPipelineStageFlags2(state.stage);
 
 	ImGui::Text(
 		"%s:\n"
@@ -521,6 +521,14 @@ void inspector_panel_imgui(GfxContext *ctx)
 	if (prev_frame) {
 		render_graph_imgui(prev_frame->render_graph.get());
 	}
+}
+
+void editor_panel_imgui(GfxContext *ctx)
+{
+	if (ImGui::Begin(EDITOR_PANEL_NAME)) {
+		ImGui::SliderInt("Target framerate", &ctx->framerate_hz, 10, 240);
+	}
+	ImGui::End();
 }
 
 }

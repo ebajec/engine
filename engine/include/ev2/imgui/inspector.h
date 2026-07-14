@@ -11,9 +11,11 @@
 namespace ev2::imgui 
 {
 
+constexpr const char *EDITOR_PANEL_NAME = "Editor";
 constexpr const char *INSPECTOR_PANEL_NAME = "Inspector";
 
 void inspector_panel_imgui(GfxContext *ctx);
+void editor_panel_imgui(GfxContext *ctx);
 
 void set_image_viewer_open_callback(void* usr, void (*callback)(void *, ev2::ImageID));
 void set_image_viewer_close_callback(void* usr, void (*callback)(void *, ev2::ImageID));

@@ -538,6 +538,7 @@ void App::imgui()
 		plot_frame_times(input.dt);
 	}
 
+	ev2::imgui::editor_panel_imgui(ctx);
 	ev2::imgui::inspector_panel_imgui(ctx);
 }
 
