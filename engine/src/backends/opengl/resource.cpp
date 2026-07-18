@@ -1,5 +1,5 @@
-#include "device_impl.h"
-#include "resource_impl.h"
+#include "device.h"
+#include "resource.h"
 
 namespace ev2 {
 

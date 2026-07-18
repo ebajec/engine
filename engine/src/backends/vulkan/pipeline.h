@@ -119,12 +119,6 @@ struct Bindings
 	BindingMode mode;
 };
 
-struct Recorder {
-	GfxContext *ctx;
-	VkCommandBuffer command_buffer;
-	uint32_t queue_family;
-};
-
 struct ViewData
 {
 	glm::mat4 p;

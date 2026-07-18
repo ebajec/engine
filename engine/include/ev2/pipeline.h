@@ -43,12 +43,6 @@ enum Usage
     USAGE_MAX_ENUM,
 };
 
-struct BindingSlot
-{
-	uint32_t set;
-	uint32_t id;
-};
-
 ShaderID load_shader(GfxContext *ctx, const char *path);
 void unload_shader(GfxContext *ctx, ShaderID id);
 

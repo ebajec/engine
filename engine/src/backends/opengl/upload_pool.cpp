@@ -1,7 +1,7 @@
 #include "upload_pool.h"
-#include "utils/common.h"
+#include "ev2/utils/common.h"
 
-#include "device_impl.h"
+#include "device.h"
 
 #include <cassert>
 

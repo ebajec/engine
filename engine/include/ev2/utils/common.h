@@ -22,7 +22,7 @@ static constexpr size_t align_up_pow2(size_t x, size_t align)
 
 static constexpr bool is_pow2(size_t x)
 {
-	return !x || (((x - 1) & x) == 0);
+	return x && (((x - 1) & x) == 0);
 }
 
 static constexpr size_t mod_pow2(ptrdiff_t a, size_t b) {

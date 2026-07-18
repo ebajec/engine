@@ -1,7 +1,7 @@
 #include "backends/opengl/def_opengl.h"
 #include "ev2/device.h"
 
-#include "device_impl.h"
+#include "device.h"
 
 #include "utils/asset_table.h"
 #include "utils/pool.h"

@@ -5,9 +5,9 @@
 #include "vulkan/vulkan_core.h"
 
 #include "backends/vulkan/def_vulkan.h"
-#include "backends/vulkan/context_impl.h"
-#include "backends/vulkan/pipeline_impl.h"
-#include "backends/vulkan/resource_impl.h"
+#include "backends/vulkan/context.h"
+#include "backends/vulkan/pipeline.h"
+#include "backends/vulkan/resource.h"
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Weverything"

@@ -5,9 +5,9 @@
 #include "utils/pool.h"
 #include "utils/gpu_table.h"
 
-#include "backends/opengl/resource_impl.h"
-#include "backends/opengl/render_impl.h"
-#include "backends/opengl/pipeline_impl.h"
+#include "backends/opengl/resource.h"
+#include "backends/opengl/render.h"
+#include "backends/opengl/pipeline.h"
 #include "backends/opengl/upload_pool.h"
 
 #include <glm/mat4x4.hpp>

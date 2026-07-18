@@ -1,7 +1,7 @@
 #include <ev2/utils/ansi_colors.h>
 
-#include "context_impl.h"
-#include "resource_impl.h"
+#include "context.h"
+#include "resource.h"
 
 #include "stb_image.h"
 

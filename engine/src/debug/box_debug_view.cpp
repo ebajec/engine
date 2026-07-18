@@ -1,6 +1,6 @@
 #include "box_debug_view.h"
 
-#include "backends/vulkan/context_impl.h"
+#include "backends/vulkan/context.h"
 
 #include <cstring>
 

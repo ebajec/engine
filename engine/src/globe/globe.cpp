@@ -959,7 +959,7 @@ ev2::Result globe_update(Globe *globe, GlobeUpdateInfo *info)
 	return result;
 }
 
-#include "backends/vulkan/context_impl.h"
+#include "backends/vulkan/context.h"
 
 void globe_draw(const Globe *globe, ev2::PassID pass)
 {

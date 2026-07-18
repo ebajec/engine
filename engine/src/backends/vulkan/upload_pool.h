@@ -3,7 +3,7 @@
 
 #include "ev2/resource.h"
 #include "def_vulkan.h"
-#include "resource_impl.h"
+#include "resource.h"
 
 #include "vk_mem_alloc.h"
 

@@ -1,7 +1,7 @@
 
 #include <ev2/imgui/inspector.h>
-#include "inspector_impl.h"
-#include "backends/vulkan/context_impl.h"
+#include "inspector.h"
+#include "backends/vulkan/context.h"
 
 #include <vulkan/vk_enum_string_helper.h>
 
@@ -10,7 +10,7 @@
 #include <imgui.h>
 #include "imgui_internal.h"
 
-#include "backends/vulkan/context_impl.h"
+#include "backends/vulkan/context.h"
 
 namespace ev2::imgui {
 

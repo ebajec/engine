@@ -1,7 +1,7 @@
 #include <ev2/defines.h>
 
-#include "backends/opengl/device_impl.h"
-#include "backends/opengl/render_impl.h"
+#include "backends/opengl/device.h"
+#include "backends/opengl/render.h"
 
 #include <glm/gtc/type_ptr.hpp>
 

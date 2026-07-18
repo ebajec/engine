@@ -10,8 +10,8 @@
 #include "utils/thread_pool.h"
 #include "utils/platform.h"
 
-#include "backends/vulkan/resource_impl.h"
-#include "backends/vulkan/pipeline_impl.h"
+#include "backends/vulkan/resource.h"
+#include "backends/vulkan/pipeline.h"
 #include "backends/vulkan/upload_pool.h"
 
 #include <glm/mat4x4.hpp>
@@ -77,6 +77,7 @@ struct VulkanOptions
     std::vector<const char*> deviceExtensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 		VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME,
+		VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME
     };
 };
 

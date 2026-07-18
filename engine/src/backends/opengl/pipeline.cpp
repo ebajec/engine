@@ -4,9 +4,9 @@
 
 #include "vulkan/vulkan_core.h"
 
-#include "backends/opengl/device_impl.h"
-#include "backends/opengl/pipeline_impl.h"
-#include "backends/opengl/resource_impl.h"
+#include "backends/opengl/device.h"
+#include "backends/opengl/pipeline.h"
+#include "backends/opengl/resource.h"
 #include "backends/opengl/def_opengl.h"
 
 #pragma clang diagnostic push

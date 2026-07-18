@@ -1,10 +1,10 @@
 #include <ev2/defines.h>
 
-#include "backends/vulkan/context_impl.h"
-#include "backends/vulkan/pipeline_impl.h"
+#include "backends/vulkan/context.h"
+#include "backends/vulkan/pipeline.h"
 
 #include <glm/gtc/type_ptr.hpp>
-#include "imgui/inspector_impl.h"
+#include "imgui/inspector.h"
 
 #include <cstring>
 
@@ -1209,8 +1209,8 @@ static void use_resource_internal(
 	}
 
 	if (!state->written && !is_dst_write) {
-		log_warn("Pass %s reads from %s %d with no prior write; likely needs intialization!", 
-		   dst_node.name.c_str(), resource.type_str(), resource.id());
+		//log_warn("Pass %s reads from %s %d with no prior write; likely needs intialization!", 
+		//   dst_node.name.c_str(), resource.type_str(), resource.id());
 	}
 
 	PassBarrier barrier = {

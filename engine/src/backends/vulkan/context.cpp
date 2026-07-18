@@ -1,8 +1,8 @@
 #include "ev2/context.h"
 
 #include "def_vulkan.h"
-#include "context_impl.h"
-#include "pipeline_impl.h"
+#include "context.h"
+#include "pipeline.h"
 
 #include "utils/asset_table.h"
 #include "utils/pool.h"
@@ -440,7 +440,7 @@ static ev2::Result create_swap_chain_targets(ev2::GfxContext *ctx)
 //------------------------------------------------------------------------------
 // Vulkan initialization
 
-static ev2::Result pick_physical_device(ev2::GfxContext *ctx, 
+static ev2::Result create_physical_device(ev2::GfxContext *ctx, 
 										const VulkanOptions &opts)
 {
 	uint32_t deviceCount = 0;
@@ -486,7 +486,7 @@ static ev2::Result pick_physical_device(ev2::GfxContext *ctx,
 	return ev2::SUCCESS;
 }
 
-static ev2::Result pick_logical_device(ev2::GfxContext *ctx, 
+static ev2::Result create_logical_device(ev2::GfxContext *ctx, 
 									   const VulkanOptions &opts)
 {
 	QueueFamilyIndices indices = findQueueFamilies(ctx->physicalDevice, 
@@ -525,10 +525,14 @@ static ev2::Result pick_logical_device(ev2::GfxContext *ctx,
     }
     
     // device features
-    VkPhysicalDeviceFeatures deviceFeatures{};
+	VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomicFloatFeatures{
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT,
+		.shaderSharedFloat32AtomicAdd = VK_TRUE,
+	};
 
 	VkPhysicalDeviceVulkan12Features features12{
 		.sType             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+		.pNext = &atomicFloatFeatures,
 		.timelineSemaphore = VK_TRUE,
 		.runtimeDescriptorArray = VK_TRUE,
 	};
@@ -540,6 +544,18 @@ static ev2::Result pick_logical_device(ev2::GfxContext *ctx,
 		.dynamicRendering = VK_TRUE,
 	};
 
+    VkPhysicalDeviceFeatures2 deviceFeatures2{
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+		.pNext = &atomicFloatFeatures,
+	};
+
+	vkGetPhysicalDeviceFeatures2(ctx->physicalDevice, &deviceFeatures2);
+
+	if (!atomicFloatFeatures.shaderSharedFloat32AtomicAdd)
+		return set_error(EINIT_FAILED, "shaderSharedFloat32AtomicAdd is unsupported"); 
+
+	VkPhysicalDeviceFeatures device_features{};
+
     VkDeviceCreateInfo createInfo = {
 		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
 		.pNext = &features13,
@@ -547,14 +563,14 @@ static ev2::Result pick_logical_device(ev2::GfxContext *ctx,
 		.pQueueCreateInfos = queueCreateInfos.data(),
 		.enabledExtensionCount = (uint32_t)opts.deviceExtensions.size(),
 		.ppEnabledExtensionNames = opts.deviceExtensions.data(),
-		.pEnabledFeatures = &deviceFeatures,
+		.pEnabledFeatures = &device_features,
 	};
 
 	VkResult result = vkCreateDevice(ctx->physicalDevice, 
 								  &createInfo, nullptr, &ctx->device); 
     if (result != VK_SUCCESS) {
-        log_error("failed to create logical device!");
-		return ev2::EINIT_FAILED;
+        
+		return set_error(EINIT_FAILED, "failed to create logical device!");
     }
 
     vkGetDeviceQueue(ctx->device, indices.presentFamily.value(), 0,
@@ -1374,16 +1390,13 @@ GfxContext *create_context_for_vulkan(const char *path,
 	ev2::Result result = ev2::SUCCESS;
 
 	VulkanOptions opts = {
-		.deviceExtensions = {
-			VK_KHR_SWAPCHAIN_EXTENSION_NAME
-		}
 	};
 
-	result = pick_physical_device(ctx, opts);
+	result = create_physical_device(ctx, opts);
 	if (result)
 		goto error;
 
-	result = pick_logical_device(ctx, opts);
+	result = create_logical_device(ctx, opts);
 	if (result)
 		goto error;
 
