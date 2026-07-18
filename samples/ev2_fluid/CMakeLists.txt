@@ -3,14 +3,24 @@ set(CMAKE_CXX_STANDARD 23)
 
 include(clang-warnings)
 
-set(TARGET ev2_fluid)
-project(${TARGET})
+project(ev2_fluid)
 
-file(GLOB SOURCES "*.cpp" "*.c")
+add_executable(ev2_fluid 
+	main.cpp 
+	poisson_solver.cpp
+)
 
-add_executable(${TARGET} ${SOURCES})
+target_link_libraries(ev2_fluid PRIVATE
+	samples-shared
+	engine
+)
 
-target_link_libraries(${TARGET} PRIVATE
+add_executable(ev2_poisson_test 
+	poisson_test.cpp 
+	poisson_solver.cpp
+)
+
+target_link_libraries(ev2_poisson_test PRIVATE
 	samples-shared
 	engine
 )

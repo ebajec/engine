@@ -1,0 +1,57 @@
+#version 460 core
+
+#extension GL_EXT_shader_atomic_float : require
+
+#define GROUPS 16
+#define CHUNK_SIZE 8
+
+layout(set = 0, r32f, binding = 0) readonly uniform image2D img_in[2];
+layout(set = 0, r32f, binding = 1) writeonly uniform image2D img_out[2];
+
+layout(set = 1, r32f, binding = 1) readonly uniform image2D img_src;
+
+layout (local_size_x = GROUPS, local_size_y = GROUPS, local_size_z = 1) in;
+
+layout (push_constant) uniform PC {
+	ivec2 u_size;
+	uint u_img_idx;
+};
+
+shared float shared_acc;
+
+void main()
+{
+	const uint img_idx = u_img_idx & 0x1;
+
+    ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+	
+	if (idx.x >= u_size.x || idx.y >= u_size.y)
+		return;
+
+	ivec2 out_size = imageSize(img_out[img_idx]);
+
+	bool is_first = idx.x == 0 && idx.y == 0; 
+
+	if (is_first)
+		shared_acc = 0;
+
+	barrier();
+
+	ivec2 start = idx * CHUNK_SIZE;
+	ivec2 end = min((1 + idx) * CHUNK_SIZE, u_size);
+
+	float acc = 0.f;
+
+	for (int i = start.x; i < end.x; ++i) {
+		for (int j = start.y; j < end.y; ++j) {
+			acc += imageLoad(img_in[img_idx], ivec2(i, j)).r; 
+		}
+	}
+
+	atomicAdd(shared_acc, acc);
+
+	barrier();
+
+	if (is_first)
+		imageStore(img_out[img_idx], ivec2(gl_WorkGroupID.xy), vec4(shared_acc));
+}

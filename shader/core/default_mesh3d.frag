@@ -53,7 +53,7 @@ void main()
 
 	vec2 vel = c0.xy;
 
-	float intensity = abs(2*c0.z); 
+	float intensity = abs(20*c0.r); 
 
 	vec3 c = jet_palette(tanh(intensity));
 

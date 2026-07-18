@@ -28,8 +28,6 @@ struct ImageViewerPanel
 		ev2::GfxPipelineID pipeline {};
 		ev2::BindingsID bindings {};
 
-		ev2::BindingSlot tex_slot;
-
 		glm::vec2 center = glm::vec2(0);
 
 		glm::mat4 proj = glm::mat4(1.f);

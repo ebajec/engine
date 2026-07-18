@@ -1,0 +1,37 @@
+#version 460 core
+#define GROUP_SIZE 16
+
+layout (local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE, local_size_z = 1) in;
+
+layout (push_constant, std430) uniform PC {
+	vec2 p1;
+	vec2 p2;
+
+	float power;
+	float sigma;
+};
+
+layout (set = 0, r32f, binding = 0) uniform image2D img_out;
+
+#define SQRT_TWOPI 2.50662827463f
+
+void main() {
+	ivec2 size = imageSize(img_out);
+	ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+
+	if (idx.x < 0 || idx.x >= size.x ||
+		idx.y < 0 || idx.y >= size.y)
+		return;
+
+	vec2 r = vec2(idx)/vec2(size) - p1; 
+	float rr = dot(r,r)/(2 * sigma * sigma);
+
+	float f = power * exp(-rr) * 1/(SQRT_TWOPI * sigma);
+	float v = imageLoad(img_out, idx).r;
+
+	float F = 4*6.28;
+
+	v += f;// * dot(r, vec2(cos(F*p1.x), sin(F*p1.y)));
+
+	imageStore(img_out, idx, vec4(v));
+}

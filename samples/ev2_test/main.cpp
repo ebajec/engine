@@ -21,7 +21,7 @@
 #include <cstdlib>
 #include <cmath>
 
-uint64_t upload_img_data(ev2::GfxContext *ctx, ev2::ImageID img, 
+uint64_t initialize_image(ev2::GfxContext *ctx, ev2::ImageID img, 
 					 uint32_t w, uint32_t h)
 {
 	size_t size = w * h * sizeof(glm::vec4);
@@ -81,9 +81,6 @@ struct WaveSim
 
 	int swap_ctr = 0;
 
-	ev2::BindingSlot img_in_slot;
-	ev2::BindingSlot img_out_slot; 
-
 	int init(ev2::GfxContext *ctx);
 	int update(ev2::GfxContext *ctx);
 	void destroy(ev2::GfxContext *ctx);
@@ -128,7 +125,7 @@ int WaveSim::init(ev2::GfxContext *ctx)
 	//------------------------------------------------------------------------------
 	// Upload some stuff
 
-	uint64_t sync = upload_img_data(ctx,swap_img[0], grid_w, grid_h);
+	uint64_t sync = initialize_image(ctx,swap_img[0], grid_w, grid_h);
 
 	return EXIT_SUCCESS;
 }
@@ -147,7 +144,7 @@ int WaveSim::update(ev2::GfxContext *ctx)
 		ImGui::SliderFloat("wave_speed", &uniforms.c, 0.f, 12.f);
 
 		if (ImGui::Button("reset")) {
-			sync = upload_img_data(ctx,swap_img[0], grid_w, grid_h);
+			sync = initialize_image(ctx,swap_img[0], grid_w, grid_h);
 		}
 	}
 

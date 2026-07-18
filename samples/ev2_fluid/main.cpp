@@ -2,8 +2,10 @@
 #include "panel.h"
 #include "texture_viewer.h"
 #include "heightmap_viewer.h"
+#include "poisson_solver.h"
 
 #include <ev2/utils/log.h>
+#include <ev2/utils/common.h>
 
 #include <ev2/context.h>
 #include <ev2/pipeline.h>
@@ -22,7 +24,7 @@
 #include <cstdlib>
 #include <cmath>
 
-uint64_t upload_img_data(ev2::GfxContext *ctx, ev2::ImageID img, 
+uint64_t initialize_image(ev2::GfxContext *ctx, ev2::ImageID img, 
 					 uint32_t w, uint32_t h)
 {
 	size_t size = w * h * sizeof(glm::vec4);
@@ -51,301 +53,6 @@ uint64_t upload_img_data(ev2::GfxContext *ctx, ev2::ImageID img,
 	};
 
 	return ev2::commit_image_uploads(ctx, uc, img, &upload, 1);
-}
-
-struct PoissonSolver
-{
-	ev2::ImageID tmp_lhs; // intermediate image
-
-	ev2::ImageID R1; // level 0 upto N
-	ev2::ImageID R2; // level 1 upto N + 1
-
-	ev2::ComputePipelineID multigrid_down;
-	ev2::ComputePipelineID multigrid_up;
-
-	ev2::BindingsID bindings0;
-	ev2::BindingsID bindings1;
-
-	uint32_t sim_w = 0, sim_h = 0;
-
-	uint32_t N = 0;
-
-	struct Uniforms {
-		uint32_t N;
-		uint32_t level;
-		uint32_t iterations;
-	};
-
-	int init(ev2::GfxContext *ctx, uint32_t w, uint32_t h);
-	void destroy(ev2::GfxContext *ctx);
-
-	void setup_bindings(ev2::GfxContext *ctx, ev2::ImageID phi, ev2::ImageID f);
-	void record_bind(ev2::PassID pass);
-	void record_v_cycle(ev2::PassID pass, ev2::GfxContext *ctx, ev2::ImageID lhs, ev2::ImageID rhs);
-};
-
-static inline constexpr bool is_pow2(size_t x)
-{
-	return !x || (((x - 1) & x) == 0);
-}
-
-void PoissonSolver::setup_bindings(ev2::GfxContext *ctx, ev2::ImageID lhs, ev2::ImageID rhs)
-{
-	ev2::reset_bindings(ctx, bindings1);
-	ev2::bind_image(ctx, bindings1, "in_lhs", lhs); 
-	ev2::bind_image(ctx, bindings1, "in_rhs", rhs); 
-	ev2::bind_image(ctx, bindings1, "out_lhs", lhs); 
-	ev2::flush_bindings(ctx, bindings1);
-}
-
-constexpr uint32_t MAX_PRESSURE_SOLVER_MIPS = 8;
-
-int PoissonSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
-{
-	sim_w = w; 
-	sim_h = h;
-
-	if (!is_pow2(sim_w) || !is_pow2(sim_h))
-		return EXIT_FAILURE;
-
-	N = std::min((uint32_t)ceil(log2((double)w)), MAX_PRESSURE_SOLVER_MIPS);
-
-	ev2::ImageUsageFlags usage = 
-		ev2::IMAGE_USAGE_STORAGE_BIT | 
-		ev2::IMAGE_USAGE_SAMPLED_BIT;
-
-	R1 = ev2::create_image(ctx, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, usage, N); 
-	ev2::set_image_name(ctx, R1, "R1");
-	R2 = ev2::create_image(ctx, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_32F, usage, N); 
-	ev2::set_image_name(ctx, R2, "R2");
-
-	tmp_lhs = ev2::create_image(ctx, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, usage);
-	ev2::set_image_name(ctx, tmp_lhs, "tmp_lhs");
-
-	multigrid_down = ev2::load_compute_pipeline(ctx, "shader/multigrid_down");
-	multigrid_up = ev2::load_compute_pipeline(ctx, "shader/multigrid_up");
-
-	//-----------------------------------------------------------------------------
-	// setup bindings
-
-	bindings0 = ev2::create_bindings(ctx, multigrid_down, 0, ev2::BINDING_MODE_STATIC);
-	//ev2::bind_buffer(ctx, bindings0, "ubo", ubo, 0, sizeof(uniforms)); 
-	ev2::bind_image(ctx, bindings0, "tmp_lhs", tmp_lhs); 
-
-	for (uint32_t i = 0; i < N; ++i) {
-		ev2::bind_image_indexed(ctx, bindings0, "R1", i, R1, i);
-		ev2::bind_image_indexed(ctx, bindings0, "R2", i, R2, i);
-	}
-	ev2::flush_bindings(ctx, bindings0);
-
-	bindings1 = ev2::create_bindings(ctx, multigrid_down, 1, ev2::BINDING_MODE_DYNAMIC);
-
-	return EXIT_SUCCESS;
-}
-
-void PoissonSolver::destroy(ev2::GfxContext *ctx)
-{
-	ev2::destroy_image(ctx, R1);
-	ev2::destroy_image(ctx, R2);
-}
-
-void PoissonSolver::record_bind(ev2::PassID pass)
-{
-	ev2::cmd_bind_resources(pass, bindings0);
-	ev2::cmd_bind_resources(pass, bindings1);
-}
-
-void PoissonSolver::record_v_cycle(ev2::PassID pass, ev2::GfxContext *ctx, ev2::ImageID lhs, ev2::ImageID rhs)
-{
-	const uint32_t groups = 16;
-
-	//-------------------------------------------------------------------
-	// 'down' stage
-
-	ev2::cmd_bind_compute_pipeline(pass, multigrid_down);
-
-	ev2::cmd_use_image(pass, lhs, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
-	ev2::cmd_use_image(pass, rhs, ev2::USAGE_STORAGE_READ_COMPUTE);
-
-	ev2::cmd_use_image(pass, tmp_lhs, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
-
-	// Downwards pass has 0 upto N passes inclusive: One pass of jacobi iterations
-	// on original, then N smooth + downsample passes on the residuals
-
-	constexpr uint its[] = {
-		4, 3, 3, 3, 2, 2, 1, 1
-	};
-
-	uint32_t tw = sim_w;
-	uint32_t th = sim_h;
-	for (uint32_t i = 0; i <= N; ++i) {
-		uint32_t idx = i;
-		Uniforms pc{
-			.N = N,
-			.level = idx,
-			.iterations = its[idx]
-		};
-
-		uint32_t output_w = groups - 2*pc.iterations;
-
-		ev2::cmd_use_image(pass, R1, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
-		ev2::cmd_use_image(pass, R2, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
-
-		ev2::cmd_push_constant(pass, multigrid_down, 0, sizeof(pc), &pc);
-		ev2::cmd_dispatch(pass, 1 + (tw - 1)/output_w, 1 + (th - 1)/output_w, 1);
-
-		tw = 1 + (tw - 1)/2;
-		th = 1 + (th - 1)/2;
-	}
-
-	//-------------------------------------------------------------------
-	// 'up' stage
-	
-	ev2::cmd_bind_compute_pipeline(pass, multigrid_up);
-
-	ev2::cmd_use_image(pass, tmp_lhs, ev2::USAGE_STORAGE_READ_COMPUTE);
-
-	tw *= 2;
-	th *= 2;
-
-	// N-1, N-2, ... 0
-	for (uint32_t i = 0; i < N; ++i) {
-		uint32_t idx = (N - 1 - i); 
-		Uniforms pc{
-			.N = N,
-			.level = idx,
-			.iterations = its[idx]
-		};
-		uint32_t output_w = groups - 2*pc.iterations;
-
-		ev2::cmd_use_image(pass, R1, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
-		ev2::cmd_use_image(pass, R2, ev2::USAGE_STORAGE_READ_COMPUTE);
-
-		ev2::cmd_push_constant(pass, multigrid_down, 0, sizeof(pc), &pc);
-
-		tw *= 2;
-		th *= 2;
-		ev2::cmd_dispatch(pass, 1 + (tw - 1)/output_w, 1 + (th - 1)/output_w, 1);
-	}
-}
-
-struct MeanSubtractor
-{
-	ev2::ComputePipelineID accumulate16;
-	ev2::ComputePipelineID subtract_img;
-
-	ev2::BindingsID accumulate_set[4];
-	ev2::BindingsID subtract_set;
-
-	ev2::ImageID downsamples[4] = {};
-	ev2::TextureID final_layer;
-	ev2::ImageID out_img;
-
-	ev2::BindingSlot accumulate_input_slot;
-	ev2::BindingSlot subtract_output_slot;
-	
-	uint32_t levels;
-	uint32_t width, height;
-	
-	int init(ev2::GfxContext *ctx, uint32_t w, uint32_t h);
-	int destroy(ev2::GfxContext *ctx);
-	void record(ev2::PassID pass);
-
-	void setup_bindings(ev2::GfxContext *ctx, ev2::ImageID img);
-};
-
-int MeanSubtractor::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
-{
-	accumulate16 = ev2::load_compute_pipeline(ctx, "shader/accumulate16");
-	subtract_img = ev2::load_compute_pipeline(ctx, "shader/subtract_img");
-
-	width = w;
-	height = h;
-	levels = (uint32_t)(ceil(std::max(log((double)w),log((double)h))/log(16.)));
-
-	ev2::ImageUsageFlags usage = ev2::IMAGE_USAGE_STORAGE_BIT |
-	                   ev2::IMAGE_USAGE_SAMPLED_BIT;
-
-	for (uint32_t i = 0; i < levels; ++i) {
-		w = 1 + (w - 1)/16;
-		h = 1 + (h - 1)/16;
-		downsamples[i] = ev2::create_image(ctx, w, h, 1, ev2::IMAGE_FORMAT_32F, usage);
-	}
-
-	assert(w == 1 && h == 1);
-
-	final_layer = ev2::create_texture(ctx, downsamples[levels - 1], ev2::FILTER_NEAREST);
-
-	accumulate_set[0] = ev2::create_bindings(ctx, accumulate16, 0, 
-									   ev2::BINDING_MODE_DYNAMIC);
-
-	for (uint32_t i = 1; i < levels; ++i) {
-		accumulate_set[i] = ev2::create_bindings(ctx, accumulate16, 0,
-										ev2::BINDING_MODE_STATIC);
-		ev2::bind_image(ctx, accumulate_set[i], "img_in", downsamples[i-1]);
-		ev2::bind_image(ctx, accumulate_set[i], "img_out", downsamples[i]);
-	}
-	for (uint32_t i = 1; i < levels; ++i)
-		ev2::flush_bindings(ctx, accumulate_set[i]);
-
-	subtract_set = ev2::create_bindings(ctx, subtract_img, 0, ev2::BINDING_MODE_DYNAMIC);
-
-	return 0;
-}
-int MeanSubtractor::destroy(ev2::GfxContext *ctx)
-{
-	for (uint32_t i = 0; i < levels; ++i) {
-		ev2::destroy_image(ctx, downsamples[i]);
-		ev2::destroy_bindings(ctx, accumulate_set[i]);
-	}
-	ev2::destroy_texture(ctx, final_layer);
-	ev2::destroy_bindings(ctx, subtract_set);
-
-	return 0;
-}
-
-void MeanSubtractor::setup_bindings(ev2::GfxContext *ctx, ev2::ImageID img)
-{
-	ev2::reset_bindings(ctx, accumulate_set[0]);
-	ev2::bind_image(ctx, accumulate_set[0], "img_in", img);
-	ev2::bind_image(ctx, accumulate_set[0], "img_out", downsamples[0]);
-	ev2::flush_bindings(ctx, accumulate_set[0]);
-
-	ev2::reset_bindings(ctx, subtract_set);
-	ev2::bind_texture(ctx, subtract_set, "img_in", final_layer);
-	ev2::bind_image(ctx, subtract_set, "img_out", img);
-	ev2::flush_bindings(ctx, subtract_set);
-
-	out_img = img;
-}
-
-void MeanSubtractor::record(ev2::PassID pass)
-{
-	ev2::cmd_bind_compute_pipeline(pass, accumulate16);
-
-	uint32_t w = width;
-	uint32_t h = height;
-
-	for (uint32_t i = 0; i < levels; ++i) {
-		ev2::cmd_use_image(pass, downsamples[i], ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
-		if (i > 0)
-			ev2::cmd_use_image(pass, downsamples[i - 1], ev2::USAGE_STORAGE_READ_COMPUTE);
-
-		ev2::cmd_bind_resources(pass, accumulate_set[i]);
-
-		uint32_t gx = 1 + (w- 1)/16;
-		uint32_t gy = 1 + (h - 1)/16;
-
-		ev2::cmd_dispatch(pass, gx, gy, 1);
-
-		w = 1 + (w-1)/16;
-		h = 1 + (h-1)/16;
-	}
-
-	ev2::cmd_use_image(pass, out_img, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE); 
-	ev2::cmd_bind_compute_pipeline(pass, subtract_img);
-	ev2::cmd_bind_resources(pass, subtract_set);
-	ev2::cmd_dispatch(pass, 1 + (width-1)/16, 1 + (height-1)/16, 1);
 }
 
 struct FluidSim
@@ -686,9 +393,9 @@ int FluidApp::initialize(int argc, char **argv)
 
 void FluidApp::reset_images()
 {
-	upload_img_data(ctx, sim->p_img, sim->grid_w, sim->grid_h);
-	upload_img_data(ctx, sim->q_img_1, 1 + sim->grid_w, 1 + sim->grid_h);
-	upload_img_data(ctx, sim->q_img_2, 1 + sim->grid_w, 1 + sim->grid_h);
+	initialize_image(ctx, sim->p_img, sim->grid_w, sim->grid_h);
+	initialize_image(ctx, sim->q_img_1, 1 + sim->grid_w, 1 + sim->grid_h);
+	initialize_image(ctx, sim->q_img_2, 1 + sim->grid_w, 1 + sim->grid_h);
 
 	ev2::flush_uploads(ctx);
 

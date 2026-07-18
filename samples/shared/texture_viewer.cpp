@@ -39,51 +39,7 @@ ImageViewerPanel::ImageViewerPanel(App *app,
 	}
 
 	panel.reset(new Panel(app, app->ctx, name, x, y, w, h));
-
-	pipeline_path = pipeline;
-}
-
-int ImageViewerPanel::set_pipeline(const char *path)
-{
-	ev2::GfxPipelineID pipeline = ev2::load_graphics_pipeline(app->ctx, path);
-
-	if (rd.pipeline.is_valid() && rd.pipeline == pipeline)
-		return 0;
-
-	if (!EV2_VALID(pipeline))
-		return App::ERROR;
-
-	if (rd.bindings.is_valid()) {
-		ev2::destroy_bindings(app->ctx, rd.bindings);
-	}
-
-	ev2::BindingsID bindings = ev2::create_bindings(
-		app->ctx, pipeline, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_DYNAMIC);
-	rd.pipeline = pipeline;
-	rd.bindings = bindings;
-	pipeline_path = path;
-
-	return App::OK;
-}
-
-int ImageViewerPanel::init(ev2::GfxContext *ctx, ev2::ImageID image) 
-{
-	this->image = image;
-	rd.camera = ev2::create_view(ctx, nullptr, nullptr);
-	rd.tex = ev2::create_texture(ctx, image, ev2::FILTER_NEAREST);
-
-	int result = App::OK;
-
-	if (!rd.camera.is_valid() || !rd.tex.is_valid()) {
-		result = App::ERROR;
-		goto error;
-	}
-
-	result = set_pipeline(pipeline_path.c_str());
-	if (result)
-		goto error;;
-
-	panel->set_settings([this, ctx]{
+	panel->set_settings([this, ctx = app->ctx]{
 		ImGui::BeginChild("FixedWidthWrapper", ImVec2(250, 0), ImGuiChildFlags_AutoResizeY);
 
 		uint32_t max_levels = 0, max_layers = 0;
@@ -147,6 +103,51 @@ int ImageViewerPanel::init(ev2::GfxContext *ctx, ev2::ImageID image)
 		ImGui::EndChild();
 	});
 
+	pipeline_path = pipeline;
+}
+
+int ImageViewerPanel::set_pipeline(const char *path)
+{
+	ev2::GfxPipelineID pipeline = ev2::load_graphics_pipeline(app->ctx, path);
+
+	if (rd.pipeline.is_valid() && rd.pipeline == pipeline)
+		return 0;
+
+	if (!EV2_VALID(pipeline))
+		return App::ERROR;
+
+	if (rd.bindings.is_valid()) {
+		ev2::destroy_bindings(app->ctx, rd.bindings);
+	}
+
+	ev2::BindingsID bindings = ev2::create_bindings(
+		app->ctx, pipeline, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_DYNAMIC);
+	rd.pipeline = pipeline;
+	rd.bindings = bindings;
+	pipeline_path = path;
+
+	return App::OK;
+}
+
+int ImageViewerPanel::init(ev2::GfxContext *ctx, ev2::ImageID image) 
+{
+	rd.camera = ev2::create_view(ctx, nullptr, nullptr);
+
+	int result = App::OK;
+	
+	result = set_image(ctx, image, 0, 0);
+	if (result)
+		return result;
+
+	if (!rd.camera.is_valid() || !rd.tex.is_valid()) {
+		result = App::ERROR;
+		goto error;
+	}
+
+	result = set_pipeline(pipeline_path.c_str());
+	if (result)
+		goto error;;
+
 	return result;
 error:
 	destroy(ctx);
@@ -198,12 +199,13 @@ int ImageViewerPanel::update(ev2::GfxContext *ctx)
 int ImageViewerPanel::set_image(ev2::GfxContext *ctx, 
 	ev2::ImageID image, uint32_t level, uint32_t layer)
 {
+	this->image = image;
 	if (rd.tex.is_valid())
 		ev2::destroy_texture(ctx, rd.tex);
 
 	rd.tex = ev2::create_texture(ctx, image, ev2::FILTER_NEAREST, level, layer);
 
-	return rd.tex.is_valid();
+	return rd.tex.is_valid() ? App::OK : App::ERROR;
 }
 
 ev2::PassID ImageViewerPanel::begin_pass(ev2::GfxContext *ctx)

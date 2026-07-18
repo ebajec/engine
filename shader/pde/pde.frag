@@ -14,34 +14,7 @@ layout (location = 1) in vec2 frag_uv;
 
 layout (location = 0) out vec4 FragColor;
 
-struct tgrad_t
-{
-	vec4 du;
-	vec4 dv;
-};
-
-tgrad_t tex_grad(vec2 uv, float h)
-{
-	float u1 = max(uv.x - h,h);
-	float u2 = min(uv.x + h,1.0 - h);
-
-	vec4 fu1 = texture(u_tex, vec2(u1,uv.y));
-	vec4 fu2 = texture(u_tex, vec2(u2,uv.y));
-
-	vec4 dfdu = (fu2 - fu1)/(u2 - u1);
-
-	float v1 = max(uv.y - h,h);
-	float v2 = min(uv.y + h,1.0 - h);
-
-	vec4 fv1 = texture(u_tex, vec2(uv.x, v1));
-	vec4 fv2 = texture(u_tex, vec2(uv.x, v2));
-
-	vec4 dfdv = (fv2 - fv1)/(v2 - v1);
-
-	return tgrad_t(dfdu,dfdv);
-}
-
-tgrad_t tex_grad2(vec2 uv)
+void tex_grad2(vec2 uv, out vec4 du, out vec4 dv)
 {
 	ivec2 size = textureSize(u_tex, 0);
 
@@ -65,15 +38,17 @@ tgrad_t tex_grad2(vec2 uv)
 
 	float scale = 10/sqrt(size.x*size.y);
 
-	return tgrad_t(scale*dfdu,scale*dfdv);
+	du = scale*dfdu;
+	dv = scale*dfdv;
 }
 
 void main()
 {
 	ivec2 size = textureSize(u_tex, 0);
 
+	vec4 grad_u, grad_v;
 	vec2 uv = frag_uv;
-	tgrad_t grad = tex_grad2(uv);
+	tex_grad2(uv, grad_u, grad_v);
 
 	ivec2 texel = ivec2(uv*vec2(size) + 0.5);
 
@@ -88,7 +63,7 @@ void main()
 
 	vec4 val = texture(u_tex,uv);
 
-	vec2 grad_x = vec2(grad.du.w,grad.dv.w);
+	vec2 grad_x = vec2(grad_u.w,grad_v.w);
 
 	vec3 sun = normalize(vec3(0.5,0.2,-0.5));
 	vec3 n = normalize(vec3(grad_x.x,grad_x.y,0.1));
