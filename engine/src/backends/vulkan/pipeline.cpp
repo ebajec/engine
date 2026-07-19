@@ -695,6 +695,7 @@ static ev2::Result generate_shader_descriptor_layouts(
 				
 				for (uint32_t b = 0; b < binding_count; ++b) {
 					const ev2::ShaderBindingInfo &info = it->second.infos[b];
+					binding_flags[b] |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
 
 					//if (info.is_variable_sized)
 					//	binding_flags[b] |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;

@@ -241,7 +241,7 @@ TextureID create_texture(GfxContext *ctx, ImageID img, TextureFilter filter,
 		.type = VK_IMAGE_VIEW_TYPE_2D,
 		.aspectMask = image->aspect_mask,
 		.baseMipLevel = level,
-		.levelCount = 1,
+		.levelCount = VK_REMAINING_MIP_LEVELS,
 		.baseArrayLayer = layer,
 		.layerCount = 1,
 		.format = image->format,
@@ -278,7 +278,7 @@ TextureID create_texture(GfxContext *ctx, ImageID img, TextureFilter filter,
 		.compareEnable = false,
 		.compareOp = VK_COMPARE_OP_NEVER,
 		.minLod = 0.f,
-		.maxLod = 0.f,
+		.maxLod = VK_LOD_CLAMP_NONE,
 		.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
 		.unnormalizedCoordinates = false,
 	};
@@ -326,6 +326,14 @@ VkImageView get_image_view(GfxContext *ctx, Image *image, const ImageViewKey &ke
 {
 	assert(key.format == image->format);
 	assert(key.aspectMask & image->aspect_mask);
+	assert(
+		key.levelCount == VK_REMAINING_MIP_LEVELS || 
+		key.baseMipLevel + key.levelCount <= image->levels
+	);
+	assert(
+		key.layerCount == VK_REMAINING_ARRAY_LAYERS ||
+		key.baseArrayLayer + key.layerCount <= image->d
+	);
 
 	auto [it, inserted] = image->view_cache.emplace(key, VK_NULL_HANDLE);
 
@@ -346,7 +354,7 @@ VkImageView get_image_view(GfxContext *ctx, Image *image, const ImageViewKey &ke
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 		.flags = 0,
 		.image = image->image,
-		.viewType = VK_IMAGE_VIEW_TYPE_2D,
+		.viewType = key.type,
 		.format = key.format,
 		.subresourceRange = VkImageSubresourceRange{
 			.aspectMask = aspect_mask,

@@ -29,6 +29,12 @@ int HeightmapViewerPanel::init(App *app_, ev2::GfxContext *ctx, ev2::TextureID t
 		 ev2::RENDER_TARGET_CREATE_DEPTH_BIT | ev2::RENDER_TARGET_CREATE_COLOR_BIT
 	 );
 
+	panel->set_settings([this](){
+		ImGui::BeginChild("FixedWidthWrapper", ImVec2(250, 0), ImGuiChildFlags_AutoResizeY);
+		ImGui::SliderFloat("Scale", &uniforms.scale, 0, 1.f);
+		ImGui::EndChild();
+	});
+
 	//-----------------------------------------------------------------------------
 	// Input
 
@@ -130,6 +136,8 @@ void HeightmapViewerPanel::render(ev2::GfxContext *ctx)
 	ev2::cmd_use_image(pass, image, ev2::USAGE_SAMPLED_GRAPHICS);
 
 	ev2::cmd_bind_gfx_pipeline(pass, rd.pipeline);
+	ev2::cmd_push_constant(pass, rd.pipeline, 0, sizeof(Uniforms), &uniforms);
+
 	ev2::cmd_bind_resources(pass, rd.bindings);
 	ev2::cmd_bind_index_buffer(pass, rd.ibo, 0);
 
@@ -138,8 +146,6 @@ void HeightmapViewerPanel::render(ev2::GfxContext *ctx)
 	ev2::cmd_custom(pass, [idx_count](VkCommandBuffer cmds){
 		vkCmdDrawIndexed(cmds, idx_count, 1, 0, 0, 0); 
 	});
-
-	//glDrawElements(GL_TRIANGLES, idx_count, GL_UNSIGNED_INT, nullptr);
 
 	ev2::end_pass(ctx, pass);
 }

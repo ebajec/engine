@@ -34,10 +34,10 @@ void main()
 
 		vec2 grad = 0.5 * vec2(r - l, t - b); 
 
-		float k = tanh(pow(100*length(grad), 5));
+		float k = tanh(pow(1000*length(grad), 5));
  		rgb = vec3(k);
 	} else {
-		rgb = jet_palette(abs(100*c));
+		rgb = jet_palette(100*abs(c));
 	}
 
 	FragColor = vec4(rgb,1); 

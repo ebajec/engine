@@ -1,0 +1,36 @@
+#version 460 core
+#define GROUP_SIZE 1
+
+layout (local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE, local_size_z = 1) in;
+
+layout (push_constant, std430) uniform PC {
+	vec2 p1;
+	uint status;
+};
+
+layout (set = 0, r32f, binding = 0) uniform image2D img_out;
+
+void set(ivec2 pos, uint value)
+{
+	ivec2 size = imageSize(img_out);
+	if (any(lessThan(pos, vec2(0))) || any(greaterThanEqual(pos, size)))
+		return;
+
+	float v = float(value) * (1.f/255.f);
+
+	imageStore(img_out, pos, vec4(v));
+}
+
+void main() {
+	ivec2 size = imageSize(img_out);
+	ivec2 idx = ivec2(p1 * vec2(size));
+
+	set(idx, 0);
+	int w = 32;
+
+	for (int i = idx.x - w/2; i <= idx.x + w/2; ++i) {
+		for (int j = idx.y - w/2; j <= idx.y + w/2; ++j) {
+			set(ivec2(i,j), 0);
+		}
+	}
+}

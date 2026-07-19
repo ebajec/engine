@@ -24,9 +24,12 @@ vec4 load_input(ivec2 idx)
 	return imageLoad(R1[u_level + 1], idx);
 }
 
-void write_output(ivec2 idx,vec4 v)
+void write_output(ivec2 idx, vec4 v)
 {
-	imageStore(R1[u_level], idx, v);
+	if (u_level == 0)
+		imageStore(out_lhs, idx, v);
+	else
+		imageStore(R1[u_level], idx, v);
 }
 
 // upsample correction as output of level + 1
@@ -77,7 +80,6 @@ void main()
 	// index in local block
 	ivec2 idx = ivec2(gl_LocalInvocationID.xy);
 
-
 	// index relative to output region 
 	// I.e., for groups = 8, j = 2
 	// i i i i i i i i            
@@ -97,48 +99,43 @@ void main()
 	ivec2 size = u_level > 0 ? 
 		imageSize(R2[u_level - 1]) : imageSize(out_lhs);
 
-	bool is_boundary = test_boundary(grid_idx, u_level); 
-
-	boundary[idx.x][idx.y] = is_boundary; 
-
 	grid_idx = clamp(grid_idx, ivec2(0), size - ivec2(1));
 
-	float correction = upsample_correction(grid_idx);
+	float wt = test_boundary(grid_idx, u_level);  
+	boundary[idx.x][idx.y] = wt;
 
 	const float h = DELTA_X;
 
-	bool outside = out_idx.x < 0 || out_idx.y < 0 || 
+	float correction = upsample_correction(grid_idx);
+	bool outside = 
+		out_idx.x < 0 || out_idx.y < 0 || 
 		out_idx.x >= out_width || out_idx.y >= out_width; 
+
+	float lhs = 0.f;
 
 	if (u_level == 0) {
 		if (outside)
 			return;
+		lhs = imageLoad(tmp_lhs, grid_idx).x - correction;
+	} else {
+		lhs = fetch_lhs(grid_idx) - correction;
+		float rhs = correction;
 
-		ivec2 size = imageSize(out_lhs);
-
-		float phi = imageLoad(tmp_lhs, grid_idx).x;
-		float value = phi - correction;
-
-		imageStore(out_lhs, grid_idx, vec4(value, 0, 0, 0));
-		return;
-	}
-
-	float rhs = correction;
-
-	// Load the stuff into shared memory
-	float lhs = fetch_lhs(grid_idx) - correction;
-	block[idx.x][idx.y] = lhs;
-
-	for (int i = 0; i < u_iterations - 1; ++i) {
-		barrier();
-		lhs = is_boundary ? lhs : jacobi_it(idx, rhs, h);
-		barrier();
 		block[idx.x][idx.y] = lhs;
-	}
-	barrier();
-	
-	if (outside)
-		return;
 
-	write_output(grid_idx, vec4(lhs,0,0,0));
+		for (int i = 0; i < u_iterations - 1; ++i) {
+			barrier();
+			lhs = jacobi_it(idx, rhs, h);
+			barrier();
+			block[idx.x][idx.y] = lhs;
+		}
+		barrier();
+
+		if (outside)
+			return;
+	}
+
+	lhs *= wt;
+
+	write_output(grid_idx, vec4(lhs));
 }

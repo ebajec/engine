@@ -233,7 +233,7 @@ int FluidSim::update(ev2::GfxContext *ctx)
 	uint32_t gx = 1 + grid_w/group_size;
 	uint32_t gy = 1 + grid_h/group_size;
 
-	pressure_solver->setup_bindings(ctx, p_img, lap_p_img);
+	pressure_solver->set_inputs(ctx, p_img, lap_p_img, {});
 
 	ev2::PassID pass = ev2::begin_compute_pass(ctx);
 
@@ -261,9 +261,9 @@ int FluidSim::update(ev2::GfxContext *ctx)
 
 	//mean_subtractor->record(pass);
 	
-	pressure_solver->record_bind(pass);
+	pressure_solver->record_setup(pass);
 	for (int i = 0; i < ((step == 0) ? 64 : 5); ++i) 
-		pressure_solver->record_v_cycle(pass, ctx, p_img, lap_p_img);
+		pressure_solver->record_v_cycle(pass);
 
 	ev2::cmd_use_image(pass, q_img_1, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 	ev2::cmd_use_image(pass, p_img, ev2::USAGE_SAMPLED_COMPUTE);

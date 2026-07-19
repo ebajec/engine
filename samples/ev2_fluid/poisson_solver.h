@@ -13,17 +13,27 @@ struct PoissonSolver
 
 	ev2::ImageID R1; // level 0 upto N
 	ev2::ImageID R2; // level 1 upto N + 1
+	ev2::ImageID bd_mips;
 
 	ev2::ComputePipelineID multigrid_down;
 	ev2::ComputePipelineID multigrid_up;
+	ev2::ComputePipelineID mipgen;
 
 	ev2::BindingsID bindings0;
 	ev2::BindingsID bindings1;
+
+	ev2::BindingsID mipgen_bindings;
 
 	uint32_t sim_w = 0, sim_h = 0;
 
 	uint32_t N_max = 0;
 	uint32_t N = 0;
+
+	struct {
+		ev2::ImageID lhs;
+		ev2::ImageID rhs;
+		ev2::ImageID bd;
+	} input;
 
 	struct Uniforms {
 		uint32_t N;
@@ -34,9 +44,11 @@ struct PoissonSolver
 	int init(ev2::GfxContext *ctx, uint32_t w, uint32_t h);
 	void destroy(ev2::GfxContext *ctx);
 
-	void setup_bindings(ev2::GfxContext *ctx, ev2::ImageID phi, ev2::ImageID f);
-	void record_bind(ev2::PassID pass);
-	void record_v_cycle(ev2::PassID pass, ev2::GfxContext *ctx, ev2::ImageID lhs, ev2::ImageID rhs);
+	void set_inputs(ev2::GfxContext *ctx, 
+		ev2::ImageID phi, ev2::ImageID f, ev2::ImageID bd);
+
+	void record_setup(ev2::PassID pass);
+	void record_v_cycle(ev2::PassID pass);
 };
 
 struct MeanSubtractor

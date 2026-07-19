@@ -16,36 +16,29 @@
 // The level 0 iteration fetches directly from f. Subsequent iterations
 // downsample the residuals from the previous pass
 
-float RHS(ivec2 idx, uint level, out float valid)
+float RHS(ivec2 idx, uint level, out float wt)
 {
 	ivec2 size = imageSize(R1[level]);
-
-	bool oob = test_boundary(idx,level);
-	bool outside = (
-		idx.x < 0 || idx.x >= size.x || 
-		idx.y < 0 || idx.y >= size.y);
-
-	valid = float(!oob && !outside);
-
-	return valid > 0 ? imageLoad(R1[level], idx).x : 0;
+	wt = test_boundary(idx,level);
+	return bool(wt) ? imageLoad(R1[level], idx).r : 0;
 }
 
-float LHS(ivec2 idx, out float valid)
+float LHS(ivec2 idx, out float wt)
 {
 	ivec2 size = imageSize(in_lhs);
-
-	bool oob = test_boundary(idx,0);
-	bool outside = (
-		idx.x < 0 || idx.x >= size.x || 
-		idx.y < 0 || idx.y >= size.y);
-
-	valid = float(!oob && !outside);
-
-	return valid > 0 ? imageLoad(in_lhs, idx).x : 0;
+	wt = test_boundary(idx,0);
+	return bool(wt) ? imageLoad(in_lhs, idx).r : 0;
 }
 
 float residual(ivec2 idx, float rhs, float h)
 {
+	float wt_c = boundary[idx.x][idx.y];
+	float u = wt_c * block[idx.x][idx.y];
+
+	if (wt_c < OOB_CELL_THRES) {
+		return 0.f;
+	}
+
 	ivec2 l_idx = clamp(idx + ivec2(-1,0), ivec2(0), ivec2(GROUPS -1));
 	ivec2 r_idx = clamp(idx + ivec2(1,0), ivec2(0), ivec2(GROUPS - 1));
 	ivec2 t_idx = clamp(idx + ivec2(0,1), ivec2(0), ivec2(GROUPS - 1));
@@ -56,18 +49,15 @@ float residual(ivec2 idx, float rhs, float h)
 	float t = block[t_idx.x][t_idx.y];
 	float b = block[b_idx.x][b_idx.y];
 
-	bool bl = boundary[l_idx.x][l_idx.y];
-	bool br = boundary[r_idx.x][r_idx.y];
-	bool bt = boundary[t_idx.x][t_idx.y];
-	bool bb = boundary[b_idx.x][b_idx.y];
-
-	float u = block[idx.x][idx.y];
+	float wt_l = boundary[l_idx.x][l_idx.y];
+	float wt_r = boundary[r_idx.x][r_idx.y];
+	float wt_t = boundary[t_idx.x][t_idx.y];
+	float wt_b = boundary[b_idx.x][b_idx.y];
 
 	float lap = (
-		mix(l,u,float(bl)) + 
-		mix(r,u,float(br)) + 
-		mix(t,u,float(bt)) + 
-		mix(b,u,float(bb)) - 4.*u
+		mix(u,l,wt_l) + mix(u,r,wt_r) + 
+		mix(u,t,wt_t) + mix(u,b,wt_b) 
+		- 4.f*u
 	)/(h*h);
 
 	return lap - rhs;
@@ -75,16 +65,15 @@ float residual(ivec2 idx, float rhs, float h)
 
 float fetch_lhs(ivec2 grid_idx, float rhs, float h)
 {
-	//if (u_level > 0)
-	//	return 0;
-
-	//float valid = 0;
-	//float center = LHS(grid_idx, valid);
-	//return center;
-#if 1
 	if (u_level > 0)
-		return -h*h*rhs;
+		return 0;
+#if 0
 
+	float wt;
+	return LHS(grid_idx, wt);
+#else
+	// When fetching from the starting grid, perform one 
+	// jacobi iteration on retrieval.
 	ivec2 stencil[4] = {
 		grid_idx + ivec2(-1, 0),
 		grid_idx + ivec2(1, 0),
@@ -92,51 +81,37 @@ float fetch_lhs(ivec2 grid_idx, float rhs, float h)
 		grid_idx + ivec2(0, -1)
 	};
 
+	float wt_c = 0;
+	float c = LHS(grid_idx, wt_c);
+
+	c *= wt_c;
+
+	if (!bool(wt_c))
+		return 0.f;
+
 	float sum = 0;
 	float den = 0;
 
 	for (int i = 0; i < 4; ++i) {
-		float valid;
-		float v = LHS(stencil[i], valid);
+		float wt;
+		float v = LHS(stencil[i], wt);
 
-		den += valid;
-		sum += valid * v;
+		wt = min(wt_c, wt);
+
+		den += wt;
+		sum += wt * v;
 	}
-
-	float valid = 0;
-	float center = LHS(grid_idx, valid);
 
 	float u_next = den > 0 ? (sum - h*h*rhs)/den : 0;
 
-	return mix(center, u_next, OMEGA); 
+	return mix(c, u_next, OMEGA); 
 #endif
 }
 
-//float downsample_rhs(ivec2 idx)
-//{
-//	// if the sizes don't match, we downsample
-//	if (u_level > 0) {
-//		const ivec2 stencil[4] = {
-//			2*idx + ivec2(0,0),
-//			2*idx + ivec2(1,0),
-//			2*idx + ivec2(0,1),
-//			2*idx + ivec2(1,1),
-//		};
-//		uint L = u_level - 1;
-//		float rhs = 0;
-//		for (int i = 0; i < 4; ++i) {
-//			float valid;
-//			float value = RHS(stencil[i],L,valid);
-//			rhs += value;
-//		}
-//		return rhs * 0.25;
-//	} 
-//	return imageLoad(in_rhs, idx).x;
-//}
-
-float downsample_rhs(ivec2 idx)
+float fetch_rhs(ivec2 idx)
 {
-	// if the sizes don't match, we downsample
+	// u_level == 0 is the original rhs; > 0
+	// we downsample the residuals from the previous level
 	if (u_level > 0) {
 		ivec2 stencil[9] = {
 			2*idx,
@@ -156,15 +131,15 @@ float downsample_rhs(ivec2 idx)
 
 		float wt[9] = {1, 2,2,2,2, 1,1,1,1};
 
-		float cvalid;
-		float center = RHS(2*idx, L, cvalid);
+		float wt_c;
+		float center = RHS(2*idx, L, wt_c);
 
 		float num = 0;
 		float den = 0;
 		for (int i = 0; i < 9; ++i) {
-			float valid;
-			float value = RHS(stencil[i],L,valid);
-			num += wt[i] * mix(center,value,valid);
+			float wt_i;
+			float value = RHS(stencil[i],L,wt_i);
+			num += wt[i] * mix(center,value,wt_i);
 			den += wt[i];
 		}
 		return den > 0 ? num/den : 0;
@@ -174,7 +149,6 @@ float downsample_rhs(ivec2 idx)
 
 void main()
 {
-
 	// index in local block
 	ivec2 idx = ivec2(gl_LocalInvocationID.xy);
 
@@ -197,13 +171,16 @@ void main()
 
 	const float h = DELTA_X;
 
-	bool is_boundary = test_boundary(grid_idx, u_level);
-
-	boundary[idx.x][idx.y] = is_boundary; 
-
-	float rhs = downsample_rhs(grid_idx);
+	float rhs = fetch_rhs(grid_idx);
 	float lhs = fetch_lhs(grid_idx, rhs, h);
+	float bd = test_boundary(grid_idx, u_level);
 
+	if (bd < OOB_CELL_THRES) {
+		rhs = 0;
+		lhs = 0;
+	}
+
+	boundary[idx.x][idx.y] = bd; 
 	block[idx.x][idx.y] = lhs;  
 
 	for (int i = 0; i < u_iterations - 1; ++i) {
@@ -217,11 +194,17 @@ void main()
 	}
 	barrier();
 
-	bool outside = out_idx.x < 0 || out_idx.y < 0 || 
+	bool outside = 
+		out_idx.x < 0 || out_idx.y < 0 || 
 		out_idx.x >= out_width || out_idx.y >= out_width; 
 
 	if (outside)
 		return;
+
+	if (bd < OOB_CELL_THRES) { 
+		lhs = 0;
+		rhs = 0;
+	}
 
 	if (u_level < N) {
 		float res = residual(idx, rhs, h);

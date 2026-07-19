@@ -222,8 +222,15 @@ ev2::PassID ImageViewerPanel::begin_pass(ev2::GfxContext *ctx)
 
 void ImageViewerPanel::render(ev2::GfxContext *ctx)
 {
-	if (!image.is_valid())
+	if (!image.is_valid()) {
+		log_error("Image not initialized.");
 		return;
+	}
+
+	if (!rd.bindings.is_valid()) {
+		log_error("Bindings not initialized.");
+		return;
+	}
 
 	ev2::PassID pass = this->begin_pass(ctx);
 	ev2::cmd_use_image(pass, image, ev2::USAGE_SAMPLED_GRAPHICS);

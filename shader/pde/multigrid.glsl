@@ -3,12 +3,13 @@
 #define OMEGA 0.67
 #define DELTA_X 0.5f
 
+#define OOB_CELL_THRES 1e-2
+
 #extension GL_EXT_nonuniform_qualifier : require
 
 layout (local_size_x = GROUPS, local_size_y = GROUPS, local_size_z = 1) in;
 
 layout (set = 0, r32f, binding = 1) uniform image2D tmp_lhs;
-layout (set = 0, binding = 2) uniform sampler2D bd_mask;
 // Layout [R1_0, R1_1, ... R1_N]
 layout (set = 0, r32f, binding = 3) uniform image2D R1[MAX_MIPS];
 
@@ -19,9 +20,10 @@ layout (set = 0, r32f, binding = 4) uniform image2D R2[MAX_MIPS];
 layout (set = 1, r32f, binding = 0) readonly uniform image2D in_lhs;
 layout (set = 1, r32f, binding = 1) readonly uniform image2D in_rhs;
 layout (set = 1, r32f, binding = 2) writeonly uniform image2D out_lhs;
+layout (set = 1, r8, binding = 3) readonly uniform image2D bd_mask[MAX_MIPS];
 
 shared float block[GROUPS][GROUPS];
-shared bool boundary[GROUPS][GROUPS];
+shared float boundary[GROUPS][GROUPS];
 
 layout (push_constant, std430) uniform Inputs {
 	uint N;
@@ -29,15 +31,21 @@ layout (push_constant, std430) uniform Inputs {
 	uint u_iterations;
 };
 
-bool test_boundary(ivec2 idx, uint level)
+float test_boundary(ivec2 idx, uint level)
 {
-	ivec2 size = imageSize(in_lhs) / (1 << level);
+	ivec2 size = imageSize(bd_mask[level]);
 
-	bool outside = 
-		idx.x < 0 || idx.y < 0 ||
-		idx.x > size.x - 1 || idx.y > size.y - 1;
+	if (any(lessThan(idx, ivec2(0))) || any(greaterThanEqual(idx, size)))
+		return 0.f;
 
-	return outside; 
+	return imageLoad(bd_mask[level], idx).r;
+}
+
+bool inbounds(ivec2 idx)
+{
+	return !( 
+		any(lessThan(idx, ivec2(0))) || 
+		any(greaterThanEqual(idx, ivec2(GROUPS))));
 }
 
 float jacobi_it(ivec2 idx, float rhs, float h)
@@ -50,31 +58,29 @@ float jacobi_it(ivec2 idx, float rhs, float h)
 	};
 
 	// assuming neumann boundary conditions with
-	// zero normal derivative.  
+	// zero normal derivative toward out of bounds cells.  
 
-	float center = block[idx.x][idx.y];
+	float wt_c = boundary[idx.x][idx.y];
+	float c = block[idx.x][idx.y];
 
-	float sum = 0;
-	float den = 0;
+	float sum = 0.f;
+	float den = 0.f;
 
 	for (int i = 0; i < 4; ++i) {
 		ivec2 p = stencil[i];
-		bool valid = 
-			p.x >= 0 && p.x < GROUPS &&
-			p.y >= 0 && p.y < GROUPS;
+		bool inb = inbounds(idx); 
 
-		if (valid)
-			valid = !boundary[p.x][p.y];
+		if (!inb)
+			continue;
 
-		float mask = float(valid);
+		float wt = min(wt_c, boundary[p.x][p.y]);
 
-		den += float(mask);
-		sum += valid ? block[p.x][p.y] : 0; 
+		den += float(wt);
+		sum += wt * block[p.x][p.y]; 
 	}
 
-	float u_next = den > 0 ? (sum - h*h*rhs)/den : 0;
-
-	return mix(center, u_next, OMEGA);
+	float u_next = den > 1e-3 ? (sum - h*h*rhs)/den : 0;
+	return mix(c, u_next, OMEGA);
 }
 
 

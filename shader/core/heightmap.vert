@@ -7,6 +7,9 @@ layout (location = 1) out vec2 out_uv;
 layout (location = 2) out vec3 out_normal;
 
 layout (set = PER_DRAW_SET, binding = 0) uniform sampler2D u_tex;
+layout (push_constant) uniform PC {
+	float u_scale;
+};
 
 struct tgrad_t
 {
@@ -56,16 +59,13 @@ void main()
 	vec2 pix = vec2(tx, ty) + vec2(0.5);
 	vec2 uv = pix/vec2(size + vec2(1));
 
-	float scale = 10.f;
-	vec4 tex = texture(u_tex, uv)*scale; 
-
+	vec4 tex = texture(u_tex, uv)*u_scale; 
 	tgrad_t grad = tex_grad2(uv);
-	grad.du *= scale;
-	grad.dv *= scale;
+	grad.du *= u_scale;
+	grad.dv *= u_scale;
 
-	float s = 0.1;
-	float z = s*tex.z;
-	vec3 n = normalize(vec3(grad.du.z, grad.dv.z, 1/s));
+	float z = tex.r;
+	vec3 n = normalize(vec3(grad.du.r, grad.dv.r, 1));
 
 	out_pos = vec3(uv,z);
 	out_uv = uv;

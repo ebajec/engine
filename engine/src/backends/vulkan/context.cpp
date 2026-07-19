@@ -535,6 +535,7 @@ static ev2::Result create_logical_device(ev2::GfxContext *ctx,
 		.pNext = &atomicFloatFeatures,
 		.timelineSemaphore = VK_TRUE,
 		.runtimeDescriptorArray = VK_TRUE,
+		.descriptorBindingPartiallyBound = VK_TRUE
 	};
 
 	VkPhysicalDeviceVulkan13Features features13{

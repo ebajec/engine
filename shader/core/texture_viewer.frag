@@ -18,7 +18,9 @@ void main()
 	if (in_uv.x < 0.f || in_uv.y < 0.f || in_uv.x > 1.f || in_uv.y > 1.f) {
 		FragColor = vec4(0.5);
 	} else {
-		FragColor = tex; 
+		vec2 f = fract(in_uv * vec2(size));
+		vec2 d = abs(f - vec2(0.5));
+		FragColor = any(greaterThan(d, vec2(0.45))) ? vec4(0) : tex; 
 	}
 }
 

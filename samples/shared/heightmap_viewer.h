@@ -17,6 +17,10 @@ struct HeightmapViewerPanel
 	MotionCamera control;
 	glm::vec3 keydir = glm::vec3(0,0,0);
 
+	struct Uniforms {
+		float scale = 1.f;
+	} uniforms;
+
 	struct RenderData {
 		glm::mat4 proj = glm::mat4(1.f);
 		glm::mat4 view = glm::mat4(1.f);

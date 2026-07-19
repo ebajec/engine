@@ -35,7 +35,7 @@ void main()
 		vec2 grad = 0.5 * vec2(r - l, t - b); 
 
 		float k = length(grad);
-		rgb = vec3(k);
+		rgb = 10*vec3(-grad.y, grad.y, 0);
 	} else {
 		rgb = vec3(c, 0, -c);
 	}
