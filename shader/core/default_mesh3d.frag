@@ -44,16 +44,12 @@ void main()
 	float t = ftime();
 
 	vec2 uv = frag_uv;
-	vec4 c0 = texture(u_tex,uv);
 
 	vec3 sun = normalize(vec3(0.2,0.2,1));
 	vec3 n = frag_normal;
 
 	float f = 0.2 + 0.8*clamp(dot(n,sun),0,1);
-
-	vec2 vel = c0.xy;
-
-	float intensity = abs(20*c0.r); 
+	float intensity = abs(frag_pos.z); 
 
 	vec3 c = jet_palette(tanh(intensity));
 

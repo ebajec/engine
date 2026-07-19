@@ -67,11 +67,11 @@ void main()
 
 	float color_val = 2*abs(val.w);
 
-	vec4 color = vec4(color_val,0.8*speed, 0.5*speed, color_val);
+	vec3 track_color = color_val * vec3(0.1, 0.1, 0.2);
+	vec3 speed_color = 
+		speed*speed * vec3(0.8f, 0.6, 0.2f) * color_val;
 
-	color *= 0.6;
-	color.r = color_val*speed*color.b;
-	color.g = 0.5*color.r;
+	vec4 color = vec4(track_color + speed_color, color_val + speed);
 
 	ivec2 pix = ivec2(uv*vec2(size));
 

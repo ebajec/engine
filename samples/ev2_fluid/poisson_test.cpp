@@ -104,10 +104,13 @@ struct PoissonSolverApp : public App
 		);
 
 		if (do_v_cycle || always_run) {
+			mean_subtractor->record(pass, rhs);
+
 			solver->record_bind(pass);
 			solver->record_v_cycle(pass, ctx, lhs, rhs);
+
+			mean_subtractor->record(pass, lhs);
 		}
-		//mean_subtractor->record(pass);
 			
 		ev2::end_pass(ctx, pass);
 	}
@@ -167,8 +170,6 @@ struct PoissonSolverApp : public App
 		ev2::flush_bindings(ctx, bindings);
 
 		solver->setup_bindings(ctx, lhs, rhs);
-		mean_subtractor->setup_bindings(ctx, rhs);
-
 		record_update();
 
 		do_v_cycle = false; 
@@ -223,8 +224,6 @@ struct PoissonSolverApp : public App
 		if (res < App::OK)
 			return res;
 
-		res = mean_subtractor->init(ctx, grid.x, grid.y);
-
 		lhs = ev2::create_image(ctx, grid.x, grid.y, 1, ev2::IMAGE_FORMAT_32F, 
 			ev2::IMAGE_USAGE_TRANSFER_DST_BIT |
 			ev2::IMAGE_USAGE_SAMPLED_BIT | 
@@ -240,6 +239,14 @@ struct PoissonSolverApp : public App
 
 		if (!rhs.is_valid())
 			return App::ERROR;
+
+		res = mean_subtractor->init(ctx, grid.x, grid.y);
+
+		if (res)
+			return App::ERROR;
+
+		mean_subtractor->setup_bindings(ctx, rhs);
+		mean_subtractor->setup_bindings(ctx, lhs);
 
 		if (heightmap_tex.is_valid())
 			ev2::destroy_texture(ctx, heightmap_tex);

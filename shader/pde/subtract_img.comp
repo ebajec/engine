@@ -17,7 +17,7 @@ void main()
 		return;
 
 	float a = imageLoad(img_out, idx).x;
-	float b = imageLoad(img_in, ivec2(0)).x/float(size.x*size.y);
+	float b = imageLoad(img_in, ivec2(0)).x;
 
 	imageStore(img_out, idx, vec4(a - b,0,0,0));
 }

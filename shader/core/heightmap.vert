@@ -63,9 +63,9 @@ void main()
 	grad.du *= scale;
 	grad.dv *= scale;
 
-	float s = 1;
-	float z = s*tex.r;
-	vec3 n = normalize(vec3(grad.du.r, grad.dv.r, 1/s));
+	float s = 0.1;
+	float z = s*tex.z;
+	vec3 n = normalize(vec3(grad.du.z, grad.dv.z, 1/s));
 
 	out_pos = vec3(uv,z);
 	out_uv = uv;

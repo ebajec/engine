@@ -129,7 +129,7 @@ void main()
 	float lhs = fetch_lhs(grid_idx) - correction;
 	block[idx.x][idx.y] = lhs;
 
-	for (int i = 0; i < 1; ++i) {
+	for (int i = 0; i < u_iterations - 1; ++i) {
 		barrier();
 		lhs = is_boundary ? lhs : jacobi_it(idx, rhs, h);
 		barrier();

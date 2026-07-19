@@ -25,17 +25,20 @@ void main()
 
 	float c = texelFetch(u_tex, texc, 0).r;
 
-	float l = texelFetch(u_tex, clamp(texc + ivec2(-1, 0), ivec2(0), lim), 0).r;
-	float r = texelFetch(u_tex, clamp(texc + ivec2(1, 0), ivec2(0), lim), 0).r;
-	float b = texelFetch(u_tex, clamp(texc + ivec2(0, -1), ivec2(0), lim), 0).r;
-	float t = texelFetch(u_tex, clamp(texc + ivec2(0, 1), ivec2(0), lim), 0).r;
+	vec3 rgb;
+	if (true) {
+		float l = texelFetch(u_tex, clamp(texc + ivec2(-1, 0), ivec2(0), lim), 0).r;
+		float r = texelFetch(u_tex, clamp(texc + ivec2(1, 0), ivec2(0), lim), 0).r;
+		float b = texelFetch(u_tex, clamp(texc + ivec2(0, -1), ivec2(0), lim), 0).r;
+		float t = texelFetch(u_tex, clamp(texc + ivec2(0, 1), ivec2(0), lim), 0).r;
 
-	vec2 grad = 0.5 * vec2(r - l, t - b); 
+		vec2 grad = 0.5 * vec2(r - l, t - b); 
 
-	float k = length(grad);
-	
-	//vec3 rgb = vec3(0,abs(c),k) + vec3(0.02);
-	vec3 rgb = vec3(k);
+		float k = length(grad);
+		rgb = vec3(k);
+	} else {
+		rgb = vec3(c, 0, -c);
+	}
 
 	if (in_uv.x < 0.f || in_uv.y < 0.f || in_uv.x > 1.f || in_uv.y > 1.f) {
 		FragColor = vec4(0.5);

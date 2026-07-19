@@ -2,9 +2,11 @@
 #include "poisson_solver.h"
 
 #include <ev2/utils/common.h>
+#include <ev2/utils/log.h>
 
 #include <glm/vec2.hpp>
 #include <cmath>
+#include <string>
 #include <bit>
 
 void PoissonSolver::setup_bindings(ev2::GfxContext *ctx, ev2::ImageID lhs, ev2::ImageID rhs)
@@ -92,7 +94,7 @@ void PoissonSolver::record_v_cycle(ev2::PassID pass, ev2::GfxContext *ctx, ev2::
 	// on original, then N smooth + downsample passes on the residuals
 
 	constexpr uint its[] = {
-		4, 2, 2, 2, 2, 2, 2, 2, 2
+		4, 3, 3, 3, 2, 2, 2, 2, 2
 	};
 
 	uint32_t tw = sim_w;
@@ -168,65 +170,78 @@ int MeanSubtractor::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 	const uint32_t tw = 1 + (w - 1) / ratio;
 	const uint32_t th = 1 + (h - 1) / ratio;
 
-	accumulator = ev2::create_image(ctx, tw, th, 1, ev2::IMAGE_FORMAT_32F, usage, 2);
+	static int name_idx = 0;
 
-	accumulate_set0 = ev2::create_bindings(ctx, accumulate, 0, ev2::BINDING_MODE_STATIC);
-	ev2::bind_image_indexed(ctx, accumulate_set0, "img_in", 0, accumulator, 0);
-	ev2::bind_image_indexed(ctx, accumulate_set0, "img_in", 1, accumulator, 1);
-	ev2::bind_image_indexed(ctx, accumulate_set0, "img_out", 0, accumulator, 1);
-	ev2::bind_image_indexed(ctx, accumulate_set0, "img_out", 1, accumulator, 0);
-	ev2::flush_bindings(ctx, accumulate_set0);
-
-	accumulate_set1 = ev2::create_bindings(ctx, accumulate, 1, ev2::BINDING_MODE_DYNAMIC);
-
-	subtract_set = ev2::create_bindings(ctx, subtract_img, 0, ev2::BINDING_MODE_DYNAMIC);
+	accumulator = ev2::create_image(ctx, tw, th, 1, ev2::IMAGE_FORMAT_32F, usage, levels);
+	ev2::set_image_name(ctx, accumulator, "accumulator");
 
 	return 0;
 }
 int MeanSubtractor::destroy(ev2::GfxContext *ctx)
 {
 	ev2::destroy_image(ctx, accumulator);
-	ev2::destroy_bindings(ctx, subtract_set);
-	ev2::destroy_bindings(ctx, accumulate_set0);
-	ev2::destroy_bindings(ctx, accumulate_set1);
+
+	for (auto [img, bindings] : binding_map) {
+		ev2::destroy_bindings(ctx, bindings.accumulate);
+		ev2::destroy_bindings(ctx, bindings.subtract);
+	}
 
 	return 0;
 }
 
 void MeanSubtractor::setup_bindings(ev2::GfxContext *ctx, ev2::ImageID img)
 {
-	ev2::reset_bindings(ctx, accumulate_set1);
-	ev2::bind_image(ctx, accumulate_set1, "img_src", img);
-	ev2::flush_bindings(ctx, accumulate_set1);
+	ev2::BindingsID accumulate_set = ev2::create_bindings(ctx, accumulate, 0, ev2::BINDING_MODE_STATIC);
+	ev2::reset_bindings(ctx, accumulate_set);
+	for (uint32_t i = 0; i < levels; ++i) {
+		ev2::bind_image_indexed(ctx, accumulate_set, "img_in", i,
+			i == 0 ? img : accumulator, //image 
+			i ? i - 1 : 0 //level
+		);
+		ev2::bind_image_indexed(ctx, accumulate_set, "img_out", i, accumulator, i);
+	}
+	ev2::flush_bindings(ctx, accumulate_set);
 
+	ev2::BindingsID subtract_set = ev2::create_bindings(ctx, subtract_img, 0, ev2::BINDING_MODE_STATIC);
 	ev2::reset_bindings(ctx, subtract_set);
 	ev2::bind_image(ctx, subtract_set, "img_in", accumulator, levels & 0x1);
 	ev2::bind_image(ctx, subtract_set, "img_out", img);
 	ev2::flush_bindings(ctx, subtract_set);
 
-	out_img = img;
+	binding_map[img] = {
+		.accumulate = accumulate_set,
+		.subtract = subtract_set
+	};
 }
 
-void MeanSubtractor::record(ev2::PassID pass)
+void MeanSubtractor::record(ev2::PassID pass, ev2::ImageID img)
 {
+	auto it = binding_map.find(img);
+	
+	if (it == binding_map.end()) {
+		log_error("Image %d has no registered bindings.", img.id);
+		return;
+	}
+
+	ImageBindings bindings = it->second;
+
 	ev2::cmd_bind_compute_pipeline(pass, accumulate);
-	ev2::cmd_bind_resources(pass, accumulate_set0);
-	ev2::cmd_bind_resources(pass, accumulate_set1);
+	ev2::cmd_bind_resources(pass, bindings.accumulate);
 
 	struct Uniforms {
-		glm::ivec2 size;
-		uint32_t parity; 
+		uint32_t level;
 	};
 
 	uint32_t w = width;
 	uint32_t h = height;
 
-	ev2::cmd_use_image(pass, out_img, ev2::USAGE_STORAGE_READ_COMPUTE); 
+	ev2::cmd_use_image(pass, img, ev2::USAGE_STORAGE_READ_COMPUTE); 
 
 	for (uint32_t i = 0; i < levels; ++i) {
+		w = 1 + (w - 1)/ratio;
+		h = 1 + (h - 1)/ratio;
 		Uniforms pc = {
-			.size = glm::ivec2(width, height),
-			.parity = i & 0x1,
+			.level = i
 		};
 		ev2::cmd_push_constant(pass, accumulate, 0, sizeof(pc), &pc);
 
@@ -235,15 +250,12 @@ void MeanSubtractor::record(ev2::PassID pass)
 
 		ev2::cmd_use_image(pass, accumulator, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE); 
 		ev2::cmd_dispatch(pass, gx, gy, 1); 
-
-		uint32_t w = 1 + (w - 1)/ratio;
-		uint32_t h = 1 + (h - 1)/ratio;
 	}
 
-	ev2::cmd_use_image(pass, out_img, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE); 
+	ev2::cmd_use_image(pass, img, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE); 
 	ev2::cmd_bind_compute_pipeline(pass, subtract_img);
-	ev2::cmd_bind_resources(pass, subtract_set);
-	ev2::cmd_dispatch(pass, 1 + (width-1)/group_size, 1 + (height-1)/group_size, 1);
+	ev2::cmd_bind_resources(pass, bindings.subtract);
+	ev2::cmd_dispatch(pass, 1 + (width - 1)/group_size, 1 + (height - 1)/group_size, 1);
 }
 
 

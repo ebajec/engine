@@ -4,54 +4,57 @@
 
 #define GROUPS 16
 #define CHUNK_SIZE 8
+#define MAX_LEVELS 2
 
-layout(set = 0, r32f, binding = 0) readonly uniform image2D img_in[2];
-layout(set = 0, r32f, binding = 1) writeonly uniform image2D img_out[2];
-
-layout(set = 1, r32f, binding = 1) readonly uniform image2D img_src;
+layout(set = 0, r32f, binding = 0) readonly uniform image2D img_in[MAX_LEVELS];
+layout(set = 0, r32f, binding = 1) writeonly uniform image2D img_out[MAX_LEVELS];
 
 layout (local_size_x = GROUPS, local_size_y = GROUPS, local_size_z = 1) in;
 
 layout (push_constant) uniform PC {
-	ivec2 u_size;
-	uint u_img_idx;
+	uint u_level;
 };
 
 shared float shared_acc;
 
 void main()
 {
-	const uint img_idx = u_img_idx & 0x1;
-
     ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
-	
-	if (idx.x >= u_size.x || idx.y >= u_size.y)
-		return;
+	ivec2 loc_idx = ivec2(gl_LocalInvocationID.xy);
 
-	ivec2 out_size = imageSize(img_out[img_idx]);
-
-	bool is_first = idx.x == 0 && idx.y == 0; 
+	bool is_first = 
+		loc_idx.x == 0 && 
+		loc_idx.y == 0; 
 
 	if (is_first)
 		shared_acc = 0;
 
 	barrier();
 
+	ivec2 in_size = imageSize(img_in[u_level]);
+
 	ivec2 start = idx * CHUNK_SIZE;
-	ivec2 end = min((1 + idx) * CHUNK_SIZE, u_size);
+	ivec2 end = min(start + ivec2(CHUNK_SIZE), in_size);
 
 	float acc = 0.f;
 
+	float f = u_level == 0 ? 
+		1.f/float(in_size.x * in_size.y) : 1.f;
+
 	for (int i = start.x; i < end.x; ++i) {
 		for (int j = start.y; j < end.y; ++j) {
-			acc += imageLoad(img_in[img_idx], ivec2(i, j)).r; 
+			acc += imageLoad(img_in[u_level], ivec2(i, j)).r; 
 		}
 	}
 
-	atomicAdd(shared_acc, acc);
+	atomicAdd(shared_acc, f*acc);
 
 	barrier();
 
 	if (is_first)
-		imageStore(img_out[img_idx], ivec2(gl_WorkGroupID.xy), vec4(shared_acc));
+		imageStore(
+			img_out[u_level], 
+			ivec2(gl_WorkGroupID.xy), 
+			vec4(shared_acc)
+		);
 }

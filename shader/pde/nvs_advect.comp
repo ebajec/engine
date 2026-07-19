@@ -231,8 +231,7 @@ void main()
 		v_hat.y += -0.1*u_gravity*(mix(RHO, 2, q_hat.w) - RHO);
 	}
 
-	q_hat.w += 0.5*(qx.w + qy.w) + 0.00*lap_w - 0.004*q_hat.w;
-	q_hat.w = clamp(q_hat.w, 0, 1);
+	q_hat.w += 0.5*(qx.w + qy.w) + 0.00*lap_w - 0.0015*q_hat.w;
 
 	imageStore(q_out, idx, vec4(v_hat,q_hat.zw));
 }

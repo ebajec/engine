@@ -44,24 +44,27 @@ struct MeanSubtractor
 	ev2::ComputePipelineID accumulate;
 	ev2::ComputePipelineID subtract_img;
 
-	ev2::BindingsID accumulate_set0;
-	ev2::BindingsID accumulate_set1;
-	ev2::BindingsID subtract_set;
-
 	ev2::ImageID accumulator;
 	ev2::ImageID out_img;
+
+	struct ImageBindings {
+		ev2::BindingsID accumulate;
+		ev2::BindingsID subtract;
+	};
+
+	std::unordered_map<ev2::ImageID, ImageBindings> binding_map;
 
 	uint32_t levels;
 	uint32_t width, height;
 	
 	static constexpr uint32_t chunk_size = 8;
-	static constexpr uint32_t group_size = 8;
+	static constexpr uint32_t group_size = 16;
 	static constexpr uint32_t ratio = chunk_size * group_size;
 	
 	int init(ev2::GfxContext *ctx, uint32_t w, uint32_t h);
 	int destroy(ev2::GfxContext *ctx);
-	void record(ev2::PassID pass);
 
+	void record(ev2::PassID pass, ev2::ImageID img);
 	void setup_bindings(ev2::GfxContext *ctx, ev2::ImageID img);
 };
 

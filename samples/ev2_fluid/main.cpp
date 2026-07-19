@@ -153,6 +153,7 @@ int FluidSim::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 	if ((result = mean_subtractor->init(ctx, grid_w, grid_h))) {
 		return result;
 	}
+	mean_subtractor->setup_bindings(ctx, lap_p_img);
 
 	nvs_advect = ev2::load_compute_pipeline(ctx, "shader/nvs_advect");
 	nvs_diffuse = ev2::load_compute_pipeline(ctx, "shader/nvs_diffuse");
@@ -232,7 +233,6 @@ int FluidSim::update(ev2::GfxContext *ctx)
 	uint32_t gx = 1 + grid_w/group_size;
 	uint32_t gy = 1 + grid_h/group_size;
 
-	mean_subtractor->setup_bindings(ctx, lap_p_img);
 	pressure_solver->setup_bindings(ctx, p_img, lap_p_img);
 
 	ev2::PassID pass = ev2::begin_compute_pass(ctx);

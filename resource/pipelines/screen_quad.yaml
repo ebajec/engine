@@ -1,6 +1,6 @@
 shaders:
   vert: shader/screen_quad2.vert.spv
-  frag: shader/texture_viewer.frag.spv
+  frag: shader/screen_quad.frag.spv
 states:
   cull: front
   depth_test: less_equal
