@@ -535,7 +535,10 @@ static ev2::Result create_logical_device(ev2::GfxContext *ctx,
 		.pNext = &atomicFloatFeatures,
 		.timelineSemaphore = VK_TRUE,
 		.runtimeDescriptorArray = VK_TRUE,
-		.descriptorBindingPartiallyBound = VK_TRUE
+		.descriptorBindingPartiallyBound = VK_TRUE,
+		.descriptorBindingUpdateUnusedWhilePending = VK_TRUE,
+		.descriptorBindingVariableDescriptorCount = VK_TRUE,
+    	.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
 	};
 
 	VkPhysicalDeviceVulkan13Features features13{
@@ -818,6 +821,10 @@ static ev2::Result create_static_descriptor_pool(ev2::GfxContext *ctx, VkDescrip
 			.descriptorCount = 64,
 		},
 		VkDescriptorPoolSize{
+			.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+			.descriptorCount = 64,
+		},
+		VkDescriptorPoolSize{
 			.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 			.descriptorCount = 128,
 		},
@@ -851,7 +858,61 @@ static ev2::Result create_static_descriptor_pool(ev2::GfxContext *ctx, VkDescrip
 	return ev2::SUCCESS;
 }
 
-static ev2::Result init_frame_descriptor_set(ev2::GfxContext *ctx, FrameContext *frame)
+static ev2::Result create_bindless_descriptors(ev2::GfxContext *ctx)
+{
+	const uint32_t descriptor_count = EV2_MAX_BINDLESS_DESCRIPTORS; 
+
+	VkDescriptorPoolSize pool_sizes[] = {
+		VkDescriptorPoolSize{
+			.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = descriptor_count,
+		},
+	};
+
+	VkDescriptorPoolCreateInfo create_info = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+		.flags = 
+			VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+		.maxSets = 1,
+		.poolSizeCount = sizeof(pool_sizes)/sizeof(pool_sizes[0]),
+		.pPoolSizes = pool_sizes,
+	};
+
+	ev2::Result result = SUCCESS;
+
+	VkResult vk_result = vkCreateDescriptorPool(ctx->device, &create_info, 
+						nullptr, &ctx->bindless_descriptor_pool);
+
+	result = check_vk_result(vk_result, "Failed to create bindless descriptor pool");
+	if (result)
+		return result;
+
+	VkDescriptorSetVariableDescriptorCountAllocateInfo var_alloc_info = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
+		.descriptorSetCount = 1,
+		.pDescriptorCounts = &descriptor_count
+	};
+
+	VkDescriptorSetAllocateInfo alloc_info = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.pNext = &var_alloc_info,
+		.descriptorPool = ctx->bindless_descriptor_pool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = &ctx->base_descriptor_set_layouts[EV2_BASE_SET_BINDLESS],
+	};
+
+	vk_result = vkAllocateDescriptorSets(ctx->device, &alloc_info, &ctx->bindless_set);
+
+	result = check_vk_result(vk_result, "Failed to create bindless descriptor set");
+
+	if (result)
+		return result;
+
+	return ev2::SUCCESS;
+
+}
+
+static ev2::Result create_frame_descriptor_set(ev2::GfxContext *ctx, FrameContext *frame)
 {
 
 	VkDescriptorSetLayout layout = 
@@ -942,7 +1003,7 @@ static ev2::Result create_frame_context(ev2::GfxContext *ctx,
 			return ev2::EINIT_FAILED;
 	}
 
-	result = init_frame_descriptor_set(ctx, frame);
+	result = create_frame_descriptor_set(ctx, frame);
 
 	if (result != ev2::SUCCESS)
 		return ev2::EINIT_FAILED;
@@ -950,7 +1011,7 @@ static ev2::Result create_frame_context(ev2::GfxContext *ctx,
 	return ev2::SUCCESS;
 }
 
-static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx)
+static ev2::Result create_device_resources(const char * path, ev2::GfxContext *ctx)
 {
 	ev2::Result result = ev2::SUCCESS;
 
@@ -997,6 +1058,8 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 		vk_result = vkCreateSemaphore(
 			ctx->device, &create_info, nullptr, &ctx->frame_semaphore);
 
+		result = check_vk_result(vk_result, "vkCreateSemaphore");
+
 		if (result)
 			return result;
 	}
@@ -1012,6 +1075,10 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 		if (ctx->base_descriptor_set_layouts[i] == VK_NULL_HANDLE)
 			return ev2::EINIT_FAILED;
 	}
+	result = create_bindless_descriptors(ctx);
+
+	if (result)
+		return result;
 
 	VkPushConstantRange base_push_constant_range = {
 		.stageFlags = 
@@ -1035,15 +1102,13 @@ static ev2::Result init_device_resources(const char * path, ev2::GfxContext *ctx
 			&create_info, 
 			nullptr, 
 			&ctx->base_pipeline_layouts[i]);
+
+		result = check_vk_result(vk_result, "vkCreatePipelineLayout");
 		
-		if (vk_result != VK_SUCCESS) {
-			result = ev2::EINIT_FAILED;
-			break;
+		if (result) {
+			return result;
 		}
 	}
-
-	if (result)
-		return result;
 
 	// Per-frame updated uniforms
 	uint64_t ubo_offset_alignment = 
@@ -1237,7 +1302,7 @@ void FrameContext::cull_unused_syncs()
 		sync_map.erase(key);
 }
 
-void DeferredDeleteQueue::enqueue(GfxContext *ctx,TaggedResource resource)
+void DeferredDeleteQueue::enqueue(GfxContext *ctx, TaggedResource resource, ResourceDeleteFn fn)
 {
 	ResourceState *state = nullptr;
 	switch(resource.type) {
@@ -1249,18 +1314,20 @@ void DeferredDeleteQueue::enqueue(GfxContext *ctx,TaggedResource resource)
 			break;
 	}
 
-	if (state->deleted) {
-		log_error("Double delete on %s %d", resource.type_str(), resource.id());
-	}
-	state->deleted = true;
-
 	std::vector<ResourceSync> syncs;
-	state->get_wait_syncs_for_write(syncs);
+	if (state) {
+		if (state->deleted) {
+			log_error("Double delete on %s %d", resource.type_str(), resource.id());
+		}
+		state->deleted = true;
+		state->get_wait_syncs_for_write(syncs);
+	}
 
-	queue.push_back(
-		Entry{
+	queue.push_back(Entry{
 		.resource = resource,
-		.sync_count = (uint32_t)syncs.size()
+		.sync_count = (uint32_t)syncs.size(),
+		.delete_fn = fn,
+		.frame_index = state ? state->last_used_by_frame : (1 + ctx->frame_counter) 
 	});
 
 	for (const ResourceSync &sync : syncs) {
@@ -1280,8 +1347,9 @@ Result DeferredDeleteQueue::process(GfxContext *ctx)
 	using ItType = decltype(queue)::iterator; 
 	ItType it = queue.begin();
 	while (it != queue.end()) {
-		TaggedResource resource = it->resource;
-		uint32_t sync_count = it->sync_count;
+		Entry ent = *it;
+		TaggedResource resource = ent.resource;
+		uint32_t sync_count = ent.sync_count;
 
 		bool can_delete = true;
 
@@ -1291,7 +1359,6 @@ Result DeferredDeleteQueue::process(GfxContext *ctx)
 		//	log_warn("no syncs!");
 
 #if EV2_USE_FINE_GRAINED_DELETION
-#else
 		ResourceState *state = nullptr;
 		switch(resource.type) {
 			case RESOURCE_TYPE_IMAGE:
@@ -1301,15 +1368,14 @@ Result DeferredDeleteQueue::process(GfxContext *ctx)
 				state = &ctx->get_buffer(resource.to_buffer())->state;
 				break;
 		}
+#else
 #endif
 
 		++it;
 		for (uint32_t i = 0; i < sync_count; ++i) {
-
-			ResourceSync sync = it->sync;
 			++it;
-
 #if EV2_USE_FINE_GRAINED_DELETION
+			ResourceSync sync = it->sync;
 			if (!can_delete)
 				continue;
 
@@ -1326,7 +1392,7 @@ Result DeferredDeleteQueue::process(GfxContext *ctx)
 		}
 
 #if not EV2_USE_FINE_GRAINED_DELETION
-		if (state->last_used_by_frame >= current_frame)
+		if (ent.frame_index >= current_frame)
 			can_delete = false;
 #endif
 
@@ -1339,23 +1405,16 @@ Result DeferredDeleteQueue::process(GfxContext *ctx)
 				callbacks.erase(callback_it);
 			}
 
-			switch (resource.type) {
-				case RESOURCE_TYPE_IMAGE: 
-					destroy_image_internal(ctx, resource.to_image());
-					break;
-				case RESOURCE_TYPE_BUFFER: 
-					destroy_buffer_internal(ctx, resource.to_buffer());
-					break;
-			}
+			ent.delete_fn(ctx, resource);
 		}
 	}
 
 	return SUCCESS;
 }
 
-void GfxContext::queue_delete(TaggedResource resource)
+void GfxContext::queue_delete(TaggedResource resource, ResourceDeleteFn fn)
 {
-	deferred_delete.enqueue(this, resource);
+	deferred_delete.enqueue(this, resource, fn);
 }
 void GfxContext::process_deferred_deletions()
 {
@@ -1417,7 +1476,7 @@ GfxContext *create_context_for_vulkan(const char *path,
 	// images can be obtained
 	ctx->reset_swap_chain();
 
-	result = init_device_resources(path, ctx);
+	result = create_device_resources(path, ctx);
 	if (result)
 		goto error;
 	
@@ -1588,6 +1647,27 @@ Result _set_error_internal(Result result, const char *file, int line, const char
     va_end(args);
 
 	return result;
+}
+
+Result _set_error_vk_internal(VkResult result, const char *file, int line, const char *msg, ...)
+{
+	if (result < VK_SUCCESS)
+	{
+		char buf[4096];
+		int idx = 0;
+
+		idx += snprintf(buf, sizeof(buf), "%s", string_VkResult(result));
+
+		va_list args;
+		va_start(args, msg);
+		idx += snprintf(buf + idx, sizeof(buf), msg, args);
+		va_end(args);
+
+		_log_function(LOG_LEVEL_ERROR, file, line, "%s", buf);
+
+		return ev2::EVULKAN;
+	}
+	return ev2::SUCCESS;
 }
 
 };

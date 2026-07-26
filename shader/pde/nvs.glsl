@@ -6,6 +6,8 @@
 #define NU 0.0
 #define RHO 1.f
 
+#define DIMS 2
+
 layout (set = 0, binding = 0) uniform ubo {
 	vec2 u_cursor;
 	vec2 u_cursor_prev;
@@ -13,6 +15,7 @@ layout (set = 0, binding = 0) uniform ubo {
 	float u_gravity;
 };
 
+layout (set = 0, r8, binding = 1) readonly uniform image2D bd_mask;
 
 float gaussian(vec2 x, vec2 c, float sigma)
 {

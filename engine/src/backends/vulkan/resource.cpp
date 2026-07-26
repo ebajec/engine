@@ -50,17 +50,16 @@ BufferID create_buffer(GfxContext *ctx, size_t size, BufferUsageFlags usage, siz
 	return id; 
 }
 
-void destroy_buffer(GfxContext *ctx, BufferID h)
+void destroy_buffer_internal(GfxContext *ctx, TaggedResource resource)
 {
-	ctx->queue_delete(h);
-}
-
-void destroy_buffer_internal(GfxContext *ctx, BufferID h)
-{
-	Buffer* buf = ctx->get_buffer(h);
+	Buffer* buf = ctx->get_buffer(resource.to_buffer());
 
 	vmaDestroyBuffer(ctx->allocator, buf->buffer, buf->allocation);
-	ctx->buffer_pool->deallocate(to_pool_id(h));
+	ctx->buffer_pool->deallocate(to_pool_id(resource.to_buffer()));
+}
+void destroy_buffer(GfxContext *ctx, BufferID h)
+{
+	ctx->queue_delete(h, &destroy_buffer_internal);
 }
 
 uint64_t get_buffer_gpu_handle(GfxContext *ctx, BufferID h)
@@ -85,8 +84,7 @@ ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, ImageF
 		usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
 	}
 
-	VkImageType type = d <= 1 ?  
-		VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_3D;
+	VkImageType type = VK_IMAGE_TYPE_2D;
 	VkFormat format = image_format_to_vk(fmt); 
 
 	VkImageCreateInfo img_ci = {
@@ -98,10 +96,10 @@ ImageID create_image(GfxContext *ctx, uint32_t w, uint32_t h, uint32_t d, ImageF
 		.extent = {
 			.width = w,
 			.height = h,
-			.depth = d,
+			.depth = 1,
 		},
 		.mipLevels = levels,
-		.arrayLayers = 1,
+		.arrayLayers = d,
 		.samples = VK_SAMPLE_COUNT_1_BIT,
 		.tiling = VK_IMAGE_TILING_OPTIMAL,
 		.usage = usage,
@@ -168,17 +166,9 @@ void pre_destroy_callback(GfxContext *ctx, ImageID img,
 	ctx->deferred_delete.callbacks[img] = std::move(callback);
 }
 
-void destroy_image(GfxContext *ctx, ImageID h)
+void destroy_image_internal(GfxContext *ctx, TaggedResource resource)
 {
-#ifdef EV2_ENABLE_IMGUI
-	ev2::imgui::on_destroy_image(h);
-#endif
-	ctx->queue_delete(h);
-}
-
-void destroy_image_internal(GfxContext *ctx, ImageID image)
-{
-	Image *img = ctx->get_image(image);
+	Image *img = ctx->get_image(resource.to_image());
 
 	for (const auto &[key, view] : img->view_cache) {
 		vkDestroyImageView(ctx->device, view, nullptr);
@@ -186,7 +176,15 @@ void destroy_image_internal(GfxContext *ctx, ImageID image)
 
 	vmaDestroyImage(ctx->allocator, img->image, img->allocation);
 
-	ctx->image_pool->deallocate(to_pool_id(image));
+	ctx->image_pool->deallocate(to_pool_id(resource.to_image()));
+}
+
+void destroy_image(GfxContext *ctx, ImageID h)
+{
+#ifdef EV2_ENABLE_IMGUI
+	ev2::imgui::on_destroy_image(h);
+#endif
+	ctx->queue_delete(h, &destroy_image_internal);
 }
 
 //------------------------------------------------------------------------------
@@ -235,6 +233,14 @@ ev2::Result wait_complete(GfxContext *ctx, uint64_t sync)
 TextureID create_texture(GfxContext *ctx, ImageID img, TextureFilter filter,
 						 uint32_t level, uint32_t layer)
 {
+	TextureID out_id = ctx->emplace_texture(Texture{});
+
+	if (out_id.id >= EV2_MAX_BINDLESS_DESCRIPTORS) {
+		log_error("Number of created textures exceeds maximum (%d)", 
+			EV2_MAX_BINDLESS_DESCRIPTORS);
+		return EV2_NULL_HANDLE(Texture);
+	}
+
 	Image *image = ctx->get_image(img);
 
 	ImageViewKey view_key = {
@@ -288,17 +294,80 @@ TextureID create_texture(GfxContext *ctx, ImageID img, TextureFilter filter,
 	if (result != VK_SUCCESS)
 		return EV2_NULL_HANDLE(Texture);
 
-	return ctx->emplace_texture(Texture{
+	Texture *texture = ctx->get_texture(out_id);
+
+	*texture = Texture{
 		.img = img,
 		.filter = filter,
 		.sampler = sampler,
 		.view = view
-	});
+	};
+
+	// The slot in the bindless array is keyed by the id in the pool
+	
+	VkDescriptorImageInfo image_info = {
+		.sampler = sampler,
+		.imageView = view,
+		.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+	};
+
+	assert(out_id.id < EV2_MAX_BINDLESS_DESCRIPTORS);
+
+	VkWriteDescriptorSet write = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = ctx->bindless_set,
+		.dstBinding = 0,
+		.dstArrayElement = get_bindless_handle(ctx, out_id),
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.pImageInfo = &image_info,
+	};
+
+	vkUpdateDescriptorSets(ctx->device, 1, &write, 0, 0);
+
+	return out_id;
+}
+
+static void destroy_texture_internal(GfxContext *ctx, TaggedResource resource)
+{
+	TextureID tex_id = resource.to_texture();
+	Texture *tex = ctx->get_texture(tex_id);
+
+	// TODO: Replace with dummy texture
+	//
+	//VkDescriptorImageInfo image_info = {
+	//	.sampler = VK_NULL_HANDLE,
+	//	.imageView = VK_NULL_HANDLE,
+	//	.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+	//};
+
+	//VkWriteDescriptorSet write = {
+	//	.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+	//	.dstSet = ctx->bindless_set,
+	//	.dstBinding = 0,
+	//	.dstArrayElement = get_bindless_handle(ctx, tex_id),
+	//	.descriptorCount = 1,
+	//	.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+	//	.pImageInfo = &image_info,
+	//};
+
+	//vkUpdateDescriptorSets(ctx->device, 1, &write, 0, 0);
+
+	vkDestroySampler(ctx->device, tex->sampler, nullptr);
+	ctx->texture_pool->deallocate(to_pool_id(tex_id));
+}
+
+uint32_t get_bindless_handle(GfxContext *ctx, TextureID h)
+{
+	if (!h.is_valid())
+		return 0;
+
+	return h.id - 1;
 }
 
 void destroy_texture(GfxContext *ctx, TextureID h)
 {
-	ctx->texture_pool->deallocate(to_pool_id(h));
+	ctx->queue_delete(h, &destroy_texture_internal);
 }
 
 ImageID get_backing_image(GfxContext *ctx, TextureID h)

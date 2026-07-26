@@ -224,6 +224,4 @@ static inline void plot_frame_times(float delta)
 	ImGui::End();
 }
 
-
-
 #endif

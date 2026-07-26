@@ -122,6 +122,7 @@ void PoissonSolver::record_setup(ev2::PassID pass)
 
 	ev2::cmd_bind_resources(pass, bindings0);
 	ev2::cmd_bind_resources(pass, bindings1);
+	ev2::cmd_use_image(pass, bd_mips, ev2::USAGE_STORAGE_READ_COMPUTE);
 }
 
 void PoissonSolver::record_v_cycle(ev2::PassID pass)

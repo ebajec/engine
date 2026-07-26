@@ -6,7 +6,6 @@
 #include "ev2/resource.h"
 #include "ev2/pipeline.h"
 #include "robin_hood.h"
-#include "utils/array.h"
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/mat4x4.hpp>

@@ -36,14 +36,18 @@ enum Result
 	EBAD_SHADER = -5,
 	ERENDER_GRAPH = -6,
 	EBAD_SWAPCHAIN = -7,
+	EVULKAN = -8,
 	EUNKNOWN = -1024
 };
 
 Result _set_error_internal(Result result, const char *file, int line, const char *msg, ...);
+Result _set_error_vk_internal(VkResult result, const char *file, int line, const char *msg, ...);
 
 #define set_error(result, format, ...)\
 	_set_error_internal(result, __FILE__, __LINE__, format, ##__VA_ARGS__)
 
+#define check_vk_result(result, format, ...)\
+	_set_error_vk_internal(result, __FILE__, __LINE__, format, ##__VA_ARGS__)
 
 struct GfxContext;
 

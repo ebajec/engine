@@ -1823,12 +1823,33 @@ VkDescriptorSetLayout generate_per_pass_descriptor_set_layout(ev2::GfxContext *c
 VkDescriptorSetLayout generate_bindless_descriptor_set_layout(ev2::GfxContext *ctx)
 {
 	VkDescriptorSetLayoutBinding bindings[] = {
+		VkDescriptorSetLayoutBinding{
+			.binding = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = EV2_MAX_BINDLESS_DESCRIPTORS,
+			.stageFlags = VK_SHADER_STAGE_ALL,
+		}
+	};
+	VkDescriptorBindingFlags binding_flags[] = {
+		VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+		VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT |
+		VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+		VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
+	};
+
+	constexpr uint32_t count = sizeof(bindings)/sizeof(bindings[0]); 
+	
+	VkDescriptorSetLayoutBindingFlagsCreateInfo flag_info = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+		.bindingCount = count,
+		.pBindingFlags = binding_flags
 	};
 
 	VkDescriptorSetLayoutCreateInfo create_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.flags = 0,
-		.bindingCount = sizeof(bindings)/sizeof(VkDescriptorSetLayoutBinding),
+		.pNext = &flag_info,
+		.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+		.bindingCount = count,
 		.pBindings = bindings,
 	};
 

@@ -26,7 +26,7 @@ void main()
 	float c = texelFetch(u_tex, texc, 0).r;
 
 	vec3 rgb;
-	if (true) {
+	if (false) {
 		float l = texelFetch(u_tex, clamp(texc + ivec2(-1, 0), ivec2(0), lim), 0).r;
 		float r = texelFetch(u_tex, clamp(texc + ivec2(1, 0), ivec2(0), lim), 0).r;
 		float b = texelFetch(u_tex, clamp(texc + ivec2(0, -1), ivec2(0), lim), 0).r;
@@ -34,8 +34,9 @@ void main()
 
 		vec2 grad = 0.5 * vec2(r - l, t - b); 
 
-		float k = length(grad);
-		rgb = 10*vec3(-grad.y, grad.y, 0);
+		float k = 10*length(grad);
+		//rgb = 10*vec3(-grad.y, grad.y, 0);
+		rgb = vec3(k);
 	} else {
 		rgb = vec3(c, 0, -c);
 	}

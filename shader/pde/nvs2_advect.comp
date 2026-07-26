@@ -1,0 +1,126 @@
+#version 430 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "nvs.glsl"
+#include "../core/common.glsl"
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+#define DIMS 2
+
+layout (set = 1, r32f, binding = 3) uniform image2D v_in[DIMS];
+layout (set = 1, r32f, binding = 4) uniform writeonly image2D v_out[DIMS];
+
+float sample_v(int coord, vec2 p)
+{
+	ivec2 size = imageSize(v_in[coord]); 
+	//int Nx = textureSize(q_in,0).x;
+	//int Ny = Nx - 1;
+
+	p[(1 + coord) & 0x1] -= 0.5;
+
+	float s = p.x;
+	float t = p.y;
+
+	//float s = p.x;
+	//float t = p.y - 0.5;
+
+	int i0 = int(floor(s));
+	int j0 = int(floor(t));
+
+	int i1 = i0 + 1;
+	int j1 = j0 + 1;
+
+	i0 = clamp(i0, 0, size.x - 1);
+	i1 = clamp(i1, 0, size.x - 1);
+
+	j0 = clamp(j0, 0, size.y - 1);
+	j1 = clamp(j1, 0, size.y - 1);
+
+	float v00 = imageLoad(v_in[coord], ivec2(i0,j0)).x;
+	float v01 = imageLoad(v_in[coord], ivec2(i0,j1)).x;
+	float v10 = imageLoad(v_in[coord], ivec2(i1,j0)).x;
+	float v11 = imageLoad(v_in[coord], ivec2(i1,j1)).x;
+
+	float u = fract(s);
+	float v = fract(t);
+
+	float v0 = mix(v00, v10, u);
+	float v1 = mix(v01, v11, u);
+
+	return mix(v0, v1, v);
+}
+
+vec2 get_v(vec2 p)
+{
+	float vx = sample_v(0, p);
+	float vy = sample_v(1, p);
+
+	return vec2(vx,vy);
+}
+
+vec2 RK4(vec2 x0, float dt)
+{
+	vec2 k1 = get_v(x0);
+	vec2 k2 = get_v(x0 - 0.5*dt*k1);
+	vec2 k3 = get_v(x0 - 0.5*dt*k2);
+	vec2 k4 = get_v(x0 - dt*k3);
+
+	return (1./6.) * dt * (k1 + 2.*k2 + 2.*k3 + k4);
+}
+
+vec2 cursor_jet(vec2 c, out float rho)
+{
+	if (!bool(u_cursor_flags))
+		return vec2(0);
+
+	vec2 size = vec2(imageSize(bd_mask));
+	vec2 cursor = u_cursor*size;
+	vec2 vcursor = (u_cursor - u_cursor_prev) * size;
+
+	vec2 O = u_cursor*size - vcursor*0.5;
+
+	float speed = length(vcursor);
+
+	if (speed > size.x/4)
+		return vec2(0);
+
+	bool valid = speed > 1e-3; 
+
+	float S = sqrt((valid ? 3*speed : 1.f));
+	vec2 V = valid ? normalize(vcursor) : vec2(0);
+	vec2 X = vec2(V.y, -V.x);
+
+	mat2 frame = valid ? mat2(V/(2*S),2*X/S) : mat2(1/S);
+	vec2 r = (c - O)*frame;
+	vec2 rv = vec2(r.x, r.y);
+
+	rho = exp(-dot(r,r));
+	return -S * V * exp(-dot(r,r));
+}
+
+void main()
+{
+    ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+
+	for (int i = 0; i < DIMS; ++i) {
+		if (any(greaterThanEqual(idx, imageSize(v_out[i]))))
+			continue;
+
+		vec2 face_offset = vec2(0.5); 
+		face_offset[i] = 0;
+
+		vec2 pos = vec2(idx.xy) + face_offset;
+		vec2 src = pos + RK4(pos, TIMESTEP);
+
+		float v_hat = sample_v(i, src);
+
+		float rho;
+		vec2 force = cursor_jet(pos, rho);
+
+		v_hat += force[i];
+
+		imageStore(v_out[i], idx, vec4(v_hat));
+	}
+}
+

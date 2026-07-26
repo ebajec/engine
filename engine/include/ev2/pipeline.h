@@ -7,7 +7,7 @@
 
 #include <functional>
 
-#define EV2_MAX_BINDLESS_DESCRIPTORS 1024
+constexpr uint32_t EV2_MAX_BINDLESS_DESCRIPTORS = 1024;
 
 MAKE_HANDLE_VERSIONED(Bindings);
 
@@ -17,7 +17,6 @@ MAKE_ASSET_HANDLE(GfxPipeline);
 MAKE_ASSET_HANDLE(ComputePipeline);
 MAKE_ASSET_HANDLE(Shader);
 
-MAKE_HANDLE(ShaderLayout);
 enum ShaderStage
 {
 	STAGE_VERTEX,
@@ -166,6 +165,8 @@ struct Rect
 	uint32_t w, h;
 };
 
+#define WHOLE_IMAGE Rect{0,0,UINT32_MAX, UINT32_MAX}
+
 enum EndPassFlagBits
 {
 	END_PASS_CONTINUE_COMMANDS
@@ -186,7 +187,7 @@ struct BeginPassInfo
 PassID begin_gfx_pass(
 	GfxContext *ctx, 
 	RenderTargetID target, ViewID view,
-	Rect viewport, Rect scissor = {}
+	Rect viewport = WHOLE_IMAGE, Rect scissor = WHOLE_IMAGE
 );
 
 // @brief Begin a compute pass   

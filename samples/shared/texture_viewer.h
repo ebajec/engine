@@ -45,12 +45,11 @@ struct ImageViewerPanel
 
 	int set_image(ev2::GfxContext *ctx, ev2::ImageID image, uint32_t level, uint32_t layer);
 
-	ev2::PassID begin_pass(ev2::GfxContext *ctx);
-
 	int init(ev2::GfxContext *ctx, ev2::ImageID image);
 	int update(ev2::GfxContext *ctx);
 	void render(ev2::GfxContext *ctx);
 	void destroy(ev2::GfxContext *ctx);
+	void record_draw(ev2::PassID pass);
 
 	// @return Whether this panel should close;
 	bool imgui();

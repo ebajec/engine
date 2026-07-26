@@ -9,6 +9,49 @@ layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 layout (set = 0, binding = 1) uniform sampler2D q_in;
 layout (set = 0, rgba32f, binding = 2) writeonly uniform image2D q_out;
 
+layout (set = 0, r32f, binding = 3) uniform image2D v_in[2];
+layout (set = 0, r32f, binding = 4) uniform writeonly image2D v_out[2];
+
+float sample_v(int coord, vec2 p)
+{
+	ivec2 size = imageSize(v_in[coord]); 
+	//int Nx = textureSize(q_in,0).x;
+	//int Ny = Nx - 1;
+
+	p[(1 + coord) & 0x1] -= 0.5;
+
+	float s = p.x;
+	float t = p.y;
+
+	//float s = p.x;
+	//float t = p.y - 0.5;
+
+	int i0 = int(floor(s));
+	int j0 = int(floor(t));
+
+	int i1 = i0 + 1;
+	int j1 = j0 + 1;
+
+	i0 = clamp(i0, 0, size.x - 1);
+	i1 = clamp(i1, 0, size.x - 1);
+
+	j0 = clamp(j0, 0, size.y - 1);
+	j1 = clamp(j1, 0, size.y - 1);
+
+	float v00 = imageLoad(v_in[coord], ivec2(i0,j0)).x;
+	float v01 = imageLoad(v_in[coord], ivec2(i0,j1)).x;
+	float v10 = imageLoad(v_in[coord], ivec2(i1,j0)).x;
+	float v11 = imageLoad(v_in[coord], ivec2(i1,j1)).x;
+
+	float u = fract(s);
+	float v = fract(t);
+
+	float v0 = mix(v00, v10, u);
+	float v1 = mix(v01, v11, u);
+
+	return mix(v0, v1, v);
+}
+
 bool within_cursor(vec2 p)
 {
 	return false;
@@ -129,13 +172,11 @@ vec2 get_v(vec2 p)
 	int N = textureSize(q_in,0).x - 1;
 	bvec2 oob = bvec2( 
 		p.x < 0.5 || p.x > N - 0.5, 
-		p.y < 0.5 || p.y > N - 0.5);
+		p.y < 0.5 || p.y > N - 0.5
+	);
 
 	float vx = sample_vx(p);
 	float vy = sample_vy(p);
-
-	if (within_cursor(p))
-		return vec2(0,0);
 
 	if (oob.x) vx = 0;
 	if (oob.y) vy = 0;

@@ -135,7 +135,8 @@ struct ResourceState {
 
 enum ResourceType : uint8_t {
 	RESOURCE_TYPE_BUFFER,
-	RESOURCE_TYPE_IMAGE
+	RESOURCE_TYPE_IMAGE,
+	RESOURCE_TYPE_TEXTURE
 };
 
 #define TAGGED_RESOURCE_CONVERSIONS(Type, TypeLower, TypeUpper)\
@@ -165,6 +166,7 @@ union TaggedResource {
 
 	TAGGED_RESOURCE_CONVERSIONS(Buffer, buffer, BUFFER);
 	TAGGED_RESOURCE_CONVERSIONS(Image, image, IMAGE);
+	TAGGED_RESOURCE_CONVERSIONS(Texture, texture, TEXTURE);
 
 	operator uint64_t () const {return u64;} 
 
@@ -176,6 +178,7 @@ union TaggedResource {
 		switch(type) {
 			case RESOURCE_TYPE_BUFFER: return to_buffer().id;
 			case RESOURCE_TYPE_IMAGE: return to_image().id;
+			case RESOURCE_TYPE_TEXTURE: return to_texture().id;
 			default: return 0;
 		}
 	}
@@ -184,6 +187,7 @@ union TaggedResource {
 		switch(type) {
 			case RESOURCE_TYPE_BUFFER: return "Buffer";
 			case RESOURCE_TYPE_IMAGE: return "Image";
+			case RESOURCE_TYPE_TEXTURE: return "Image";
 			default: return "";
 		}
 	}
@@ -316,8 +320,8 @@ static inline VkFormat image_format_to_vk(ev2::ImageFormat fmt)
 
 extern VkImageView get_image_view(GfxContext *ctx, Image *image, const ImageViewKey &key);
 
-void destroy_image_internal(GfxContext *ctx, ImageID image);
-void destroy_buffer_internal(GfxContext *ctx, BufferID buffer);
+void destroy_image_internal(GfxContext *ctx, TaggedResource resource);
+void destroy_buffer_internal(GfxContext *ctx, TaggedResource resource);
 
 };
 

@@ -208,16 +208,14 @@ int ImageViewerPanel::set_image(ev2::GfxContext *ctx,
 	return rd.tex.is_valid() ? App::OK : App::ERROR;
 }
 
-ev2::PassID ImageViewerPanel::begin_pass(ev2::GfxContext *ctx)
+void ImageViewerPanel::record_draw(ev2::PassID pass)
 {
-	glm::ivec2 win_size = panel->get_size(); 
-
-	ev2::RenderTargetID window_target = panel->get_target();
-	ev2::Rect view_rect = {0,0, 
-		(uint32_t)std::max(win_size.x, 1), 
-		(uint32_t)std::max(win_size.y, 1)};
-
-	return ev2::begin_gfx_pass(ctx, window_target, rd.camera, view_rect);
+	ev2::cmd_use_image(pass, image, ev2::USAGE_SAMPLED_GRAPHICS);
+	ev2::cmd_bind_gfx_pipeline(pass, rd.pipeline);
+	ev2::cmd_bind_resources(pass, rd.bindings);
+	ev2::cmd_custom(pass, [](VkCommandBuffer cmds){
+		vkCmdDraw(cmds, 6, 1, 0, 0);
+	});
 }
 
 void ImageViewerPanel::render(ev2::GfxContext *ctx)
@@ -232,13 +230,8 @@ void ImageViewerPanel::render(ev2::GfxContext *ctx)
 		return;
 	}
 
-	ev2::PassID pass = this->begin_pass(ctx);
-	ev2::cmd_use_image(pass, image, ev2::USAGE_SAMPLED_GRAPHICS);
-	ev2::cmd_bind_gfx_pipeline(pass, rd.pipeline);
-	ev2::cmd_bind_resources(pass, rd.bindings);
-	ev2::cmd_custom(pass, [](VkCommandBuffer cmds){
-		vkCmdDraw(cmds, 6, 1, 0, 0);
-	});
+	ev2::PassID pass = ev2::begin_gfx_pass(ctx, panel->get_target(), rd.camera);
+	record_draw(pass);
 	ev2::end_pass(ctx, pass);
 }
 

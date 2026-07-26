@@ -8,7 +8,7 @@
 #include "utils/pool.h"
 #include "utils/gpu_table.h"
 #include "utils/thread_pool.h"
-#include "utils/platform.h"
+#include "utils/array.h"
 
 #include "backends/vulkan/resource.h"
 #include "backends/vulkan/pipeline.h"
@@ -394,11 +394,15 @@ struct RenderGraph
 //------------------------------------------------------------------------------
 // Graphics context
 
+typedef void (*ResourceDeleteFn)(GfxContext *, TaggedResource);
+
 struct DeferredDeleteQueue
 {
 	union Entry {
 		struct {
 			TaggedResource resource;
+			ResourceDeleteFn delete_fn;
+			uint64_t frame_index;
 			uint32_t sync_count;
 		};
 		ResourceSync sync;
@@ -406,7 +410,7 @@ struct DeferredDeleteQueue
 	std::list<Entry> queue;
 	robin_hood::unordered_map<TaggedResource, std::function<void()>> callbacks; 
 
-	void enqueue(GfxContext *ctx, TaggedResource resource);
+	void enqueue(GfxContext *ctx, TaggedResource resource, ResourceDeleteFn fn);
 	Result process(GfxContext *ctx);
 };
 
@@ -443,6 +447,9 @@ struct GfxContext
 	VkPipelineLayout 			base_pipeline_layouts[EV2_BASE_SET_COUNT];
 
 	VkDescriptorPool static_descriptor_pool;
+	VkDescriptorPool bindless_descriptor_pool;
+
+	VkDescriptorSet bindless_set;
 
 	uint64_t frame_counter;
 	VkSemaphore frame_semaphore;
@@ -504,7 +511,7 @@ struct GfxContext
 	ViewID default_view;
 
 	//------------------------------------------------------------------------------
-
+	
 	void assert_inside_frame();
 	void assert_outside_frame();
 	bool is_inside_frame() {return get_current_frame()->index >= frame_counter;}
@@ -529,7 +536,7 @@ struct GfxContext
 		return &frames[idx % max_frames_in_flight];
 	}
 
-	void queue_delete(TaggedResource resource);
+	void queue_delete(TaggedResource resource, ResourceDeleteFn fn);
 	void process_deferred_deletions();
 
 	MAKE_VERSIONED_HANDLE_ACCESS(Buffer, buffer);

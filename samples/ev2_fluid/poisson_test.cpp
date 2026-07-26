@@ -1,4 +1,6 @@
 #include "poisson_solver.h"
+#include "boundary_editor.h"
+#include "utils.h"
 #include "app.h"
 #include "texture_viewer.h"
 #include "heightmap_viewer.h"
@@ -6,26 +8,6 @@
 #include <ev2/imgui/inspector.h>
 
 #include <memory>
-
-static uint64_t initialize_image(ev2::GfxContext *ctx, ev2::ImageID img, 
-					 uint32_t w, uint32_t h, const void *pix_init, 
-					size_t pix_size, size_t pix_align)
-{
-	size_t size = w * h * pix_size;
-	ev2::UploadContext uc = ev2::begin_upload(ctx, size, pix_align);
-
-	for (size_t i = 0; i < size; i += pix_size) {
-		memcpy((char*)uc.ptr + i, pix_init, pix_size); 
-	}
-	ev2::ImageUpload upload = {
-		.src_offset = 0,
-		.x = 0, 
-		.y = 0,
-		.w = w,
-		.h = h,
-	};
-	return ev2::commit_image_uploads(ctx, uc, img, &upload, 1);
-}
 
 struct PoissonSolverApp : public App
 {
@@ -38,16 +20,13 @@ struct PoissonSolverApp : public App
 	ev2::ComputePipelineID cursor;
 	ev2::BindingsID bindings;
 
-	ev2::ComputePipelineID bd_cursor;
-	ev2::BindingsID bd_cursor_bindings;
-
 	std::unique_ptr<PoissonSolver> solver;
 	std::unique_ptr<MeanSubtractor> mean_subtractor;
 
 	std::unique_ptr<HeightmapViewerPanel> heightmap_panel;
 	std::unique_ptr<ImageViewerPanel> lhs_panel;
 	std::unique_ptr<ImageViewerPanel> rhs_panel;
-	std::unique_ptr<ImageViewerPanel> bd_panel;
+	std::unique_ptr<BoundaryEditor> bd_panel;
 
 	glm::uvec2 grid;
 
@@ -74,8 +53,7 @@ struct PoissonSolverApp : public App
 		rhs_panel.reset(new ImageViewerPanel(this, 0, 0, 500, 500, 
 			"pipelines/pressure_viz.yaml", "rhs"));
 
-		bd_panel.reset(new ImageViewerPanel(this, 0, 0, 500, 500, 
-			"pipelines/screen_quad.yaml", "BdMask"));
+		bd_panel.reset(new BoundaryEditor(this, 0, 0, 500, 500, "BdMask"));
 
 		heightmap_panel.reset(new HeightmapViewerPanel());
 
@@ -95,9 +73,6 @@ struct PoissonSolverApp : public App
 
 		cursor = ev2::load_compute_pipeline(ctx, "shader/cursor_r32f");
 		bindings = ev2::create_bindings(ctx, cursor, 0, ev2::BINDING_MODE_DYNAMIC);
-
-		bd_cursor = ev2::load_compute_pipeline(ctx, "shader/bd_cursor");
-		bd_cursor_bindings = ev2::create_bindings(ctx, bd_cursor, 0, ev2::BINDING_MODE_DYNAMIC);
 
 		return App::OK;
 	}
@@ -123,21 +98,6 @@ struct PoissonSolverApp : public App
 			ev2::cmd_dispatch(pass,
 				1 + (grid.x - 1)/group_size, 1 + (grid.y - 1)/group_size, 1
 			);
-		}
-
-		if (input.right_mouse_pressed && bd_panel->panel->is_hovered()) {
-			struct {
-				glm::vec2 pos;
-				uint32_t status;
-			} pc = {
-				.pos = bd_panel->get_world_cursor_pos(),
-				.status = 0,
-			};
-			ev2::cmd_use_image(pass, bd, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
-			ev2::cmd_bind_compute_pipeline(pass, bd_cursor);
-			ev2::cmd_bind_resources(pass, bd_cursor_bindings);
-			ev2::cmd_push_constant(pass, bd_cursor, 0, sizeof(pc), &pc);
-			ev2::cmd_dispatch(pass, 1 ,1, 1);
 		}
 
 		if (do_v_cycle || always_run) {
@@ -216,10 +176,6 @@ struct PoissonSolverApp : public App
 		ev2::bind_image(ctx, bindings, "img_out", rhs);
 		ev2::flush_bindings(ctx, bindings);
 
-		ev2::reset_bindings(ctx, bd_cursor_bindings);
-		ev2::bind_image(ctx, bd_cursor_bindings, "img_out", bd);
-		ev2::flush_bindings(ctx, bd_cursor_bindings);
-
 		solver->set_inputs(ctx, lhs, rhs, bd);
 		mean_subtractor->setup_bindings(ctx, rhs);
 		mean_subtractor->setup_bindings(ctx, lhs);
@@ -248,20 +204,18 @@ struct PoissonSolverApp : public App
 	}
 
 	void reset_bd() {
-		uint8_t init = UINT8_MAX;
-		initialize_image(ctx, bd, grid.x, grid.y, &init, sizeof(init), alignof(uint8_t)); 
+		initialize_image<uint8_t>(ctx, bd, UINT8_MAX); 
 		ev2::flush_uploads(ctx);
 	}
 
 	void reset_rhs() {
-		glm::vec4 init(0);
-		initialize_image(ctx, rhs, grid.x, grid.y, &init, sizeof(init), alignof(glm::vec4)); 
+		;
+		initialize_image(ctx, rhs, glm::vec4(0)); 
 		ev2::flush_uploads(ctx);
 	}
 
 	void reset_solver() {
-		glm::vec4 init(0);
-		initialize_image(ctx, lhs, grid.x, grid.y, &init, sizeof(init), alignof(glm::vec4)); 
+		initialize_image(ctx, lhs, glm::vec4(0)); 
 		ev2::flush_uploads(ctx);
 	}
 

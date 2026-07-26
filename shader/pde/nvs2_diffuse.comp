@@ -1,0 +1,71 @@
+#version 430 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "nvs.glsl"
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout (set = 1, r32f, binding = 1) readonly uniform image2D v_in[DIMS];
+layout (set = 1, r32f, binding = 2) writeonly uniform image2D v_out[DIMS];
+
+float get_v(int coord, ivec2 idx, out float wt)
+{
+	if (any(greaterThanEqual(idx, imageSize(v_in[coord])))) {
+		wt = 0.f;
+		return 0.f;
+	}
+
+	wt = 1.f;
+	return imageLoad(v_in[coord], idx).x;
+}
+
+float get_wt(ivec2 idx)
+{
+	if (idx != clamp(idx, ivec2(0), imageSize(bd_mask)))
+		return 0.f;
+
+	return imageLoad(bd_mask, idx).x;
+}
+
+void main()
+{
+    ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+
+	ivec2 stencil[4] = {
+		ivec2(-1,0),
+		ivec2(1,0),
+		ivec2(0,-1),
+		ivec2(0,1),
+	};
+
+	for (int i = 0; i < DIMS; ++i) {
+		if (any(greaterThanEqual(idx, imageSize(v_out[i]))))
+			continue;
+
+		float wc;
+		float vc = get_v(i, idx, wc);
+
+		float sum = 0.f;
+
+		for (int j = 0; j < 4; ++j) {
+			float wt;
+			float v = get_v(i, idx + stencil[j], wt);
+
+			sum += mix(vc, v, wt);
+		}
+
+		float lap = (sum - 4.f * vc) / (DELTA_X * DELTA_X);
+		//vc += TIMESTEP * 0.01 * lap;
+
+		// zero any wall velocities which border a oob cell 
+		ivec2 front = idx;
+		ivec2 back = idx;
+		back[i] -= 1;
+
+		vc *= min(get_wt(front), get_wt(back));
+
+		imageStore(v_out[i], idx, vec4(vc));
+	}
+
+	return;
+}

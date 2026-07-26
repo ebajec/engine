@@ -3,6 +3,8 @@
 #include "backends/vulkan/context.h"
 #include "backends/vulkan/pipeline.h"
 
+#include "utils/platform.h"
+
 #include <glm/gtc/type_ptr.hpp>
 #include "imgui/inspector.h"
 
@@ -1731,7 +1733,8 @@ static void rg_record_gfx_pass_begin(RenderGraph*rg, const PassNode &node, VkCom
 	// Can record commands now
 
 	VkPipelineLayout base_layout = ctx->get_base_pipeline_layout(EV2_BASE_SET_PER_PASS);
-	std::array<VkDescriptorSet,2> base_sets = {
+	std::array<VkDescriptorSet,3> base_sets = {
+		ctx->bindless_set,
 		frame->descriptor_set,
 		render_pass->descriptor_set,
 	};
@@ -1739,7 +1742,7 @@ static void rg_record_gfx_pass_begin(RenderGraph*rg, const PassNode &node, VkCom
 	VkBindDescriptorSetsInfo info = {
 		.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
 		.layout = base_layout,
-		.firstSet = EV2_BASE_SET_PER_FRAME,
+		.firstSet = EV2_BASE_SET_BINDLESS,
 		.descriptorSetCount = (uint32_t)base_sets.size(),
 		.pDescriptorSets = base_sets.data(),
 		.dynamicOffsetCount = 0,
@@ -1770,8 +1773,8 @@ static void rg_record_gfx_pass_begin(RenderGraph*rg, const PassNode &node, VkCom
 	VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)render_pass->viewport.w;
-    viewport.height = (float)render_pass->viewport.h;
+    viewport.width = (float)std::min(render_pass->viewport.w, target->w);
+    viewport.height = (float)std::min(render_pass->viewport.h, target->h);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(cmds, 0, 1, &viewport);
@@ -1779,8 +1782,8 @@ static void rg_record_gfx_pass_begin(RenderGraph*rg, const PassNode &node, VkCom
     VkRect2D scissor{};
     scissor.offset = {0, 0};
     scissor.extent = VkExtent2D{
-		.width = render_pass->scissor.w,
-		.height = render_pass->scissor.h
+		.width = std::min(render_pass->scissor.w, target->w),
+		.height = std::min(render_pass->scissor.h, target->h)
 	};
     vkCmdSetScissor(cmds, 0, 1, &scissor);
 }

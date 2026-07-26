@@ -13,11 +13,6 @@ struct framedata_t
 	float dt;
 };
 
-layout (set = PER_FRAME_SET, std140, binding = 0) uniform FrameData
-{
-	framedata_t u_frame;
-};
-
 struct viewdata_t
 {
 	mat4 p;
@@ -26,6 +21,13 @@ struct viewdata_t
 	vec3 center;
 
 	ivec2 resolution; 
+};
+
+layout (set = BINDLESS_SET, binding = 0) uniform sampler2D u_textures[];
+
+layout (set = PER_FRAME_SET, std140, binding = 0) uniform FrameData
+{
+	framedata_t u_frame;
 };
 
 layout (set = PER_PASS_SET, std140, binding = 0) uniform ViewData

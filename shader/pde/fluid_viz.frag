@@ -63,9 +63,9 @@ void main()
 
 	float f = 0.5 + 0.5*clamp(dot(n,sun),0,1);
 
-	float speed = 0.5*length(val.xy);
+	float speed = length(val.xy);
 
-	float color_val = 2*abs(val.w);
+	float color_val = abs(val.w);
 
 	vec3 track_color = color_val * vec3(0.1, 0.1, 0.2);
 	vec3 speed_color = 
@@ -78,6 +78,6 @@ void main()
 	if (uv.x < 0.f || uv.y < 0.f || uv.x > 1.f || uv.y > 1.f) {
 		FragColor = vec4(0.5);
 	} else {
-		FragColor = vec4(f*color.rgb,color.a);
+		FragColor = vec4(f*color.rgb,1.f);
 	}
 }

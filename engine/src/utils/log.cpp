@@ -51,7 +51,7 @@ void _log_function_internal(log_level_t lvl, const char *file, int line, const c
 
 	fprintf(out, "\n");
 
-	if (_log_callback) _log_callback(LOG_WARN_BIT,format,args);
+	if (_log_callback) _log_callback(lvl, format, args);
 }
 
 void log_set_file(log_level_t lvl, FILE *file)

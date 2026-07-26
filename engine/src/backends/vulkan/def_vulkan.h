@@ -3,6 +3,7 @@
 
 // vulkan
 #include <vulkan/vulkan.h>
+#include <vulkan/vk_enum_string_helper.h>
 
 #define VK_VERSION VK_MAKE_VERSION(1, 3, 0)
 #define VK_API_VERSION VK_API_VERSION_1_3
