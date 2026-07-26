@@ -189,6 +189,7 @@ void post_frame_submission_stats(const RenderGraphSubmission *submissions, uint3
 
 void set_image_viewer_open_callback(void* usr, void (*callback)(void *, ev2::ImageID))
 {
+	assert(g_vk.allow_resource_inspection);
 	g_state.image_viewer_open = {
 		.usr = usr,
 		.callback = callback
@@ -197,6 +198,7 @@ void set_image_viewer_open_callback(void* usr, void (*callback)(void *, ev2::Ima
 
 void set_image_viewer_close_callback(void* usr, void (*callback)(void *, ev2::ImageID))
 {
+	assert(g_vk.allow_resource_inspection);
 	g_state.image_viewer_close = {
 		.usr = usr,
 		.callback = callback

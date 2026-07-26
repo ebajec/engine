@@ -151,6 +151,9 @@ void destroy_render_target(
 VkImageView get_render_target_color_view(RenderTargetID target);
 ImageID get_render_target_color_image(RenderTargetID target);
 
+void get_render_target_images(RenderTargetID target,
+	ev2::ImageID *color, ev2::ImageID *depth);
+
 ev2::Result begin_frame(GfxContext *ctx);
 ev2::Result end_frame(GfxContext *ctx);
 
@@ -190,11 +193,16 @@ PassID begin_gfx_pass(
 	Rect viewport = WHOLE_IMAGE, Rect scissor = WHOLE_IMAGE
 );
 
-// @brief Begin a compute pass   
+// @brief Begin a compute pass.  Does not bind any descriptor sets.   
 PassID begin_compute_pass(
 	GfxContext *ctx 
 );
 
+// @brief End a pass.  The ordering of this call determines the read/write
+// dependencies between passes.
+//
+// E.g., if Pass A writes to X and is submitted first, and Pass B reads X, 
+// and is submitted after, a dependency will be inserted between A and B
 void end_pass(GfxContext *ctx, PassID pass);
 
 //------------------------------------------------------------------------------

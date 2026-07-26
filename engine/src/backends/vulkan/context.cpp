@@ -1321,13 +1321,17 @@ void DeferredDeleteQueue::enqueue(GfxContext *ctx, TaggedResource resource, Reso
 		}
 		state->deleted = true;
 		state->get_wait_syncs_for_write(syncs);
+
+		if (!state->last_used_by_frame) {
+			log_warn("Deleting unused resource: %s %d", resource.type_str(), resource.id());
+		}
 	}
 
 	queue.push_back(Entry{
 		.resource = resource,
 		.sync_count = (uint32_t)syncs.size(),
 		.delete_fn = fn,
-		.frame_index = state ? state->last_used_by_frame : (1 + ctx->frame_counter) 
+		.enqueued_frame_index = ctx->frame_counter
 	});
 
 	for (const ResourceSync &sync : syncs) {
@@ -1359,6 +1363,8 @@ Result DeferredDeleteQueue::process(GfxContext *ctx)
 		//	log_warn("no syncs!");
 
 #if EV2_USE_FINE_GRAINED_DELETION
+#else
+#endif
 		ResourceState *state = nullptr;
 		switch(resource.type) {
 			case RESOURCE_TYPE_IMAGE:
@@ -1368,8 +1374,6 @@ Result DeferredDeleteQueue::process(GfxContext *ctx)
 				state = &ctx->get_buffer(resource.to_buffer())->state;
 				break;
 		}
-#else
-#endif
 
 		++it;
 		for (uint32_t i = 0; i < sync_count; ++i) {
@@ -1392,7 +1396,20 @@ Result DeferredDeleteQueue::process(GfxContext *ctx)
 		}
 
 #if not EV2_USE_FINE_GRAINED_DELETION
-		if (ent.frame_index >= current_frame)
+		if (state) {
+			uint64_t last_used_by_frame = state->last_used_by_frame;
+			if (last_used_by_frame + 3 < current_frame) {
+				log_warn(
+					"%s %d on delete queue was last used on frame %lld, current frame is at %lld", 
+					resource.type_str(), resource.id(), ent.enqueued_frame_index, current_frame);
+			}
+
+			if (last_used_by_frame >= current_frame) {
+				can_delete = false;
+			}
+		}
+
+		if (ent.enqueued_frame_index >= current_frame)
 			can_delete = false;
 #endif
 

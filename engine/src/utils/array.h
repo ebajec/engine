@@ -16,10 +16,23 @@ class Array {
 	IndexType _size = 0;
 
 public:
+	Array() {}
 	~Array()
 	{
 		if (_data)
 			free(_data);
+	}
+
+	Array(const Array &other) = delete;
+	Array(Array &&other)
+	{
+		_data = other._data;
+		_capacity = other._capacity;
+		_size = other._size;
+
+		other._data = nullptr;
+		other._capacity = 0;
+		other._size = 0;
 	}
 
 	void ensure_space(size_t bytes)

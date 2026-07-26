@@ -342,6 +342,19 @@ ImageID get_render_target_color_image(RenderTargetID handle)
 	return target->color_img;
 }
 
+void get_render_target_images(RenderTargetID handle,
+	ev2::ImageID *color, ev2::ImageID *depth)
+{
+	RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget, handle);
+	assert(target);
+
+	if (color && (target->flags & RENDER_TARGET_CREATE_COLOR_BIT))
+		*color = target->color_img;
+	if (depth && (target->flags & 
+		(RENDER_TARGET_CREATE_DEPTH_BIT | RENDER_TARGET_CREATE_STENCIL_BIT)))
+		*depth = target->depth_img;
+}
+
 ViewID create_view(GfxContext *ctx, float view[], float proj[])
 {
 	ViewData data = view_data_from_matrices(view, proj);
@@ -452,15 +465,9 @@ static Pass *rg_create_pass(GfxContext *ctx, FrameContext *frame,
 {
 	Pass *pass = &frame->passes.emplace_back(Pass{
 		.ctx = ctx,
-	});
-
-	PassNode *node = &frame->render_graph->nodes.emplace_back(PassNode{
-		.pass = pass,
 		.name = std::move(name),
-		.queue_family_index = queue_family_index,
+		.queue_family_index = queue_family_index
 	});
-
-	pass->node = node;
 
 	return pass;
 }
@@ -540,31 +547,22 @@ PassID begin_gfx_pass(
 	if (!gfx)
 		return EV2_NULL_HANDLE(Pass);
 
-	pass->node->gfx = std::move(gfx);
+	pass->gfx = std::move(gfx);
 
 	const bool render_to_swapchain = !target_handle.is_valid();
 
+	PassID pass_id = EV2_HANDLE_CAST(Pass, pass); 
+
 	if (render_to_swapchain) {
-		pass->cmds.push_back(CmdUseImage{
-			.image = ctx->depth_buffer,
-			.usage = USAGE_DEPTH_ATTACHMENT, 
-		});		
+		ev2::cmd_use_image(pass_id, ctx->depth_buffer, ev2::USAGE_DEPTH_ATTACHMENT);
 	} else if (RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget,target_handle)){
 		if (target->depth_img.is_valid())
-			pass->cmds.push_back(
-			CmdUseImage{
-				.image = target->depth_img,
-				.usage = USAGE_DEPTH_ATTACHMENT, 
-			});		
+			ev2::cmd_use_image(pass_id, target->depth_img, ev2::USAGE_DEPTH_ATTACHMENT);
 		if (target->color_img.is_valid())
-			pass->cmds.push_back(
-			CmdUseImage{
-				.image = target->color_img,
-				.usage = USAGE_COLOR_ATTACHMENT, 
-			});		
+			ev2::cmd_use_image(pass_id, target->color_img, ev2::USAGE_COLOR_ATTACHMENT);
 	}
 
-	return EV2_HANDLE_CAST(Pass, pass); 
+	return pass_id; 
 }
 
 PassID begin_compute_pass(GfxContext *ctx)
@@ -584,7 +582,18 @@ PassID begin_compute_pass(GfxContext *ctx)
 
 void end_pass(GfxContext *ctx, PassID pass_handle)
 {
+	FrameContext *frame = ctx->get_current_frame();
+
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_handle);
+
+	frame->render_graph->nodes.emplace_back(PassNode{
+		.pass = pass,
+		.custom_callbacks = std::move(pass->custom_callbacks),
+		.push_constant_data = std::move(pass->push_constant_data),
+		.gfx = std::move(pass->gfx),
+		.name = std::move(pass->name),
+		.queue_family_index = pass->queue_family_index,
+	});
 }
 
 static bool access_contains_write(VkAccessFlags2 access)
@@ -750,6 +759,8 @@ void cmd_use_buffer(
 
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 
+	assert(!pass->ctx->get_buffer(buf_id)->state.deleted);
+
 	pass->cmds.push_back(CmdUseBuffer{
 		.buffer = buf_id,
 		.usage = usage
@@ -766,6 +777,8 @@ void cmd_use_image(
 	check_input(img_id);
 
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
+
+	assert(!pass->ctx->get_image(img_id)->state.deleted);
 
 	pass->cmds.push_back(CmdUseImage{
 		.image = img_id,
@@ -841,11 +854,9 @@ static void cmd_push_constant_internal(
 		return;
 	}
 
-	PassNode *node = pass->node;
+	uint32_t src_offset = pass->push_constant_data.size();
 
-	uint32_t src_offset = node->push_constant_data.size();
-
-	node->push_constant_data.push_range((char*)data, size);
+	pass->push_constant_data.push_range((char*)data, size);
 	pass->cmds.push_back(CmdPushConstant{
 		.pipeline = pipeline,
 		.src_offset = src_offset,
@@ -914,9 +925,9 @@ void cmd_custom(
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
 
 	pass->cmds.push_back(CmdCustom{
-		.callback_id = (uint32_t)pass->node->custom_callbacks.size()
+		.callback_id = (uint32_t)pass->custom_callbacks.size()
 	});
-	pass->node->custom_callbacks.push_back(std::move(callback));
+	pass->custom_callbacks.push_back(std::move(callback));
 }
 
 void cmd_bind_gfx_pipeline(PassID pass_id, GfxPipelineID pipeline_id)

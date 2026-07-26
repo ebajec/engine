@@ -224,14 +224,19 @@ int App::begin_frame()
 	if (ev2_result != ev2::SUCCESS)
 		return App::ERROR;
 
-	std::vector<ev2::ImageID> delete_list;
+	gui_pass = ev2::begin_gfx_pass(
+		ctx, 
+		{}, {}, 
+		ev2::Rect{0,0,(uint32_t)win.width, (uint32_t)win.height}
+	);
 
 	for (const auto&[image, viewer] : image_viewers) {
 		if (viewer->update(ctx) == App::SHOULD_CLOSE) {
-			delete_list.push_back(image);
+			to_close_viewers.push_back(image);
 		}
 	}
-	
+	std::vector<ev2::ImageID> delete_list = std::move(to_close_viewers);
+
 	for (ev2::ImageID image : delete_list) {
 		close_image_viewer(image);
 	}
@@ -249,38 +254,14 @@ int App::end_frame()
 	ImGui::Render();
 	ImDrawData *draw_data = ImGui::GetDrawData();
 #endif 
-	ev2::PassID gui_pass = ev2::begin_gfx_pass(
-		ctx, 
-		{}, {}, 
-		ev2::Rect{0,0,(uint32_t)win.width, (uint32_t)win.height}
-	);
-
-	for (const auto[image, _] : imgui_images) {
-		ev2::cmd_use_image(gui_pass, image, ev2::USAGE_SAMPLED_GRAPHICS);
-	}
-
 	ev2::cmd_custom(gui_pass, [draw_data](VkCommandBuffer cmds) {
 		ImGui_ImplVulkan_RenderDrawData(draw_data, cmds);
 	});
-	ev2::end_pass(ctx, gui_pass);
 
-	imgui_images.clear();
+	ev2::end_pass(ctx, gui_pass);
 
 	ev2::end_frame(ctx);
 	return App::OK;
-}
-
-void App::acquire_image_for_gui(ev2::ImageID image)
-{
-	auto [it, inserted] = imgui_images.emplace(image, VK_NULL_HANDLE);
-
-	if (!inserted)
-		return;
-}
-
-void App::release_image_for_gui(ev2::ImageID image)
-{
-	imgui_images.erase(image);
 }
 
 int App::initialize(int argc, char *argv[])
@@ -404,9 +385,6 @@ int App::initialize(int argc, char *argv[])
 void App::terminate()
 {
 	image_viewers.clear();
-	for (auto [image, set] : imgui_images) {
-		ImGui_ImplVulkan_RemoveTexture(set);
-	}
 #ifdef ENABLE_IMGUI
 	ImGui_ImplVulkan_Shutdown();
 	ImGui_ImplGlfw_Shutdown();

@@ -61,6 +61,8 @@ public:
 
 	~Panel();
 
+	void cleanup_render_target();
+
 	int update(bool *was_resized = nullptr);
 
 	 //@return whether this window should close

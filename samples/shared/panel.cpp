@@ -49,21 +49,22 @@ Panel::Panel(
 
 Panel::~Panel()
 {
+	cleanup_render_target();
+}
+
+void Panel::cleanup_render_target()
+{
 	if (m_target.is_valid()) {
 		ev2::destroy_render_target(m_ctx, m_target);
 	}
+	m_target = EV2_NULL_HANDLE(RenderTarget);
 }
 
 int Panel::update(bool *was_resized)
 {
 	if (m_needs_resize) {
-		if (m_target.is_valid()) {
-			m_app->release_image_for_gui(
-				ev2::get_render_target_color_image(m_target));
-			ev2::destroy_render_target(m_ctx, m_target);
-			imgui_texture = VK_NULL_HANDLE;
-			m_target = EV2_NULL_HANDLE(RenderTarget);
-		}
+		cleanup_render_target();
+		imgui_texture = VK_NULL_HANDLE;
 
 		if (m_size.x <= 0 || m_size.y <= 0) {
 			return App::OK;
@@ -75,19 +76,19 @@ int Panel::update(bool *was_resized)
 			return App::ERROR;
 		}
 
-		ev2::ImageID color_img = ev2::get_render_target_color_image(m_target);
-
 		VkImageView view = ev2::get_render_target_color_view(m_target);
 		imgui_texture = ImGui_ImplVulkan_AddTexture(
 			view,
 			VK_IMAGE_LAYOUT_GENERAL
 		);
 
-		ev2::pre_destroy_callback(m_app->ctx, color_img, [tex = imgui_texture]{
+		ev2::ImageID color_img = {};
+		ev2::get_render_target_images(m_target, &color_img, nullptr);
+
+		ev2::pre_destroy_callback(m_app->ctx, color_img,
+		[color_img, tex = imgui_texture](){
 			ImGui_ImplVulkan_RemoveTexture(tex);
 		});
-
-		m_app->acquire_image_for_gui(color_img);
 
 		if (was_resized)
 			*was_resized = true;
@@ -168,6 +169,10 @@ bool Panel::imgui()
 			// If the window is closed and this code executes, the frame will be left holding
 			// an invalid image id since the render target gets destroyed
 			if (open && imgui_texture) {
+				ev2::ImageID color;
+				ev2::get_render_target_images(m_target, &color, nullptr);
+				ev2::cmd_use_image(m_app->gui_pass, color, ev2::USAGE_SAMPLED_GRAPHICS);
+
 				ImGui::ImageWithBg(
 					(ImTextureID)imgui_texture, 
 					content, 

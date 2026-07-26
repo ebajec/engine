@@ -69,7 +69,7 @@ MAKE_POOL_ID_CONVERSION(Bindings)
 
 extern struct VulkanGlobals
 {
-	bool allow_resource_inspection = false;
+	bool allow_resource_inspection = true;
 } g_vk;
 
 struct VulkanOptions
@@ -150,11 +150,19 @@ struct TransientCommands
 	VkResult get_cmds(uint32_t count, VkCommandBuffer *out_cmds);
 };
 
+struct RenderPass;
+
 struct Pass
 {
 	GfxContext *ctx;
-	PassNode *node;
 	std::vector<Command> cmds;
+
+	std::vector<std::function<void(VkCommandBuffer)>> custom_callbacks;
+	Array<char, uint32_t, 256> push_constant_data;
+
+	std::string name;
+	uint32_t queue_family_index;
+	std::unique_ptr<RenderPass> gfx;
 };
 
 struct FrameContext
@@ -402,7 +410,7 @@ struct DeferredDeleteQueue
 		struct {
 			TaggedResource resource;
 			ResourceDeleteFn delete_fn;
-			uint64_t frame_index;
+			uint64_t enqueued_frame_index;
 			uint32_t sync_count;
 		};
 		ResourceSync sync;

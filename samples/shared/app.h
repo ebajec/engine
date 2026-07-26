@@ -3,6 +3,7 @@
 
 #include <ev2/context.h>
 #include <ev2/resource.h>
+#include <ev2/pipeline.h>
 
 #include <glad/glad.h>
 
@@ -83,12 +84,14 @@ struct App
 
 	std::vector<key_callback_t> key_callbacks;
 
-	std::unordered_map<ev2::ImageID, VkDescriptorSet> imgui_images;
-
 	std::unordered_map<
 		ev2::ImageID, 
 		std::shared_ptr<ImageViewerPanel>
 	> image_viewers;
+
+	std::vector<ev2::ImageID> to_close_viewers;
+
+	ev2::PassID gui_pass;
 
 	ImGuiID root_dockspace;
 
@@ -105,9 +108,6 @@ struct App
 	void imgui();
 
 	void update_input();
-
-	void acquire_image_for_gui(ev2::ImageID image);
-	void release_image_for_gui(ev2::ImageID image);
 
 	int initialize(int argc, char *argv[]);
 	void terminate();
