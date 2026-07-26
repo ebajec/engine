@@ -44,6 +44,8 @@ void main()
 	vec2 Y;
 
 	float v;
+	
+	vec4 color;
 
 	if (inst < Nx) {
 		uint ix = inst;
@@ -58,6 +60,8 @@ void main()
 		O = d * vec2(float(idx.x), float(idx.y) + 0.5);
 
 		v = texelFetch(u_textures[v_img[0]], idx, 0).r; 
+
+		color = vec4(abs(10*v), 0, 0, clamp(abs(v), 0.f, 1.f));
 	} else {
 		uint iy = inst - Nx;
 
@@ -71,19 +75,20 @@ void main()
 		O = d * vec2(float(idx.x) + 0.5, float(idx.y));
 
 		v = texelFetch(u_textures[v_img[1]], idx, 0).r; 
+		color = vec4(0, abs(10*v), 0, clamp(abs(v), 0.f, 1.f));
 	}
 
-	v *= 4.f;
+	v *= 10.f;
 
 	float scale = min(d.x, d.y);
 
 	float w = 0.10 * scale;
 	float h = 0.25 * scale;
 
-	Y *= clamp(v, -1, 1.f);
+	h *= clamp(v, -1.f, 1.f);
 
 	float arrow_w = 2*w;
-	float arrow_h = 0.35 * scale;
+	float arrow_h = 1.33*arrow_w * sign(v);
 
 	vec2 pos;
 	switch (gl_VertexIndex) 
@@ -113,7 +118,7 @@ void main()
 			break;
 	}
 
-	out_color = vec4(-v, v, 0, clamp(abs(v), 0.f, 1.f));
+	out_color = color;
 
 	mat3x2 world = mat3x2(
 		2,0, 0,2, -1,-1

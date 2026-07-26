@@ -85,6 +85,8 @@ vec2 cursor_jet(vec2 c, out float rho)
 	if (speed > size.x/4)
 		return vec2(0);
 
+	speed *= 100.f/float(size.x);
+
 	bool valid = speed > 1e-3; 
 
 	float S = sqrt((valid ? 3*speed : 1.f));
@@ -96,7 +98,7 @@ vec2 cursor_jet(vec2 c, out float rho)
 	vec2 rv = vec2(r.x, r.y);
 
 	rho = exp(-dot(r,r));
-	return -S * V * exp(-dot(r,r));
+	return S * V * exp(-dot(r,r));
 }
 
 void main()
@@ -111,7 +113,7 @@ void main()
 		face_offset[i] = 0;
 
 		vec2 pos = vec2(idx.xy) + face_offset;
-		vec2 src = pos + RK4(pos, TIMESTEP);
+		vec2 src = pos - RK4(pos, TIMESTEP);
 
 		float v_hat = sample_v(i, src);
 
