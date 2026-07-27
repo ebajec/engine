@@ -40,6 +40,9 @@ struct FluidSim
 
 	ev2::ImageID lap_p_img; // rhs of lap(phi) = f 
 	ev2::ImageID p_img; // pressure
+
+	ev2::ImageID q_img; // density track, arbitrary advected quantity
+	ev2::TextureID q_tex[2];
 	
 	ev2::ImageID mask_img; // out of bounds mask: 0 = oob, 1 = inb
 
@@ -113,17 +116,20 @@ int FluidSim::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 		v_img_2[i] = ev2::create_image(ctx, size.x, size.y, 1, ev2::IMAGE_FORMAT_32F, usage);
 	}
 
+	//q_img = ev2::create_image(ctx, grid_w, grid_h, 2, ev2::IMAGE_FORMAT_32F, usage);
+	//ev2::set_image_name(ctx, q_img, "q_img");
+
+	//q_tex[0] = ev2::create_texture(ctx, q_img, ev2::FILTER_BILINEAR, 0, 0);
+	//q_tex[1] = ev2::create_texture(ctx, q_img, ev2::FILTER_BILINEAR, 0, 1);
+
 	lap_p_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F, usage);
-	ev2::set_image_name(ctx, lap_p_img, "lap_p");
+	ev2::set_image_name(ctx, lap_p_img, "lap_p_img");
 
 	p_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F, usage);
-	ev2::set_image_name(ctx, p_img, "p");
+	ev2::set_image_name(ctx, p_img, "p_img");
 
 	mask_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_R8_UNORM, usage);
-	ev2::set_image_name(ctx, mask_img, "Mask");
-
-	//q_tex_1 = ev2::create_texture(ctx, q_img_1, ev2::FILTER_BILINEAR);
-	//q_tex_2 = ev2::create_texture(ctx, q_img_2, ev2::FILTER_BILINEAR);
+	ev2::set_image_name(ctx, mask_img, "bd_mask");
 
 	lap_p_tex = ev2::create_texture(ctx, lap_p_img, ev2::FILTER_BILINEAR);
 	p_tex = ev2::create_texture(ctx, p_img, ev2::FILTER_BILINEAR);
@@ -173,6 +179,9 @@ int FluidSim::update_advect_set(ev2::GfxContext *ctx)
 		ev2::bind_image_indexed(ctx, set, "v_in", i, v_img_1[i]);
 		ev2::bind_image_indexed(ctx, set, "v_out", i, v_img_2[i]);
 	}
+
+	//ev2::bind_texture(ctx, set, "q_in", q_tex[step & 0x1]);
+	//ev2::bind_image(ctx, set, "q_out", q_img, 0, (step & 0x1) ^ 0x1);
 	
 	ev2::flush_bindings(ctx, set);
 
@@ -248,6 +257,7 @@ int FluidSim::update(ev2::GfxContext *ctx)
 
 	ev2::PassID pass = ev2::begin_compute_pass(ctx);
 	ev2::cmd_use_image(pass, mask_img, ev2::USAGE_STORAGE_READ_COMPUTE);
+	//ev2::cmd_use_image(pass, q_img, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 
 	ev2::cmd_use_buffer(pass, ubo, ev2::USAGE_UNIFORM_READ);
 
@@ -434,6 +444,11 @@ void FluidApp::reset_images()
 		initialize_image(ctx, sim->v_img_1[i], glm::vec4(0));
 		initialize_image(ctx, sim->v_img_2[i], glm::vec4(0));
 	}
+
+	//initialize_image<float>(ctx, sim->q_img, 0.f, 0);
+	//initialize_image<float>(ctx, sim->q_img, 0.f, 1);
+
+	initialize_image<uint8_t>(ctx, sim->mask_img, UINT8_MAX);
 
 	initialize_image<uint8_t>(ctx, sim->mask_img, UINT8_MAX);
 

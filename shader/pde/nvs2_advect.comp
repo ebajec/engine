@@ -11,6 +11,9 @@ layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 layout (set = 1, r32f, binding = 3) uniform image2D v_in[DIMS];
 layout (set = 1, r32f, binding = 4) uniform writeonly image2D v_out[DIMS];
 
+//layout (set = 1, binding = 5) uniform sampler2D q_in;
+//layout (set = 1, r32f, binding = 6) uniform writeonly image2D q_out;
+
 float sample_v(int coord, vec2 p)
 {
 	ivec2 size = imageSize(v_in[coord]); 
@@ -124,5 +127,22 @@ void main()
 
 		imageStore(v_out[i], idx, vec4(v_hat));
 	}
+
+	//ivec2 q_size = imageSize(q_out);
+	//if (all(lessThan(idx, q_size)))
+	//{
+	//	vec2 pos = vec2(idx.xy) + vec2(0.5);
+	//	vec2 src = pos - RK4(pos, TIMESTEP);
+
+	//	float q_hat = texture(q_in, src/vec2(q_size)).r;
+
+	//	float rho;
+	//	cursor_jet(pos, rho);
+
+	//	q_hat += rho;
+
+	//	imageStore(q_out, idx, vec4(q_hat));
+	//}
+
 }
 

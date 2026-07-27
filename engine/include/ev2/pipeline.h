@@ -4,6 +4,7 @@
 #include "ev2/defines.h"
 #include "ev2/context.h"
 #include "ev2/resource.h"
+#include "ev2/asset.h"
 
 #include <functional>
 
@@ -12,10 +13,6 @@ constexpr uint32_t EV2_MAX_BINDLESS_DESCRIPTORS = 1024;
 MAKE_HANDLE_VERSIONED(Bindings);
 
 namespace ev2 {
-
-MAKE_ASSET_HANDLE(GfxPipeline);
-MAKE_ASSET_HANDLE(ComputePipeline);
-MAKE_ASSET_HANDLE(Shader);
 
 enum ShaderStage
 {
@@ -41,18 +38,6 @@ enum Usage
     USAGE_VERTEX_INPUT,
     USAGE_MAX_ENUM,
 };
-
-ShaderID load_shader(GfxContext *ctx, const char *path);
-void unload_shader(GfxContext *ctx, ShaderID id);
-
-GfxPipelineID load_graphics_pipeline(GfxContext *ctx, const char *path);
-void unload_graphics_pipeline(GfxContext *ctx, GfxPipelineID pipe);
-
-ComputePipelineID load_compute_pipeline(GfxContext *ctx, const char *path);
-void unload_compute_pipeline(GfxContext *ctx, ComputePipelineID pipe);
-
-//------------------------------------------------------------------------------
-// Bindings
 
 enum BindingMode {
 	BINDING_MODE_STATIC,
@@ -111,7 +96,7 @@ ev2::Result bind_image_indexed(
 );
 
 //------------------------------------------------------------------------------
-// rendering
+// Rendering
 
 MAKE_HANDLE(View);
 MAKE_HANDLE(Pass);
@@ -157,7 +142,6 @@ void get_render_target_images(RenderTargetID target,
 ev2::Result begin_frame(GfxContext *ctx);
 ev2::Result end_frame(GfxContext *ctx);
 
-
 ViewID create_view(GfxContext *ctx, float view[], float proj[]);
 void update_view(GfxContext *ctx, ViewID handle, float view[], float proj[]);
 void destroy_view(GfxContext *ctx, ViewID handle);
@@ -168,22 +152,7 @@ struct Rect
 	uint32_t w, h;
 };
 
-#define WHOLE_IMAGE Rect{0,0,UINT32_MAX, UINT32_MAX}
-
-enum EndPassFlagBits
-{
-	END_PASS_CONTINUE_COMMANDS
-};
-typedef uint32_t EndPassFlags;
-
-struct BeginPassInfo
-{
-	uint32_t buffer_count;
-	const BufferID *buffers;
-
-	uint32_t image_count;
-	const ImageID *images;
-};
+constexpr Rect WHOLE_IMAGE = Rect{0, 0, UINT32_MAX, UINT32_MAX};
 
 // @brief Begin a render pass.  Configures bindings for pass-specific data  
 // (view matrices, etc).    
@@ -208,33 +177,19 @@ void end_pass(GfxContext *ctx, PassID pass);
 //------------------------------------------------------------------------------
 // command recording
 
-enum CommandMode {
-	MODE_PRIMARY,
-	MODE_SECONDARY
-};
-
-enum DrawMode
-{
-	MODE_TRIANGLES
-};
-
 void cmd_bind_resources(PassID pass_id, BindingsID bindings_id);
 void cmd_bind_compute_pipeline(PassID pass_id, ComputePipelineID pipeline_id);
 void cmd_bind_gfx_pipeline(PassID pass_id, GfxPipelineID pipeline_id);
 void cmd_bind_index_buffer(PassID pass_id, BufferID buf, size_t offset);
 void cmd_bind_vertex_buffer(PassID pass_id, BufferID buf, size_t offset);
 void cmd_bind_indirect_buffer(PassID pass_id, BufferID buf, size_t offset);
-
 void cmd_dispatch(PassID pass_id, uint32_t countx, uint32_t county, uint32_t countz);
-
 void cmd_use_buffer(PassID pass_id, BufferID buf_id, Usage usage);
 void cmd_use_image(PassID pass_id, ImageID img_id, Usage usage);
-
 void cmd_push_constant(PassID pass_id, GfxPipelineID pipeline_id, 
 					   uint32_t offset, uint32_t size, void *data);
 void cmd_push_constant(PassID pass_id, ComputePipelineID pipeline_id, 
 					   uint32_t offset, uint32_t size, void *data);
-
 void cmd_custom(PassID pass_id, std::function<void(VkCommandBuffer)>&& callback);
 };
 

@@ -82,7 +82,7 @@ void main()
 
 	float scale = min(d.x, d.y);
 
-	float w = 0.10 * scale;
+	float w = 0.05 * scale;
 	float h = 0.25 * scale;
 
 	h *= clamp(v, -1.f, 1.f);

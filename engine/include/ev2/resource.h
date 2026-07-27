@@ -10,8 +10,6 @@ MAKE_HANDLE_VERSIONED(Texture);
 
 namespace ev2 {
 
-MAKE_ASSET_HANDLE(ImageAsset);
-
 enum ImageFormat
 {
 	IMAGE_FORMAT_RGBA8,
@@ -126,13 +124,6 @@ uint32_t get_bindless_handle(GfxContext *ctx, TextureID h);
 ImageID get_backing_image(GfxContext *ctx, TextureID h);
 void get_texture_gpu_handle(GfxContext *ctx, TextureID h, VkImageView *view);
 void get_texture_dims(GfxContext *ctx, TextureID tex, uint32_t *w, uint32_t *h, uint32_t*d);
-
-//------------------------------------------------------------------------------
-// Image assets
-
-ImageAssetID load_image_asset(GfxContext *ctx, const char *path);
-void unload_image_asset(GfxContext *ctx, ImageAssetID id);
-ImageID get_image_resource(GfxContext *ctx, ImageAssetID id);
 
 };
 

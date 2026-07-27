@@ -688,12 +688,12 @@ uint64_t UploadPool::commit_image(uint32_t idx, ImageID img, const ImageUpload *
 			.imageOffset = VkOffset3D{
 				.x = (int32_t)regions[i].x,
 				.y = (int32_t)regions[i].y,
-				.z = (int32_t)regions[i].z,
+				.z = 0,
 			},
 			.imageExtent = VkExtent3D{
 				.width = regions[i].w,
 				.height = regions[i].h,
-				.depth = regions[i].d,
+				.depth = 1,
 			},
 		};
 		queues[0].images.push_back(copy);

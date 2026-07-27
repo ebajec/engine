@@ -55,7 +55,7 @@ void main()
 		}
 
 		float lap = (sum - 4.f * vc) / (DELTA_X * DELTA_X);
-		//vc += TIMESTEP * 0.01 * lap;
+		vc += TIMESTEP * 0.01 * lap;
 
 		// zero any wall velocities which border a oob cell 
 		ivec2 front = idx;

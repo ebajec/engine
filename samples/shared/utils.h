@@ -6,7 +6,7 @@
 #include <ev2/resource.h>
 
 template<typename T>
-static uint64_t initialize_image(ev2::GfxContext *ctx, ev2::ImageID img, T defval = (T)0)
+static uint64_t initialize_image(ev2::GfxContext *ctx, ev2::ImageID img, T defval = (T)0, uint32_t layer = 0)
 {
 	uint32_t w, h, d;
 	ev2::get_image_dims(ctx, img, &w, &h, &d);
@@ -21,8 +21,11 @@ static uint64_t initialize_image(ev2::GfxContext *ctx, ev2::ImageID img, T defva
 		.src_offset = 0,
 		.x = 0, 
 		.y = 0,
+		.z = layer,
+
 		.w = w,
 		.h = h,
+		.d = 1
 	};
 	return ev2::commit_image_uploads(ctx, uc, img, &upload, 1);
 }

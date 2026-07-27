@@ -12,6 +12,7 @@
 
 #include "backends/vulkan/resource.h"
 #include "backends/vulkan/pipeline.h"
+#include "backends/vulkan/mesh.h"
 #include "backends/vulkan/upload_pool.h"
 
 #include <glm/mat4x4.hpp>
@@ -555,6 +556,7 @@ struct GfxContext
 	MAKE_ASSET_HANDLE_ACCESS(GfxPipeline, gfx_pipeline);
 	MAKE_ASSET_HANDLE_ACCESS(ComputePipeline, compute_pipeline);
 	MAKE_ASSET_HANDLE_ACCESS(Shader, shader);
+	MAKE_ASSET_HANDLE_ACCESS(Mesh, mesh);
 };
 
 extern VkPipelineRenderingCreateInfoKHR get_swapchain_rendering_info(GfxContext *ctx);
