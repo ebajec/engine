@@ -74,6 +74,14 @@ ev2::Result bind_texture(
 	TextureID texture_handle  
 ); 
 
+ev2::Result bind_texture_indexed(
+	GfxContext *ctx, 
+	BindingsID binding_handle,
+	const char *name,
+	uint32_t dst_index,
+	TextureID texture_handle  
+); 
+
 /// @brief Bind a single mip level + layer of an image to the binding
 /// given by name.  The binding is assumed to not be an array type.
 ev2::Result bind_image(
@@ -136,8 +144,10 @@ void destroy_render_target(
 VkImageView get_render_target_color_view(RenderTargetID target);
 ImageID get_render_target_color_image(RenderTargetID target);
 
+void get_render_target_views(RenderTargetID handle, 
+							  VkImageView* color, VkImageView* depth);
 void get_render_target_images(RenderTargetID target,
-	ev2::ImageID *color, ev2::ImageID *depth);
+							  ev2::ImageID *color, ev2::ImageID *depth);
 
 ev2::Result begin_frame(GfxContext *ctx);
 ev2::Result end_frame(GfxContext *ctx);
@@ -153,6 +163,19 @@ struct Rect
 };
 
 constexpr Rect WHOLE_IMAGE = Rect{0, 0, UINT32_MAX, UINT32_MAX};
+
+struct GfxPassInfo
+{
+	RenderTargetID target;
+	ViewID view;
+	Rect viewport = WHOLE_IMAGE;
+	Rect scissor = WHOLE_IMAGE;
+
+	bool clear_color : 1 = true;
+	bool clear_depth : 1 = true;
+};
+
+PassID begin_gfx_pass(GfxContext *ctx, const GfxPassInfo *info);
 
 // @brief Begin a render pass.  Configures bindings for pass-specific data  
 // (view matrices, etc).    
@@ -182,8 +205,8 @@ void cmd_bind_compute_pipeline(PassID pass_id, ComputePipelineID pipeline_id);
 void cmd_bind_gfx_pipeline(PassID pass_id, GfxPipelineID pipeline_id);
 void cmd_bind_index_buffer(PassID pass_id, BufferID buf, size_t offset);
 void cmd_bind_vertex_buffer(PassID pass_id, BufferID buf, size_t offset);
-void cmd_bind_indirect_buffer(PassID pass_id, BufferID buf, size_t offset);
 void cmd_dispatch(PassID pass_id, uint32_t countx, uint32_t county, uint32_t countz);
+void cmd_draw_indirect(PassID pass_id, BufferID buf, size_t offset, uint32_t count, uint32_t stride); 
 void cmd_use_buffer(PassID pass_id, BufferID buf_id, Usage usage);
 void cmd_use_image(PassID pass_id, ImageID img_id, Usage usage);
 void cmd_push_constant(PassID pass_id, GfxPipelineID pipeline_id, 

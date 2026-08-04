@@ -342,6 +342,19 @@ ImageID get_render_target_color_image(RenderTargetID handle)
 	return target->color_img;
 }
 
+void get_render_target_views(RenderTargetID handle,
+							 VkImageView *color, VkImageView *depth)
+{
+	RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget, handle);
+	assert(target);
+
+	if (color && (target->flags & RENDER_TARGET_CREATE_COLOR_BIT))
+		*color = target->color_view;
+	if (depth && (target->flags & 
+		(RENDER_TARGET_CREATE_DEPTH_BIT | RENDER_TARGET_CREATE_STENCIL_BIT)))
+		*depth = target->depth_view;
+}
+
 void get_render_target_images(RenderTargetID handle,
 	ev2::ImageID *color, ev2::ImageID *depth)
 {
@@ -381,6 +394,7 @@ void destroy_view(GfxContext *ctx, ViewID handle)
 
 static void populate_rendering_info(
 	const RenderTarget *p_target,
+	const RenderPass *pass,
 	VkRenderingInfo *p_rendering_info,
 	VkRenderingAttachmentInfo *p_color_info,
 	VkRenderingAttachmentInfo *p_depth_info,
@@ -398,7 +412,8 @@ static void populate_rendering_info(
 			.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 			.resolveMode = VK_RESOLVE_MODE_NONE,
 			.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+			.loadOp = pass->info.clear_color ? 
+				VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 			.clearValue = VkClearValue{
 				.color = {
@@ -416,7 +431,8 @@ static void populate_rendering_info(
 			.resolveMode = VK_RESOLVE_MODE_NONE,
 			.resolveImageView = VK_NULL_HANDLE,
 			.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+			.loadOp = pass->info.clear_depth ? 
+				VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 			.clearValue = VkClearValue{
 				.depthStencil = {
@@ -478,14 +494,24 @@ PassID begin_gfx_pass(
 	Rect in_viewport, Rect in_scissor
 )
 {
+	GfxPassInfo info = {
+		.target = target_handle,
+		.view = view_handle,
+		.viewport = in_viewport,
+		.scissor = in_scissor,
+	};
+
+	return begin_gfx_pass(ctx, &info);
+}
+
+PassID begin_gfx_pass(GfxContext *ctx, const GfxPassInfo *info)
+{
 	ctx->assert_inside_frame();
 
 	if (EV2_IS_NULL(ctx->view_data.buffer))
 		log_error("No views created.  Did you remember to call begin_frame()?"); 
 
-	if (view_handle.id == 0) {
-		view_handle = ctx->default_view;
-	}
+	ViewID view_id = info->view.is_valid() ? info->view : ctx->default_view;
 
 	FrameContext *frame = ctx->get_current_frame();
 
@@ -495,17 +521,18 @@ PassID begin_gfx_pass(
 		ctx->graphics_family->index
 	);
 
-	Rect scissor = in_scissor;
+	Rect scissor = info->scissor;
 
-	if (in_scissor.h == 0 || in_scissor.w == 0) {
-		scissor = in_viewport;
+	if (info->scissor.h == 0 || info->scissor.w == 0) {
+		scissor = info->viewport;
 	}
 
 	std::unique_ptr<RenderPass> gfx (new RenderPass{
-		.target = target_handle,
-		.view = view_handle,
-		.viewport = in_viewport,
-		.scissor = scissor
+		.target = info->target,
+		.view = view_id,
+		.viewport = info->viewport,
+		.scissor = scissor,
+		.info = *info
 	});
 
 	VkDescriptorSetLayout layout = 
@@ -528,7 +555,7 @@ PassID begin_gfx_pass(
 
 	VkDescriptorBufferInfo buffer_info = {
 		.buffer = buf->buffer,
-		.offset = ctx->view_data.get_offset((uint32_t)view_handle.id),
+		.offset = ctx->view_data.get_offset((uint32_t)view_id.id),
 		.range = ctx->view_data.stride
 	};
 
@@ -549,13 +576,13 @@ PassID begin_gfx_pass(
 
 	pass->gfx = std::move(gfx);
 
-	const bool render_to_swapchain = !target_handle.is_valid();
+	const bool render_to_swapchain = !info->target.is_valid();
 
 	PassID pass_id = EV2_HANDLE_CAST(Pass, pass); 
 
 	if (render_to_swapchain) {
 		ev2::cmd_use_image(pass_id, ctx->depth_buffer, ev2::USAGE_DEPTH_ATTACHMENT);
-	} else if (RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget,target_handle)){
+	} else if (RenderTarget *target = EV2_TYPE_PTR_CAST(RenderTarget,info->target)){
 		if (target->depth_img.is_valid())
 			ev2::cmd_use_image(pass_id, target->depth_img, ev2::USAGE_DEPTH_ATTACHMENT);
 		if (target->color_img.is_valid())
@@ -969,15 +996,17 @@ void cmd_bind_vertex_buffer(PassID pass_id, BufferID buf_id, size_t offset)
 	});
 }
 
-void cmd_bind_indirect_buffer(PassID pass_id, BufferID buf_id, size_t offset)
+void cmd_draw_indirect(PassID pass_id, BufferID buf_id, size_t offset, uint32_t count, uint32_t stride) 
 {
 	check_input(pass_id);
 	check_input(buf_id);
 
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
-	pass->cmds.push_back(CmdBindIndirectBuffer{
+	pass->cmds.push_back(CmdDrawIndirect{
 		.buffer = buf_id,
-		.offset = offset
+		.offset = offset,
+		.count = count, 
+		.stride = stride,
 	});
 }
 
@@ -1360,7 +1389,7 @@ static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 				case BindResources:
 				case BindVertexBuffer:
 				case BindIndexBuffer:
-				case BindIndirectBuffer:
+				case DrawIndirect:
 				case PushConstant:
 				case Custom:
 				case Clear:
@@ -1777,7 +1806,8 @@ static void rg_record_gfx_pass_begin(RenderGraph*rg, const PassNode &node, VkCom
 
 	VkRenderingAttachmentInfo color_info, depth_info, stencil_info; VkRenderingInfo rendering_info;
 
-	populate_rendering_info(target, &rendering_info, &color_info, &depth_info, &stencil_info);
+	populate_rendering_info(target, render_pass,
+		&rendering_info, &color_info, &depth_info, &stencil_info);
 
 	vkCmdBeginRendering(cmds, &rendering_info);
 
@@ -1918,7 +1948,7 @@ static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBu
 				vkCmdBindVertexBuffers(cmds, 0, 1, &buffer->buffer, &cmd.offset);
 				break;
 			}
-			case BindIndirectBuffer: {
+			case DrawIndirect: {
 				break;
 			}
 			case PushConstant: {

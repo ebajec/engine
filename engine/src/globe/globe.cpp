@@ -979,7 +979,6 @@ void globe_draw(const Globe *globe, ev2::PassID pass)
 	ev2::cmd_bind_resources(pass, globe->render_data.bindings);
 	globe->gpu_cache->bind_textures(1);
 
-	ev2::cmd_bind_indirect_buffer(pass, data.indirect, 0);
 	ev2::cmd_bind_index_buffer(pass, data.ibo, 0);
 	ev2::cmd_bind_vertex_buffer(pass, data.vbo, 0);
 

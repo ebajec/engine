@@ -320,6 +320,8 @@ struct RenderPass
 	Rect viewport;
 	Rect scissor;
 
+	GfxPassInfo info;
+
 	// Contains UBO with view data.
 	VkDescriptorSet descriptor_set;
 

@@ -606,14 +606,16 @@ uint64_t UploadPool::post_commit_sync(entry_t *ent, ResourceState *state)
 
 	if (has_semaphore) {
 		for (uint32_t i = 0; i < sync_count; ++i) {
-			assert(syncs[i].semaphore);
-			queues[0].waits.push_back(VkSemaphoreSubmitInfo{
-				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-				.semaphore = syncs[i].semaphore,
-				.value = syncs[i].wait_value,
-				.stageMask = dst_stage,
-				.deviceIndex = 0, 
-			});
+			if (syncs[i].semaphore != semaphore) {
+				assert(syncs[i].semaphore);
+				queues[0].waits.push_back(VkSemaphoreSubmitInfo{
+					.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+					.semaphore = syncs[i].semaphore,
+					.value = syncs[i].wait_value,
+					.stageMask = dst_stage,
+					.deviceIndex = 0, 
+				});
+			}
 		}
 	}
 	state->sync_write(semaphore, done_value);

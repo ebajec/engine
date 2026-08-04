@@ -160,9 +160,11 @@ struct CmdBindVertexBuffer{
 	BufferID buffer;
 	VkDeviceSize offset;
 };
-struct CmdBindIndirectBuffer{
+struct CmdDrawIndirect{
 	BufferID buffer;
 	VkDeviceSize offset;
+	uint32_t count;
+	uint32_t stride;
 };
 
 struct CmdPushConstant{
@@ -199,7 +201,7 @@ enum CmdType
 	BindResources,
 	BindIndexBuffer,
 	BindVertexBuffer,
-	BindIndirectBuffer,
+	DrawIndirect,
 	PushConstant,
 	Clear,
 	Dispatch,
@@ -221,7 +223,7 @@ struct Command {
 		CmdBindResources 		bind_resources;
 		CmdBindIndexBuffer		bind_index_buffer;
 		CmdBindVertexBuffer		bind_vertex_buffer;
-		CmdBindIndirectBuffer	bind_indirect_buffer;
+		CmdDrawIndirect			draw_indirect;
 		CmdPushConstant			push_constant;
 		CmdClear				clear;
 		CmdDispatch 			dispatch;
@@ -236,7 +238,7 @@ struct Command {
 	COMMAND_UNION_CONVERSION(BindResources, bind_resources)
 	COMMAND_UNION_CONVERSION(BindIndexBuffer, bind_index_buffer)
 	COMMAND_UNION_CONVERSION(BindVertexBuffer, bind_vertex_buffer)
-	COMMAND_UNION_CONVERSION(BindIndirectBuffer, bind_indirect_buffer)
+	COMMAND_UNION_CONVERSION(DrawIndirect, draw_indirect)
 	COMMAND_UNION_CONVERSION(PushConstant, push_constant)
 	COMMAND_UNION_CONVERSION(Clear, clear)
 	COMMAND_UNION_CONVERSION(Dispatch, dispatch)

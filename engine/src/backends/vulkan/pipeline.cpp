@@ -872,13 +872,13 @@ static ev2::Result initialize_gfx_pipeline_vk_pipeline(
 	};
 
     VkPipelineColorBlendAttachmentState colorBlendAttachment{
-    	.blendEnable = VK_FALSE,
-    	.srcColorBlendFactor = VK_BLEND_FACTOR_ONE, // Optional
-    	.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO, // Optional
-    	.colorBlendOp = VK_BLEND_OP_ADD, // Optional
-    	.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE, // Optional
-    	.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO, // Optional
-    	.alphaBlendOp = VK_BLEND_OP_ADD, // Optional
+    	.blendEnable = VK_TRUE,
+    	.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+    	.dstColorBlendFactor = VK_BLEND_FACTOR_ONE,
+    	.colorBlendOp = VK_BLEND_OP_ADD,
+    	.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+    	.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+    	.alphaBlendOp = VK_BLEND_OP_ADD,
     	.colorWriteMask = 
 			VK_COLOR_COMPONENT_R_BIT | 
 			VK_COLOR_COMPONENT_G_BIT | 
@@ -1566,11 +1566,11 @@ ev2::Result bind_buffer(
 	});
 	return ev2::SUCCESS;
 }
-
-ev2::Result bind_texture(
+static ev2::Result bind_texture_internal(
 	GfxContext *ctx, 
 	BindingsID id,
 	const char *name,
+	uint32_t dst_index,
 	TextureID texture_handle  
 ) 
 {
@@ -1606,7 +1606,7 @@ ev2::Result bind_texture(
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 		.dstSet = bindings->descriptor_set,
 		.dstBinding = binding.binding,
-		.dstArrayElement = 0,
+		.dstArrayElement = dst_index,
 		.descriptorCount = 1,
 		.descriptorType = binding.descriptorType,
 	};
@@ -1618,6 +1618,38 @@ ev2::Result bind_texture(
 	});
 	return ev2::SUCCESS;
 }
+
+ev2::Result bind_texture(
+	GfxContext *ctx, 
+	BindingsID id,
+	const char *name,
+	TextureID texture_handle  
+) 
+{
+	return bind_texture_internal(
+		ctx, 
+		id,
+		name,
+		0,
+		texture_handle);  
+}
+
+ev2::Result bind_texture_indexed(
+	GfxContext *ctx, 
+	BindingsID id,
+	const char *name,
+	uint32_t dst_index,
+	TextureID texture_handle  
+) 
+{
+	return bind_texture_internal(
+		ctx, 
+		id,
+		name,
+		dst_index,
+		texture_handle);  
+}
+
 
 static ev2::Result bind_image_internal(
 	GfxContext *ctx,
