@@ -11,22 +11,21 @@ layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 layout (set = 1, r32f, binding = 3) uniform image2D v_in[DIMS];
 layout (set = 1, r32f, binding = 4) uniform writeonly image2D v_out[DIMS];
 
-//layout (set = 1, binding = 5) uniform sampler2D q_in;
-//layout (set = 1, r32f, binding = 6) uniform writeonly image2D q_out;
+layout (set = 1, binding = 5) uniform sampler2D q_in[2];
+layout (set = 1, r32f, binding = 6) uniform writeonly image2D q_out[2];
+
+layout (push_constant) uniform PC {
+	uint u_q_idx;
+};
 
 float sample_v(int coord, vec2 p)
 {
 	ivec2 size = imageSize(v_in[coord]); 
-	//int Nx = textureSize(q_in,0).x;
-	//int Ny = Nx - 1;
 
 	p[(1 + coord) & 0x1] -= 0.5;
 
 	float s = p.x;
 	float t = p.y;
-
-	//float s = p.x;
-	//float t = p.y - 0.5;
 
 	int i0 = int(floor(s));
 	int j0 = int(floor(t));
@@ -74,8 +73,41 @@ vec2 RK4(vec2 x0, float dt)
 
 vec2 cursor_jet(vec2 c, out float rho)
 {
+	rho = 0.f;
+
 	if (!bool(u_cursor_flags))
 		return vec2(0);
+
+	vec2 size = vec2(imageSize(bd_mask));
+
+	vec2 p1 = u_cursor_prev * size;
+	vec2 p2 = u_cursor*size;
+	vec2 vel = p2 - p1;
+
+	vec2 O = p2 - vel*0.5;
+
+	float speed = length(vel);
+
+	if (speed > size.x/4)
+		return vec2(0);
+
+	bool valid = speed > 1e-3; 
+
+	float S = sqrt((valid ? 3*speed : 1.f));
+	vec2 V = valid ? normalize(vel) : vec2(0);
+	vec2 X = vec2(V.y, -V.x);
+
+	mat2 frame = valid ? mat2(V/(2*S),2*X/S) : mat2(1/S);
+	vec2 r = (c - O)*frame;
+
+	rho = 0.04 * S * exp(-dot(r,r));
+	return 0.3*S * V * exp(-dot(r,r));
+}
+
+float cursor_stuff(vec2 c)
+{
+	if (!bool(u_cursor_flags))
+		return 0.f;
 
 	vec2 size = vec2(imageSize(bd_mask));
 	vec2 cursor = u_cursor*size;
@@ -85,10 +117,8 @@ vec2 cursor_jet(vec2 c, out float rho)
 
 	float speed = length(vcursor);
 
-	if (speed > size.x/4)
-		return vec2(0);
-
-	speed *= 100.f/float(size.x);
+	if (speed > 64)
+		return 0.f;
 
 	bool valid = speed > 1e-3; 
 
@@ -96,17 +126,24 @@ vec2 cursor_jet(vec2 c, out float rho)
 	vec2 V = valid ? normalize(vcursor) : vec2(0);
 	vec2 X = vec2(V.y, -V.x);
 
-	mat2 frame = valid ? mat2(V/(2*S),2*X/S) : mat2(1/S);
+	mat2 frame = valid ? mat2(V/(2*S),X) : mat2(1/S);
 	vec2 r = (c - O)*frame;
-	vec2 rv = vec2(r.x, r.y);
 
-	rho = exp(-dot(r,r));
-	return S * V * exp(-dot(r,r));
+	return 0.1*S * exp(-dot(r,r));
+}
+
+float get_q(vec2 pos)
+{
+	vec2 size = vec2(imageSize(q_out[u_q_idx]));
+	vec2 uv = clamp(pos, vec2(0.5), size - 0.5)/size;
+	return texture(q_in[u_q_idx], clamp(uv, 0, 1)).r;
 }
 
 void main()
 {
     ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+
+	const float omega = 0.8f;
 
 	for (int i = 0; i < DIMS; ++i) {
 		if (any(greaterThanEqual(idx, imageSize(v_out[i]))))
@@ -115,34 +152,35 @@ void main()
 		vec2 face_offset = vec2(0.5); 
 		face_offset[i] = 0;
 
-		vec2 pos = vec2(idx.xy) + face_offset;
-		vec2 src = pos - RK4(pos, TIMESTEP);
+		vec2 dst = vec2(idx.xy) + face_offset;
+		vec2 src = dst - RK4(dst, TIMESTEP);
 
-		float v_hat = sample_v(i, src);
+		float v_src = sample_v(i, src);
 
 		float rho;
-		vec2 force = cursor_jet(pos, rho);
+		vec2 force = cursor_jet(dst, rho);
 
-		v_hat += force[i];
+		v_src += force[i];
 
-		imageStore(v_out[i], idx, vec4(v_hat));
+		if (i == 1)
+			v_src -= u_gravity * get_q(dst);
+
+		imageStore(v_out[i], idx, vec4(v_src));
 	}
 
-	//ivec2 q_size = imageSize(q_out);
-	//if (all(lessThan(idx, q_size)))
-	//{
-	//	vec2 pos = vec2(idx.xy) + vec2(0.5);
-	//	vec2 src = pos - RK4(pos, TIMESTEP);
+	ivec2 q_size = imageSize(q_out[u_q_idx]);
+	if (all(lessThan(idx, q_size)))
+	{
+		vec2 dst = vec2(idx.xy) + vec2(0.5);
+		vec2 src = dst - RK4(dst, TIMESTEP);
 
-	//	float q_hat = texture(q_in, src/vec2(q_size)).r;
+		float q_src = get_q(src);
 
-	//	float rho;
-	//	cursor_jet(pos, rho);
+		float wt = imageLoad(bd_mask, idx).r;
 
-	//	q_hat += rho;
+		q_src += cursor_stuff(dst) - 0.000*q_src;
+		q_src *= wt; 
 
-	//	imageStore(q_out, idx, vec4(q_hat));
-	//}
-
+		imageStore(q_out[u_q_idx], idx, vec4(q_src));
+	}
 }
-

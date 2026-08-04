@@ -47,6 +47,8 @@ struct ImageViewerPanel
 
 	int init(ev2::GfxContext *ctx, ev2::ImageID image);
 	int update(ev2::GfxContext *ctx);
+
+	// Render into the underlying panel's target, clearing old values
 	void render(ev2::GfxContext *ctx);
 	void destroy(ev2::GfxContext *ctx);
 	void record_draw(ev2::PassID pass);

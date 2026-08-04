@@ -61,7 +61,7 @@ void main()
 
 		v = texelFetch(u_textures[v_img[0]], idx, 0).r; 
 
-		color = vec4(abs(10*v), 0, 0, clamp(abs(v), 0.f, 1.f));
+		color = vec4(abs(10*v), 0, 0, clamp(abs(2*v), 0.f, 1.f));
 	} else {
 		uint iy = inst - Nx;
 
@@ -75,14 +75,14 @@ void main()
 		O = d * vec2(float(idx.x) + 0.5, float(idx.y));
 
 		v = texelFetch(u_textures[v_img[1]], idx, 0).r; 
-		color = vec4(0, abs(10*v), 0, clamp(abs(v), 0.f, 1.f));
+		color = vec4(0, abs(10*v), 0, clamp(abs(2*v), 0.f, 1.f));
 	}
 
 	v *= 10.f;
 
 	float scale = min(d.x, d.y);
 
-	float w = 0.05 * scale;
+	float w = 0.1 * scale;
 	float h = 0.25 * scale;
 
 	h *= clamp(v, -1.f, 1.f);

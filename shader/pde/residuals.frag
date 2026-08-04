@@ -37,7 +37,7 @@ void main()
 		float k = tanh(pow(1000*length(grad), 5));
  		rgb = vec3(k);
 	} else {
-		rgb = jet_palette(100*abs(c));
+		rgb = jet_palette(abs(c));
 	}
 
 	FragColor = vec4(rgb,1); 

@@ -1,8 +1,12 @@
 #ifndef NVS_GLSL
 #define NVS_GLSL
 
-#define TIMESTEP 2.0
-#define DELTA_X 0.5f
+#extension GL_GOOGLE_include_directive : require
+
+#include "fluid_particle.glsl"
+
+#define TIMESTEP 0.1
+#define DELTA_X 1.0f
 #define NU 0.0
 #define RHO 1.f
 

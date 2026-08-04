@@ -230,7 +230,13 @@ void ImageViewerPanel::render(ev2::GfxContext *ctx)
 		return;
 	}
 
-	ev2::PassID pass = ev2::begin_gfx_pass(ctx, panel->get_target(), rd.camera);
+	ev2::GfxPassInfo pass_info = {
+		.target = panel->get_target(),
+		.view = rd.camera,
+		.clear_color = true,
+		.clear_depth = true
+	};
+	ev2::PassID pass = ev2::begin_gfx_pass(ctx, &pass_info);
 	record_draw(pass);
 	ev2::end_pass(ctx, pass);
 }
