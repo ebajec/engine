@@ -34,11 +34,11 @@ void main()
 
 		vec2 grad = 0.5 * vec2(r - l, t - b); 
 
-		float k = 10*length(grad);
+		float k = 0.3*length(grad);
 		//rgb = 10*vec3(-grad.y, grad.y, 0);
 		rgb = vec3(k);
 	} else {
-		rgb = vec3(c, 0, -c);
+		rgb = 0.15*vec3(c, 0, -c);
 	}
 
 	if (in_uv.x < 0.f || in_uv.y < 0.f || in_uv.x > 1.f || in_uv.y > 1.f) {

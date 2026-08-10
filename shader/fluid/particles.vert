@@ -30,7 +30,7 @@ void main()
 	FluidParticle part = u_parts[gl_InstanceIndex];
 	int vtx = gl_VertexIndex;
 
-	float w = 2.5;
+	float w = 1.5;
 
 	vec2 pos;
 	if (vtx < 3) {
@@ -39,11 +39,13 @@ void main()
 		pos = part.pos + w*corners_ccw[vtx - 1];
 	}
 
-	float f_vel = clamp(dot(part.vel, part.vel), 0, 1);
+	float f_vel = tanh(0.8*dot(part.vel, part.vel));
+
+	vec3 base_color = jet_palette(f_vel);
 
 	out_pos = pos;
 	out_center = part.pos;
-	out_color = mix(vec4(0.0), vec4(jet_palette(f_vel),1), f_vel);
+	out_color = mix(vec4(0.0), vec4(1), f_vel);
 
 	gl_Position = u_view.pv * vec4(world * vec3(pos, 1) - vec2(1), 0, 1);
 }

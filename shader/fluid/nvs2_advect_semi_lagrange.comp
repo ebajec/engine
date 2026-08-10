@@ -8,15 +8,8 @@ layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 #define DIMS 2
 
-layout (set = 1, r32f, binding = 3) uniform image2D v_in[DIMS];
-layout (set = 1, r32f, binding = 4) uniform writeonly image2D v_out[DIMS];
-
-layout (set = 1, binding = 5) uniform sampler2D q_in[2];
-layout (set = 1, r32f, binding = 6) uniform writeonly image2D q_out[2];
-
-layout (push_constant) uniform PC {
-	uint u_q_idx;
-};
+layout (set = 1, r32f, binding = 0) uniform image2D v_in[DIMS];
+layout (set = 1, r32f, binding = 1) uniform writeonly image2D v_out[DIMS];
 
 float sample_v(int coord, vec2 p)
 {
@@ -132,13 +125,6 @@ float cursor_stuff(vec2 c)
 	return 0.1*S * exp(-dot(r,r));
 }
 
-float get_q(vec2 pos)
-{
-	vec2 size = vec2(imageSize(q_out[u_q_idx]));
-	vec2 uv = clamp(pos, vec2(0.5), size - 0.5)/size;
-	return texture(q_in[u_q_idx], clamp(uv, 0, 1)).r;
-}
-
 void main()
 {
     ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
@@ -162,25 +148,6 @@ void main()
 
 		v_src += force[i];
 
-		if (i == 1)
-			v_src -= u_gravity * get_q(dst);
-
 		imageStore(v_out[i], idx, vec4(v_src));
-	}
-
-	ivec2 q_size = imageSize(q_out[u_q_idx]);
-	if (all(lessThan(idx, q_size)))
-	{
-		vec2 dst = vec2(idx.xy) + vec2(0.5);
-		vec2 src = dst - RK4(dst, TIMESTEP);
-
-		float q_src = get_q(src);
-
-		float wt = imageLoad(bd_mask, idx).r;
-
-		q_src += cursor_stuff(dst) - 0.000*q_src;
-		q_src *= wt; 
-
-		imageStore(q_out[u_q_idx], idx, vec4(q_src));
 	}
 }
