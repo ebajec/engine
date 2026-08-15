@@ -57,7 +57,7 @@ void main()
 
 	vec4 val = texture(u_tex,uv);
 
-	const float S = 10.f;
+	const float S = 0.1f;
 
 	vec2 grad_x = S*vec2(grad.du.x,grad.dv.x);
 
@@ -74,13 +74,13 @@ void main()
 	vec3 speed_color = 
 		speed*speed * vec3(0.8f, 0.6, 0.2f) * color_val;
 
-	vec4 color = tanh(val.r)*vec4(jet_palette(val.r), 1);//vec4(track_color, color_val);
+	vec4 color = tanh(val.r)*vec4(jet_palette(S*val.r), 1);//vec4(track_color, color_val);
 
 	ivec2 pix = ivec2(uv*vec2(size));
 
 	if (uv.x < 0.f || uv.y < 0.f || uv.x > 1.f || uv.y > 1.f) {
 		FragColor = vec4(0.5);
 	} else {
-		FragColor = vec4(f*color.rgb,0.f);
+		FragColor = vec4(f*color.rgb,0.2f);
 	}
 }
