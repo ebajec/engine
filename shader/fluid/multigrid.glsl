@@ -6,6 +6,8 @@
 #define OOB_CELL_THRES 1e-2
 
 #extension GL_EXT_nonuniform_qualifier : require
+#extension GL_EXT_shader_8bit_storage : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
 
 layout (local_size_x = GROUPS, local_size_y = GROUPS, local_size_z = 1) in;
 
@@ -20,10 +22,12 @@ layout (set = 0, r32f, binding = 4) uniform image2D R2[MAX_MIPS];
 layout (set = 1, r32f, binding = 0) readonly uniform image2D in_lhs;
 layout (set = 1, r32f, binding = 1) readonly uniform image2D in_rhs;
 layout (set = 1, r32f, binding = 2) writeonly uniform image2D out_lhs;
-layout (set = 1, r8, binding = 3) readonly uniform image2D bd_mask[MAX_MIPS];
+layout (set = 1, r8_snorm, binding = 3) readonly uniform image2D bd_mask[MAX_MIPS];
 
 shared float block[GROUPS][GROUPS];
-shared float boundary[GROUPS][GROUPS];
+shared uint8_t boundary[GROUPS][GROUPS];
+
+const uint AIR = 0xFF;
 
 layout (push_constant, std430) uniform Inputs {
 	uint N;
@@ -48,6 +52,26 @@ bool inbounds(ivec2 idx)
 		any(greaterThanEqual(idx, ivec2(GROUPS))));
 }
 
+float get_bd(ivec2 p)
+{
+	uint cell = boundary[p.x][p.y]; 
+	if (cell == AIR)
+		return 1.f;
+	return float(cell) * (1.f/254.f); 
+}
+
+void set_bd(ivec2 p, float bd)
+{
+	if (bd < 0.f)
+		boundary[p.x][p.y] = uint8_t(AIR);
+	boundary[p.x][p.y] = uint8_t(254.f * bd);
+}
+
+float get_fluid(ivec2 p)
+{
+	return 1.f - float(boundary[p.x][p.y] == AIR);
+}
+
 float jacobi_it(ivec2 idx, float rhs, float h)
 {
 	ivec2 stencil[4] = {
@@ -60,8 +84,8 @@ float jacobi_it(ivec2 idx, float rhs, float h)
 	// assuming neumann boundary conditions with
 	// zero normal derivative toward out of bounds cells.  
 
-	float wt_c = boundary[idx.x][idx.y];
-	float c = block[idx.x][idx.y];
+	float wt_c = get_bd(idx);
+	float c = block[idx.x][idx.y] * get_fluid(idx);
 
 	float sum = 0.f;
 	float den = 0.f;
@@ -73,10 +97,10 @@ float jacobi_it(ivec2 idx, float rhs, float h)
 		if (!inb)
 			continue;
 
-		float wt = min(wt_c, boundary[p.x][p.y]);
+		float wt = min(wt_c, get_bd(p));
 
 		den += float(wt);
-		sum += wt * block[p.x][p.y]; 
+		sum += wt * block[p.x][p.y] * get_fluid(p); 
 	}
 
 	float u_next = den > 1e-3 ? (sum - h*h*rhs)/den : 0;

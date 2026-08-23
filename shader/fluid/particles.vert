@@ -9,9 +9,13 @@ layout (location = 0) out vec2 out_pos;
 layout (location = 1) flat out vec2 out_center;
 layout (location = 2) out vec4 out_color;
 
-layout (set = PER_DRAW_SET, binding = 0) readonly buffer Particles
+layout (set = PER_DRAW_SET, binding = 0) readonly buffer Positions
 {
-	FluidParticle u_parts[];
+	vec2 u_pos[];
+};
+layout (set = PER_DRAW_SET, binding = 1) readonly buffer Velocities
+{
+	vec2 u_vel[];
 };
 
 layout (push_constant) uniform PC {
@@ -27,24 +31,26 @@ void main()
 	 	vec2(-1,1)
 	};
 
-	FluidParticle part = u_parts[gl_InstanceIndex];
+	vec2 part_pos = u_pos[gl_InstanceIndex];
+	vec2 part_vel = u_vel[gl_InstanceIndex];
+
 	int vtx = gl_VertexIndex;
 
 	float w = 1.0;
 
 	vec2 pos;
 	if (vtx < 3) {
-		pos = part.pos + w*corners_ccw[vtx];
+		pos = part_pos + w*corners_ccw[vtx];
 	} else {
-		pos = part.pos + w*corners_ccw[vtx - 1];
+		pos = part_pos + w*corners_ccw[vtx - 1];
 	}
 
-	float f_vel = tanh(0.8*dot(part.vel, part.vel));
+	float f_vel = tanh(0.8*dot(part_vel, part_vel));
 
 	vec3 base_color = jet_palette(f_vel);
 
 	out_pos = pos;
-	out_center = part.pos;
+	out_center = part_pos;
 	out_color = mix(vec4(0.0), vec4(1), f_vel);
 
 	gl_Position = u_view.pv * vec4(world * vec3(pos, 1) - vec2(1), 0, 1);

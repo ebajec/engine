@@ -18,21 +18,19 @@
 
 float RHS(ivec2 idx, uint level, out float wt)
 {
-	ivec2 size = imageSize(R1[level]);
 	wt = test_boundary(idx,level);
-	return bool(wt) ? imageLoad(R1[level], idx).r : 0;
+	return bool(wt > 0.f) ? imageLoad(R1[level], idx).r : 0;
 }
 
 float LHS(ivec2 idx, out float wt)
 {
-	ivec2 size = imageSize(in_lhs);
 	wt = test_boundary(idx,0);
-	return bool(wt) ? imageLoad(in_lhs, idx).r : 0;
+	return bool(wt > 0.f) ? imageLoad(in_lhs, idx).r : 0;
 }
 
 float residual(ivec2 idx, float rhs, float h)
 {
-	float wt_c = boundary[idx.x][idx.y];
+	float wt_c = get_bd(idx);
 	float u = wt_c * block[idx.x][idx.y];
 
 	if (wt_c < OOB_CELL_THRES) {
@@ -49,10 +47,10 @@ float residual(ivec2 idx, float rhs, float h)
 	float t = block[t_idx.x][t_idx.y];
 	float b = block[b_idx.x][b_idx.y];
 
-	float wt_l = boundary[l_idx.x][l_idx.y];
-	float wt_r = boundary[r_idx.x][r_idx.y];
-	float wt_t = boundary[t_idx.x][t_idx.y];
-	float wt_b = boundary[b_idx.x][b_idx.y];
+	float wt_l = get_bd(l_idx);
+	float wt_r = get_bd(r_idx);
+	float wt_t = get_bd(t_idx);
+	float wt_b = get_bd(b_idx);
 
 	float lap = (
 		mix(u,l,wt_l) + mix(u,r,wt_r) + 
@@ -180,7 +178,7 @@ void main()
 		lhs = 0;
 	}
 
-	boundary[idx.x][idx.y] = bd; 
+	set_bd(idx, bd);
 	block[idx.x][idx.y] = lhs;  
 
 	for (int i = 0; i < u_iterations - 1; ++i) {

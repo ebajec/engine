@@ -6,6 +6,7 @@
 
 #include "poisson_solver.h"
 #include "boundary_editor.h"
+#include "grid_sim.h"
 
 #include <ev2/utils/log.h>
 #include <ev2/utils/common.h>
@@ -25,369 +26,313 @@
 #include <memory>
 #include <cstdlib>
 
-enum VelocityUpdateMode
-{
-	VELOCITY_UPDATE_SEMI_LAGRANGIAN,
-	VELOCITY_UPDATE_LAGRANGIAN
-};
-
-struct FluidParticle
-{
-	glm::vec2 pos;
-	glm::vec2 vel;
-};
-
-struct FluidSim
+struct FLIPFluidSim
 {
 	uint32_t grid_w;
 	uint32_t grid_h;
 
 	static constexpr uint32_t DIMS = 2;
 
-	ev2::ImageID v_img_1[DIMS];
-	ev2::ImageID v_img_2[DIMS];
+	ev2::ImageID v_pre_proj_img[DIMS];
+	ev2::ImageID v_proj_img[DIMS];
+	ev2::BufferID deposit_buf;
 
 	ev2::ImageID lap_p_img; // rhs of lap(phi) = f 
 	ev2::ImageID p_img; // pressure
 	
-	ev2::ImageID mask_img; // out of bounds mask: 0 = oob, 1 = inb
+	// solid mask: 
+	// 0 = solid, 
+	// 1 = free space
+	ev2::ImageID solid_mask_img;
 
-	ev2::TextureID lap_p_tex; // rhs of lap(phi) = f 
-	ev2::TextureID p_tex; // pressure
+	// boundary mask: 
+	// x < 0 -> air, 
+	// 0 < x < 1 -> solid,
+	// x = 1 -> fluid
+	ev2::ImageID bd_mask_img;
 	
-	ev2::TextureID mask_tex;
-	
-	ev2::BufferID ubo;
-	ev2::BufferID particles;
+	ev2::BufferID part_data;
 
 	uint32_t particle_count;
 
-	ev2::ComputePipelineID nvs_particles;
-	ev2::ComputePipelineID nvs_advect;
-	ev2::ComputePipelineID nvs_diffuse;
-	ev2::ComputePipelineID nvs_divergence;
-	ev2::ComputePipelineID nvs_project;
+	// shared descriptor set across all stages
+	ev2::BindingsID bindings;
 
-	ev2::BindingsID base_set;
-
-	ev2::BindingsID particles_set;
-	ev2::BindingsID advect_set;
-	ev2::BindingsID diffuse_set;
-	ev2::BindingsID pressure_set;
-	ev2::BindingsID project_set;
+	// correct velocity using projected grid and apply
+	// lagrangian advection step
+	ev2::ComputePipelineID p_advect;
+	// deposit velocities back into a buffer
+	ev2::ComputePipelineID p_deposit;
+	// compute divergence
+	ev2::ComputePipelineID p_divergence;
+	// after solving for pressure, correct the deposited velocities
+	ev2::ComputePipelineID p_project;
 
 	std::unique_ptr<PoissonSolver> pressure_solver;
 	std::unique_ptr<MeanSubtractor> mean_subtractor;
 
 	uint64_t step = 0;
 
-	struct Uniforms {
-		glm::vec2 cursor = glm::vec2(1,0.5);
-		glm::vec2 cursor_prev;
-		uint32_t flags;
-		float gravity = 0;
-	} uniforms;
+	size_t get_part_pos_offset()
+	{
+		return 0;
+	}
 
-	int update_advect_set(ev2::GfxContext *ctx);
-	int update_diffuse_set(ev2::GfxContext *ctx);
-	int update_divergence_set(ev2::GfxContext *ctx);
-	int update_project_set(ev2::GfxContext *ctx);
+	size_t get_part_vel_offset()
+	{
+		return get_part_pos_offset() + particle_count * sizeof(glm::vec2);
+	}
 
-	int init(ev2::GfxContext *ctx, uint32_t w, uint32_t h);
-	int update(ev2::GfxContext *ctx);
-	void step_sim(ev2::GfxContext *ctx);
-	void destroy(ev2::GfxContext *ctx);
+	size_t get_depost_buf_header_size() 
+	{
+		return DIMS * sizeof(uint32_t);
+	}
+	size_t get_depost_buf_data_size() 
+	{
+		return ((1 + grid_w) * (grid_h) + (grid_w) * (1 + grid_h)) * sizeof(glm::vec2); 
+	}
 
-	size_t get_particle_buffer_size() {
-		return particle_count * sizeof(FluidParticle);
+	int init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
+	{
+		if (!is_pow2(w) || !is_pow2(h))
+			return EXIT_FAILURE;
+
+		grid_w = w;
+		grid_h = h;
+
+		particle_count = grid_w * grid_h;
+
+		ev2::ImageUsageFlags usage = 
+			ev2::IMAGE_USAGE_STORAGE_BIT | 
+			ev2::IMAGE_USAGE_SAMPLED_BIT;
+
+		const glm::ivec2 v_grid_sizes[] = {
+			glm::ivec2(1 + grid_w, grid_h),
+			glm::ivec2(grid_w, 1 + grid_h),
+		};
+
+		for (int i = 0; i < DIMS; ++i) {
+			glm::ivec2 size = v_grid_sizes[i];
+			char buf[100];
+
+			v_pre_proj_img[i] = ev2::create_image(ctx, size.x, size.y, 1, ev2::IMAGE_FORMAT_32F, usage);
+
+			snprintf(buf, sizeof(buf), "v_pre_proj_%d", i);
+			ev2::set_image_name(ctx, v_pre_proj_img[i], buf);
+
+			v_proj_img[i] = ev2::create_image(ctx, size.x, size.y, 1, ev2::IMAGE_FORMAT_32F, usage);
+
+			snprintf(buf, sizeof(buf), "v_proj_%d", i);
+			ev2::set_image_name(ctx, v_proj_img[i], buf);
+		}
+
+		size_t deposit_buf_size = get_depost_buf_header_size() + get_depost_buf_data_size(); 
+
+		deposit_buf = ev2::create_buffer(ctx, deposit_buf_size,
+			ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT); 
+
+		part_data = ev2::create_buffer(ctx, particle_count * (sizeof(glm::vec2) + sizeof(glm::vec2)),
+			ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT | ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT); 
+
+		lap_p_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F, usage);
+		ev2::set_image_name(ctx, lap_p_img, "lap_p_img");
+
+		p_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F, usage);
+		ev2::set_image_name(ctx, p_img, "p_img");
+
+		bd_mask_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_R8_SNORM, usage);
+		ev2::set_image_name(ctx, bd_mask_img, "bd_mask");
+
+		solid_mask_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_R8_UNORM, usage);
+		ev2::set_image_name(ctx, solid_mask_img, "solid_mask");
+
+		pressure_solver.reset(new PoissonSolver);
+
+		int result = EXIT_SUCCESS;
+
+		if ((result = pressure_solver->init(ctx, w, h))) {
+			return result;
+		}
+
+		mean_subtractor.reset(new MeanSubtractor);
+
+		if ((result = mean_subtractor->init(ctx, grid_w, grid_h))) {
+			return result;
+		}
+		mean_subtractor->setup_bindings(ctx, lap_p_img);
+
+		p_advect = ev2::load_compute_pipeline(ctx, "shader/nvs2_flip_advect");
+		p_deposit = ev2::load_compute_pipeline(ctx, "shader/nvs2_flip_deposit");
+		p_divergence = ev2::load_compute_pipeline(ctx, "shader/nvs2_flip_divergence");
+		p_project = ev2::load_compute_pipeline(ctx, "shader/nvs2_flip_project");
+
+		bindings = ev2::create_bindings(ctx, p_advect, 0, ev2::BINDING_MODE_STATIC);
+
+		ev2::bind_image(ctx, bindings, "solid_mask", solid_mask_img);
+		ev2::bind_image(ctx, bindings, "bd_mask", bd_mask_img);
+
+		for (int i = 0; i < DIMS; ++i) {
+			ev2::bind_image_indexed(ctx, bindings, "v_pre_proj", i, v_pre_proj_img[i]);
+			ev2::bind_image_indexed(ctx, bindings, "v_proj", i, v_proj_img[i]);
+		}
+
+		ev2::bind_buffer(ctx, bindings, "ParticlePositions", part_data, 
+			get_part_pos_offset(), particle_count * sizeof(glm::vec2)); 
+		ev2::bind_buffer(ctx, bindings, "ParticleVelocity", part_data, 
+			get_part_vel_offset(), particle_count * sizeof(glm::vec2)); 
+		ev2::bind_buffer(ctx, bindings, "VelocityBuffer", deposit_buf, 0, deposit_buf_size);  
+
+		ev2::bind_image(ctx, bindings, "f_out", lap_p_img);
+		ev2::bind_image(ctx, bindings, "p_in", p_img);
+
+		ev2::flush_bindings(ctx, bindings);
+
+		return 0;
+	}
+
+	int update(ev2::GfxContext *ctx)
+	{
+		pressure_solver->set_inputs(ctx, p_img, lap_p_img, bd_mask_img);
+		return 0;
+	}
+
+	void step_sim(ev2::GfxContext *ctx)
+	{
+		uint32_t group_size = 16;
+
+		uint32_t gx = 1 + grid_w/group_size;
+		uint32_t gy = 1 + grid_h/group_size;
+
+		ev2::PassID pass = ev2::begin_compute_pass(ctx);
+
+		//------------------------------------------------------------------------------
+		// advection stage
+
+		for (int i = 0; i < DIMS; ++i) {
+			ev2::cmd_use_image(pass, v_pre_proj_img[i], ev2::USAGE_SAMPLED_COMPUTE);
+			ev2::cmd_use_image(pass, v_proj_img[i], ev2::USAGE_SAMPLED_COMPUTE);
+		}
+		ev2::cmd_use_buffer(pass, part_data, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
+
+		struct {
+			uint32_t count;
+			uint32_t step;
+		} pc_particle = {
+			.count = particle_count,
+			.step = (uint32_t)step
+		};
+
+		ev2::cmd_push_constant(pass, p_advect, 0, sizeof(pc_particle), &pc_particle);
+		ev2::cmd_bind_resources(pass, bindings);
+
+		ev2::cmd_bind_compute_pipeline(pass, p_advect);
+		ev2::cmd_dispatch(pass, 1 + (particle_count - 1)/32, 1, 1);
+
+		//------------------------------------------------------------------------------
+		// scatter/deposit stage
+
+		ev2::cmd_use_buffer(pass, deposit_buf, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
+		ev2::cmd_use_image(pass, solid_mask_img, ev2::USAGE_STORAGE_READ_COMPUTE);
+		ev2::cmd_use_image(pass, bd_mask_img, ev2::USAGE_STORAGE_WRITE_COMPUTE);
+
+		ev2::cmd_bind_compute_pipeline(pass, p_deposit);
+		ev2::cmd_dispatch(pass, 1 + (particle_count - 1)/128, 1, 1);
+
+		//------------------------------------------------------------------------------
+		// divergence stage
+
+		ev2::cmd_use_buffer(pass, deposit_buf, ev2::USAGE_STORAGE_READ_COMPUTE);
+		ev2::cmd_use_image(pass, lap_p_img, ev2::USAGE_STORAGE_WRITE_COMPUTE);
+
+		ev2::cmd_bind_compute_pipeline(pass, p_divergence);
+		ev2::cmd_dispatch(pass, gx, gy, 1);
+
+		//------------------------------------------------------------------------------
+		// pressure_solve
+
+		//mean_subtractor->record(pass);
+		
+		pressure_solver->record_setup(pass);
+		for (int i = 0; i < ((step == 0) ? 64 : 2); ++i) 
+			pressure_solver->record_v_cycle(pass);
+
+		//------------------------------------------------------------------------------
+		// velocity projection
+
+		ev2::cmd_push_constant(pass, p_advect, 0, sizeof(pc_particle), &pc_particle);
+		ev2::cmd_bind_resources(pass, bindings);
+
+		for (int i = 0; i < DIMS; ++i) {
+			ev2::cmd_use_image(pass, v_pre_proj_img[i], ev2::USAGE_STORAGE_WRITE_COMPUTE);
+			ev2::cmd_use_image(pass, v_proj_img[i], ev2::USAGE_STORAGE_WRITE_COMPUTE);
+		}
+		ev2::cmd_use_image(pass, p_img, ev2::USAGE_SAMPLED_COMPUTE);
+
+		ev2::cmd_bind_compute_pipeline(pass, p_project);
+		ev2::cmd_dispatch(pass, gx, gy, 1);
+
+		//mean_subtractor->set_image(ctx, p_img);
+		//mean_subtractor->record(rec);
+
+		ev2::end_pass(ctx, pass);
+
+		 ++step;
+	}
+
+	void reset(ev2::GfxContext *ctx)
+	{
+		initialize_image(ctx, p_img, 0.f);
+
+		for (int i = 0; i < GridFluidSim::DIMS; ++i) {
+			initialize_image(ctx, v_proj_img[i], glm::vec4(0));
+			initialize_image(ctx, v_pre_proj_img[i], glm::vec4(0));
+		}
+
+		initialize_image<uint8_t>(ctx, bd_mask_img, UINT8_MAX); // -1
+		initialize_image<uint8_t>(ctx, solid_mask_img, UINT8_MAX);
+
+		size_t bufsize = get_depost_buf_data_size();
+		ev2::UploadContext uc = ev2::begin_upload(ctx, bufsize, alignof(glm::vec2));
+		memset(uc.ptr, 0x0, bufsize);
+		ev2::BufferUpload up = {
+			.src_offset = 0,
+			.dst_offset = get_depost_buf_header_size(),
+			.size = bufsize,
+		};
+		ev2::commit_buffer_uploads(ctx, uc, deposit_buf, &up, 1);
+
+		ev2::flush_uploads(ctx);
+
+		step = 0;
+	}
+
+	void destroy(ev2::GfxContext *ctx)
+	{
+		for (int i = 0; i < DIMS; ++i) {
+			ev2::destroy_image(ctx, v_pre_proj_img[i]);
+			ev2::destroy_image(ctx, v_proj_img[i]);
+		}
+		ev2::destroy_buffer(ctx, deposit_buf);
+
+		ev2::destroy_image(ctx, lap_p_img);
+		ev2::destroy_image(ctx, p_img);
+		ev2::destroy_image(ctx, solid_mask_img);
+		ev2::destroy_image(ctx, bd_mask_img);
+
+		ev2::destroy_buffer(ctx, part_data);
+		ev2::destroy_bindings(ctx, bindings);
 	}
 };
 
-int FluidSim::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
-{
-	if (!is_pow2(w) || !is_pow2(h))
-		return EXIT_FAILURE;
-
-	grid_w = w;
-	grid_h = h;
-
-	particle_count = grid_w * grid_h;
-
-	ev2::ImageUsageFlags usage = 
-		ev2::IMAGE_USAGE_STORAGE_BIT | 
-		ev2::IMAGE_USAGE_SAMPLED_BIT;
-
-	const glm::ivec2 v_grid_sizes[] = {
-		glm::ivec2(1 + grid_w, grid_h),
-		glm::ivec2(grid_w, 1 + grid_h),
-	};
-
-	for (int i = 0; i < DIMS; ++i) {
-		glm::ivec2 size = v_grid_sizes[i];
-		v_img_1[i] = ev2::create_image(ctx, size.x, size.y, 1, ev2::IMAGE_FORMAT_32F, usage);
-		v_img_2[i] = ev2::create_image(ctx, size.x, size.y, 1, ev2::IMAGE_FORMAT_32F, usage);
-	}
-
-	particles = ev2::create_buffer(ctx, particle_count * sizeof(FluidParticle),
-		ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT | ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT); 
-
-	lap_p_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F, usage);
-	ev2::set_image_name(ctx, lap_p_img, "lap_p_img");
-
-	p_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F, usage);
-	ev2::set_image_name(ctx, p_img, "p_img");
-
-	mask_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_R8_UNORM, usage);
-	ev2::set_image_name(ctx, mask_img, "bd_mask");
-
-	lap_p_tex = ev2::create_texture(ctx, lap_p_img, ev2::FILTER_BILINEAR);
-	p_tex = ev2::create_texture(ctx, p_img, ev2::FILTER_BILINEAR);
-
-	ubo = ev2::create_buffer(ctx, sizeof(uniforms), ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-
-	pressure_solver.reset(new PoissonSolver);
-
-	int result = EXIT_SUCCESS;
-
-	if ((result = pressure_solver->init(ctx, w, h))) {
-		return result;
-	}
-
-	mean_subtractor.reset(new MeanSubtractor);
-
-	if ((result = mean_subtractor->init(ctx, grid_w, grid_h))) {
-		return result;
-	}
-	mean_subtractor->setup_bindings(ctx, lap_p_img);
-
-	nvs_particles = ev2::load_compute_pipeline(ctx, "shader/nvs2_advect_particles");
-	nvs_advect = ev2::load_compute_pipeline(ctx, "shader/nvs2_advect_semi_lagrange");
-	nvs_diffuse = ev2::load_compute_pipeline(ctx, "shader/nvs2_diffuse");
-	nvs_divergence = ev2::load_compute_pipeline(ctx, "shader/nvs2_divergence");
-	nvs_project = ev2::load_compute_pipeline(ctx, "shader/nvs2_project");
-
-	particles_set = ev2::create_bindings(ctx, nvs_particles, 1, ev2::BINDING_MODE_STATIC);
-	for (int i = 0; i < DIMS; ++i) {
-		ev2::bind_image_indexed(ctx, particles_set, "v_in", i, v_img_1[i]);
-	}
-	ev2::bind_buffer(ctx, particles_set, "Particles", particles, 0, particle_count * sizeof(glm::vec2));
-	ev2::flush_bindings(ctx, particles_set);
-
-	update_advect_set(ctx);
-	update_diffuse_set(ctx);
-	update_divergence_set(ctx);
-	update_project_set(ctx);
-
-	base_set = ev2::create_bindings(ctx, nvs_advect, 0, ev2::BINDING_MODE_STATIC);
-	ev2::bind_image(ctx, base_set, "bd_mask", mask_img);
-	ev2::bind_buffer(ctx, base_set, "ubo", ubo, 0, sizeof(Uniforms));
-	ev2::flush_bindings(ctx, base_set);
-
-	return 0;
-}
-
-int FluidSim::update_advect_set(ev2::GfxContext *ctx)
-{
-	ev2::BindingsID set = ev2::create_bindings(ctx, nvs_advect, 1, ev2::BINDING_MODE_STATIC);
-	
-	for (int i = 0; i < DIMS; ++i) {
-		ev2::bind_image_indexed(ctx, set, "v_in", i, v_img_1[i]);
-		ev2::bind_image_indexed(ctx, set, "v_out", i, v_img_2[i]);
-	}
-
-	ev2::flush_bindings(ctx, set);
-
-	advect_set = set;
-
-	return 0;
-}
-
-int FluidSim::update_diffuse_set(ev2::GfxContext *ctx)
-{
-	ev2::BindingsID set = ev2::create_bindings(ctx, nvs_diffuse, 1, ev2::BINDING_MODE_STATIC);
-	
-	for (int i = 0; i < DIMS; ++i) {
-		ev2::bind_image_indexed(ctx, set, "v_in", i, v_img_2[i]);
-		ev2::bind_image_indexed(ctx, set, "v_out", i, v_img_1[i]);
-	}
-
-	ev2::flush_bindings(ctx, set);
-
-	diffuse_set = set;
-
-	return 0;
-}
-
-int FluidSim::update_divergence_set(ev2::GfxContext *ctx)
-{
-	ev2::BindingsID set = ev2::create_bindings(ctx, nvs_divergence, 1, ev2::BINDING_MODE_STATIC);
-	
-	for (int i = 0; i < DIMS; ++i) {
-		ev2::bind_image_indexed(ctx, set, "v_in", i, v_img_1[i]);
-	}
-	ev2::bind_image(ctx, set, "f_out", lap_p_img);
-	ev2::flush_bindings(ctx, set);
-
-	pressure_set = set;
-
-	return 0;
-}
-int FluidSim::update_project_set(ev2::GfxContext *ctx)
-{
-	ev2::BindingsID set = ev2::create_bindings(ctx, nvs_project, 1, ev2::BINDING_MODE_STATIC);
-
-	for (int i = 0; i < DIMS; ++i) {
-		ev2::bind_image_indexed(ctx, set, "v_out", i, v_img_1[i]);
-	}
-	ev2::bind_texture(ctx, set, "p_in", p_tex);
-	ev2::bind_texture(ctx, set, "lap_p_in", lap_p_tex);
-	ev2::flush_bindings(ctx, set);
-
-	project_set = set;
-
-	return 0;
-}
-
-void FluidSim::step_sim(ev2::GfxContext *ctx)
-{
-	uint32_t group_size = 16;
-
-	uint32_t gx = 1 + grid_w/group_size;
-	uint32_t gy = 1 + grid_h/group_size;
-
-	ev2::PassID pass = ev2::begin_compute_pass(ctx);
-	ev2::cmd_use_buffer(pass, ubo, ev2::USAGE_UNIFORM_READ);
-
-	for (int i = 0; i < DIMS; ++i) {
-		ev2::cmd_use_image(pass, v_img_1[i], ev2::USAGE_SAMPLED_COMPUTE);
-	}
-
-	struct {
-		uint32_t count;
-		uint32_t step;
-	} pc_particle = {
-		.count = particle_count,
-		.step = (uint32_t)step
-	};
-
-	ev2::cmd_use_buffer(pass, particles, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
-	ev2::cmd_bind_compute_pipeline(pass, nvs_particles);
-	ev2::cmd_push_constant(pass, nvs_particles, 0, sizeof(pc_particle), &pc_particle);
-	ev2::cmd_bind_resources(pass, base_set);
-	ev2::cmd_bind_resources(pass, particles_set);
-	ev2::cmd_dispatch(pass, 1 + (particle_count - 1)/32, 1, 1);
-
-	for (int i = 0; i < DIMS; ++i) {
-		ev2::cmd_use_image(pass, v_img_2[i], ev2::USAGE_STORAGE_WRITE_COMPUTE);
-	}
-
-	struct {
-		uint32_t q_img_idx;
-	} pc_advect = {
-		.q_img_idx = (uint32_t)(step & 0x1),
-	};
-
-	ev2::cmd_bind_compute_pipeline(pass, nvs_advect);
-	ev2::cmd_push_constant(pass, nvs_advect, 0, sizeof(pc_advect), &pc_advect);
-
-	ev2::cmd_bind_resources(pass, base_set);
-	ev2::cmd_bind_resources(pass, advect_set);
-	ev2::cmd_dispatch(pass, gx, gy, 1);
-
-	for (int i = 0; i < DIMS; ++i) {
-		ev2::cmd_use_image(pass, v_img_1[i], ev2::USAGE_STORAGE_WRITE_COMPUTE);
-		ev2::cmd_use_image(pass, v_img_2[i], ev2::USAGE_STORAGE_READ_COMPUTE);
-	}
-
-	ev2::cmd_bind_compute_pipeline(pass, nvs_diffuse);
-	ev2::cmd_bind_resources(pass, base_set);
-	ev2::cmd_bind_resources(pass, diffuse_set);
-	ev2::cmd_dispatch(pass, gx, gy, 1);
-
-	for (int i = 0; i < DIMS; ++i) {
-		ev2::cmd_use_image(pass, v_img_1[i], ev2::USAGE_SAMPLED_COMPUTE);
-	}
-	ev2::cmd_use_image(pass, lap_p_img, ev2::USAGE_STORAGE_WRITE_COMPUTE);
-
-	ev2::cmd_bind_compute_pipeline(pass, nvs_divergence);
-	ev2::cmd_bind_resources(pass, base_set);
-	ev2::cmd_bind_resources(pass, pressure_set);
-	ev2::cmd_dispatch(pass, gx, gy, 1);
-
-	//mean_subtractor->record(pass);
-	
-	pressure_solver->record_setup(pass);
-	for (int i = 0; i < ((step == 0) ? 64 : 2); ++i) 
-		pressure_solver->record_v_cycle(pass);
-
-	for (int i = 0; i < DIMS; ++i) {
-		ev2::cmd_use_image(pass, v_img_1[i], ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
-	}
-
-	ev2::cmd_use_image(pass, p_img, ev2::USAGE_SAMPLED_COMPUTE);
-	ev2::cmd_use_image(pass, lap_p_img, ev2::USAGE_SAMPLED_COMPUTE);
-
-	ev2::cmd_bind_compute_pipeline(pass, nvs_project);
-	ev2::cmd_bind_resources(pass, base_set);
-	ev2::cmd_bind_resources(pass, project_set);
-	ev2::cmd_dispatch(pass, gx, gy, 1);
-
-	//mean_subtractor->set_image(ctx, p_img);
-	//mean_subtractor->record(rec);
-
-	ev2::end_pass(ctx, pass);
-
-	 ++step;
-}
-
-int FluidSim::update(ev2::GfxContext *ctx)
-{
-	ev2::UploadContext uc = ev2::begin_upload(ctx, sizeof(Uniforms), alignof(Uniforms));
-	memcpy(uc.ptr, &uniforms, sizeof(Uniforms));
-	ev2::BufferUpload up = {.size = sizeof(Uniforms)};
-	uint64_t sync = ev2::commit_buffer_uploads(ctx, uc, ubo, &up, 1);
-	ev2::flush_uploads(ctx);
-
-	pressure_solver->set_inputs(ctx, p_img, lap_p_img, mask_img);
-
-	return 0;
-}
-void FluidSim::destroy(ev2::GfxContext *ctx)
-{
-	pressure_solver->destroy(ctx);
-	mean_subtractor->destroy(ctx);
-
-	for (int i = 0; i < DIMS; ++i) {
-		ev2::destroy_image(ctx, v_img_1[i]);
-		ev2::destroy_image(ctx, v_img_2[i]);
-	}
-
-	ev2::destroy_image(ctx, lap_p_img);
-	ev2::destroy_image(ctx, p_img);
-	
-	//ev2::destroy_texture(ctx, q_tex_1);
-	//ev2::destroy_texture(ctx, q_tex_2);
-
-	ev2::destroy_texture(ctx, lap_p_tex);
-	ev2::destroy_texture(ctx, p_tex);
-	
-	ev2::destroy_buffer(ctx, ubo);
-
-	ev2::destroy_bindings(ctx, advect_set);
-	ev2::destroy_bindings(ctx, diffuse_set);
-	ev2::destroy_bindings(ctx, pressure_set);
-	ev2::destroy_bindings(ctx, project_set);
-}
-
 struct FluidApp : public App
 {
-	std::unique_ptr<FluidSim> sim;
+	std::unique_ptr<FLIPFluidSim> sim;
 	std::unique_ptr<ImageViewerPanel> main_panel;
 	std::unique_ptr<ImageViewerPanel> right_panel;
 	std::unique_ptr<BoundaryEditor> boundary_editor;
 	std::unique_ptr<HeightmapViewerPanel> heightmap_panel;
 
-	ev2::TextureID v_tex[FluidSim::DIMS];
+	ev2::TextureID v_tex[GridFluidSim::DIMS];
 
 	ev2::TextureID phi_tex;
 	ev2::TextureID f_tex;
@@ -400,7 +345,7 @@ struct FluidApp : public App
 	bool b_main_panel = true;
 	bool b_enable_flux_arrows = false;
 
-	bool m_stopped = false;
+	bool m_stopped = true;
 	uint64_t m_step = 0;
 	float m_rate = 1.f;
 
@@ -421,7 +366,7 @@ int FluidApp::initialize(int argc, char **argv)
 	if (result)
 		return result;
 
-	sim.reset(new FluidSim);
+	sim.reset(new FLIPFluidSim);
 
 	main_panel.reset(new ImageViewerPanel(this, 200, 0, 500, 500,
 		"pipelines/fluid_viz.yaml", "Interactive Simulation"));
@@ -432,12 +377,14 @@ int FluidApp::initialize(int argc, char **argv)
 
 	heightmap_panel.reset(new HeightmapViewerPanel());
 
-	result = sim->init(ctx, 512, 512);
+	result = sim->init(ctx, 128, 128);
 	if (result)
 		return result;
 
-	for (int i = 0; i < FluidSim::DIMS; ++i) {
-		v_tex[i] = ev2::create_texture(ctx, sim->v_img_1[i], ev2::FILTER_BILINEAR);
+	phi_tex = ev2::create_texture(ctx, sim->p_img, ev2::FILTER_NEAREST);
+
+	for (int i = 0; i < GridFluidSim::DIMS; ++i) {
+		v_tex[i] = ev2::create_texture(ctx, sim->v_proj_img[i], ev2::FILTER_BILINEAR);
 	}
 
 	result = main_panel->init(ctx, sim->p_img); 
@@ -450,12 +397,12 @@ int FluidApp::initialize(int argc, char **argv)
 		return result;
 	right_panel->panel->set_closable(false);
 
-	result = heightmap_panel->init(this, ctx, sim->p_tex); 
+	result = heightmap_panel->init(this, ctx, phi_tex); 
 	if(result)
 		return result;
 	heightmap_panel->panel->set_closable(false);
 
-	result = boundary_editor->init(ctx, sim->mask_img); 
+	result = boundary_editor->init(ctx, sim->solid_mask_img); 
 	if(result)
 		return result;
 	boundary_editor->panel->set_closable(false);
@@ -470,19 +417,20 @@ int FluidApp::initialize(int argc, char **argv)
 
 void FluidApp::reset_images()
 {
-	initialize_image(ctx, sim->p_img, 0.f);
+	sim->reset(ctx);
+	//initialize_image(ctx, sim->p_img, 0.f);
 
-	for (int i = 0; i < FluidSim::DIMS; ++i) {
-		initialize_image(ctx, sim->v_img_1[i], glm::vec4(0));
-		initialize_image(ctx, sim->v_img_2[i], glm::vec4(0));
-	}
+	//for (int i = 0; i < GridFluidSim::DIMS; ++i) {
+	//	initialize_image(ctx, sim->v_img_1[i], glm::vec4(0));
+	//	initialize_image(ctx, sim->v_img_2[i], glm::vec4(0));
+	//}
 
-	initialize_image<uint8_t>(ctx, sim->mask_img, UINT8_MAX);
+	//initialize_image<uint8_t>(ctx, sim->bd_mask_img, UINT8_MAX);
 
-	ev2::flush_uploads(ctx);
+	//ev2::flush_uploads(ctx);
 
-	sim->uniforms.cursor = sim->uniforms.cursor_prev = glm::vec2(1,0.5);
-	sim->step = 0;
+	//sim->uniforms.cursor = sim->uniforms.cursor_prev = glm::vec2(1,0.5);
+	//sim->step = 0;
 }
 
 int FluidApp::update()
@@ -511,7 +459,7 @@ int FluidApp::update()
 		reset_images();
 	}
 
-	ImGui::SliderFloat("gravity", &sim->uniforms.gravity, -1, 1);
+	//ImGui::SliderFloat("gravity", &sim->uniforms.gravity, -1, 1);
 
 	ImGui::End();
 
@@ -544,13 +492,13 @@ int FluidApp::update()
 	bool is_panel_clicked = this->input.right_mouse_pressed && 
 			main_panel->panel->is_content_selected();
 
-	if (is_panel_clicked) {
-		sim->uniforms.cursor_prev = sim->uniforms.cursor;
-		sim->uniforms.cursor = main_panel->get_world_cursor_pos();
-		sim->uniforms.flags = true; 
-	} else {
-		sim->uniforms.flags = false; 
-	}
+	//if (is_panel_clicked) {
+	//	sim->uniforms.cursor_prev = sim->uniforms.cursor;
+	//	sim->uniforms.cursor = main_panel->get_world_cursor_pos();
+	//	sim->uniforms.flags = true; 
+	//} else {
+	//	sim->uniforms.flags = false; 
+	//}
 
 	return result;
 }
@@ -570,8 +518,8 @@ void FluidApp::render()
 	if (b_enable_flux_arrows) {
 		ev2::GfxPipelineID flux_arrows = ev2::load_graphics_pipeline(ctx, "pipelines/flux.yaml");
 		
-		for (int i = 0; i < FluidSim::DIMS; ++i) {
-			ev2::cmd_use_image(pass, sim->v_img_1[i], ev2::USAGE_SAMPLED_GRAPHICS);
+		for (int i = 0; i < GridFluidSim::DIMS; ++i) {
+			ev2::cmd_use_image(pass, sim->v_proj_img[i], ev2::USAGE_SAMPLED_GRAPHICS);
 		}
 
 		struct alignas(8) {
@@ -595,7 +543,14 @@ void FluidApp::render()
 	}
 
 	ev2::reset_bindings(ctx, particle_bindings);
-	ev2::bind_buffer(ctx, particle_bindings, "Particles", sim->particles, 0, sim->particle_count * sizeof(glm::vec2));
+	ev2::bind_buffer(ctx, particle_bindings, "Positions", 
+		sim->part_data, 
+		sim->get_part_pos_offset(), 
+		sim->particle_count * sizeof(glm::vec2));
+	ev2::bind_buffer(ctx, particle_bindings, "Velocities", 
+		sim->part_data, sim->get_part_vel_offset(), 
+		sim->particle_count * sizeof(glm::vec2));
+
 	ev2::flush_bindings(ctx, particle_bindings);
 
 	struct {

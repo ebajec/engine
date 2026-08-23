@@ -151,7 +151,7 @@ void get_image_dims(GfxContext *ctx, ImageID h_img, uint32_t *w, uint32_t *h,
 void set_image_name(GfxContext *ctx, ImageID h, const char *name)
 {
 	Image *img = ctx->get_image(h);
-	img->name = name;
+	img->name = g_register_string(name);
 }
 
 const char *get_image_name(GfxContext *ctx, ImageID h)

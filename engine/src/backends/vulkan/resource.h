@@ -315,6 +315,8 @@ static inline VkFormat image_format_to_vk(ev2::ImageFormat fmt)
 			return VK_FORMAT_R32_SFLOAT;
 		case ev2::IMAGE_FORMAT_R8_UNORM:
 			return VK_FORMAT_R8_UNORM;
+		case ev2::IMAGE_FORMAT_R8_SNORM:
+			return VK_FORMAT_R8_SNORM;
 	}
 }
 

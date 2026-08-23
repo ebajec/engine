@@ -80,14 +80,14 @@ struct Pool {
 
 	typedef std::unique_ptr<Page, decltype(&delete_page)> PagePtr;
 
-	static Pool<T, PageSize, PageAlign> *create();
-
 	std::vector<PagePtr> pages;
 	std::vector<uint32_t> free_list;
 
 	size_t cap = 0;
 
 	mutable std::mutex sync;
+
+	static Pool<T, PageSize, PageAlign> *create();
 
 	PoolID allocate(T&& val);
 	void deallocate(PoolID id);

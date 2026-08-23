@@ -425,6 +425,8 @@ struct DeferredDeleteQueue
 	Result process(GfxContext *ctx);
 };
 
+extern const char * g_register_string(const char *s);
+
 struct GfxContext
 {
 	//-----------------------------------------------------------------------------

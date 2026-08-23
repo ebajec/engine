@@ -1,0 +1,60 @@
+
+#version 460 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "nvs2_flip.glsl"
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+float get_p(ivec2 idx, out float wt)
+{
+	if (any(lessThan(idx, vec2(0))) || 
+		any(greaterThanEqual(idx, imageSize(solid_mask)))) {
+		wt = 0.f;
+		return 0.f;
+	}
+
+	wt = imageLoad(solid_mask, idx).x;
+	return imageLoad(p_in, idx).x;
+}
+
+void main()
+{
+    ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+
+	ivec2 stencil[DIMS] = {
+		ivec2(-1, 0),
+		ivec2(0, -1),
+	};
+
+	float wt_c;
+	float p_c = get_p(idx, wt_c);
+
+	// reset the air mask
+	if (any(lessThan(idx, imageSize(bd_mask)))) {
+		imageStore(bd_mask, idx, vec4(wt_c > 0.f ? -1 : wt_c));
+	}
+
+	ivec2 size = imageSize(p_in);
+
+	for (int i = 0; i < DIMS; ++i) {
+		if (any(greaterThanEqual(idx, imageSize(v_proj[i]))))
+			continue;
+
+		float wt;
+		float p = get_p(idx + stencil[i], wt); 
+		wt = min(wt, wt_c);
+
+		int row_size = size[i] + 1;
+		uint v_idx = s_offsets[i] + row_size * idx[(i + 1) % DIMS] + idx[i];
+		float v = s_vel[v_idx];
+
+		float dp = (p_c - p)/(2*DELTA_X);
+		float v_hat = wt * (v + TIMESTEP * -dp/RHO);
+
+		imageStore(v_pre_proj[i], idx, vec4(v));
+		imageStore(v_proj[i], idx, vec4(v_hat));
+		s_vel[v_idx] = 0;
+	}
+}
+

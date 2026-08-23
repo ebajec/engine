@@ -22,6 +22,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <format>
 
 namespace fs = std::filesystem;
 
@@ -79,7 +80,11 @@ static std::string get_shader_info(ev2::Shader *shader)
 			stage = "???";
 	}
 
+	char id[100];
+	snprintf(id, sizeof(id), "\tVkShaderModule: " ANSI_BLUE(0x%LX), (unsigned long long)shader->shader_module); 
+
 	std::string info;
+	info += std::string(id) + "\n";
 	info += "\tstage : " + std::string(stage) + "\n";
 	std::string layout_string = get_layout_string(*shader->layout_map); 
 	info += layout_string.empty() ? "\t(no bindings)" : std::move(layout_string);
@@ -1020,13 +1025,14 @@ static std::string get_gfx_pipeline_info(ev2::GfxContext *ctx, ev2::GfxPipeline 
 	const char *frag = ctx->assets->get_entry((AssetID)p_pipeline->frag.id)->path;
 
 	const char *fmt = 
+		"\tVkPipeline: " ANSI_BLUE(0x%LX)"\n"
 		"\tvert: " COLORIZE_PATH(%s)"\n"
 		"\tfrag: " COLORIZE_PATH(%s)"";
 
 	std::string buf;
 	buf.resize((strlen(fmt) + strlen(vert) + strlen(frag)) + 1);
 	
-	snprintf(buf.data(), buf.size(), fmt, vert, frag);
+	snprintf(buf.data(), buf.size(), fmt, p_pipeline ? p_pipeline->base.pipeline : 0, vert, frag);
 	return buf;
 }
 
@@ -1211,6 +1217,12 @@ static ev2::Result compute_pipeline_create_callback(
 	}
 
 	pipeline->shader = shader_handle;
+
+	log_info(
+		"Compute pipeline: " COLORIZE_PATH(%s) "\n"
+		"\tVkPipeline: " ANSI_BLUE(0x%LX),
+		path, pipeline->base.pipeline
+	);
 
 	*pp_pipeline = pipeline.release();
 

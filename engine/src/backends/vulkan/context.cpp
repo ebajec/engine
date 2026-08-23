@@ -46,6 +46,14 @@ struct SwapChainSupportDetails {
     std::vector<VkPresentModeKHR> presentModes;
 };
 
+const char * g_register_string(const char *s)
+{
+	static robin_hood::unordered_set<std::string> g_strings;
+
+	auto [it, inserted] = g_strings.emplace(s);
+	return it->c_str();
+}
+
 static VkResult CreateDebugUtilsMessengerEXT(
     VkInstance instance,
     const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
@@ -539,6 +547,7 @@ static ev2::Result create_logical_device(ev2::GfxContext *ctx,
 		.descriptorBindingUpdateUnusedWhilePending = VK_TRUE,
 		.descriptorBindingVariableDescriptorCount = VK_TRUE,
     	.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
+		.shaderInt8 = VK_TRUE
 	};
 
 	VkPhysicalDeviceVulkan13Features features13{
@@ -546,6 +555,7 @@ static ev2::Result create_logical_device(ev2::GfxContext *ctx,
 		.pNext = &features12,
 		.synchronization2 = VK_TRUE,
 		.dynamicRendering = VK_TRUE,
+		.shaderDemoteToHelperInvocation = VK_TRUE,
 	};
 
     VkPhysicalDeviceFeatures2 deviceFeatures2{

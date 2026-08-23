@@ -20,6 +20,7 @@ layout (set = 0, binding = 0) uniform ubo {
 };
 
 layout (set = 0, r8, binding = 1) readonly uniform image2D bd_mask;
+layout (set = 0, r8, binding = 2) readonly uniform image2D air_mask;
 
 float gaussian(vec2 x, vec2 c, float sigma)
 {

@@ -1,0 +1,42 @@
+#version 460 core
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_shader_atomic_float :require
+
+#include "nvs2_flip.glsl"
+
+layout (local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+	int idx = int(gl_GlobalInvocationID.x);
+
+	if (idx > pc.count)
+		return;
+
+	vec2 part_vel = u_part_vel[idx];
+	vec2 part_pos = u_part_pos[idx];
+
+	ivec2 mask_size = imageSize(bd_mask);
+
+	ivec2 p = min(ivec2(part_pos), mask_size);
+	vec2 wt = fract(part_pos);
+	vec2 v = part_vel;
+
+	for (int i = 0; i < DIMS; ++i) {
+		int row_size = mask_size[i] + 1;
+
+		uint idx = s_offsets[i] +  row_size * p[(i + 1) % DIMS] + p[i];
+
+		float v1 = wt[i] * v[i];
+		float v2 = (1.f - wt[i]) * v[i];
+
+		atomicAdd(s_vel[idx], v1); 
+		atomicAdd(s_vel[idx + 1], v2); 
+
+		float wt = imageLoad(solid_mask, p).r;
+
+		if (wt > 0.f) {
+			imageStore(bd_mask, p, vec4(1.f));
+		}
+	}
+}
