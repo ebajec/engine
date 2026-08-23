@@ -3,7 +3,7 @@ set(CMAKE_CXX_STANDARD 23)
 
 include(clang-warnings)
 
-set(TARGET ev2_test)
+set(TARGET sorting)
 project(${TARGET})
 
 file(GLOB SOURCES "*.cpp" "*.c")

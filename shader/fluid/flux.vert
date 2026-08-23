@@ -47,12 +47,14 @@ void main()
 	
 	vec4 color;
 
+	ivec2 idx;
+
 	if (inst < Nx) {
 		uint ix = inst;
 
 		uint w = sx.x;
 		uint quo = ix / w;
-		ivec2 idx = ivec2(ix - quo * w, quo);
+		idx = ivec2(ix - quo * w, quo);
 
 		X = vec2(0, -1);
 		Y = vec2(1, 0);
@@ -65,7 +67,7 @@ void main()
 
 		uint w = sy.x;
 		uint quo = iy / w;
-		ivec2 idx = ivec2(iy - quo * w, quo);
+		idx = ivec2(iy - quo * w, quo);
 
 		X = vec2(1, 0);
 		Y = vec2(0, 1);

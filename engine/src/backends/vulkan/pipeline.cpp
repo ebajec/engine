@@ -872,7 +872,7 @@ static ev2::Result initialize_gfx_pipeline_vk_pipeline(
 	};
 
     VkPipelineColorBlendAttachmentState colorBlendAttachment{
-    	.blendEnable = VK_TRUE,
+    	.blendEnable = VK_FALSE,
     	.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
     	.dstColorBlendFactor = VK_BLEND_FACTOR_ONE,
     	.colorBlendOp = VK_BLEND_OP_ADD,

@@ -1504,7 +1504,7 @@ error:
 	return nullptr;
 }
 
-ev2::Result on_resize(GfxContext *ctx, uint32_t width, uint32_t height)
+ev2::Result resize_swapchain(GfxContext *ctx, uint32_t width, uint32_t height)
 {
 	uint32_t old_width = ctx->desired_surface_width;
 	uint32_t old_height = ctx->desired_surface_width;

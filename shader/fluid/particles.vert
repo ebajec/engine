@@ -30,7 +30,7 @@ void main()
 	FluidParticle part = u_parts[gl_InstanceIndex];
 	int vtx = gl_VertexIndex;
 
-	float w = 1.5;
+	float w = 1.0;
 
 	vec2 pos;
 	if (vtx < 3) {

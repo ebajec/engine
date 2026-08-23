@@ -22,6 +22,7 @@ void main()
 		vec2 d = abs(f - vec2(0.5));
 		FragColor = any(greaterThan(d, vec2(0.45))) ? vec4(0) : texture(u_tex, in_uv); 
 	}
+	FragColor = tex;
 }
 
 

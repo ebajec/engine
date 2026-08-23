@@ -13,5 +13,8 @@ void main()
 {
 	vec2 r = in_pos - in_center;
 	float a = exp(-4*dot(r,r));
+	if (a < 0.7)
+		discard;
+
 	out_color = vec4(in_color.rgb, a);
 }

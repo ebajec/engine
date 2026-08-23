@@ -5,7 +5,7 @@
 
 #include "fluid_particle.glsl"
 
-#define TIMESTEP 0.1
+#define TIMESTEP 0.05
 #define DELTA_X 1.0f
 #define NU 0.0
 #define RHO 1.f

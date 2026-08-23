@@ -579,6 +579,10 @@ void FluidApp::render()
 			uint32_t v_img[2];
 		} pc = {
 			.size = glm::ivec2(sim->grid_w, sim->grid_h),
+			.v_img = {
+				ev2::get_bindless_handle(ctx, v_tex[0]),
+				ev2::get_bindless_handle(ctx, v_tex[1]),
+			}
 		};
 
 		ev2::cmd_bind_gfx_pipeline(pass, flux_arrows);

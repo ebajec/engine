@@ -75,7 +75,7 @@ GfxContext *create_context_for_vulkan(const char *path, const GfxContextVulkanIn
 
 void destroy_context(GfxContext *ctx);
 
-ev2::Result on_resize(GfxContext *ctx, uint32_t width, uint32_t height);
+ev2::Result resize_swapchain(GfxContext *ctx, uint32_t width, uint32_t height);
 ev2::Result wait_complete(GfxContext *ctx, uint64_t sync);
 
 #ifdef EV2_IMGUI_COMPATIBILITY

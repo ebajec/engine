@@ -173,7 +173,7 @@ int App::resize(int width, int height)
 	win.width = width;
 	win.height = height;
 
-	return ev2::on_resize(ctx, width, height) == ev2::SUCCESS ? 
+	return ev2::resize_swapchain(ctx, width, height) == ev2::SUCCESS ? 
 		App::OK : App::ERROR;
 }
 
@@ -283,7 +283,7 @@ int App::initialize(int argc, char *argv[])
 	}
 
 	glfwWindowHint(GLFW_CLIENT_API,GLFW_NO_API);
-	glfwWindowHint(GLFW_RESIZABLE,GLFW_FALSE);
+	glfwWindowHint(GLFW_RESIZABLE,GLFW_TRUE);
 
 	print_glfw_platform();
 

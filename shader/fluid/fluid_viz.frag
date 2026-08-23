@@ -74,6 +74,8 @@ void main()
 	vec3 speed_color = 
 		speed*speed * vec3(0.8f, 0.6, 0.2f) * color_val;
 
+	val = abs(val);
+
 	vec4 color = tanh(val.r)*vec4(jet_palette(S*val.r), 1);//vec4(track_color, color_val);
 
 	ivec2 pix = ivec2(uv*vec2(size));

@@ -97,10 +97,10 @@ void main()
 		uint h1 = pcg_hash(idx);
 		uint h2 = pcg_hash(idx + 1);
 
-		u_parts[idx].pos = vec2(
-			hash_to_float(h1),
-			hash_to_float(h2)
-		) * vec2(size);
+		float f1 = hash_to_float(h1);
+		float f2 = hash_to_float(h2); 
+
+		u_parts[idx].pos = 100*(1.f - 2.f*vec2(f1,f2)) + 0.5*vec2(size);
 		u_parts[idx].vel = vec2(0);
 		return;
 	}

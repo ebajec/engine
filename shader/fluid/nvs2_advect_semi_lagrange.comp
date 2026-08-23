@@ -72,7 +72,6 @@ vec2 cursor_jet(vec2 c, out float rho)
 		return vec2(0);
 
 	vec2 size = vec2(imageSize(bd_mask));
-
 	vec2 p1 = u_cursor_prev * size;
 	vec2 p2 = u_cursor*size;
 	vec2 vel = p2 - p1;
