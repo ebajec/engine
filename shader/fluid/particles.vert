@@ -8,6 +8,7 @@
 layout (location = 0) out vec2 out_pos;
 layout (location = 1) flat out vec2 out_center;
 layout (location = 2) out vec4 out_color;
+layout (location = 3) out vec2 out_vel;
 
 layout (set = PER_DRAW_SET, binding = 0) readonly buffer Positions
 {
@@ -19,7 +20,7 @@ layout (set = PER_DRAW_SET, binding = 1) readonly buffer Velocities
 };
 
 layout (push_constant) uniform PC {
-	mat3x2 world;
+	mat3x2 u_world;
 };
 
 void main()
@@ -36,7 +37,7 @@ void main()
 
 	int vtx = gl_VertexIndex;
 
-	float w = 1.0;
+	float w = 0.1f;
 
 	vec2 pos;
 	if (vtx < 3) {
@@ -52,6 +53,7 @@ void main()
 	out_pos = pos;
 	out_center = part_pos;
 	out_color = mix(vec4(0.0), vec4(1), f_vel);
+	out_vel = part_vel;
 
-	gl_Position = u_view.pv * vec4(world * vec3(pos, 1) - vec2(1), 0, 1);
+	gl_Position = u_view.pv * vec4(u_world * vec3(pos, 1) - vec2(1), 0, 1);
 }

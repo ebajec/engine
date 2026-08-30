@@ -78,14 +78,14 @@ void main()
 	}
 
 	color = vec4(v, -v, 0, 1);
-	v *= 10.f;
+	v *= 1.f;
 
 	float scale = min(d.x, d.y);
 
 	float w = 0.1 * scale;
 	float h = 0.25 * scale;
 
-	h *= clamp(v, -1.f, 1.f);
+	h *= clamp(v, -5.f, 5.f);
 
 	float arrow_w = 2*w;
 	float arrow_h = 1.33*arrow_w * sign(v);

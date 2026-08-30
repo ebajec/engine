@@ -6,12 +6,12 @@
 
 #include "fluid_particle.glsl"
 
-#define GRID_WT 0.1
+#define GRID_WT 0.05
 
 #define TIMESTEP 0.05
 #define DELTA_X 1.0f
 #define NU 0.0
-#define RHO 1.f
+#define RHO 0.1f
 
 #define DIMS 2
 
@@ -33,10 +33,16 @@ layout (set = 0, binding = 5, std430) buffer ParticleVelocity
 	vec2 u_part_vel[];
 };
 
+struct VelocityCell
+{
+	float acc;
+	float wt;
+};
+
 layout (set = 0, binding = 6, std430) buffer VelocityBuffer 
 {
 	uint s_offsets[DIMS];
-	float s_vel[];
+	VelocityCell s_vel[];
 };
 
 // Goes to pressure solver
@@ -49,6 +55,16 @@ layout (push_constant) uniform PC
 {
 	uint count;
 	uint step;
+	vec2 cursor1;
+	vec2 cursor2;
+	uint cursor_flags;
 } pc;
+
+float get_avg_vel(uint idx)
+{
+	float wt = s_vel[idx].wt;
+	return (wt > 1e-3) ? s_vel[idx].acc / wt : 0;
+}
+
 
 #endif

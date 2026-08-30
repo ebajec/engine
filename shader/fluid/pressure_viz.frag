@@ -2,6 +2,7 @@
 #extension GL_GOOGLE_include_directive : require
 
 #include "../core/frame.glsl"
+#include "../core/jet_palette.glsl"
 
 layout (set = PER_DRAW_SET, binding = 0) uniform sampler2D u_tex;
 
@@ -26,7 +27,7 @@ void main()
 	float c = texelFetch(u_tex, texc, 0).r;
 
 	vec3 rgb;
-	if (true) {
+	if (false) {
 		float l = texelFetch(u_tex, clamp(texc + ivec2(-1, 0), ivec2(0), lim), 0).r;
 		float r = texelFetch(u_tex, clamp(texc + ivec2(1, 0), ivec2(0), lim), 0).r;
 		float b = texelFetch(u_tex, clamp(texc + ivec2(0, -1), ivec2(0), lim), 0).r;
@@ -38,7 +39,8 @@ void main()
 		//rgb = 10*vec3(-grad.y, grad.y, 0);
 		rgb = vec3(k);
 	} else {
-		rgb = 0.15*vec3(c, 0, -c);
+		rgb = 0.2*vec3(c, c, -c);
+		//rgb = jet_palette(abs(c));
 	}
 
 	if (in_uv.x < 0.f || in_uv.y < 0.f || in_uv.x > 1.f || in_uv.y > 1.f) {

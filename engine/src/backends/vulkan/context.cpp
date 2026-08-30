@@ -48,9 +48,11 @@ struct SwapChainSupportDetails {
 
 const char * g_register_string(const char *s)
 {
-	static robin_hood::unordered_set<std::string> g_strings;
+	static std::unordered_set<std::string> g_strings;
 
-	auto [it, inserted] = g_strings.emplace(s);
+	std::string key(s);
+
+	auto [it, inserted] = g_strings.emplace(key);
 	return it->c_str();
 }
 

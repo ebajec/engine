@@ -47,14 +47,17 @@ void main()
 
 		int row_size = size[i] + 1;
 		uint v_idx = s_offsets[i] + row_size * idx[(i + 1) % DIMS] + idx[i];
-		float v = s_vel[v_idx];
+
+		float v = get_avg_vel(v_idx);
 
 		float dp = (p_c - p)/(2*DELTA_X);
 		float v_hat = wt * (v + TIMESTEP * -dp/RHO);
 
 		imageStore(v_pre_proj[i], idx, vec4(v));
 		imageStore(v_proj[i], idx, vec4(v_hat));
-		s_vel[v_idx] = 0;
+
+		s_vel[v_idx].acc = 0;
+		s_vel[v_idx].wt = 0;
 	}
 }
 

@@ -5,6 +5,9 @@
 
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
+#define DAMP 0.6
+#define G 2
+
 #define declare_sample(image)\
 float sample_##image(int coord, vec2 p)\
 {\
@@ -12,8 +15,8 @@ float sample_##image(int coord, vec2 p)\
 \
 	ivec2 size = imageSize(image[coord]);\
 \
-	ivec2 px0 = clamp(ivec2(floor(p)), ivec2(0), size - ivec2(1));\
-	ivec2 px1 = clamp(px0, ivec2(0), size - ivec2(1));\
+	ivec2 px0 = clamp(ivec2(p), ivec2(0), size - ivec2(1));\
+	ivec2 px1 = clamp(px0 + ivec2(1), ivec2(0), size - ivec2(1));\
 \
 	float u = fract(p.x);\
 	float v = fract(p.y);\
@@ -49,14 +52,41 @@ float hash_to_float(uint h) {
     return float(h) * (1.0 / 4294967296.0);
 }
 
-vec2 RK4(vec2 x0, float dt)
+vec2 cursor_jet(vec2 c)
 {
-	vec2 k1 = get_v_proj(x0);
-	vec2 k2 = get_v_proj(x0 + 0.5*dt*k1);
-	vec2 k3 = get_v_proj(x0 + 0.5*dt*k2);
-	vec2 k4 = get_v_proj(x0 + dt*k3);
+	if (!bool(pc.cursor_flags))
+		return vec2(0);
 
-	return x0 + (1./6.) * dt * (k1 + 2.*k2 + 2.*k3 + k4);
+	vec2 size = vec2(imageSize(bd_mask));
+	vec2 p1 = pc.cursor1 * size;
+	vec2 p2 = pc.cursor2 * size;
+	vec2 vel = p2 - p1;
+
+	//vec2 d = c - p1;
+	//return (-3*vec2(d.y, -d.x) - 10*d)/ (0.1f + dot(d,d));
+
+	vec2 O = p2 - vel*0.25;
+
+	float speed = length(vel);
+
+	if (speed > size.x/4)
+		return vec2(0);
+
+	bool valid = speed > 1e-3; 
+
+	float S = sqrt((valid ? 8*speed : 1.f));
+	vec2 V = valid ? normalize(vel) : vec2(0);
+	vec2 X = vec2(V.y, -V.x);
+
+	mat2 frame = valid ? mat2(V/(2*S),2*X/S) : mat2(1/S);
+	vec2 r = (c - O)*frame;
+
+	return S * V * exp(-dot(r,r)/10);
+}
+
+vec2 bounce(vec2 p1, vec2 p2, vec2 v, float R)
+{
+	return vec2(0);
 }
 
 void main()
@@ -70,41 +100,61 @@ void main()
 
 	int quo = idx/size.x;
 
+	uint h1 = pcg_hash(idx);
+	uint h2 = pcg_hash(idx + 1);
+
+	float r1 = hash_to_float(h1);
+	float r2 = hash_to_float(h2); 
+
 	// Reset positions
 	if (pc.step == 0) {
-		uint h1 = pcg_hash(idx);
-		uint h2 = pcg_hash(idx + 1);
-
-		float f1 = hash_to_float(h1);
-		float f2 = hash_to_float(h2); 
-
-		float w = 50.f;
 
 		vec2 c = vec2(size)/2;
+		vec2 w = vec2(size)/4;
 
-		vec2 pos = w*(vec2(1.f) -2.f*vec2(f1,f2)) + c;
+		vec2 pos = w*(vec2(1.f) -2.f*vec2(r1,r2)) + c - vec2(0.5);
 
 		u_part_pos[idx] = pos;
 
-		vec2 r = normalize(pos - c);
+		vec2 r = length(pos - c) > 1e-3 ? normalize(pos - c) : vec2(0);
 		
-		u_part_vel[idx] = vec2(r.y, -r.x);
+		u_part_vel[idx] = -1*vec2(r.x, r.y);
 		return;
 	}
 
 	vec2 p_old = u_part_pos[idx];
+	vec2 v_grid = get_v_proj(p_old);
 
-	vec2 correction = get_v_proj(p_old) - get_v_pre_proj(p_old); 
+	vec2 correction = v_grid - get_v_pre_proj(p_old); 
 
 	vec2 k1 = u_part_vel[idx] + correction;
-	vec2 k2 = get_v_proj(p_old + 0.5 * TIMESTEP * k1); 
-	vec2 k3 = get_v_proj(p_old + TIMESTEP * k2); 
+	vec2 k2 = get_v_proj(p_old - 0.5 * TIMESTEP * k1); 
+	vec2 k3 = get_v_proj(p_old - TIMESTEP * k2); 
 
 	vec2 p_new = p_old + TIMESTEP * (1./6.) * (k1 + 4*k2 + k3);
+	vec2 v_new = mix(k1, v_grid, 0.1);
 
-	// velocity to be deposited and corrected after the next pressure solve
-	vec2 v_new = mix(k1, get_v_proj(p_new), GRID_WT);
+	//p_new += 0.01*normalize(vec2(1.f) - 2.f*vec2(r1, r2));
+
+	float S = length(v_new);
+	float R = max(S*TIMESTEP, 0.9f);
+
+	vec2 p_clamped = clamp(p_new, vec2(R), vec2(size) - vec2(R));
+
+	if (p_new.x != p_clamped.x) {
+		v_new.x = -DAMP*v_new.x;
+	}
+
+	if (abs(p_new.y - p_clamped.y) > 1e-3) {
+		v_new.y = -DAMP*v_new.y;
+	} else {
+		v_new.y += -G*TIMESTEP;
+	}
+
+	p_new = p_clamped;
+
+	v_new += cursor_jet(p_new);
 
 	u_part_pos[idx] = p_new;
-	u_part_vel[idx] = v_new;
+	u_part_vel[idx] = 0.995*v_new;
 }

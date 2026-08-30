@@ -62,7 +62,7 @@ int PoissonSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 	R2 = ev2::create_image(ctx, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_32F, usage, N); 
 	ev2::set_image_name(ctx, R2, "R2");
 
-	bd_mips = ev2::create_image(ctx, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_R8_UNORM, usage, N - 1);
+	bd_mips = ev2::create_image(ctx, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_R8_SNORM, usage, N - 1);
 	ev2::set_image_name(ctx, bd_mips, "BdMaskMips");
 
 	tmp_lhs = ev2::create_image(ctx, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, usage);
@@ -147,7 +147,7 @@ void PoissonSolver::record_v_cycle(ev2::PassID pass)
 	// on original, then N smooth + downsample passes on the residuals
 
 	constexpr uint its[] = {
-		4, 4, 3, 3, 2, 2, 2, 2, 2
+		6, 4, 3, 3, 2, 2, 2, 2, 2
 	};
 
 	uint32_t tw = sim_w;

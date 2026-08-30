@@ -35,14 +35,14 @@ layout (push_constant, std430) uniform Inputs {
 	uint u_iterations;
 };
 
-float test_boundary(ivec2 idx, uint level)
+float get_bd_mask(ivec2 idx, uint level)
 {
 	ivec2 size = imageSize(bd_mask[level]);
 
 	if (any(lessThan(idx, ivec2(0))) || any(greaterThanEqual(idx, size)))
 		return 0.f;
 
-	return imageLoad(bd_mask[level], idx).r;
+	return imageLoad(bd_mask[level], idx).r; 
 }
 
 bool inbounds(ivec2 idx)
@@ -52,11 +52,14 @@ bool inbounds(ivec2 idx)
 		any(greaterThanEqual(idx, ivec2(GROUPS))));
 }
 
-float get_bd(ivec2 p)
+float get_bd(ivec2 p, out float fill)
 {
 	uint cell = boundary[p.x][p.y]; 
-	if (cell == AIR)
+	if (cell == AIR) {
+		fill = 0.f;
 		return 1.f;
+	}
+	fill = 1.f;
 	return float(cell) * (1.f/254.f); 
 }
 
@@ -65,11 +68,6 @@ void set_bd(ivec2 p, float bd)
 	if (bd < 0.f)
 		boundary[p.x][p.y] = uint8_t(AIR);
 	boundary[p.x][p.y] = uint8_t(254.f * bd);
-}
-
-float get_fluid(ivec2 p)
-{
-	return 1.f - float(boundary[p.x][p.y] == AIR);
 }
 
 float jacobi_it(ivec2 idx, float rhs, float h)
@@ -84,8 +82,9 @@ float jacobi_it(ivec2 idx, float rhs, float h)
 	// assuming neumann boundary conditions with
 	// zero normal derivative toward out of bounds cells.  
 
-	float wt_c = get_bd(idx);
-	float c = block[idx.x][idx.y] * get_fluid(idx);
+	float fill_c = 0;
+	float wt_c = get_bd(idx, fill_c);
+	float c = block[idx.x][idx.y];
 
 	float sum = 0.f;
 	float den = 0.f;
@@ -97,14 +96,16 @@ float jacobi_it(ivec2 idx, float rhs, float h)
 		if (!inb)
 			continue;
 
-		float wt = min(wt_c, get_bd(p));
+		float fill;
+		float wt = get_bd(p, fill);
+		wt = min(wt_c, wt); 
 
 		den += float(wt);
-		sum += wt * block[p.x][p.y] * get_fluid(p); 
+		sum += fill * wt * block[p.x][p.y];
 	}
 
 	float u_next = den > 1e-3 ? (sum - h*h*rhs)/den : 0;
-	return mix(c, u_next, OMEGA);
+	return fill_c * mix(c, u_next, OMEGA);
 }
 
 

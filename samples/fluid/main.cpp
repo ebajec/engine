@@ -26,6 +26,19 @@
 #include <memory>
 #include <cstdlib>
 
+struct VelocityCell
+{
+	float acc;
+	float wt;
+};
+
+struct SimParams
+{
+	glm::vec2 cursor1;
+	glm::vec2 cursor2;
+	uint cursor_flags;
+};
+
 struct FLIPFluidSim
 {
 	uint32_t grid_w;
@@ -89,7 +102,7 @@ struct FLIPFluidSim
 	}
 	size_t get_depost_buf_data_size() 
 	{
-		return ((1 + grid_w) * (grid_h) + (grid_w) * (1 + grid_h)) * sizeof(glm::vec2); 
+		return ((1 + grid_w) * (grid_h) + (grid_w) * (1 + grid_h)) * sizeof(VelocityCell); 
 	}
 
 	int init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
@@ -196,7 +209,7 @@ struct FLIPFluidSim
 		return 0;
 	}
 
-	void step_sim(ev2::GfxContext *ctx)
+	void step_sim(ev2::GfxContext *ctx, const SimParams &params)
 	{
 		uint32_t group_size = 16;
 
@@ -205,25 +218,45 @@ struct FLIPFluidSim
 
 		ev2::PassID pass = ev2::begin_compute_pass(ctx);
 
+		struct alignas(sizeof(glm::vec2)) {
+			uint32_t count;
+			uint32_t step;
+			glm::vec2 cursor1;
+			glm::vec2 cursor2;
+			uint cursor_flags;
+		} pc_particle = {
+			.count = particle_count,
+			.step = (uint32_t)step,
+			.cursor1 = params.cursor1,
+			.cursor2 = params.cursor2,
+			.cursor_flags = params.cursor_flags
+		};
+
+		//------------------------------------------------------------------------------
+		// velocity projection
+
+		ev2::cmd_push_constant(pass, p_advect, 0, sizeof(pc_particle), &pc_particle);
+		ev2::cmd_bind_resources(pass, bindings);
+
+		ev2::cmd_use_buffer(pass, deposit_buf, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
+		ev2::cmd_use_image(pass, bd_mask_img, ev2::USAGE_STORAGE_WRITE_COMPUTE);
+		for (int i = 0; i < DIMS; ++i) {
+			ev2::cmd_use_image(pass, v_pre_proj_img[i], ev2::USAGE_STORAGE_WRITE_COMPUTE);
+			ev2::cmd_use_image(pass, v_proj_img[i], ev2::USAGE_STORAGE_WRITE_COMPUTE);
+		}
+		ev2::cmd_use_image(pass, p_img, ev2::USAGE_SAMPLED_COMPUTE);
+
+		ev2::cmd_bind_compute_pipeline(pass, p_project);
+		ev2::cmd_dispatch(pass, gx, gy, 1);
+
 		//------------------------------------------------------------------------------
 		// advection stage
 
 		for (int i = 0; i < DIMS; ++i) {
-			ev2::cmd_use_image(pass, v_pre_proj_img[i], ev2::USAGE_SAMPLED_COMPUTE);
-			ev2::cmd_use_image(pass, v_proj_img[i], ev2::USAGE_SAMPLED_COMPUTE);
+			ev2::cmd_use_image(pass, v_pre_proj_img[i], ev2::USAGE_STORAGE_READ_COMPUTE);
+			ev2::cmd_use_image(pass, v_proj_img[i], ev2::USAGE_STORAGE_READ_COMPUTE);
 		}
 		ev2::cmd_use_buffer(pass, part_data, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
-
-		struct {
-			uint32_t count;
-			uint32_t step;
-		} pc_particle = {
-			.count = particle_count,
-			.step = (uint32_t)step
-		};
-
-		ev2::cmd_push_constant(pass, p_advect, 0, sizeof(pc_particle), &pc_particle);
-		ev2::cmd_bind_resources(pass, bindings);
 
 		ev2::cmd_bind_compute_pipeline(pass, p_advect);
 		ev2::cmd_dispatch(pass, 1 + (particle_count - 1)/32, 1, 1);
@@ -231,6 +264,7 @@ struct FLIPFluidSim
 		//------------------------------------------------------------------------------
 		// scatter/deposit stage
 
+		ev2::cmd_use_buffer(pass, part_data, ev2::USAGE_STORAGE_READ_COMPUTE);
 		ev2::cmd_use_buffer(pass, deposit_buf, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 		ev2::cmd_use_image(pass, solid_mask_img, ev2::USAGE_STORAGE_READ_COMPUTE);
 		ev2::cmd_use_image(pass, bd_mask_img, ev2::USAGE_STORAGE_WRITE_COMPUTE);
@@ -243,6 +277,7 @@ struct FLIPFluidSim
 
 		ev2::cmd_use_buffer(pass, deposit_buf, ev2::USAGE_STORAGE_READ_COMPUTE);
 		ev2::cmd_use_image(pass, lap_p_img, ev2::USAGE_STORAGE_WRITE_COMPUTE);
+		ev2::cmd_use_image(pass, bd_mask_img, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 
 		ev2::cmd_bind_compute_pipeline(pass, p_divergence);
 		ev2::cmd_dispatch(pass, gx, gy, 1);
@@ -253,23 +288,8 @@ struct FLIPFluidSim
 		//mean_subtractor->record(pass);
 		
 		pressure_solver->record_setup(pass);
-		for (int i = 0; i < ((step == 0) ? 64 : 2); ++i) 
+		for (int i = 0; i < ((step == 0) ? 64 : 4); ++i) 
 			pressure_solver->record_v_cycle(pass);
-
-		//------------------------------------------------------------------------------
-		// velocity projection
-
-		ev2::cmd_push_constant(pass, p_advect, 0, sizeof(pc_particle), &pc_particle);
-		ev2::cmd_bind_resources(pass, bindings);
-
-		for (int i = 0; i < DIMS; ++i) {
-			ev2::cmd_use_image(pass, v_pre_proj_img[i], ev2::USAGE_STORAGE_WRITE_COMPUTE);
-			ev2::cmd_use_image(pass, v_proj_img[i], ev2::USAGE_STORAGE_WRITE_COMPUTE);
-		}
-		ev2::cmd_use_image(pass, p_img, ev2::USAGE_SAMPLED_COMPUTE);
-
-		ev2::cmd_bind_compute_pipeline(pass, p_project);
-		ev2::cmd_dispatch(pass, gx, gy, 1);
 
 		//mean_subtractor->set_image(ctx, p_img);
 		//mean_subtractor->record(rec);
@@ -291,13 +311,35 @@ struct FLIPFluidSim
 		initialize_image<uint8_t>(ctx, bd_mask_img, UINT8_MAX); // -1
 		initialize_image<uint8_t>(ctx, solid_mask_img, UINT8_MAX);
 
+		size_t header = get_depost_buf_header_size();
 		size_t bufsize = get_depost_buf_data_size();
-		ev2::UploadContext uc = ev2::begin_upload(ctx, bufsize, alignof(glm::vec2));
-		memset(uc.ptr, 0x0, bufsize);
+
+		ev2::UploadContext uc = ev2::begin_upload(ctx, header + bufsize, alignof(VelocityCell));
+
+		uint32_t grid[DIMS] = {grid_w, grid_h};
+		uint32_t offsets[DIMS] = {};
+
+		uint32_t sum = 0;
+		for (int i = 0; i < DIMS; ++i) {
+			offsets[i] = sum;
+
+			uint32_t count = 1;
+			for (int j = 0; j < DIMS; ++j) {
+				count *= (i == j) ? grid[j] + 1 : grid[j];
+			}
+
+			sum += count;
+		}
+
+		assert(sizeof(offsets) == header);
+
+		memcpy(uc.ptr, &offsets, sizeof(offsets));
+		memset((char*)uc.ptr + header, 0x0, bufsize);
+
 		ev2::BufferUpload up = {
 			.src_offset = 0,
-			.dst_offset = get_depost_buf_header_size(),
-			.size = bufsize,
+			.dst_offset = 0,
+			.size = header + bufsize,
 		};
 		ev2::commit_buffer_uploads(ctx, uc, deposit_buf, &up, 1);
 
@@ -331,6 +373,8 @@ struct FluidApp : public App
 	std::unique_ptr<ImageViewerPanel> right_panel;
 	std::unique_ptr<BoundaryEditor> boundary_editor;
 	std::unique_ptr<HeightmapViewerPanel> heightmap_panel;
+
+	SimParams params {};
 
 	ev2::TextureID v_tex[GridFluidSim::DIMS];
 
@@ -377,7 +421,7 @@ int FluidApp::initialize(int argc, char **argv)
 
 	heightmap_panel.reset(new HeightmapViewerPanel());
 
-	result = sim->init(ctx, 128, 128);
+	result = sim->init(ctx, 256, 256);
 	if (result)
 		return result;
 
@@ -387,7 +431,7 @@ int FluidApp::initialize(int argc, char **argv)
 		v_tex[i] = ev2::create_texture(ctx, sim->v_proj_img[i], ev2::FILTER_BILINEAR);
 	}
 
-	result = main_panel->init(ctx, sim->p_img); 
+	result = main_panel->init(ctx, sim->lap_p_img); 
 	if (result)
 		return result;
 	main_panel->panel->set_closable(false);
@@ -407,30 +451,12 @@ int FluidApp::initialize(int argc, char **argv)
 		return result;
 	boundary_editor->panel->set_closable(false);
 
-	reset_images();
+	sim->reset(ctx);
 
 	particles = ev2::load_graphics_pipeline(ctx, "pipelines/pde/fluid_particles.yaml");
 	particle_bindings = ev2::create_bindings(ctx, particles, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_DYNAMIC);
 
 	return result;
-}
-
-void FluidApp::reset_images()
-{
-	sim->reset(ctx);
-	//initialize_image(ctx, sim->p_img, 0.f);
-
-	//for (int i = 0; i < GridFluidSim::DIMS; ++i) {
-	//	initialize_image(ctx, sim->v_img_1[i], glm::vec4(0));
-	//	initialize_image(ctx, sim->v_img_2[i], glm::vec4(0));
-	//}
-
-	//initialize_image<uint8_t>(ctx, sim->bd_mask_img, UINT8_MAX);
-
-	//ev2::flush_uploads(ctx);
-
-	//sim->uniforms.cursor = sim->uniforms.cursor_prev = glm::vec2(1,0.5);
-	//sim->step = 0;
 }
 
 int FluidApp::update()
@@ -456,7 +482,7 @@ int FluidApp::update()
 	ImGui::SliderFloat("Sim update rate", &m_rate, 1.f/256.f, 1.f);
 
 	if (ImGui::Button("Reset")) {
-		reset_images();
+		sim->reset(ctx);
 	}
 
 	//ImGui::SliderFloat("gravity", &sim->uniforms.gravity, -1, 1);
@@ -469,8 +495,8 @@ int FluidApp::update()
 		if ((result = sim->update(ctx)))
 			return result;
 
-		for (int i = 0; i < 3; ++i) {
-			sim->step_sim(ctx);
+		for (int i = 0; i < 1; ++i) {
+			sim->step_sim(ctx, params);
 		}
 	}
 	result = main_panel->update(ctx);
@@ -492,13 +518,14 @@ int FluidApp::update()
 	bool is_panel_clicked = this->input.right_mouse_pressed && 
 			main_panel->panel->is_content_selected();
 
-	//if (is_panel_clicked) {
-	//	sim->uniforms.cursor_prev = sim->uniforms.cursor;
-	//	sim->uniforms.cursor = main_panel->get_world_cursor_pos();
-	//	sim->uniforms.flags = true; 
-	//} else {
-	//	sim->uniforms.flags = false; 
-	//}
+	if (is_panel_clicked) {
+		glm::vec2 pos = main_panel->get_world_cursor_pos();
+		params.cursor1 = params.cursor_flags ? params.cursor2 : pos;
+		params.cursor2 = pos;
+		params.cursor_flags = true; 
+	} else {
+		params.cursor_flags = false; 
+	}
 
 	return result;
 }
@@ -519,7 +546,7 @@ void FluidApp::render()
 		ev2::GfxPipelineID flux_arrows = ev2::load_graphics_pipeline(ctx, "pipelines/flux.yaml");
 		
 		for (int i = 0; i < GridFluidSim::DIMS; ++i) {
-			ev2::cmd_use_image(pass, sim->v_proj_img[i], ev2::USAGE_SAMPLED_GRAPHICS);
+			ev2::cmd_use_image(pass, sim->v_pre_proj_img[i], ev2::USAGE_SAMPLED_GRAPHICS);
 		}
 
 		struct alignas(8) {
@@ -554,15 +581,16 @@ void FluidApp::render()
 	ev2::flush_bindings(ctx, particle_bindings);
 
 	struct {
-		glm::mat2 world;
+		glm::mat3x2 world;
 	} pc {
 		.world = glm::mat3x2(
 			glm::vec2(2.f/(float)sim->grid_w, 0),
 			glm::vec2(0, 2.f/(float)sim->grid_h),
-			glm::vec2(-1, -1)
+			glm::vec2(0, 0)
 		)
 	};
 
+	ev2::cmd_use_buffer(pass, sim->part_data, ev2::USAGE_STORAGE_READ_GRAPHICS);
 	ev2::cmd_bind_gfx_pipeline(pass, particles);
 	ev2::cmd_bind_resources(pass, particle_bindings);
 	ev2::cmd_push_constant(pass, particles, 0, sizeof(pc), &pc);

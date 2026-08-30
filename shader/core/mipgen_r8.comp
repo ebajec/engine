@@ -3,19 +3,13 @@
 layout(constant_id = 0) const int MIP_COUNT = 8;
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-layout (set = 0, r8, binding = 0) uniform image2D levels[MIP_COUNT];
+layout (set = 0, r8_snorm, binding = 0) uniform image2D levels[MIP_COUNT];
 
 layout (push_constant) uniform pc {
 	uint u_level;
 };
 
 #define downsample(img, idx)\
-(0.25*(\
-	imageLoad(img, 2*idx).r +\
-	imageLoad(img, 2*idx + ivec2(1,0)).r +\
-	imageLoad(img, 2*idx + ivec2(0,1)).r +\
-	imageLoad(img, 2*idx + ivec2(1,1)).r\
-))\
 
 void main()
 {
@@ -25,7 +19,27 @@ void main()
 	if (any(greaterThanEqual(idx, size)) || any(lessThan(idx, ivec2(0))))
 		return;
 
-	float box = downsample(levels[u_level], idx);
+	float samples[4] = {
+		imageLoad(levels[u_level], 2*idx).r,
+		imageLoad(levels[u_level], 2*idx + ivec2(1,0)).r,
+		imageLoad(levels[u_level], 2*idx + ivec2(0,1)).r,
+		imageLoad(levels[u_level], 2*idx + ivec2(1,1)).r,
+	};
 
-	imageStore(levels[u_level + 1], idx, vec4(box));
+	float avg = 0.f;
+	float den = 0.f;
+
+	for (int i = 0; i < 4; ++i) {
+		float samp = samples[i]; 
+		if (samp < 0.f) {
+			continue;
+		}
+
+		avg += samp;
+		den += 1.f;
+	}
+
+	avg = den > 0.f ? avg / den : -1.f;
+
+	imageStore(levels[u_level + 1], idx, vec4(avg));
 }

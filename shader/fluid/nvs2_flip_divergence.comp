@@ -4,11 +4,16 @@
 #include "nvs2_flip.glsl"
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-float div_v(ivec2 p)
+#define BETA 0.1
+#define PARTS_PER_CELL 8
+
+float rhs(ivec2 p)
 {
 	float div = 0;
 
 	ivec2 size = imageSize(f_out);
+
+	float rho = 0;
 
 	int offset = 0;
 	for (int i = 0; i < DIMS; ++i) {
@@ -16,10 +21,61 @@ float div_v(ivec2 p)
 		uint idx = row_size * p[(i + 1) % DIMS] + p[i];
 		uint offset = s_offsets[i];
 
-		div += s_vel[offset + idx + 1] - s_vel[offset + idx];  
+		uint idx1 = offset + idx;
+		uint idx2 = offset + idx + 1;
+
+		float wt1 = s_vel[idx1].wt;
+		float wt2 = s_vel[idx2].wt;
+
+		float v1 = s_vel[idx1].acc;
+		float v2 = s_vel[idx2].acc;
+
+		if (wt1 > 1e-3 && wt2 > 1e-3) {
+			div += v2 / wt2 - v1 / wt1;
+			rho += (wt1 + wt2) * RHO/PARTS_PER_CELL;
+		}
+		if (p.y == 0 || p.x == 0 || p.x == size.x - 1)
+			rho *= 8;
 	}
 
-	return div/(2*DELTA_X); 
+	float bd = imageLoad(bd_mask, p).r;
+
+
+	float f_rho = bd < 0 ? 0.f : -BETA*bd*(rho - RHO)/(RHO);
+	float f_div = RHO*div/(2*DELTA_X*TIMESTEP); 
+
+	return f_div + f_rho;
+}
+
+void flood_fill(ivec2 p)
+{
+	ivec2 stencil[4] = {
+		ivec2(1,0),
+		ivec2(0,1),
+		ivec2(-1,0),
+		ivec2(0,-1)
+	};
+
+	int count = 0;
+
+	ivec2 size = imageSize(bd_mask);
+
+	for (int i = 0; i < 4; ++i) {
+		ivec2 idx = p + stencil[i];
+		if (all(greaterThan(idx, ivec2(0))) && 
+			all(lessThan(idx, size))) {
+
+			float bd = imageLoad(bd_mask, idx).r;
+			if (bd >= 1.f)
+				++count;
+		}
+	}
+
+	float bd = imageLoad(bd_mask, p).r;
+
+	if (bd > 0 && count > 0) {
+		imageStore(bd_mask, p, vec4(1.f));
+	}
 }
 
 void main()
@@ -30,7 +86,9 @@ void main()
 	if (idx.x >= size.x || idx.y >= size.y)
 		return;
 
-	float f = RHO*div_v(idx)/TIMESTEP;
+	float f = rhs(idx);
+
+	flood_fill(idx);
 
 	imageStore(f_out, idx, vec4(f, 0, 0, 0));
 }

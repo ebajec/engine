@@ -689,6 +689,11 @@ static ResourceStateFlags usage_to_state_flags(Usage usage)
 					VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT_KHR |
 					VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT_KHR
 			};
+    	case USAGE_STORAGE_READ_GRAPHICS:
+			return ResourceStateFlags{
+				.access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+				.stage = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
+			};
 		case USAGE_STORAGE_READ_COMPUTE:
 			return ResourceStateFlags{
 				.access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
@@ -736,6 +741,7 @@ static uint8_t usage_to_rw_flags(Usage usage)
 		case USAGE_VERTEX_INPUT:
 		case USAGE_INDEX_INPUT:
 		case USAGE_SAMPLED_GRAPHICS:
+		case USAGE_STORAGE_READ_GRAPHICS:
 		case USAGE_STORAGE_READ_COMPUTE:
 		case USAGE_SAMPLED_COMPUTE:
 			return PASS_READ;

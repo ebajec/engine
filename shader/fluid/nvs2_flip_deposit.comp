@@ -6,11 +6,17 @@
 
 layout (local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 
+void deposit(float v, float wt, uint idx)
+{
+	atomicAdd(s_vel[idx].acc, wt * v); 
+	atomicAdd(s_vel[idx].wt, wt); 
+}
+
 void main()
 {
 	int idx = int(gl_GlobalInvocationID.x);
 
-	if (idx > pc.count)
+	if (idx >= pc.count)
 		return;
 
 	vec2 part_vel = u_part_vel[idx];
@@ -18,25 +24,56 @@ void main()
 
 	ivec2 mask_size = imageSize(bd_mask);
 
-	ivec2 p = min(ivec2(part_pos), mask_size);
-	vec2 wt = fract(part_pos);
 	vec2 v = part_vel;
 
 	for (int i = 0; i < DIMS; ++i) {
-		int row_size = mask_size[i] + 1;
+		// "twizzle"
+		ivec2 tw = ivec2(i, (i + 1) % DIMS);
 
-		uint idx = s_offsets[i] +  row_size * p[(i + 1) % DIMS] + p[i];
+		vec2 p = part_pos;
+		p[tw.y] -= 0.5;
+		ivec2 p_grid = min(ivec2(p), mask_size);
 
-		float v1 = wt[i] * v[i];
-		float v2 = (1.f - wt[i]) * v[i];
+		int row_size = mask_size[tw.x] + 1;
 
-		atomicAdd(s_vel[idx], v1); 
-		atomicAdd(s_vel[idx + 1], v2); 
+		int j1 = int(s_offsets[tw.x]) + row_size * p_grid[tw.y] + p_grid[i];
+		int j2 = j1 + 1;
+		int j3 = j1 + row_size;
+		int j4 = j2 + row_size;
 
-		float wt = imageLoad(solid_mask, p).r;
+		int j_max = int(s_offsets[tw.x]) + row_size * mask_size[tw.y];
 
-		if (wt > 0.f) {
-			imageStore(bd_mask, p, vec4(1.f));
+		float v = v[i];
+
+		vec2 wt = fract(p);
+
+		float s = wt[tw.x];
+		float t = wt[tw.y];
+
+		if (j1 >= 0 && j1 < j_max) {
+			deposit(v, (1.f - s) * (1.f - t), j1);
+			deposit(v, s * (1.f - t), j2);
+		}
+		if (j3 >= 0 && j3 < j_max) {
+			deposit(v, (1.f - s) * t, j3);
+			deposit(v, s * t, j4);
+		}
+	}
+
+	ivec2 c = min(ivec2(part_pos), mask_size);
+
+	for (int i = 0; i < 3; ++i) {
+		for (int j = 0; j < 3; ++j) {
+			ivec2 p = c + ivec2(i - 1, j - 1); 
+
+			if (p != clamp(p, ivec2(0), ivec2(mask_size) - ivec2(1)))
+				continue;
+
+			float wt = imageLoad(solid_mask, p).r;
+
+			if (wt > 0.f) {
+				imageStore(bd_mask, p, vec4(1.f));
+			}
 		}
 	}
 }

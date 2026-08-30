@@ -16,22 +16,29 @@
 // The level 0 iteration fetches directly from f. Subsequent iterations
 // downsample the residuals from the previous pass
 
-float RHS(ivec2 idx, uint level, out float wt)
+float RHS(ivec2 idx, uint level, out float wt, out float fill)
 {
-	wt = test_boundary(idx,level);
-	return bool(wt > 0.f) ? imageLoad(R1[level], idx).r : 0;
+	float mask = get_bd_mask(idx,level);
+	wt = abs(mask);
+	fill = float(wt > 0);
+
+	return (abs(wt) > 0.f) ? imageLoad(R1[level], idx).r : 0;
 }
 
-float LHS(ivec2 idx, out float wt)
+float LHS(ivec2 idx, out float wt, out float fill)
 {
-	wt = test_boundary(idx,0);
-	return bool(wt > 0.f) ? imageLoad(in_lhs, idx).r : 0;
+	float mask = get_bd_mask(idx,0);
+	wt = abs(mask);
+	fill = float(wt > 0);
+
+	return (abs(wt) > 0.f) ? imageLoad(in_lhs, idx).r : 0;
 }
 
 float residual(ivec2 idx, float rhs, float h)
 {
-	float wt_c = get_bd(idx);
-	float u = wt_c * block[idx.x][idx.y];
+	float fill_c;
+	float wt_c = get_bd(idx, fill_c);
+	float u = fill_c * wt_c * block[idx.x][idx.y];
 
 	if (wt_c < OOB_CELL_THRES) {
 		return 0.f;
@@ -47,14 +54,19 @@ float residual(ivec2 idx, float rhs, float h)
 	float t = block[t_idx.x][t_idx.y];
 	float b = block[b_idx.x][b_idx.y];
 
-	float wt_l = get_bd(l_idx);
-	float wt_r = get_bd(r_idx);
-	float wt_t = get_bd(t_idx);
-	float wt_b = get_bd(b_idx);
+	float fill_l;
+	float fill_r;
+	float fill_t;
+	float fill_b;
+
+	float wt_l = get_bd(l_idx, fill_l);
+	float wt_r = get_bd(r_idx, fill_r);
+	float wt_t = get_bd(t_idx, fill_t);
+	float wt_b = get_bd(b_idx, fill_b);
 
 	float lap = (
-		mix(u,l,wt_l) + mix(u,r,wt_r) + 
-		mix(u,t,wt_t) + mix(u,b,wt_b) 
+		mix(u, fill_l * l, wt_l) + mix(u, fill_r * r, wt_r) + 
+		mix(u, fill_t * t, wt_t) + mix(u, fill_b * b, wt_b) 
 		- 4.f*u
 	)/(h*h);
 
@@ -79,8 +91,9 @@ float fetch_lhs(ivec2 grid_idx, float rhs, float h)
 		grid_idx + ivec2(0, -1)
 	};
 
-	float wt_c = 0;
-	float c = LHS(grid_idx, wt_c);
+	float fill_c;
+	float wt_c;
+	float c = LHS(grid_idx, wt_c, fill_c);
 
 	c *= wt_c;
 
@@ -91,18 +104,19 @@ float fetch_lhs(ivec2 grid_idx, float rhs, float h)
 	float den = 0;
 
 	for (int i = 0; i < 4; ++i) {
+		float fill;
 		float wt;
-		float v = LHS(stencil[i], wt);
+		float v = LHS(stencil[i], wt, fill);
 
 		wt = min(wt_c, wt);
 
 		den += wt;
-		sum += wt * v;
+		sum += fill * wt * v;
 	}
 
 	float u_next = den > 0 ? (sum - h*h*rhs)/den : 0;
 
-	return mix(c, u_next, OMEGA); 
+	return fill_c * mix(c, u_next, OMEGA); 
 #endif
 }
 
@@ -129,19 +143,22 @@ float fetch_rhs(ivec2 idx)
 
 		float wt[9] = {1, 2,2,2,2, 1,1,1,1};
 
+		float fill;
 		float wt_c;
-		float center = RHS(2*idx, L, wt_c);
+		float center = RHS(2*idx, L, wt_c, fill);
 
 		float num = 0;
 		float den = 0;
 		for (int i = 0; i < 9; ++i) {
+			float fill_i;
 			float wt_i;
-			float value = RHS(stencil[i],L,wt_i);
-			num += wt[i] * mix(center,value,wt_i);
-			den += wt[i];
+			float value = RHS(stencil[i], L, wt_i, fill_i);
+			num += wt_i * fill * wt[i] * mix(center,value,wt_i);
+			den += wt_i * fill * wt[i];
 		}
 		return den > 0 ? num/den : 0;
 	}
+
 	return imageLoad(in_rhs, idx).x;
 }
 
@@ -171,7 +188,7 @@ void main()
 
 	float rhs = fetch_rhs(grid_idx);
 	float lhs = fetch_lhs(grid_idx, rhs, h);
-	float bd = test_boundary(grid_idx, u_level);
+	float bd = get_bd_mask(grid_idx, u_level);
 
 	if (bd < OOB_CELL_THRES) {
 		rhs = 0;

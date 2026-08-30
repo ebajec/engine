@@ -101,7 +101,7 @@ void main()
 
 	grid_idx = clamp(grid_idx, ivec2(0), size - ivec2(1));
 
-	float bd = test_boundary(grid_idx, u_level);  
+	float bd = get_bd_mask(grid_idx, u_level);  
 	set_bd(idx, bd);
 
 	const float h = DELTA_X;
