@@ -61,11 +61,11 @@ int GridFluidSim::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 	}
 	mean_subtractor->setup_bindings(ctx, lap_p_img);
 
-	nvs_particles = ev2::load_compute_pipeline(ctx, "shader/nvs2_flip_advect");
-	nvs_advect = ev2::load_compute_pipeline(ctx, "shader/nvs2_advect_semi_lagrange");
-	nvs_diffuse = ev2::load_compute_pipeline(ctx, "shader/nvs2_diffuse");
-	nvs_divergence = ev2::load_compute_pipeline(ctx, "shader/nvs2_divergence");
-	nvs_project = ev2::load_compute_pipeline(ctx, "shader/nvs2_project");
+	nvs_particles = ev2::load_compute_pipeline(ctx, "shader/fluid/nvs2_flip_advect");
+	nvs_advect = ev2::load_compute_pipeline(ctx, "shader/fluid/nvs2_advect_semi_lagrange");
+	nvs_diffuse = ev2::load_compute_pipeline(ctx, "shader/fluid/nvs2_diffuse");
+	nvs_divergence = ev2::load_compute_pipeline(ctx, "shader/fluid/nvs2_divergence");
+	nvs_project = ev2::load_compute_pipeline(ctx, "shader/fluid/nvs2_project");
 
 	particles_set = ev2::create_bindings(ctx, nvs_particles, 1, ev2::BINDING_MODE_STATIC);
 	for (int i = 0; i < DIMS; ++i) {

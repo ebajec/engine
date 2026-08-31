@@ -6,12 +6,10 @@ build-*/
 
 imgui.ini
 
-resource/shader/*.spv
-resource/shader/*.d
+resource/shader/*/*.spv
+resource/shader/*/*.d
 samples/boxes/
 samples/hopf/
-
-res/shader/
 
 perf.*
 

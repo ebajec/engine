@@ -1,4 +1,4 @@
-#version 430 core
+#version 460 core
 #extension GL_GOOGLE_include_directive : require
 
 #include "nvs2_flip.glsl"
@@ -6,7 +6,7 @@
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 #define DAMP 0.6
-#define G 2
+#define G 3
 
 #define declare_sample(image)\
 float sample_##image(int coord, vec2 p)\
@@ -63,7 +63,7 @@ vec2 cursor_jet(vec2 c)
 	vec2 vel = p2 - p1;
 
 	//vec2 d = c - p1;
-	//return (-3*vec2(d.y, -d.x) - 10*d)/ (0.1f + dot(d,d));
+	//return (10*d + 2*vec2(d.y, -d.x))/ (1.0f + 2*dot(d,d));
 
 	vec2 O = p2 - vel*0.25;
 
@@ -113,21 +113,20 @@ void main()
 		vec2 w = vec2(size)/4;
 
 		vec2 pos = w*(vec2(1.f) -2.f*vec2(r1,r2)) + c - vec2(0.5);
-
-		u_part_pos[idx] = pos;
-
 		vec2 r = length(pos - c) > 1e-3 ? normalize(pos - c) : vec2(0);
 		
-		u_part_vel[idx] = -1*vec2(r.x, r.y);
+		u_parts[idx] = FluidParticle(pos, -vec2(r.x,r.y));
 		return;
 	}
 
-	vec2 p_old = u_part_pos[idx];
+	FluidParticle part = u_parts[idx];
+
+	vec2 p_old = part.pos;
 	vec2 v_grid = get_v_proj(p_old);
 
 	vec2 correction = v_grid - get_v_pre_proj(p_old); 
 
-	vec2 k1 = u_part_vel[idx] + correction;
+	vec2 k1 = part.vel + correction;
 	vec2 k2 = get_v_proj(p_old - 0.5 * TIMESTEP * k1); 
 	vec2 k3 = get_v_proj(p_old - TIMESTEP * k2); 
 
@@ -155,6 +154,5 @@ void main()
 
 	v_new += cursor_jet(p_new);
 
-	u_part_pos[idx] = p_new;
-	u_part_vel[idx] = 0.995*v_new;
+	u_parts[idx] = FluidParticle(p_new, 0.995*v_new);
 }

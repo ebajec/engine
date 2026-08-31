@@ -66,6 +66,16 @@ ev2::Result bind_buffer(
 	size_t size
 );
 
+ev2::Result bind_buffer_indexed(
+	GfxContext *ctx, 
+	BindingsID id, 
+	const char *name,
+	uint32_t dst_index,
+	BufferID buffer_handle, 
+	size_t offset, 
+	size_t size
+);
+
 /// @brief Bind a texture to the binding given by name.
 /// The binding is assumed to not be an array type.
 ev2::Result bind_texture(

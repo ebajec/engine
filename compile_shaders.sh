@@ -15,7 +15,8 @@ shift $((OPTIND - 1))
 # Usage: ./compile_shaders.sh [INPUT_DIR] [OUTPUT_DIR]
 INPUT_DIR="${1:-./shader}"
 OUTPUT_DIR="${2:-./resource/shader}"
-
+# Strip any trailing slash so relative-path stripping below matches cleanly.
+INPUT_DIR="${INPUT_DIR%/}"
 mkdir -p "$OUTPUT_DIR"
 
 EXTENSIONS=(vert frag comp geom tesc tese)
@@ -51,20 +52,21 @@ needs_recompile() {
 }
 
 for ext in "${EXTENSIONS[@]}"; do
-  for src in "$INPUT_DIR"/*/*."$ext"; do
-    # skip if no files match
-    [[ -e "$src" ]] || continue
+  # find at any depth under INPUT_DIR (not just one level), so nested
+  # subdirectories are picked up too.
+  while IFS= read -r -d '' src; do
 
-    filename="$(basename "$src")"
-    out="$OUTPUT_DIR/${filename}.spv"
-    depfile="$OUTPUT_DIR/${filename}.d"
+    rel="${src#"$INPUT_DIR"/}"
+    out="$OUTPUT_DIR/${rel}.spv"
+    depfile="$OUTPUT_DIR/${rel}.d"
+    mkdir -p "$(dirname "$out")"
 
-	if needs_recompile "$src" "$out" "$depfile" || [ ${FORCE_COMPILE} -eq 1 ]; then
-		echo "Compiling $src → $out"
-		glslc -c -O -g -fpreserve-bindings --target-env=vulkan1.3 -MD -MF "$depfile" ${INCLUDE_FLAGS} "$src" -o "$out"
-		i=$((i + 1))
-	fi
-  done
+    if needs_recompile "$src" "$out" "$depfile" || [ ${FORCE_COMPILE} -eq 1 ]; then
+        echo "Compiling $src → $out"
+        glslc -c -O -g -fpreserve-bindings --target-env=vulkan1.3 -MD -MF "$depfile" ${INCLUDE_FLAGS} "$src" -o "$out"
+        i=$((i + 1))
+    fi
+  done < <(find "$INPUT_DIR" -type f -name "*.${ext}" -print0)
 done
 
 if ((i == 0)); then

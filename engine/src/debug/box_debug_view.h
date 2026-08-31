@@ -33,7 +33,7 @@ struct BoxDebugView
 	uint64_t upload_index;
 
 	BoxDebugView(ev2::GfxContext *_ctx) : ctx(_ctx) {
-		pipeline = ev2::load_graphics_pipeline(ctx, "pipelines/box_debug.yaml");
+		pipeline = ev2::load_graphics_pipeline(ctx, "pipelines/core/box_debug.yaml");
 
 		vcap = 0;
 		icap = 0;

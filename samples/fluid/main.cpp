@@ -86,16 +86,6 @@ struct FLIPFluidSim
 
 	uint64_t step = 0;
 
-	size_t get_part_pos_offset()
-	{
-		return 0;
-	}
-
-	size_t get_part_vel_offset()
-	{
-		return get_part_pos_offset() + particle_count * sizeof(glm::vec2);
-	}
-
 	size_t get_depost_buf_header_size() 
 	{
 		return DIMS * sizeof(uint32_t);
@@ -144,7 +134,7 @@ struct FLIPFluidSim
 		deposit_buf = ev2::create_buffer(ctx, deposit_buf_size,
 			ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT); 
 
-		part_data = ev2::create_buffer(ctx, particle_count * (sizeof(glm::vec2) + sizeof(glm::vec2)),
+		part_data = ev2::create_buffer(ctx, particle_count * (sizeof(FluidParticle)),
 			ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT | ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT); 
 
 		lap_p_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F, usage);
@@ -174,10 +164,10 @@ struct FLIPFluidSim
 		}
 		mean_subtractor->setup_bindings(ctx, lap_p_img);
 
-		p_advect = ev2::load_compute_pipeline(ctx, "shader/nvs2_flip_advect");
-		p_deposit = ev2::load_compute_pipeline(ctx, "shader/nvs2_flip_deposit");
-		p_divergence = ev2::load_compute_pipeline(ctx, "shader/nvs2_flip_divergence");
-		p_project = ev2::load_compute_pipeline(ctx, "shader/nvs2_flip_project");
+		p_advect = ev2::load_compute_pipeline(ctx, "shader/fluid/nvs2_flip_advect");
+		p_deposit = ev2::load_compute_pipeline(ctx, "shader/fluid/nvs2_flip_deposit");
+		p_divergence = ev2::load_compute_pipeline(ctx, "shader/fluid/nvs2_flip_divergence");
+		p_project = ev2::load_compute_pipeline(ctx, "shader/fluid/nvs2_flip_project");
 
 		bindings = ev2::create_bindings(ctx, p_advect, 0, ev2::BINDING_MODE_STATIC);
 
@@ -189,10 +179,8 @@ struct FLIPFluidSim
 			ev2::bind_image_indexed(ctx, bindings, "v_proj", i, v_proj_img[i]);
 		}
 
-		ev2::bind_buffer(ctx, bindings, "ParticlePositions", part_data, 
-			get_part_pos_offset(), particle_count * sizeof(glm::vec2)); 
-		ev2::bind_buffer(ctx, bindings, "ParticleVelocity", part_data, 
-			get_part_vel_offset(), particle_count * sizeof(glm::vec2)); 
+		ev2::bind_buffer(ctx, bindings, "Particles", part_data, 
+			0, particle_count * sizeof(FluidParticle)); 
 		ev2::bind_buffer(ctx, bindings, "VelocityBuffer", deposit_buf, 0, deposit_buf_size);  
 
 		ev2::bind_image(ctx, bindings, "f_out", lap_p_img);
@@ -285,14 +273,9 @@ struct FLIPFluidSim
 		//------------------------------------------------------------------------------
 		// pressure_solve
 
-		//mean_subtractor->record(pass);
-		
 		pressure_solver->record_setup(pass);
-		for (int i = 0; i < ((step == 0) ? 64 : 4); ++i) 
+		for (int i = 0; i < ((step == 0) ? 32 : 4); ++i) 
 			pressure_solver->record_v_cycle(pass);
-
-		//mean_subtractor->set_image(ctx, p_img);
-		//mean_subtractor->record(rec);
 
 		ev2::end_pass(ctx, pass);
 
@@ -570,13 +553,8 @@ void FluidApp::render()
 	}
 
 	ev2::reset_bindings(ctx, particle_bindings);
-	ev2::bind_buffer(ctx, particle_bindings, "Positions", 
-		sim->part_data, 
-		sim->get_part_pos_offset(), 
-		sim->particle_count * sizeof(glm::vec2));
-	ev2::bind_buffer(ctx, particle_bindings, "Velocities", 
-		sim->part_data, sim->get_part_vel_offset(), 
-		sim->particle_count * sizeof(glm::vec2));
+	ev2::bind_buffer(ctx, particle_bindings, "Particles", 
+		sim->part_data, 0, sim->particle_count * sizeof(FluidParticle));
 
 	ev2::flush_bindings(ctx, particle_bindings);
 

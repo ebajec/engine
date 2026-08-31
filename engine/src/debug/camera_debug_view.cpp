@@ -20,7 +20,7 @@ CameraDebugView::CameraDebugView(ev2::GfxContext *_ctx) : ctx(_ctx)
 	ibo = ev2::create_buffer(ctx, sizeof(frust_indices), ev2::BUFFER_USAGE_INDEX_BUFFER_BIT);
 	ssbo = ev2::create_buffer(ctx, sizeof(glm::mat4), ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
-	pipeline = ev2::load_graphics_pipeline(ctx, "pipelines/frustum.yaml");
+	pipeline = ev2::load_graphics_pipeline(ctx, "pipelines/core/frustum.yaml");
 
 	desc = ev2::create_bindings(ctx, pipeline, EV2_GFX_SET_PER_DRAW, 
 							 ev2::BINDING_MODE_STATIC);

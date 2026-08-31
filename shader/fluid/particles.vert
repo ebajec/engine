@@ -10,13 +10,9 @@ layout (location = 1) flat out vec2 out_center;
 layout (location = 2) out vec4 out_color;
 layout (location = 3) out vec2 out_vel;
 
-layout (set = PER_DRAW_SET, binding = 0) readonly buffer Positions
+layout (set = PER_DRAW_SET, binding = 0) readonly buffer Particles
 {
-	vec2 u_pos[];
-};
-layout (set = PER_DRAW_SET, binding = 1) readonly buffer Velocities
-{
-	vec2 u_vel[];
+	FluidParticle u_parts[];
 };
 
 layout (push_constant) uniform PC {
@@ -32,12 +28,12 @@ void main()
 	 	vec2(-1,1)
 	};
 
-	vec2 part_pos = u_pos[gl_InstanceIndex];
-	vec2 part_vel = u_vel[gl_InstanceIndex];
+	vec2 part_pos = u_parts[gl_InstanceIndex].pos;
+	vec2 part_vel = u_parts[gl_InstanceIndex].vel;
 
 	int vtx = gl_VertexIndex;
 
-	float w = 0.1f;
+	float w = 0.0f;
 
 	vec2 pos;
 	if (vtx < 3) {

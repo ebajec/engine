@@ -10,9 +10,9 @@ struct BoundaryEditor : public ImageViewerPanel
 		uint32_t x, uint32_t y, 
 		uint32_t w, uint32_t h, 
 		const char *name = nullptr
-	) :  ImageViewerPanel(app, x, y, w, h, "pipelines/screen_quad.yaml", name) 
+	) :  ImageViewerPanel(app, x, y, w, h, "pipelines/core/screen_quad.yaml", name) 
 	{
-		cursor = ev2::load_compute_pipeline(app->ctx, "shader/bd_cursor");
+		cursor = ev2::load_compute_pipeline(app->ctx, "shader/fluid/bd_cursor");
 		cursor_bindings = ev2::create_bindings(app->ctx, cursor, 0, 
 											ev2::BINDING_MODE_DYNAMIC);
 	}

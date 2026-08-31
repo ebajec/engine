@@ -1,3 +1,0 @@
-shaders:
-  vert: shader/screen_quad2.vert.spv
-  frag: shader/depth_viz.frag.spv

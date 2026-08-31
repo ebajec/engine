@@ -481,7 +481,7 @@ static ev2::Result create_render_data(ev2::GfxContext *ctx, RenderData &data)
 	size_t indirect_size = MAX_TILES*sizeof(ev2::DrawCommand);
 	size_t ssbo_size = MAX_TILES*sizeof(TileMetadata);
 
-	data.pipeline = ev2::load_graphics_pipeline(ctx, "pipelines/globe_tile.yaml");
+	data.pipeline = ev2::load_graphics_pipeline(ctx, "pipelines/core/globe_tile.yaml");
 
 	if (!data.pipeline.id)
 		goto load_failed;

@@ -1,0 +1,7 @@
+shaders:
+  vert: shader/core/screen_quad2.vert.spv
+  frag: shader/core/texture_viewer.frag.spv
+states:
+  cull: front
+  depth_test: less_equal
+  blend: opaque

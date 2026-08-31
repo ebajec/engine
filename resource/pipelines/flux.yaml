@@ -1,3 +1,3 @@
 shaders:
-  vert: shader/flux.vert.spv
-  frag: shader/flux.frag.spv
+  vert: shader/fluid/flux.vert.spv
+  frag: shader/fluid/flux.frag.spv

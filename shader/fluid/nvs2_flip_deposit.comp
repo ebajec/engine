@@ -19,8 +19,10 @@ void main()
 	if (idx >= pc.count)
 		return;
 
-	vec2 part_vel = u_part_vel[idx];
-	vec2 part_pos = u_part_pos[idx];
+	FluidParticle part = u_parts[idx];
+
+	vec2 part_vel = part.vel;
+	vec2 part_pos = part.pos;
 
 	ivec2 mask_size = imageSize(bd_mask);
 

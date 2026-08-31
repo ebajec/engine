@@ -1348,7 +1348,7 @@ ComputePipelineID load_compute_pipeline(GfxContext *ctx, const char *path)
 {
 	std::string_view path_str (path);
 	if (path_str.ends_with(".comp.spv") || path_str.ends_with(".comp")) {
-		log_warn("Compute pipeline loaded via shader file path: internal name will be different");
+		log_warn("Compute pipeline loaded via shader file path: internal name will trim extension");
 	}
 
 	AssetID id = ctx->assets->load(path);
@@ -1524,10 +1524,11 @@ Result reset_bindings(GfxContext *ctx, BindingsID bindings_handle)
 	return ev2::SUCCESS;
 }
 
-ev2::Result bind_buffer(
+static ev2::Result bind_buffer_internal(
 	GfxContext *ctx, 
 	BindingsID id, 
 	const char *name,
+	uint32_t dst_index,
 	BufferID buffer_handle, 
 	size_t offset, 
 	size_t size
@@ -1566,7 +1567,7 @@ ev2::Result bind_buffer(
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 		.dstSet = bindings->descriptor_set,
 		.dstBinding = binding.binding,
-		.dstArrayElement = 0,
+		.dstArrayElement = dst_index,
 		.descriptorCount = 1,
 		.descriptorType = binding.descriptorType,
 	};
@@ -1578,6 +1579,31 @@ ev2::Result bind_buffer(
 	});
 	return ev2::SUCCESS;
 }
+
+ev2::Result bind_buffer(
+	GfxContext *ctx, 
+	BindingsID id, 
+	const char *name,
+	BufferID buffer_handle, 
+	size_t offset, 
+	size_t size
+) 
+{
+	return bind_buffer_internal(ctx, id, name, 0, buffer_handle, offset, size);
+}
+ev2::Result bind_buffer_indexed(
+	GfxContext *ctx, 
+	BindingsID id, 
+	const char *name,
+	uint32_t dst_index,
+	BufferID buffer_handle, 
+	size_t offset, 
+	size_t size
+) 
+{
+	return bind_buffer_internal(ctx, id, name, dst_index, buffer_handle, offset, size);
+}
+
 static ev2::Result bind_texture_internal(
 	GfxContext *ctx, 
 	BindingsID id,

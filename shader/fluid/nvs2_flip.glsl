@@ -1,4 +1,3 @@
-
 #ifndef NVS_GLSL
 #define NVS_GLSL
 
@@ -24,13 +23,9 @@ layout (set = 0, binding = 1, r8_snorm) uniform image2D bd_mask;
 layout (set = 0, r32f, binding = 2) uniform image2D v_pre_proj[DIMS];
 layout (set = 0, r32f, binding = 3) uniform image2D v_proj[DIMS];
 
-layout (set = 0, binding = 4, std430) buffer ParticlePositions
+layout (set = 0, binding = 4, std430) buffer Particles
 {
-	vec2 u_part_pos[];
-};
-layout (set = 0, binding = 5, std430) buffer ParticleVelocity
-{
-	vec2 u_part_vel[];
+	FluidParticle u_parts[];
 };
 
 struct VelocityCell
@@ -39,17 +34,17 @@ struct VelocityCell
 	float wt;
 };
 
-layout (set = 0, binding = 6, std430) buffer VelocityBuffer 
+layout (set = 0, binding = 5, std430) buffer VelocityBuffer 
 {
 	uint s_offsets[DIMS];
 	VelocityCell s_vel[];
 };
 
 // Goes to pressure solver
-layout (set = 0, r32f, binding = 7) writeonly uniform image2D f_out;
+layout (set = 0, r32f, binding = 6) writeonly uniform image2D f_out;
 
 // Comes from pressure solver
-layout (set = 0, r32f, binding = 8) uniform readonly image2D p_in;
+layout (set = 0, r32f, binding = 7) uniform readonly image2D p_in;
 
 layout (push_constant) uniform PC
 {

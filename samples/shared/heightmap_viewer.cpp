@@ -49,7 +49,7 @@ int HeightmapViewerPanel::init(App *app_, ev2::GfxContext *ctx, ev2::TextureID t
 	//-----------------------------------------------------------------------------
 	// Setup pipeline
 	
-	rd.pipeline = ev2::load_graphics_pipeline(ctx, "pipelines/heightmap.yaml");
+	rd.pipeline = ev2::load_graphics_pipeline(ctx, "pipelines/core/heightmap.yaml");
 
 	if (!EV2_VALID(rd.pipeline))
 		return EXIT_FAILURE;
