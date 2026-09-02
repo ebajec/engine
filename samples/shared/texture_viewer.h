@@ -39,7 +39,7 @@ struct ImageViewerPanel
 
 	glm::vec2 world_cursor;
 	ImageViewerPanel(App *app, uint32_t x, uint32_t y, uint32_t w, uint32_t h, 
-					const char * pipeline = "pipelines/screen_quad.yaml", const char *name = nullptr);
+					const char * pipeline = "pipelines/core/screen_quad.yaml", const char *name = nullptr);
 
 	int set_pipeline(const char *path);
 

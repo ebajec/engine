@@ -8,9 +8,9 @@
 #define GRID_WT 0.05
 
 #define TIMESTEP 0.05
-#define DELTA_X 1.0f
+#define DELTA_X 0.5f
 #define NU 0.0
-#define RHO 0.1f
+#define RHO 1.0f
 
 #define DIMS 2
 

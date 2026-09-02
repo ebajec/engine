@@ -484,7 +484,7 @@ std::shared_ptr<ImageViewerPanel> App::open_image_viewer(ev2::ImageID image)
 
 	std::shared_ptr<ImageViewerPanel> panel( 
 		new ImageViewerPanel(this, pos.x, pos.y, width, height, 
-			"pipelines/screen_quad.yaml", panel_name.c_str())
+			"pipelines/core/screen_quad.yaml", panel_name.c_str())
 	);
 
 	if (panel->init(ctx, image) != App::OK) {

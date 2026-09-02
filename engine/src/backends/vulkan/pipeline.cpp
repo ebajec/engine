@@ -1157,12 +1157,19 @@ static ev2::Result gfx_pipeline_reload_callback(ev2::GfxContext *ctx, void** usr
 static ev2::Result compute_pipeline_create_callback(
 	ev2::GfxContext *ctx, 
 	ev2::ComputePipeline **pp_pipeline, 
-	const char *path
+	const char *in_name
 )
 {
 	ev2::ShaderID shader_handle = EV2_NULL_HANDLE(Shader);
 
-	std::string path_str = path;
+	const char *sep = ":";
+
+	std::string_view name = in_name;
+	size_t sep_idx = name.find_first_of(sep);
+
+	std::string entrypoint = sep_idx == std::string::npos ? "main" : std::string(name.substr(1 + sep_idx));
+	std::string path_str = std::string(name.substr(0, sep_idx));
+
 	bool is_from_config = path_str.ends_with(".yaml");
 
 	if (!is_from_config) {
@@ -1195,7 +1202,7 @@ static ev2::Result compute_pipeline_create_callback(
 			.flags = 0,
 			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
 			.module = shader->shader_module,
-			.pName = "main",
+			.pName = entrypoint.c_str(),
 			.pSpecializationInfo = nullptr
 		},
 		.layout = pipeline->base.layout,
@@ -1221,7 +1228,7 @@ static ev2::Result compute_pipeline_create_callback(
 	log_info(
 		"Compute pipeline: " COLORIZE_PATH(%s) "\n"
 		"\tVkPipeline: " ANSI_BLUE(0x%LX),
-		path, pipeline->base.pipeline
+		in_name, pipeline->base.pipeline
 	);
 
 	*pp_pipeline = pipeline.release();

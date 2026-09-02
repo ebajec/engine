@@ -33,7 +33,7 @@ void main()
 
 	int vtx = gl_VertexIndex;
 
-	float w = 0.0f;
+	float w = 0.2f;
 
 	vec2 pos;
 	if (vtx < 3) {

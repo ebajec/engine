@@ -18,6 +18,17 @@ float get_p(ivec2 idx, out float wt)
 	return imageLoad(p_in, idx).x;
 }
 
+void poop()
+{
+    ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+	float wt_c;
+	float p_c = get_p(idx, wt_c);
+	// reset the air mask
+	if (any(lessThan(idx, imageSize(bd_mask)))) {
+		imageStore(bd_mask, idx, vec4(wt_c > 0.f ? -1 : wt_c));
+	}
+}
+
 void main()
 {
     ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
@@ -50,8 +61,8 @@ void main()
 
 		float v = get_avg_vel(v_idx);
 
-		float dp = (p_c - p)/(2*DELTA_X);
-		float v_hat = wt * (v + TIMESTEP * -dp/RHO);
+		float dp = (p_c - p);
+		float v_hat = wt * (v + -dp);
 
 		imageStore(v_pre_proj[i], idx, vec4(v));
 		imageStore(v_proj[i], idx, vec4(v_hat));

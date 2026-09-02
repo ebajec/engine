@@ -110,7 +110,7 @@ void main()
 	if (pc.step == 0) {
 
 		vec2 c = vec2(size)/2;
-		vec2 w = vec2(size)/4;
+		vec2 w = vec2(size) * vec2(0.01, 0.5);
 
 		vec2 pos = w*(vec2(1.f) -2.f*vec2(r1,r2)) + c - vec2(0.5);
 		vec2 r = length(pos - c) > 1e-3 ? normalize(pos - c) : vec2(0);
@@ -133,10 +133,10 @@ void main()
 	vec2 p_new = p_old + TIMESTEP * (1./6.) * (k1 + 4*k2 + k3);
 	vec2 v_new = mix(k1, v_grid, 0.1);
 
-	//p_new += 0.01*normalize(vec2(1.f) - 2.f*vec2(r1, r2));
+	p_new += 0.001*normalize(vec2(1.f) - 2.f*vec2(r1, r2));
 
 	float S = length(v_new);
-	float R = max(S*TIMESTEP, 0.9f);
+	float R = max(S*TIMESTEP, 1.0f);
 
 	vec2 p_clamped = clamp(p_new, vec2(R), vec2(size) - vec2(R));
 

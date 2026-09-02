@@ -6,6 +6,7 @@ layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 #define BETA 0.1
 #define PARTS_PER_CELL 8
+#define RHO_REST 100.1f
 
 float rhs(ivec2 p)
 {
@@ -32,17 +33,17 @@ float rhs(ivec2 p)
 
 		if (wt1 > 1e-3 && wt2 > 1e-3) {
 			div += v2 / wt2 - v1 / wt1;
-			rho += (wt1 + wt2) * RHO/PARTS_PER_CELL;
+			rho += (wt1 + wt2) * RHO_REST/PARTS_PER_CELL;
 		}
 		if (p.y == 0 || p.x == 0 || p.x == size.x - 1)
-			rho *= 8;
+			rho *= 6;
 	}
 
 	float bd = imageLoad(bd_mask, p).r;
 
 
-	float f_rho = bd < 0 ? 0.f : -BETA*bd*(rho - RHO)/(RHO);
-	float f_div = RHO*div/(2*DELTA_X*TIMESTEP); 
+	float f_rho = bd < 0 ? 0.f : -BETA*bd*(rho - RHO_REST)/(RHO_REST);
+	float f_div = div;
 
 	return f_div + f_rho;
 }
