@@ -239,6 +239,30 @@ static void edge_tooltip(const RenderGraph *rg, const PassEdge *edge, const char
 	ImGui::EndTooltip();
 }
 
+static void get_resource_name(GfxContext *ctx, std::string &out, TaggedResource resource)
+{
+	switch (resource.type) {
+		case RESOURCE_TYPE_IMAGE: {
+			const Image *img = ctx->get_image(resource.to_image());
+			if (img->name) {
+				out += img->name;
+				break;
+			}
+		}
+ 		[[fallthrough]];
+		default:
+			out += resource.type_str() + std::to_string(resource.id());
+			break;
+	}
+}
+
+static bool is_same_resource(const RenderGraph *rg, uint32_t edge1, uint32_t edge2)
+{
+	if (edge1 > rg->edges.size() || edge2 > rg->edges.size())
+		return false;
+	return rg->edges[edge1].resource == rg->edges[edge2].resource;
+}
+
 void render_graph_imgui(const RenderGraph *rg)
 {
 
@@ -413,14 +437,14 @@ void render_graph_imgui(const RenderGraph *rg)
 			dl->AddText(ImVec2_Add(p_min , ImVec2(6,6)), text_color, node.name);
 		}
 
-		std::string name;
-
 		constexpr uint32_t selected_bg_color = 0xDD663333;
 		constexpr uint32_t hover_bg_color = 0xDD994444;
 		constexpr uint32_t resource_bg_color = 0xDD000000;
 
 		bool has_hovered_edge = false;
-		
+
+		std::string name;
+
 		for (uint32_t e = 0; e < edge_count; ++e) {
 			if (rg->edges[e].dst_node == PASS_NODE_INDEX_OUT_OF_FRAME)
 				continue;
@@ -439,7 +463,7 @@ void render_graph_imgui(const RenderGraph *rg)
 				2.0f
 			);
 
-			name += edge.resource.type_str() + std::to_string(edge.resource.id());
+			get_resource_name(rg->ctx, name, edge.resource);
 
 			ImVec2 mid = ImVec2(0.5f*(p1.x + p2.x), 0.5f*(p1.y + p2.y));
 			ImVec2 text_size = ImGui::CalcTextSize(name.c_str());
@@ -459,10 +483,9 @@ void render_graph_imgui(const RenderGraph *rg)
 			ImGui::PopID();
 
 			if (clicked)
-				g_state.selected_edge = e;
+				g_state.selected_edge_idx = e;
 			if (hovered) {
 				g_state.hovered_edge = e;
-				g_state.hovered_edge_name = name;
 				has_hovered_edge = true;
 
 				if (hovered) {
@@ -470,11 +493,11 @@ void render_graph_imgui(const RenderGraph *rg)
 				}
 			}
 
-			bool name_matches = name == g_state.hovered_edge_name;
+			bool matches_selection = is_same_resource(rg, e, g_state.selected_edge_idx);
+			bool is_selected = (g_state.selected_edge_idx == e);
 
-			bool is_selected = (g_state.selected_edge == e);
 			ImU32 box_bg = is_selected ? selected_bg_color
-						 : (hovered || name_matches) ? hover_bg_color
+						 : (hovered || matches_selection) ? hover_bg_color
 										: resource_bg_color;
 
 			dl->AddRectFilled(box_min, box_max, box_bg, 3.0f);
@@ -488,13 +511,8 @@ void render_graph_imgui(const RenderGraph *rg)
 
 		if (!has_hovered_edge) {
 			g_state.hovered_edge = UINT32_MAX;
-			g_state.hovered_edge_name = "";
 		}
 	}
-
-	//if (ImGui::BeginChild("Images", ImVec2(0, 300), true)) {
-	//}
-	//ImGui::EndChild();
 	ImGui::End(); 
 
 }

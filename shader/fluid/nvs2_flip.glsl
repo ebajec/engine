@@ -8,7 +8,7 @@
 #define GRID_WT 0.05
 
 #define TIMESTEP 0.05
-#define DELTA_X 0.5f
+#define DELTA_X 1.5f
 #define NU 0.0
 #define RHO 1.0f
 

@@ -22,7 +22,7 @@ void main()
 
 	float f = 1.f;
 
-	float a = exp(-4*dot(r,r)) * f;
+	float a = exp(-40*dot(r,r)) * f;
 	if (a < 0.7)
 		discard;
 

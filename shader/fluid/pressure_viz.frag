@@ -27,7 +27,7 @@ void main()
 	float c = texelFetch(u_tex, texc, 0).r;
 
 	vec3 rgb;
-	if (false) {
+	if (true) {
 		float l = texelFetch(u_tex, clamp(texc + ivec2(-1, 0), ivec2(0), lim), 0).r;
 		float r = texelFetch(u_tex, clamp(texc + ivec2(1, 0), ivec2(0), lim), 0).r;
 		float b = texelFetch(u_tex, clamp(texc + ivec2(0, -1), ivec2(0), lim), 0).r;

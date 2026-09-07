@@ -1,7 +1,7 @@
 #define MAX_MIPS 8
 #define GROUPS 16
-#define OMEGA 0.67
-#define DELTA_X 0.5f
+#define OMEGA 0.6
+#define DELTA_X 1.0f
 
 #define OOB_CELL_THRES 1e-2
 
@@ -70,28 +70,28 @@ void set_bd(ivec2 p, float bd)
 	boundary[p.x][p.y] = uint8_t(254.f * bd);
 }
 
-float jacobi_it(ivec2 idx, float rhs, float h)
+const float THETA = 0.632;
+const float SIGMA = 0.066;
+
+float jacobi_it(ivec2 idx, float rhs, float u_prev, float h)
 {
 	ivec2 stencil[4] = {
-		idx + ivec2(-1,0),
-		idx + ivec2(1,0), 
-		idx + ivec2(0,1), 
-		idx + ivec2(0,-1)
+		ivec2(-1,0),
+		ivec2(1,0), 
+		ivec2(0,1), 
+		ivec2(0,-1)
 	};
-
-	// assuming neumann boundary conditions with
-	// zero normal derivative toward out of bounds cells.  
 
 	float fill_c = 0;
 	float wt_c = get_bd(idx, fill_c);
-	float c = block[idx.x][idx.y];
+	float u = block[idx.x][idx.y];
 
 	float sum = 0.f;
 	float den = 0.f;
 
 	for (int i = 0; i < 4; ++i) {
-		ivec2 p = stencil[i];
-		bool inb = inbounds(idx); 
+		ivec2 p = idx + stencil[i];
+		bool inb = inbounds(p); 
 
 		if (!inb)
 			continue;
@@ -105,7 +105,8 @@ float jacobi_it(ivec2 idx, float rhs, float h)
 	}
 
 	float u_next = den > 1e-3 ? (sum - h*h*rhs)/den : 0;
-	return fill_c * mix(c, u_next, OMEGA);
+	float u_cheb = u + THETA * (u_next - u) + SIGMA * (u - u_prev);
+	return fill_c * u_cheb;
 }
 
 

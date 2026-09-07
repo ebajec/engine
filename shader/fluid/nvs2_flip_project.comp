@@ -61,7 +61,7 @@ void main()
 
 		float v = get_avg_vel(v_idx);
 
-		float dp = (p_c - p);
+		float dp = (p_c - p)/(2*DELTA_X);
 		float v_hat = wt * (v + -dp);
 
 		imageStore(v_pre_proj[i], idx, vec4(v));

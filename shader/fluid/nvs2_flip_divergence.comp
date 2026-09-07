@@ -4,9 +4,16 @@
 #include "nvs2_flip.glsl"
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-#define BETA 0.1
-#define PARTS_PER_CELL 8
-#define RHO_REST 100.1f
+#define BETA 0.25
+#define PARTS_PER_CELL 128
+#define RHO_REST 1.f
+
+const ivec2 stencil[4] = {
+	ivec2(1,0),
+	ivec2(0,1),
+	ivec2(-1,0),
+	ivec2(0,-1)
+};
 
 float rhs(ivec2 p)
 {
@@ -32,11 +39,14 @@ float rhs(ivec2 p)
 		float v2 = s_vel[idx2].acc;
 
 		if (wt1 > 1e-3 && wt2 > 1e-3) {
-			div += v2 / wt2 - v1 / wt1;
+			div += (v2 / wt2 - v1 / wt1)/(2*DELTA_X);
 			rho += (wt1 + wt2) * RHO_REST/PARTS_PER_CELL;
 		}
-		if (p.y == 0 || p.x == 0 || p.x == size.x - 1)
-			rho *= 6;
+	}
+
+	if (p.y <= 0 || p.x <= 0 || p.x == size.x - 1 || p.y == size.y - 1)
+	{
+		rho *= 8;
 	}
 
 	float bd = imageLoad(bd_mask, p).r;
@@ -89,7 +99,7 @@ void main()
 
 	float f = rhs(idx);
 
-	flood_fill(idx);
+	//flood_fill(idx);
 
 	imageStore(f_out, idx, vec4(f, 0, 0, 0));
 }

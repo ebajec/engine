@@ -203,7 +203,7 @@ int ImageViewerPanel::set_image(ev2::GfxContext *ctx,
 	if (rd.tex.is_valid())
 		ev2::destroy_texture(ctx, rd.tex);
 
-	rd.tex = ev2::create_texture(ctx, image, ev2::FILTER_NEAREST, level, layer);
+	rd.tex = ev2::create_texture(ctx, image, ev2::FILTER_BILINEAR, level, layer);
 
 	return rd.tex.is_valid() ? App::OK : App::ERROR;
 }

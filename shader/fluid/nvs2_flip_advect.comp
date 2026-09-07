@@ -5,8 +5,8 @@
 
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
-#define DAMP 0.6
-#define G 3
+#define DAMP 0.8
+#define G 9
 
 #define declare_sample(image)\
 float sample_##image(int coord, vec2 p)\
@@ -62,9 +62,11 @@ vec2 cursor_jet(vec2 c)
 	vec2 p2 = pc.cursor2 * size;
 	vec2 vel = p2 - p1;
 
-	//vec2 d = c - p1;
-	//return (10*d + 2*vec2(d.y, -d.x))/ (1.0f + 2*dot(d,d));
+	//vel = vec2(0, 0.2);
 
+	//vec2 d = c - p1;
+	//float f = length(d)/20;
+	//return -normalize(d) * 1/(1 + f*f*f);;
 	vec2 O = p2 - vel*0.25;
 
 	float speed = length(vel);
@@ -74,7 +76,7 @@ vec2 cursor_jet(vec2 c)
 
 	bool valid = speed > 1e-3; 
 
-	float S = sqrt((valid ? 8*speed : 1.f));
+	float S = sqrt((valid ? 12*speed : 1.f));
 	vec2 V = valid ? normalize(vel) : vec2(0);
 	vec2 X = vec2(V.y, -V.x);
 
@@ -109,8 +111,8 @@ void main()
 	// Reset positions
 	if (pc.step == 0) {
 
-		vec2 c = vec2(size)/2;
-		vec2 w = vec2(size) * vec2(0.01, 0.5);
+		vec2 c = vec2(size.x/2, size.y/4);
+		vec2 w = vec2(size) * vec2(0.4, 0.01);
 
 		vec2 pos = w*(vec2(1.f) -2.f*vec2(r1,r2)) + c - vec2(0.5);
 		vec2 r = length(pos - c) > 1e-3 ? normalize(pos - c) : vec2(0);
@@ -133,6 +135,7 @@ void main()
 	vec2 p_new = p_old + TIMESTEP * (1./6.) * (k1 + 4*k2 + k3);
 	vec2 v_new = mix(k1, v_grid, 0.1);
 
+	// The current trick for avoiding "clumping"
 	p_new += 0.001*normalize(vec2(1.f) - 2.f*vec2(r1, r2));
 
 	float S = length(v_new);

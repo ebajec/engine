@@ -1,6 +1,7 @@
 #ifdef EV2_ENABLE_IMGUI
 
 #include <ev2/resource.h>
+#include "backends/vulkan/resource.h"
 
 #include "utils/pool.h"
 
@@ -30,9 +31,8 @@ extern struct InspectorPanelState
 	ImageCallback image_viewer_close;
 
 	bool render_graph_window_open;
-	uint32_t selected_edge;
+	uint32_t selected_edge_idx;
 	uint32_t hovered_edge;
-	std::string hovered_edge_name;
 } g_state;
 
 extern void on_destroy_image(ev2::ImageID image);

@@ -147,7 +147,7 @@ void PoissonSolver::record_v_cycle(ev2::PassID pass)
 	// on original, then N smooth + downsample passes on the residuals
 
 	constexpr uint its[] = {
-		6, 4, 3, 3, 2, 2, 2, 2, 2
+		3, 3, 3, 2, 2, 2, 2, 1, 1
 	};
 
 	uint32_t tw = sim_w;

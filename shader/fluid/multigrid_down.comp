@@ -198,10 +198,14 @@ void main()
 	set_bd(idx, bd);
 	block[idx.x][idx.y] = lhs;  
 
+	float u_prev = lhs;
+
 	for (int i = 0; i < u_iterations - 1; ++i) {
 		barrier();
 
-		lhs = jacobi_it(idx, rhs, h);
+		float old = lhs;
+		lhs = jacobi_it(idx, rhs, u_prev, h);
+		u_prev = old;
 
 		barrier();
 

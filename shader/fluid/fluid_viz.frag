@@ -57,7 +57,7 @@ void main()
 
 	vec4 val = texture(u_tex,uv);
 
-	const float S = 0.1f;
+	const float S = 0.3f;
 
 	vec2 grad_x = S*vec2(grad.du.x,grad.dv.x);
 
@@ -83,6 +83,6 @@ void main()
 	if (uv.x < 0.f || uv.y < 0.f || uv.x > 1.f || uv.y > 1.f) {
 		FragColor = vec4(0.5);
 	} else {
-		FragColor = 0*vec4(f*color.rgb,1.0f);
+		FragColor = vec4(f*color.rgb,1.0f);
 	}
 }

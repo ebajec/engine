@@ -103,7 +103,7 @@ struct FLIPFluidSim
 		grid_w = w;
 		grid_h = h;
 
-		particle_count = grid_w * grid_h;
+		particle_count = 500000;
 
 		ev2::ImageUsageFlags usage = 
 			ev2::IMAGE_USAGE_STORAGE_BIT | 
@@ -274,7 +274,7 @@ struct FLIPFluidSim
 		// pressure_solve
 
 		pressure_solver->record_setup(pass);
-		for (int i = 0; i < ((step == 0) ? 32 : 4); ++i) 
+		for (int i = 0; i < ((step == 0) ? 32 : 32); ++i) 
 			pressure_solver->record_v_cycle(pass);
 
 		ev2::end_pass(ctx, pass);
