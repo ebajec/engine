@@ -16,59 +16,85 @@
 // The level 0 iteration fetches directly from f. Subsequent iterations
 // downsample the residuals from the previous pass
 
-float RHS(ivec2 idx, uint level, out float wt, out float fill)
+float RHS(ivec2 idx, uint level, out float wt, out float phi)
 {
-	float mask = get_bd_mask(idx,level);
-	wt = abs(mask);
-	fill = float(wt > 0);
+	vec2 mask = get_bd_mask(idx,level);
+	wt = mask.r;
+	phi = mask.g;
 
-	return (abs(wt) > 0.f) ? imageLoad(R1[level], idx).r : 0;
+	return (wt > 0.f) ? imageLoad(R1[level], idx).r : 0;
 }
 
-float LHS(ivec2 idx, out float wt, out float fill)
-{
-	float mask = get_bd_mask(idx,0);
-	wt = abs(mask);
-	fill = float(wt > 0);
-
-	return (abs(wt) > 0.f) ? imageLoad(in_lhs, idx).r : 0;
-}
+//float LHS(ivec2 idx, out float wt, out float phi)
+//{
+//	vec2 mask = get_bd_mask(idx,0);
+//	wt = mask.r;
+//	phi = mask.g;
+//
+//	return (wt > 0.f) ? imageLoad(in_lhs, idx).r : 0;
+//}
 
 float residual(ivec2 idx, float rhs, float h)
 {
-	float fill_c;
-	float wt_c = get_bd(idx, fill_c);
-	float u = fill_c * wt_c * block[idx.x][idx.y];
+	vec2 bd = get_bd(idx);
+	float wt_c = bd.r;
+	float phi_c = bd.g;
 
-	if (wt_c > 0 && wt_c < OOB_CELL_THRES) {
+	float u = wt_c * block[idx.x][idx.y];
+
+	if (wt_c < OOB_CELL_THRES || phi_c > 0) {
 		return 0.f;
 	}
 
-	ivec2 l_idx = clamp(idx + ivec2(-1,0), ivec2(0), ivec2(GROUPS -1));
-	ivec2 r_idx = clamp(idx + ivec2(1,0), ivec2(0), ivec2(GROUPS - 1));
-	ivec2 t_idx = clamp(idx + ivec2(0,1), ivec2(0), ivec2(GROUPS - 1));
-	ivec2 b_idx = clamp(idx + ivec2(0,-1), ivec2(0), ivec2(GROUPS - 1));
+	ivec2 stencil[4] = {
+		ivec2(-1,0),
+		ivec2(1,0), 
+		ivec2(0,1), 
+		ivec2(0,-1)
+	};
 
-	float l = block[l_idx.x][l_idx.y];
-	float r = block[r_idx.x][r_idx.y];
-	float t = block[t_idx.x][t_idx.y];
-	float b = block[b_idx.x][b_idx.y];
+	float lap = 0.f;
 
-	float fill_l;
-	float fill_r;
-	float fill_t;
-	float fill_b;
+	for (int i = 0; i < 4; ++i) {
+		ivec2 p = clamp(idx + stencil[i], ivec2(0), ivec2(GROUPS -1));
 
-	float wt_l = get_bd(l_idx, fill_l);
-	float wt_r = get_bd(r_idx, fill_r);
-	float wt_t = get_bd(t_idx, fill_t);
-	float wt_b = get_bd(b_idx, fill_b);
+		vec2 bd = get_bd(p);
+		const bool is_air = bd.g > 0;
 
-	float lap = (
-		mix(u, fill_l * l, wt_l) + mix(u, fill_r * r, wt_r) + 
-		mix(u, fill_t * t, wt_t) + mix(u, fill_b * b, wt_b) 
-		- 4.f*u
-	)/(h*h);
+		float val = is_air ? 0.f : block[p.x][p.y];
+		float wt = is_air ? face_frac(phi_c, bd.g) : bd.r;
+
+		lap += mix(u, val, wt);
+	}
+
+	lap -= 4.f * u;
+	lap /= h*h;
+
+	//ivec2 l_idx = clamp(idx + ivec2(-1,0), ivec2(0), ivec2(GROUPS -1));
+	//ivec2 r_idx = clamp(idx + ivec2(1,0), ivec2(0), ivec2(GROUPS - 1));
+	//ivec2 t_idx = clamp(idx + ivec2(0,1), ivec2(0), ivec2(GROUPS - 1));
+	//ivec2 b_idx = clamp(idx + ivec2(0,-1), ivec2(0), ivec2(GROUPS - 1));
+
+	//float fill_l;
+	//float fill_r;
+	//float fill_t;
+	//float fill_b;
+
+	//vec2 bd_l = get_bd(l_idx, fill_l);
+	//vec2 bd_r = get_bd(r_idx, fill_r);
+	//vec2 bd_t = get_bd(t_idx, fill_t);
+	//vec2 bd_b = get_bd(b_idx, fill_b);
+
+	//float l = bd_l.g > 0 ? 0.f : block[l_idx.x][l_idx.y];
+	//float r = bd_l.g > 0 ? 0.f : block[r_idx.x][r_idx.y];
+	//float t = bd_l.g > 0 ? 0.f : block[t_idx.x][t_idx.y];
+	//float b = bd_l.g > 0 ? 0.f : block[b_idx.x][b_idx.y];
+
+	//float lap = (
+	//	mix(u, l, bd_l.r) + mix(u, r, bd_r.r) + 
+	//	mix(u, t, bd_t.r) + mix(u, b, bd_b.r) 
+	//	- 4.f*u
+	//)/(h*h);
 
 	return lap - rhs;
 }
@@ -80,43 +106,45 @@ float fetch_lhs(ivec2 grid_idx, float rhs, float h)
 #if 0
 
 	float wt;
-	return LHS(grid_idx, wt);
+	return LHS(true, grid_idx, wt);
 #else
-	// When fetching from the starting grid, perform one 
-	// jacobi iteration on retrieval.
-	ivec2 stencil[4] = {
-		grid_idx + ivec2(-1, 0),
-		grid_idx + ivec2(1, 0),
-		grid_idx + ivec2(0, 1),
-		grid_idx + ivec2(0, -1)
-	};
+	return jacobi_it(true, grid_idx, rhs, 0, h); 
+	//// When fetching from the starting grid, perform one 
+	//// jacobi iteration on retrieval.
+	//ivec2 stencil[4] = {
+	//	grid_idx + ivec2(-1, 0),
+	//	grid_idx + ivec2(1, 0),
+	//	grid_idx + ivec2(0, 1),
+	//	grid_idx + ivec2(0, -1)
+	//};
 
-	float fill_c;
-	float wt_c;
-	float c = LHS(grid_idx, wt_c, fill_c);
+	//float phi_c;
+	//float wt_c;
+	//float c = LHS(grid_idx, wt_c, fill_c);
 
-	c *= wt_c;
+	//c *= wt_c;
 
-	if (!bool(wt_c))
-		return 0.f;
+	//if (!bool(wt_c))
+	//	return 0.f;
 
-	float sum = 0;
-	float den = 0;
+	//float sum = 0;
+	//float den = 0;
 
-	for (int i = 0; i < 4; ++i) {
-		float fill;
-		float wt;
-		float v = LHS(stencil[i], wt, fill);
+	//for (int i = 0; i < 4; ++i) {
+	//	float wt;
+	//	float phi;
+	//	float v = LHS(stencil[i], wt, phi);
 
-		wt = min(wt_c, wt);
+	//	const bool is_air = phi > 0.f;
+	//	wt = is_air ? face_frac(phi_c, phi) / min(wt_c, wt); 
 
-		den += wt;
-		sum += fill * wt * v;
-	}
+	//	den += wt;
+	//	sum += is_air ? 0.f : wt * block[p.x][p.y];
+	//}
 
-	float u_next = den > 0 ? (sum - h*h*rhs)/den : 0;
+	//float u_next = den > 0 ? (sum - h*h*rhs)/den : 0;
 
-	return fill_c * mix(c, u_next, OMEGA); 
+	//return fill_c * mix(c, u_next, OMEGA); 
 #endif
 }
 
@@ -143,19 +171,23 @@ float fetch_rhs(ivec2 idx)
 
 		float wt[9] = {1, 2,2,2,2, 1,1,1,1};
 
-		float fill;
+		float phi_c;
 		float wt_c;
-		float center = RHS(2*idx, L, wt_c, fill);
-		center *= fill;
+		float center = RHS(2*idx, L, wt_c, phi_c);
+
+		center *= float(phi_c <= 0);
 
 		float num = 0;
 		float den = 0;
 		for (int i = 0; i < 9; ++i) {
-			float fill_i;
+			float phi_i;
 			float wt_i;
-			float value = RHS(stencil[i], L, wt_i, fill_i);
-			num += wt_i * fill_i * wt[i] * mix(center,value,wt_i);
-			den += wt_i * fill_i * wt[i];
+			float value = RHS(stencil[i], L, wt_i, phi_i);
+
+			const bool is_air = phi_i > 0;
+
+			num += is_air ? 0 : wt_i * wt[i] * mix(center,value,wt_i);
+			den += wt_i * wt[i];
 		}
 		return den > 0 ? num/den : 0;
 	}
@@ -189,9 +221,9 @@ void main()
 
 	float rhs = fetch_rhs(grid_idx);
 	float lhs = fetch_lhs(grid_idx, rhs, h);
-	float bd = get_bd_mask(grid_idx, u_level);
+	vec2 bd = get_bd_mask(grid_idx, u_level);
 
-	if (bd < OOB_CELL_THRES) {
+	if (bd.r < OOB_CELL_THRES) {
 		rhs = 0;
 		lhs = 0;
 	}
@@ -205,7 +237,7 @@ void main()
 		barrier();
 
 		float old = lhs;
-		lhs = jacobi_it(idx, rhs, u_prev, h);
+		lhs = jacobi_it(false, idx, rhs, u_prev, h);
 		u_prev = old;
 
 		barrier();
@@ -221,7 +253,7 @@ void main()
 	if (outside)
 		return;
 
-	if (bd < OOB_CELL_THRES) { 
+	if (bd.r < OOB_CELL_THRES) { 
 		lhs = 0;
 		rhs = 0;
 	}

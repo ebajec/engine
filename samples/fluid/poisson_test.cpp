@@ -176,7 +176,7 @@ struct PoissonSolverApp : public App
 		ev2::bind_image(ctx, bindings, "img_out", rhs);
 		ev2::flush_bindings(ctx, bindings);
 
-		solver->set_inputs(ctx, lhs, rhs, bd);
+		solver->set_inputs(ctx, lhs, rhs, bd, bd);
 		mean_subtractor->setup_bindings(ctx, rhs);
 		mean_subtractor->setup_bindings(ctx, lhs);
 

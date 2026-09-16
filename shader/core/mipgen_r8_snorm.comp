@@ -3,7 +3,7 @@
 layout(constant_id = 0) const int MIP_COUNT = 8;
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-layout (set = 0, r8, binding = 0) uniform image2D levels[MIP_COUNT];
+layout (set = 0, r8_snorm, binding = 0) uniform image2D levels[MIP_COUNT];
 
 layout (push_constant) uniform pc {
 	uint u_level;

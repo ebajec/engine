@@ -54,7 +54,7 @@ float hash_to_float(uint h) {
 
 vec2 world_to_grid(vec2 p)
 {
-	vec2 size = vec2(imageSize(bd_mask));
+	vec2 size = vec2(imageSize(solid_mask));
 
 	return p * size.y;
 }
@@ -68,10 +68,10 @@ vec2 cursor_jet(vec2 c)
 	vec2 p2 = world_to_grid(pc.cursor2);
 	vec2 vel = p2 - p1;
 
-	//vel = vec2(0, 0.2);
-	//vec2 d = c - p1;
-	//float f = length(d)/20;
-	//return -normalize(d) * 1/(1 + f * f);;
+	vel = vec2(0, 0.2);
+	vec2 d = c - p1;
+	float f = length(d)/20;
+	return -normalize(d) * 1/(1 + f * f);;
 
 	vec2 O = p2 - vel*0.25;
 
@@ -101,7 +101,7 @@ void main()
 	if (idx > pc.count)
 		return;
 
-	ivec2 size = imageSize(bd_mask);
+	ivec2 size = imageSize(solid_mask);
 
 	int quo = idx/size.x;
 

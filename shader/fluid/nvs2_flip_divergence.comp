@@ -68,46 +68,14 @@ float rhs(ivec2 p)
 		rho += (mix(wt2, wt1, face1) + mix(wt1, wt2, face2)) * RHO_REST/PARTS_PER_CELL;
 	}
 
-	float bd = imageLoad(bd_mask, p).r;
+	float wt = imageLoad(solid_mask, p).r;
 
 	imageStore(fill_mask, p, vec4(0.125f - rho));
 
-
-	float f_rho = bd < 0 ? 0.f : -BETA*bd*(rho - RHO_REST)/(RHO_REST);
+	float f_rho = -wt*BETA*(rho - RHO_REST)/(RHO_REST);
 	float f_div = div;
 
 	return f_div + f_rho;
-}
-
-void flood_fill(ivec2 p)
-{
-	ivec2 stencil[4] = {
-		ivec2(1,0),
-		ivec2(0,1),
-		ivec2(-1,0),
-		ivec2(0,-1)
-	};
-
-	int count = 0;
-
-	ivec2 size = imageSize(bd_mask);
-
-	for (int i = 0; i < 4; ++i) {
-		ivec2 idx = p + stencil[i];
-		if (all(greaterThan(idx, ivec2(0))) && 
-			all(lessThan(idx, size))) {
-
-			float bd = imageLoad(bd_mask, idx).r;
-			if (bd >= 1.f)
-				++count;
-		}
-	}
-
-	float bd = imageLoad(bd_mask, p).r;
-
-	if (bd > 0 && count > 2) {
-		imageStore(bd_mask, p, vec4(1.f));
-	}
 }
 
 void main()
@@ -119,8 +87,6 @@ void main()
 		return;
 
 	float f = rhs(idx);
-
-	//flood_fill(idx);
 
 	imageStore(f_out, idx, vec4(f, 0, 0, 0));
 }

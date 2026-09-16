@@ -91,19 +91,13 @@ struct FLIPFluidSim
 
 	ev2::ImageID lap_p_img; // rhs of lap(phi) = f 
 	ev2::ImageID p_img; // pressure
-	ev2::ImageID fill_mask_img; // cell fill %
 	
 	// solid mask: 
 	// 0 = solid, 
 	// 1 = free space
 	ev2::ImageID solid_mask_img;
+	ev2::ImageID fill_mask_img; // cell fill %
 
-	// boundary mask: 
-	// x < 0 -> air, 
-	// 0 < x < 1 -> solid,
-	// x = 1 -> fluid
-	ev2::ImageID bd_mask_img;
-	
 	ev2::BufferID particles;
 	ev2::BufferID particles_mirror;
 
@@ -188,14 +182,11 @@ struct FLIPFluidSim
 		lap_p_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F, usage);
 		ev2::set_image_name(ctx, lap_p_img, "lap_p_img");
 
-		fill_mask_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_R8_UNORM, usage);
-		ev2::set_image_name(ctx, fill_mask_img, "fill_img");
-
 		p_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F, usage);
 		ev2::set_image_name(ctx, p_img, "p_img");
 
-		bd_mask_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_R8_SNORM, usage);
-		ev2::set_image_name(ctx, bd_mask_img, "bd_mask");
+		fill_mask_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_R8_SNORM, usage);
+		ev2::set_image_name(ctx, fill_mask_img, "fill_mask");
 
 		solid_mask_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_R8_UNORM, usage);
 		ev2::set_image_name(ctx, solid_mask_img, "solid_mask");
@@ -222,7 +213,6 @@ struct FLIPFluidSim
 		bindings = ev2::create_bindings(ctx, p_advect, 0, ev2::BINDING_MODE_STATIC);
 
 		ev2::bind_image(ctx, bindings, "solid_mask", solid_mask_img);
-		ev2::bind_image(ctx, bindings, "bd_mask", bd_mask_img);
 		ev2::bind_image(ctx, bindings, "fill_mask", fill_mask_img);
 
 		for (int i = 0; i < DIMS; ++i) {
@@ -244,7 +234,7 @@ struct FLIPFluidSim
 
 	int update(ev2::GfxContext *ctx)
 	{
-		pressure_solver->set_inputs(ctx, p_img, lap_p_img, bd_mask_img);
+		pressure_solver->set_inputs(ctx, p_img, lap_p_img, solid_mask_img, fill_mask_img);
 		return 0;
 	}
 
@@ -278,7 +268,6 @@ struct FLIPFluidSim
 		ev2::cmd_bind_resources(pass, bindings);
 
 		ev2::cmd_use_buffer(pass, deposit_buf, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
-		ev2::cmd_use_image(pass, bd_mask_img, ev2::USAGE_STORAGE_WRITE_COMPUTE);
 		for (int i = 0; i < DIMS; ++i) {
 			ev2::cmd_use_image(pass, v_pre_proj_img[i], ev2::USAGE_STORAGE_WRITE_COMPUTE);
 			ev2::cmd_use_image(pass, v_proj_img[i], ev2::USAGE_STORAGE_WRITE_COMPUTE);
@@ -306,7 +295,6 @@ struct FLIPFluidSim
 		ev2::cmd_use_buffer(pass, particles, ev2::USAGE_STORAGE_READ_COMPUTE);
 		ev2::cmd_use_buffer(pass, deposit_buf, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 		ev2::cmd_use_image(pass, solid_mask_img, ev2::USAGE_STORAGE_READ_COMPUTE);
-		ev2::cmd_use_image(pass, bd_mask_img, ev2::USAGE_STORAGE_WRITE_COMPUTE);
 
 		ev2::cmd_bind_compute_pipeline(pass, p_deposit);
 		ev2::cmd_dispatch(pass, 1 + (particle_count - 1)/128, 1, 1);
@@ -316,7 +304,6 @@ struct FLIPFluidSim
 
 		ev2::cmd_use_buffer(pass, deposit_buf, ev2::USAGE_STORAGE_READ_COMPUTE);
 		ev2::cmd_use_image(pass, lap_p_img, ev2::USAGE_STORAGE_WRITE_COMPUTE);
-		ev2::cmd_use_image(pass, bd_mask_img, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 		ev2::cmd_use_image(pass, fill_mask_img, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 
 		ev2::cmd_bind_compute_pipeline(pass, p_divergence);
@@ -344,7 +331,6 @@ struct FLIPFluidSim
 		assert(sort_input[0] != sort_input[1]);
 
 		sorter->record(pass, MORTON_CODE_BITS, sort_input, particle_count, sizeof(FluidParticle), &sort_pc, sizeof(sort_pc));
-		//particles_mirror = particles == sort_input[0] ? sort_input[1] : sort_input[0];
 
 		//------------------------------------------------------------------------------
 		// compute bvh
@@ -404,7 +390,7 @@ struct FLIPFluidSim
 			initialize_image(ctx, v_pre_proj_img[i], glm::vec4(0));
 		}
 
-		initialize_image<uint8_t>(ctx, bd_mask_img, UINT8_MAX); // -1
+		initialize_image<uint8_t>(ctx, fill_mask_img, UINT8_MAX); // -1
 		initialize_image<uint8_t>(ctx, solid_mask_img, UINT8_MAX);
 
 		size_t header = get_depost_buf_header_size();
@@ -455,7 +441,7 @@ struct FLIPFluidSim
 		ev2::destroy_image(ctx, lap_p_img);
 		ev2::destroy_image(ctx, p_img);
 		ev2::destroy_image(ctx, solid_mask_img);
-		ev2::destroy_image(ctx, bd_mask_img);
+		ev2::destroy_image(ctx, fill_mask_img);
 
 		ev2::destroy_buffer(ctx, particles);
 		ev2::destroy_bindings(ctx, bindings);
@@ -776,9 +762,7 @@ int main(int argc, char *argv[])
 	if (app->initialize(argc, argv) != App::OK)
 		return EXIT_FAILURE;
 
-	for(int status = App::OK; !should_exit(status); status = frame(app.get()))
-	{
-	}
+	for(int status = App::OK; !should_exit(status); status = frame(app.get())) {}
 
 	app->destroy();
 

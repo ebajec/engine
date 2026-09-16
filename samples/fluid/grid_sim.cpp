@@ -248,7 +248,7 @@ int GridFluidSim::update(ev2::GfxContext *ctx)
 	uint64_t sync = ev2::commit_buffer_uploads(ctx, uc, ubo, &up, 1);
 	ev2::flush_uploads(ctx);
 
-	pressure_solver->set_inputs(ctx, p_img, lap_p_img, bd_mask_img);
+	pressure_solver->set_inputs(ctx, p_img, lap_p_img, bd_mask_img, bd_mask_img);
 
 	return 0;
 }

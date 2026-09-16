@@ -22,13 +22,12 @@ layout (set = 0, r32f, binding = 4) uniform image2D R2[MAX_MIPS];
 layout (set = 1, r32f, binding = 0) readonly uniform image2D in_lhs;
 layout (set = 1, r32f, binding = 1) readonly uniform image2D in_rhs;
 layout (set = 1, r32f, binding = 2) writeonly uniform image2D out_lhs;
-layout (set = 1, r8_snorm, binding = 3) readonly uniform image2D bd_mask[MAX_MIPS];
-layout (set = 1, r8, binding = 4) readonly uniform image2D fill_mask[MAX_MIPS];
+layout (set = 1, r8, binding = 3) readonly uniform image2D solid_mask[MAX_MIPS];
+layout (set = 1, r8_snorm, binding = 4) readonly uniform image2D fill_mask[MAX_MIPS];
 
 shared float block[GROUPS][GROUPS];
 shared uint8_t boundary[GROUPS][GROUPS];
-
-const uint AIR = 0xFF;
+shared int8_t air[GROUPS][GROUPS];
 
 layout (push_constant, std430) uniform Inputs {
 	uint N;
@@ -36,14 +35,17 @@ layout (push_constant, std430) uniform Inputs {
 	uint u_iterations;
 };
 
-float get_bd_mask(ivec2 idx, uint level)
+vec2 get_bd_mask(ivec2 idx, uint level)
 {
-	ivec2 size = imageSize(bd_mask[level]);
+	ivec2 size = imageSize(solid_mask[level]);
 
 	if (any(lessThan(idx, ivec2(0))) || any(greaterThanEqual(idx, size)))
-		return 0.f;
+		return vec2(0.f);
 
-	return imageLoad(bd_mask[level], idx).r; 
+	return vec2(
+		imageLoad(solid_mask[level], idx).r,  
+		imageLoad(fill_mask[level], idx).r  
+	);
 }
 
 bool inbounds(ivec2 idx)
@@ -53,30 +55,57 @@ bool inbounds(ivec2 idx)
 		any(greaterThanEqual(idx, ivec2(GROUPS))));
 }
 
-float get_bd(ivec2 p, out float fill)
+vec2 get_bd(ivec2 p)
 {
-	uint cell = boundary[p.x][p.y]; 
-	if (cell == AIR) {
-		fill = 0.f;
-		return 1.f;
-	}
-	fill = 1.f;
-	return float(cell) * (1.f/254.f); 
+	uint solid = boundary[p.x][p.y]; 
+	int air = air[p.x][p.y]; 
+
+	return vec2(
+		float(solid) / 255.f, 
+		float(air) / 128.f
+	);
 }
 
-void set_bd(ivec2 p, float bd)
+void set_bd(ivec2 p, vec2 bd)
 {
-	if (bd < 0.f) {
-		boundary[p.x][p.y] = uint8_t(254.f);
-		return;
-	}
-	boundary[p.x][p.y] = uint8_t(254.f * bd);
+	boundary[p.x][p.y] = uint8_t(255.f * bd.r);
+	air[p.x][p.y] = int8_t(128.f * bd.g);
 }
 
 const float THETA = 0.632;
 const float SIGMA = 0.066;
 
-float jacobi_it(ivec2 idx, float rhs, float u_prev, float h)
+float face_frac(float phi_c, float phi_n)
+{
+	float tht = phi_c / (phi_c - phi_n); 
+	return 1.f/max(tht, 0.01);
+}
+
+float LHS(bool is_fetch, ivec2 idx, out float wt, out float phi)
+{
+	if (is_fetch) {
+		vec2 mask = get_bd_mask(idx,0);
+		wt = mask.r;
+		phi = mask.g;
+
+		return (wt > 0.f) ? imageLoad(in_lhs, idx).r : 0;
+	} else {
+		bool inb = inbounds(idx); 
+		if (!inb) {
+			wt = 0;
+			phi = 0;
+			return 0;
+		}
+
+		vec2 mask = get_bd(idx);
+		wt = mask.r;
+		phi = mask.g;
+
+		return block[idx.x][idx.y];
+	}
+}
+
+float jacobi_it(bool is_fetch, ivec2 idx, float rhs, float u_prev, float h)
 {
 	ivec2 stencil[4] = {
 		ivec2(-1,0),
@@ -85,31 +114,39 @@ float jacobi_it(ivec2 idx, float rhs, float u_prev, float h)
 		ivec2(0,-1)
 	};
 
-	float fill_c = 0;
-	float wt_c = get_bd(idx, fill_c);
-	float u = block[idx.x][idx.y];
+	float wt_c;
+	float phi_c;
+	float u_c = LHS(is_fetch, idx, wt_c, phi_c);
+
+	if (phi_c > 0) {
+		return 0;
+	}
 
 	float sum = 0.f;
 	float den = 0.f;
 
 	for (int i = 0; i < 4; ++i) {
 		ivec2 p = idx + stencil[i];
-		bool inb = inbounds(p); 
 
-		if (!inb)
-			continue;
+		float wt;
+		float phi;
+		float u = LHS(is_fetch, p, wt, phi);
 
-		float fill;
-		float wt = get_bd(p, fill);
-		wt = min(wt_c, wt); 
+		const bool is_air = phi > 0.f;
+		wt = is_air ? face_frac(phi_c, phi) / min(wt_c, wt) : wt; 
 
-		den += float(wt);
-		sum += fill * wt * block[p.x][p.y];
+		den += wt;
+		sum += is_air ? 0.f : wt * u;
 	}
 
-	float u_next = den > 1e-3 ? (sum - h*h*rhs)/den : 0;
-	float u_cheb = u + THETA * (u_next - u) + SIGMA * (u - u_prev);
-	return fill_c * u_cheb;
+	if (is_fetch) {
+		float u_next = den > 1e-3 ? (sum - h*h*rhs)/den : 0;
+		return mix(u_c, u_next, OMEGA); 
+	} else {
+		float u_next = den > 1e-3 ? (sum - h*h*rhs)/den : 0;
+		float u_cheb = u_c + THETA * (u_next - u_c) + SIGMA * (u_c - u_prev);
+		return u_cheb;
+	}
 }
 
 

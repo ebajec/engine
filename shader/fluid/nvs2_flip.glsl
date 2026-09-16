@@ -19,8 +19,7 @@ layout (set = 0, r8, binding = 0) readonly uniform image2D solid_mask;
 // x < 0 -> air
 // 0 < x < 1 -> solid 
 // 1 -> fluid
-layout (set = 0, binding = 1, r8_snorm) uniform image2D bd_mask;
-layout (set = 0, binding = 2, r8) uniform image2D fill_mask;
+layout (set = 0, binding = 1, r8_snorm) uniform image2D fill_mask;
 
 layout (set = 0, r32f, binding = 3) uniform image2D v_pre_proj[DIMS];
 layout (set = 0, r32f, binding = 4) uniform image2D v_proj[DIMS];

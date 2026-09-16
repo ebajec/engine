@@ -10,30 +10,43 @@
 #include <bit>
 
 void PoissonSolver::set_inputs(
-	ev2::GfxContext *ctx, ev2::ImageID lhs, ev2::ImageID rhs, ev2::ImageID bd)
+	ev2::GfxContext *ctx, ev2::ImageID lhs, ev2::ImageID rhs, 
+	ev2::ImageID solid, ev2::ImageID fill)
 {
 	ev2::reset_bindings(ctx, bindings1);
 	ev2::bind_image(ctx, bindings1, "in_lhs", lhs); 
 	ev2::bind_image(ctx, bindings1, "in_rhs", rhs); 
 	ev2::bind_image(ctx, bindings1, "out_lhs", lhs); 
 
-	ev2::bind_image_indexed(ctx, bindings1, "bd_mask", 0, bd); 
+	ev2::bind_image_indexed(ctx, bindings1, "solid_mask", 0, solid); 
 	for (uint32_t i = 0; i < N_max - 1; ++i) {
-		ev2::bind_image_indexed(ctx, bindings1, "bd_mask", i + 1, bd_mips, i); 
+		ev2::bind_image_indexed(ctx, bindings1, "solid_mask", i + 1, solid_mips, i); 
+	}
+	ev2::bind_image_indexed(ctx, bindings1, "fill_mask", 0, fill); 
+	for (uint32_t i = 0; i < N_max - 1; ++i) {
+		ev2::bind_image_indexed(ctx, bindings1, "fill_mask", i + 1, fill_mips, i); 
 	}
 	ev2::flush_bindings(ctx, bindings1);
 
-	ev2::reset_bindings(ctx, mipgen_bindings);
-	ev2::bind_image_indexed(ctx, mipgen_bindings, "levels", 0, bd); 
+	ev2::reset_bindings(ctx, mipgen_bindings_solid);
+	ev2::bind_image_indexed(ctx, mipgen_bindings_solid, "levels", 0, solid); 
 	for (uint32_t i = 0; i < N_max - 1; ++i) {
-		ev2::bind_image_indexed(ctx, mipgen_bindings, "levels", i + 1, bd_mips, i); 
+		ev2::bind_image_indexed(ctx, mipgen_bindings_solid, "levels", i + 1, solid_mips, i); 
 	}
-	ev2::flush_bindings(ctx, mipgen_bindings);
+	ev2::flush_bindings(ctx, mipgen_bindings_solid);
+
+	ev2::reset_bindings(ctx, mipgen_bindings_fill);
+	ev2::bind_image_indexed(ctx, mipgen_bindings_fill, "levels", 0, fill); 
+	for (uint32_t i = 0; i < N_max - 1; ++i) {
+		ev2::bind_image_indexed(ctx, mipgen_bindings_fill, "levels", i + 1, fill_mips, i); 
+	}
+	ev2::flush_bindings(ctx, mipgen_bindings_fill);
 
 	input = {
 		.lhs = lhs,
 		.rhs = rhs,
-		.bd = bd,
+		.solid = solid,
+		.fill = fill
 	};
 }
 
@@ -62,15 +75,19 @@ int PoissonSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 	R2 = ev2::create_image(ctx, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_32F, usage, N); 
 	ev2::set_image_name(ctx, R2, "R2");
 
-	bd_mips = ev2::create_image(ctx, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_R8_SNORM, usage, N - 1);
-	ev2::set_image_name(ctx, bd_mips, "BdMaskMips");
+	solid_mips = ev2::create_image(ctx, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_R8_UNORM, usage, N - 1);
+	ev2::set_image_name(ctx, solid_mips, "solid_mips");
+
+	fill_mips = ev2::create_image(ctx, sim_w/2, sim_h/2, 1, ev2::IMAGE_FORMAT_R8_SNORM, usage, N - 1);
+	ev2::set_image_name(ctx, fill_mips, "fill_mips");
 
 	tmp_lhs = ev2::create_image(ctx, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, usage);
 	ev2::set_image_name(ctx, tmp_lhs, "tmp_lhs");
 
 	multigrid_down = ev2::load_compute_pipeline(ctx, "shader/fluid/multigrid_down");
 	multigrid_up = ev2::load_compute_pipeline(ctx, "shader/fluid/multigrid_up");
-	mipgen = ev2::load_compute_pipeline(ctx, "shader/core/mipgen_r8");
+	mipgen_r8 = ev2::load_compute_pipeline(ctx, "shader/core/mipgen_r8");
+	mipgen_r8_snorm = ev2::load_compute_pipeline(ctx, "shader/core/mipgen_r8_snorm");
 
 	//-----------------------------------------------------------------------------
 	// setup bindings
@@ -86,7 +103,8 @@ int PoissonSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 
 	bindings1 = ev2::create_bindings(ctx, multigrid_down, 1, ev2::BINDING_MODE_DYNAMIC);
 
-	mipgen_bindings = ev2::create_bindings(ctx, mipgen, 0, ev2::BINDING_MODE_DYNAMIC);
+	mipgen_bindings_solid = ev2::create_bindings(ctx, mipgen_r8, 0, ev2::BINDING_MODE_DYNAMIC);
+	mipgen_bindings_fill = ev2::create_bindings(ctx, mipgen_r8_snorm, 0, ev2::BINDING_MODE_DYNAMIC);
 
 	return EXIT_SUCCESS;
 }
@@ -98,35 +116,49 @@ void PoissonSolver::destroy(ev2::GfxContext *ctx)
 	ev2::destroy_image(ctx, tmp_lhs);
 	ev2::destroy_bindings(ctx, bindings0);
 	ev2::destroy_bindings(ctx, bindings1);
-	ev2::destroy_bindings(ctx, mipgen_bindings);
+	ev2::destroy_bindings(ctx, mipgen_bindings_solid);
+	ev2::destroy_bindings(ctx, mipgen_bindings_fill);
 }
 
 void PoissonSolver::record_setup(ev2::PassID pass)
 {
-	ev2::cmd_bind_compute_pipeline(pass, mipgen);
-	ev2::cmd_bind_resources(pass, mipgen_bindings);
+	auto exec_mipgen = [this](ev2::PassID pass, ev2::ComputePipelineID pipeline, 
+						   ev2::BindingsID bindings, ev2::ImageID img, ev2::ImageID mips)
+	{
+		ev2::cmd_bind_resources(pass, bindings);
 
-	ev2::cmd_use_image(pass, input.bd, ev2::USAGE_STORAGE_READ_COMPUTE);
+		ev2::cmd_use_image(pass, img, ev2::USAGE_STORAGE_READ_COMPUTE);
 
-	uint32_t w = sim_w, h = sim_h;
+		uint32_t w = sim_w, h = sim_h;
 
-	for (int i  = 0; i < N - 1; ++i) {
-		w >>= 1;
-		h >>= 1;
+		for (int i  = 0; i < N - 1; ++i) {
+			w >>= 1;
+			h >>= 1;
 
-		ev2::cmd_use_image(pass, bd_mips, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
+			ev2::cmd_use_image(pass, mips, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 
-		uint32_t level = i;
-		ev2::cmd_push_constant(pass, mipgen, 0, sizeof(uint32_t), &level);
+			uint32_t level = i;
+			ev2::cmd_push_constant(pass, pipeline, 0, sizeof(uint32_t), &level);
 
-		uint32_t gx = 1 + (w - 1)/16;
-		uint32_t gy = 1 + (h - 1)/16;
-		ev2::cmd_dispatch(pass, gx, gy, 1);
-	}
+			uint32_t gx = 1 + (w - 1)/16;
+			uint32_t gy = 1 + (h - 1)/16;
+			ev2::cmd_dispatch(pass, gx, gy, 1);
+		}
+	};
+
+	ev2::cmd_bind_compute_pipeline(pass, mipgen_r8);
+	exec_mipgen(pass, mipgen_r8, mipgen_bindings_solid, input.solid, solid_mips);
+
+	ev2::cmd_bind_compute_pipeline(pass, mipgen_r8_snorm);
+	exec_mipgen(pass, mipgen_r8_snorm, mipgen_bindings_fill, input.fill, fill_mips);
 
 	ev2::cmd_bind_resources(pass, bindings0);
 	ev2::cmd_bind_resources(pass, bindings1);
-	ev2::cmd_use_image(pass, bd_mips, ev2::USAGE_STORAGE_READ_COMPUTE);
+
+	ev2::cmd_use_image(pass, solid_mips, ev2::USAGE_STORAGE_READ_COMPUTE);
+	ev2::cmd_use_image(pass, fill_mips, ev2::USAGE_STORAGE_READ_COMPUTE);
+	ev2::cmd_use_image(pass, input.solid, ev2::USAGE_STORAGE_READ_COMPUTE);
+	ev2::cmd_use_image(pass, input.fill, ev2::USAGE_STORAGE_READ_COMPUTE);
 }
 
 void PoissonSolver::record_v_cycle(ev2::PassID pass)
@@ -140,10 +172,6 @@ void PoissonSolver::record_v_cycle(ev2::PassID pass)
 
 	ev2::cmd_use_image(pass, input.lhs, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 	ev2::cmd_use_image(pass, input.rhs, ev2::USAGE_STORAGE_READ_COMPUTE);
-
-	ev2::cmd_use_image(pass, bd_mips, ev2::USAGE_STORAGE_READ_COMPUTE);
-	if (input.bd.is_valid())
-		ev2::cmd_use_image(pass, input.bd, ev2::USAGE_STORAGE_READ_COMPUTE);
 
 	ev2::cmd_use_image(pass, tmp_lhs, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 

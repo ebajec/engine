@@ -13,16 +13,20 @@ struct PoissonSolver
 
 	ev2::ImageID R1; // level 0 upto N
 	ev2::ImageID R2; // level 1 upto N + 1
-	ev2::ImageID bd_mips;
+
+	ev2::ImageID solid_mips;
+	ev2::ImageID fill_mips;
 
 	ev2::ComputePipelineID multigrid_down;
 	ev2::ComputePipelineID multigrid_up;
-	ev2::ComputePipelineID mipgen;
+	ev2::ComputePipelineID mipgen_r8;
+	ev2::ComputePipelineID mipgen_r8_snorm;
 
 	ev2::BindingsID bindings0;
 	ev2::BindingsID bindings1;
 
-	ev2::BindingsID mipgen_bindings;
+	ev2::BindingsID mipgen_bindings_solid;
+	ev2::BindingsID mipgen_bindings_fill;
 
 	uint32_t sim_w = 0, sim_h = 0;
 
@@ -32,7 +36,8 @@ struct PoissonSolver
 	struct {
 		ev2::ImageID lhs;
 		ev2::ImageID rhs;
-		ev2::ImageID bd;
+		ev2::ImageID solid;
+		ev2::ImageID fill;
 	} input;
 
 	struct Uniforms {
@@ -45,7 +50,7 @@ struct PoissonSolver
 	void destroy(ev2::GfxContext *ctx);
 
 	void set_inputs(ev2::GfxContext *ctx, 
-		ev2::ImageID phi, ev2::ImageID f, ev2::ImageID bd);
+		ev2::ImageID phi, ev2::ImageID f, ev2::ImageID solid, ev2::ImageID fill);
 
 	void record_setup(ev2::PassID pass);
 	void record_v_cycle(ev2::PassID pass);
