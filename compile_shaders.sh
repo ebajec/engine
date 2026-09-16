@@ -69,6 +69,27 @@ for ext in "${EXTENSIONS[@]}"; do
   done < <(find "$INPUT_DIR" -type f -name "*.${ext}" -print0)
 done
 
+# Slang, discovered the same way as the GLSL above. slangc emits every
+# [shader()]-annotated entry point when no -entry flags are given, and -depfile
+# lists transitive imports in the same format needs_recompile() already parses,
+# so a new shader needs no entry here.
+while IFS= read -r -d '' src; do
+	# library modules declare no entry points; they arrive via `import`
+	grep -q '\[shader(' "$src" || continue
+
+	rel="${src#"$INPUT_DIR"/}"
+	# .comp.spv because load_compute_pipeline() appends that suffix
+	out="$OUTPUT_DIR/${rel%.slang}.comp.spv"
+	depfile="$OUTPUT_DIR/${rel%.slang}.d"
+	mkdir -p "$(dirname "$out")"
+
+	if needs_recompile "$src" "$out" "$depfile" || [ ${FORCE_COMPILE} -eq 1 ]; then
+		echo "Compiling $src → $out"
+		slangc -fvk-use-entrypoint-name ${INCLUDE_FLAGS} -target spirv -depfile "$depfile" "$src" -o "$out"
+		i=$((i + 1))
+	fi
+done < <(find "$INPUT_DIR" -type f -name '*.slang' -print0)
+
 if ((i == 0)); then
 	echo "No shaders to compile"
 else

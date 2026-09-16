@@ -6,7 +6,7 @@
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 #define DAMP 0.8
-#define G 9
+#define G 5
 
 #define declare_sample(image)\
 float sample_##image(int coord, vec2 p)\
@@ -52,31 +52,34 @@ float hash_to_float(uint h) {
     return float(h) * (1.0 / 4294967296.0);
 }
 
+vec2 world_to_grid(vec2 p)
+{
+	vec2 size = vec2(imageSize(bd_mask));
+
+	return p * size.y;
+}
+
 vec2 cursor_jet(vec2 c)
 {
 	if (!bool(pc.cursor_flags))
 		return vec2(0);
 
-	vec2 size = vec2(imageSize(bd_mask));
-	vec2 p1 = pc.cursor1 * size;
-	vec2 p2 = pc.cursor2 * size;
+	vec2 p1 = world_to_grid(pc.cursor1);
+	vec2 p2 = world_to_grid(pc.cursor2);
 	vec2 vel = p2 - p1;
 
 	//vel = vec2(0, 0.2);
-
 	//vec2 d = c - p1;
 	//float f = length(d)/20;
-	//return -normalize(d) * 1/(1 + f*f*f);;
+	//return -normalize(d) * 1/(1 + f * f);;
+
 	vec2 O = p2 - vel*0.25;
 
 	float speed = length(vel);
 
-	if (speed > size.x/4)
-		return vec2(0);
-
 	bool valid = speed > 1e-3; 
 
-	float S = sqrt((valid ? 12*speed : 1.f));
+	float S = sqrt((valid ? 6*speed : 1.f));
 	vec2 V = valid ? normalize(vel) : vec2(0);
 	vec2 X = vec2(V.y, -V.x);
 
@@ -111,13 +114,13 @@ void main()
 	// Reset positions
 	if (pc.step == 0) {
 
-		vec2 c = vec2(size.x/2, size.y/4);
-		vec2 w = vec2(size) * vec2(0.4, 0.01);
+		vec2 c = vec2(size.x/2, size.y/2);
+		vec2 w = vec2(size) * vec2(0.25, 0.25);
 
 		vec2 pos = w*(vec2(1.f) -2.f*vec2(r1,r2)) + c - vec2(0.5);
 		vec2 r = length(pos - c) > 1e-3 ? normalize(pos - c) : vec2(0);
 		
-		u_parts[idx] = FluidParticle(pos, -vec2(r.x,r.y));
+		u_parts[idx] = FluidParticle(pos, vec2(0));
 		return;
 	}
 
@@ -133,13 +136,13 @@ void main()
 	vec2 k3 = get_v_proj(p_old - TIMESTEP * k2); 
 
 	vec2 p_new = p_old + TIMESTEP * (1./6.) * (k1 + 4*k2 + k3);
-	vec2 v_new = mix(k1, v_grid, 0.1);
+	vec2 v_new = mix(k1, v_grid, 0.03);
 
 	// The current trick for avoiding "clumping"
-	p_new += 0.001*normalize(vec2(1.f) - 2.f*vec2(r1, r2));
+	p_new += 0.003*normalize(vec2(1.f) - 2.f*vec2(r1, r2));
 
 	float S = length(v_new);
-	float R = max(S*TIMESTEP, 1.0f);
+	float R = max(S*TIMESTEP, 0.5f);
 
 	vec2 p_clamped = clamp(p_new, vec2(R), vec2(size) - vec2(R));
 

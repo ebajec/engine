@@ -10,18 +10,21 @@
 struct GPUSort
 {
 	static constexpr uint32_t TILE_SIZE = 1024; // work group size
+	static constexpr uint32_t CLEAR_GROUP_SIZE = 128;
+
 	static constexpr uint32_t BITS_PER_DIGIT = 6;
 	static constexpr uint32_t DIGITS = (1 << BITS_PER_DIGIT);
 
-	static constexpr uint32_t CLEAR_GROUP_SIZE = 128;
 	static constexpr uint32_t CLEAR_OFFSETS_BIT = 0x1;
 	static constexpr uint32_t CLEAR_TILE_INFO_BIT = 0x2;
 
 	struct PushConstantHeader
 	{
-		uint32_t stage;
 		uint32_t count;
 		uint32_t num_stages;
+		uint32_t stage;
+		VkDeviceAddress in_data;
+		VkDeviceAddress out_data;
 	};
 
 	size_t max_elem_count;
@@ -31,28 +34,28 @@ struct GPUSort
 	ev2::BufferID buffer;
 
 	ev2::ComputePipelineID p_counting;
-	ev2::ComputePipelineID p_sorting;
-	ev2::ComputePipelineID p_clear;
+	ev2::ComputePipelineID p_scatter;
+	ev2::ComputePipelineID p_clear_offsets;
+	ev2::ComputePipelineID p_clear_tiles;
 
 	ev2::BindingsID bindings;
-	ev2::BindingsID clear_bindings;
 
 	ev2::GfxContext *ctx;
 
 //------------------------------------------------------------------------------
 
-	int init(
+	static GPUSort *create(
 		ev2::GfxContext *in_ctx,
 		size_t in_elem_count, 
-		uint32_t in_pass_count, 
-		ev2::ComputePipelineID in_p_counting,
-		ev2::ComputePipelineID in_p_sorting
+		uint32_t max_num_bits, 
+		const char *pipeline
 	); 
 
-	void record(
+	// @return The buffer index containing the final sorted output
+	ev2::BufferID record(
 		ev2::PassID pass, 
-		uint32_t num_stages, 
-		ev2::BufferID data, 
+		uint32_t num_bits, 
+		ev2::BufferID data[2], 
 		uint32_t elem_count, 
 		size_t elem_size,
 		void *pc, 
@@ -71,7 +74,7 @@ struct GPUSort
 	}
 
 	constexpr size_t get_tile_info_bufsize() {
-		return (1 + get_max_num_tiles() * sizeof(uint32_t));
+		return (1 + get_max_num_tiles() * DIGITS) * sizeof(uint32_t);
 	}
 
 	constexpr size_t get_offsets_bufsize()

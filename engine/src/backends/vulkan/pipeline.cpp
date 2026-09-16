@@ -422,39 +422,53 @@ struct GfxPipelineInfo
 {
 	std::string vert_path; 
 	std::string frag_path; 
+
+	VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 };
 
 static ev2::Result parse_gfx_pipeline_file(GfxPipelineInfo *info, const char *path)
 {
 	YAML::Node root = YAML::LoadFile(path);
 
-	const YAML::Node &shaders_node = root["shaders"];
+	if (const YAML::Node &node = root["shaders"]; node.IsDefined()) {
+		if (!node) {
+			return set_error(ev2::ELOAD_FAILED, 
+					   "Pipeline %s does not specify any shaders!",path);
+		}
 
-	if (!shaders_node) {
-		return set_error(ev2::ELOAD_FAILED, 
-				   "Pipeline %s does not specify any shaders!",path);
+		if (!node.IsMap()) {
+			return set_error(ev2::ELOAD_FAILED, 
+					   "'shaders' field is not a map!");
+		}
+
+		const YAML::Node &vert = node["vert"];
+		const YAML::Node &frag = node["frag"];
+
+		if (!frag) {
+			return set_error(ev2::ELOAD_FAILED, 
+					   "Pipeline %s does not contain a fragment shader",path);
+		}
+
+		if (!vert) {
+			return set_error(ev2::ELOAD_FAILED, 
+					   "Pipeline %s does not contain a vertex shader", path);
+		}
+
+		info->frag_path = frag.as<std::string>();
+		info->vert_path = vert.as<std::string>();
+	} else {
+		return set_error(ev2::ELOAD_FAILED, "Graphics pipeline config must contain a shaders node");
 	}
 
-	if (!shaders_node.IsMap()) {
-		return set_error(ev2::ELOAD_FAILED, 
-				   "'shaders' field is not a map!");
+	if (const YAML::Node &node  = root["input"]; node.IsDefined() && node.IsMap()) {
+		if (const YAML::Node& top = node["topology"]; top.IsDefined()) {
+			std::string type = top.as<std::string>();	
+			if (type == "LINE_LIST")
+				info->topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+			else if (type == "LINE_STRIP")
+				info->topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+		}
 	}
-
-	const YAML::Node &vert = shaders_node["vert"];
-	const YAML::Node &frag = shaders_node["frag"];
-
-	if (!frag) {
-		return set_error(ev2::ELOAD_FAILED, 
-				   "Pipeline %s does not contain a fragment shader",path);
-	}
-
-	if (!vert) {
-		return set_error(ev2::ELOAD_FAILED, 
-				   "Pipeline %s does not contain a vertex shader", path);
-	}
-
-	info->frag_path = frag.as<std::string>();
-	info->vert_path = vert.as<std::string>();
 
 	return ev2::SUCCESS;
 }
@@ -815,7 +829,7 @@ static ev2::Result initialize_gfx_pipeline_vk_pipeline(
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{
     	.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-    	.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+    	.topology = info->topology,
     	.primitiveRestartEnable = VK_FALSE,
 	};
 
@@ -1027,7 +1041,7 @@ static std::string get_gfx_pipeline_info(ev2::GfxContext *ctx, ev2::GfxPipeline 
 	const char *fmt = 
 		"\tVkPipeline: " ANSI_BLUE(0x%LX)"\n"
 		"\tvert: " COLORIZE_PATH(%s)"\n"
-		"\tfrag: " COLORIZE_PATH(%s)"";
+		"\tfrag: " COLORIZE_PATH(%s)"\n";
 
 	std::string buf;
 	buf.resize((strlen(fmt) + strlen(vert) + strlen(frag)) + 1);
@@ -1162,17 +1176,17 @@ static ev2::Result compute_pipeline_create_callback(
 {
 	ev2::ShaderID shader_handle = EV2_NULL_HANDLE(Shader);
 
-	const char *sep = ":";
+	const char *sep = ".";
 
 	std::string_view name = in_name;
-	size_t sep_idx = name.find_first_of(sep);
+	size_t sep_idx = name.find_last_of(sep);
 
-	std::string entrypoint = sep_idx == std::string::npos ? "main" : std::string(name.substr(1 + sep_idx));
 	std::string path_str = std::string(name.substr(0, sep_idx));
+	std::string entrypoint = sep_idx == std::string::npos ? "main" : std::string(name.substr(1 + sep_idx));
 
-	bool is_from_config = path_str.ends_with(".yaml");
+	const bool is_from_config = path_str.ends_with(".yaml");
 
-	if (!is_from_config) {
+	if ((!is_from_config)) {
 		path_str += ".comp.spv";
 		shader_handle = ev2::load_shader(ctx, path_str.c_str());
 	} else {
@@ -1383,6 +1397,21 @@ ComputePipelineID load_compute_pipeline(GfxContext *ctx, const char *path)
 
 	return EV2_NULL_HANDLE(ComputePipeline);
 }
+
+//------------------------------------------------------------------------------
+
+ComputePipelineID load_compute_pipeline(GfxContext *ctx, const char *path, const char *entrypoint)
+{
+	char buf[1024];
+	size_t len = snprintf(buf, sizeof(buf), "%s.%s", path, entrypoint);
+
+	if (len >= sizeof(buf))
+		return EV2_NULL_HANDLE(ComputePipeline);
+
+	return load_compute_pipeline(ctx, buf);
+}
+
+//------------------------------------------------------------------------------
 
 void unload_compute_pipeline(GfxContext *ctx, ComputePipelineID pipe)
 {

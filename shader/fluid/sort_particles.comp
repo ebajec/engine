@@ -1,9 +1,0 @@
-#version 460 core
-
-#include "sort_particles_defs.glsl"
-#include "../sort/sort_onepass.glsl"
-
-void main()
-{
-	sort_execute();
-}

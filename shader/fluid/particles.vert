@@ -9,6 +9,8 @@ layout (location = 0) out vec2 out_pos;
 layout (location = 1) flat out vec2 out_center;
 layout (location = 2) out vec4 out_color;
 layout (location = 3) out vec2 out_vel;
+layout (location = 4) flat out uint out_idx;
+layout (location = 5) flat out float out_w;
 
 layout (set = PER_DRAW_SET, binding = 0) readonly buffer Particles
 {
@@ -33,7 +35,7 @@ void main()
 
 	int vtx = gl_VertexIndex;
 
-	float w = 0.00;
+	float w = 0.15;
 
 	vec2 pos;
 	if (vtx < 3) {
@@ -50,6 +52,8 @@ void main()
 	out_center = part_pos;
 	out_color = mix(vec4(0.0), vec4(1), f_vel);
 	out_vel = part_vel;
+	out_idx = gl_InstanceIndex;
+	out_w = w;
 
-	gl_Position = u_view.pv * vec4(u_world * vec3(pos, 1) - vec2(1), 0, 1);
+	gl_Position = u_view.pv * vec4(u_world * vec3(pos, 1), 0, 1);
 }

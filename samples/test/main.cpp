@@ -282,7 +282,7 @@ int TestApp::update()
 		return result;
 
 	sim->uniforms.cursor1 = sim->uniforms.cursor2;
-	sim->uniforms.cursor2 = main_panel->get_world_cursor_pos();
+	sim->uniforms.cursor2 = main_panel->get_grid_cursor_pos();
 	sim->uniforms.active = 
 		this->input.right_mouse_pressed && 
 		main_panel->panel->is_content_selected();

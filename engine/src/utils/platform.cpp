@@ -3,6 +3,16 @@
 #include <cerrno>
 #include <cstdio>
 
+#include <csignal>
+#include <cstdlib>
+
+#include <cxxabi.h>
+
+#ifdef __linux__
+#include <execinfo.h>
+#include <unistd.h>
+#endif
+
 namespace ev2::platform {
 
 struct timespec monotonic_clock_time() 
@@ -67,6 +77,26 @@ Result sleep_until(struct timespec *ts)
 		}
 	}
 #endif
+}
+
+#ifdef __linux__
+static void crash_handler(int sig) {
+    void* frames[64];
+    int n = backtrace(frames, 64);
+    fprintf(stderr, "Caught signal %d, backtrace:\n", sig);
+    backtrace_symbols_fd(frames, n, STDERR_FILENO); // async-signal-safe
+    _exit(1); // don't call exit() from a signal handler
+}
+#endif
+
+Result init()
+{
+    //signal(SIGSEGV, crash_handler);
+    //signal(SIGABRT, crash_handler);
+    //signal(SIGFPE,  crash_handler);
+    //signal(SIGILL,  crash_handler);
+
+	return ev2::SUCCESS;
 }
 
 };

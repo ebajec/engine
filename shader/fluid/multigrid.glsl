@@ -1,7 +1,7 @@
 #define MAX_MIPS 8
 #define GROUPS 16
-#define OMEGA 0.6
-#define DELTA_X 1.0f
+#define OMEGA 0.66
+#define DELTA_X 2.0f
 
 #define OOB_CELL_THRES 1e-2
 
@@ -23,6 +23,7 @@ layout (set = 1, r32f, binding = 0) readonly uniform image2D in_lhs;
 layout (set = 1, r32f, binding = 1) readonly uniform image2D in_rhs;
 layout (set = 1, r32f, binding = 2) writeonly uniform image2D out_lhs;
 layout (set = 1, r8_snorm, binding = 3) readonly uniform image2D bd_mask[MAX_MIPS];
+layout (set = 1, r8, binding = 4) readonly uniform image2D fill_mask[MAX_MIPS];
 
 shared float block[GROUPS][GROUPS];
 shared uint8_t boundary[GROUPS][GROUPS];
@@ -65,8 +66,10 @@ float get_bd(ivec2 p, out float fill)
 
 void set_bd(ivec2 p, float bd)
 {
-	if (bd < 0.f)
-		boundary[p.x][p.y] = uint8_t(AIR);
+	if (bd < 0.f) {
+		boundary[p.x][p.y] = uint8_t(254.f);
+		return;
+	}
 	boundary[p.x][p.y] = uint8_t(254.f * bd);
 }
 

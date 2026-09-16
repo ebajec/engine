@@ -93,7 +93,7 @@ uint64_t commit_image_uploads(GfxContext *ctx, UploadContext uc, ImageID img,
 BufferID create_buffer(GfxContext *ctx, size_t size, BufferUsageFlags usage, 
 					   size_t align = 0);
 void destroy_buffer(GfxContext *ctx, BufferID buf);
-uint64_t get_buffer_gpu_handle(GfxContext *ctx, BufferID h);
+VkDeviceAddress get_buffer_device_address(GfxContext *ctx, BufferID h);
 
 //--------------------------------------------------------------------
 // Image

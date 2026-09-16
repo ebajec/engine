@@ -1,4 +1,3 @@
-
 shaders:
   vert: shader/core/heightmap.vert.spv
   frag: shader/core/default_mesh3d.frag.spv

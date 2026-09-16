@@ -14,7 +14,7 @@ BufferID create_buffer(GfxContext *ctx, size_t size, BufferUsageFlags usage, siz
 		return EV2_NULL_HANDLE(Buffer);
 	}
 
-	usage |= ev2::BUFFER_USAGE_TRANSFER_DST_BIT;
+	usage |= ev2::BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
 
 	VkBufferCreateInfo buffer_ci = {
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -62,10 +62,14 @@ void destroy_buffer(GfxContext *ctx, BufferID h)
 	ctx->queue_delete(h, &destroy_buffer_internal);
 }
 
-uint64_t get_buffer_gpu_handle(GfxContext *ctx, BufferID h)
+VkDeviceAddress get_buffer_device_address(GfxContext *ctx, BufferID h)
 {
-	Buffer *buf = ctx->get_buffer(h);
-	return (uint64_t)buf->buffer;
+	const Buffer *buffer = ctx->get_buffer(h);
+	VkBufferDeviceAddressInfo addr_info = {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+		.buffer = buffer->buffer
+	};
+	return vkGetBufferDeviceAddress(ctx->device, &addr_info);
 }
 
 //------------------------------------------------------------------------------

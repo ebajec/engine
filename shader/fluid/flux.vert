@@ -120,8 +120,10 @@ void main()
 
 	out_color = color;
 
+	float aspect = float(u_size.x)/float(u_size.y); 
+
 	mat3x2 world = mat3x2(
-		2,0, 0,2, -1,-1
+		2 * aspect,0, 0,2, -aspect,-1
 	);
 
 	gl_Position = u_view.pv * vec4(world * vec3(pos, 1), 0, 1);

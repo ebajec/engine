@@ -72,6 +72,7 @@ struct GfxContextVulkanInfo
 ev2::Result init_for_vulkan(const VulkanInitOptions &opts);
 VkInstance get_vulkan_instance();
 GfxContext *create_context_for_vulkan(const char *path, const GfxContextVulkanInfo &params);
+const VkPhysicalDeviceLimits *get_vulkan_physical_device_limits(GfxContext *ctx);
 
 void destroy_context(GfxContext *ctx);
 

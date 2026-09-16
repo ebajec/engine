@@ -40,7 +40,7 @@ float residual(ivec2 idx, float rhs, float h)
 	float wt_c = get_bd(idx, fill_c);
 	float u = fill_c * wt_c * block[idx.x][idx.y];
 
-	if (wt_c < OOB_CELL_THRES) {
+	if (wt_c > 0 && wt_c < OOB_CELL_THRES) {
 		return 0.f;
 	}
 
@@ -146,6 +146,7 @@ float fetch_rhs(ivec2 idx)
 		float fill;
 		float wt_c;
 		float center = RHS(2*idx, L, wt_c, fill);
+		center *= fill;
 
 		float num = 0;
 		float den = 0;
@@ -153,8 +154,8 @@ float fetch_rhs(ivec2 idx)
 			float fill_i;
 			float wt_i;
 			float value = RHS(stencil[i], L, wt_i, fill_i);
-			num += wt_i * fill * wt[i] * mix(center,value,wt_i);
-			den += wt_i * fill * wt[i];
+			num += wt_i * fill_i * wt[i] * mix(center,value,wt_i);
+			den += wt_i * fill_i * wt[i];
 		}
 		return den > 0 ? num/den : 0;
 	}

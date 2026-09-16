@@ -129,7 +129,17 @@ void HeightmapViewerPanel::render(ev2::GfxContext *ctx)
 		.x0 = 0, .y0 = 0,
 		.w = (uint32_t)panel_size.x, .h = (uint32_t)panel_size.y
 	};
-	ev2::PassID pass = ev2::begin_gfx_pass(ctx, panel->get_target(), rd.camera, rect);
+
+	ev2::GfxPassInfo pass_info = {
+		.target = panel->get_target(),
+		.view = rd.camera,
+		.viewport = rect,
+		.clear_color = true,
+		.clear_depth = true,
+		.name = panel->get_name(),
+	};
+
+	ev2::PassID pass = ev2::begin_gfx_pass(ctx, &pass_info);
 	ev2::cmd_use_buffer(pass, rd.ibo, ev2::USAGE_INDEX_INPUT);
 
 	ev2::ImageID image = ev2::get_backing_image(ctx, rd.tex);

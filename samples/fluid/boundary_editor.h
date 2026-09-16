@@ -30,7 +30,7 @@ struct BoundaryEditor : public ImageViewerPanel
 				glm::vec2 pos;
 				uint32_t status;
 			} pc = {
-				.pos = get_world_cursor_pos(),
+				.pos = get_grid_cursor_pos(),
 				.status = 0,
 			};
 			ev2::PassID pass = ev2::begin_compute_pass(ctx);

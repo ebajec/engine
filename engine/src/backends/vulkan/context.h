@@ -78,7 +78,8 @@ struct VulkanOptions
     std::vector<const char*> deviceExtensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 		VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME,
-		VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME
+		VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME,
+		VK_EXT_SHADER_ATOMIC_FLOAT_2_EXTENSION_NAME
     };
 };
 
@@ -206,11 +207,12 @@ struct FrameContext
 	void cull_unused_syncs();
 };
 
-struct GPUFramedata
+struct GPUFramedata 
 {
 	uint32_t t_seconds;
 	float t_fract;
 	float dt;
+	alignas(8) glm::ivec2 display_res;
 };
 
 //------------------------------------------------------------------------------

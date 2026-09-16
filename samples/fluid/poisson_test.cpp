@@ -170,7 +170,7 @@ struct PoissonSolverApp : public App
 		if (res < App::OK)
 			return res;
 
-		uniforms.p1 = rhs_panel->get_world_cursor_pos();
+		uniforms.p1 = rhs_panel->get_grid_cursor_pos();
 
 		ev2::reset_bindings(ctx, bindings);
 		ev2::bind_image(ctx, bindings, "img_out", rhs);

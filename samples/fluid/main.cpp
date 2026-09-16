@@ -7,6 +7,7 @@
 #include "poisson_solver.h"
 #include "boundary_editor.h"
 #include "grid_sim.h"
+#include "gpu_sort.h"
 
 #include <ev2/utils/log.h>
 #include <ev2/utils/common.h>
@@ -39,12 +40,50 @@ struct SimParams
 	uint cursor_flags;
 };
 
+struct BVHHeader
+{
+	uint32_t elem_count;
+	uint32_t internal_size;
+};
+
+struct GpuAABB2f
+{
+	glm::vec2 min;
+	glm::vec2 max;
+};
+
+static_assert(sizeof(FluidParticle) == 16);
+static_assert(offsetof(FluidParticle, pos) == 0);
+static_assert(offsetof(FluidParticle, vel) == 8);
+
+static_assert(sizeof(GPUSort::PushConstantHeader) == 32);
+static_assert(offsetof(GPUSort::PushConstantHeader, in_data) == 16);
+
+uint32_t bvh_size(uint32_t elem_count, uint32_t factor)
+{
+	uint32_t total = 0;
+	do {
+		elem_count = (elem_count + factor - 1)/factor;
+		total += elem_count;
+	} while (elem_count > 1);
+
+	return total;
+}
+
 struct FLIPFluidSim
 {
 	uint32_t grid_w;
 	uint32_t grid_h;
 
+	static constexpr uint32_t BVH_INTERNAL_SIZE = 16;
+	static constexpr uint32_t BVH_GROUP_SIZE = 128;
+
+	static constexpr uint32_t MORTON_CODE_BITS = 24;
 	static constexpr uint32_t DIMS = 2;
+
+	struct Config {
+		int num_v_cycles = 16;
+	} config;
 
 	ev2::ImageID v_pre_proj_img[DIMS];
 	ev2::ImageID v_proj_img[DIMS];
@@ -52,6 +91,7 @@ struct FLIPFluidSim
 
 	ev2::ImageID lap_p_img; // rhs of lap(phi) = f 
 	ev2::ImageID p_img; // pressure
+	ev2::ImageID fill_mask_img; // cell fill %
 	
 	// solid mask: 
 	// 0 = solid, 
@@ -64,7 +104,10 @@ struct FLIPFluidSim
 	// x = 1 -> fluid
 	ev2::ImageID bd_mask_img;
 	
-	ev2::BufferID part_data;
+	ev2::BufferID particles;
+	ev2::BufferID particles_mirror;
+
+	ev2::BufferID particle_bvh;
 
 	uint32_t particle_count;
 
@@ -82,7 +125,7 @@ struct FLIPFluidSim
 	ev2::ComputePipelineID p_project;
 
 	std::unique_ptr<PoissonSolver> pressure_solver;
-	std::unique_ptr<MeanSubtractor> mean_subtractor;
+	std::unique_ptr<GPUSort> sorter;
 
 	uint64_t step = 0;
 
@@ -103,7 +146,7 @@ struct FLIPFluidSim
 		grid_w = w;
 		grid_h = h;
 
-		particle_count = 500000;
+		particle_count = grid_w*grid_h;
 
 		ev2::ImageUsageFlags usage = 
 			ev2::IMAGE_USAGE_STORAGE_BIT | 
@@ -134,11 +177,19 @@ struct FLIPFluidSim
 		deposit_buf = ev2::create_buffer(ctx, deposit_buf_size,
 			ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT); 
 
-		part_data = ev2::create_buffer(ctx, particle_count * (sizeof(FluidParticle)),
+		particles = ev2::create_buffer(ctx, particle_count * (sizeof(FluidParticle)),
 			ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT | ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT); 
+		particles_mirror = ev2::create_buffer(ctx, particle_count * (sizeof(FluidParticle)),
+			ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT | ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT); 
+
+		size_t particle_bvh_size = align_up(sizeof(BVHHeader) + sizeof(GpuAABB2f) * bvh_size(particle_count, BVH_INTERNAL_SIZE), 16);
+		particle_bvh = ev2::create_buffer(ctx, particle_bvh_size, ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT, 16); 
 
 		lap_p_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F, usage);
 		ev2::set_image_name(ctx, lap_p_img, "lap_p_img");
+
+		fill_mask_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_R8_UNORM, usage);
+		ev2::set_image_name(ctx, fill_mask_img, "fill_img");
 
 		p_img = ev2::create_image(ctx, grid_w, grid_h, 1, ev2::IMAGE_FORMAT_32F, usage);
 		ev2::set_image_name(ctx, p_img, "p_img");
@@ -153,16 +204,15 @@ struct FLIPFluidSim
 
 		int result = EXIT_SUCCESS;
 
-		if ((result = pressure_solver->init(ctx, w, h))) {
+		if ((result = pressure_solver->init(ctx, w, h)) < 0) {
 			return result;
 		}
 
-		mean_subtractor.reset(new MeanSubtractor);
+		sorter.reset(GPUSort::create(ctx, particle_count, MORTON_CODE_BITS, "shader/fluid/sort_particles"));
 
-		if ((result = mean_subtractor->init(ctx, grid_w, grid_h))) {
-			return result;
+		if (!sorter) {
+			return EXIT_FAILURE;
 		}
-		mean_subtractor->setup_bindings(ctx, lap_p_img);
 
 		p_advect = ev2::load_compute_pipeline(ctx, "shader/fluid/nvs2_flip_advect");
 		p_deposit = ev2::load_compute_pipeline(ctx, "shader/fluid/nvs2_flip_deposit");
@@ -173,13 +223,14 @@ struct FLIPFluidSim
 
 		ev2::bind_image(ctx, bindings, "solid_mask", solid_mask_img);
 		ev2::bind_image(ctx, bindings, "bd_mask", bd_mask_img);
+		ev2::bind_image(ctx, bindings, "fill_mask", fill_mask_img);
 
 		for (int i = 0; i < DIMS; ++i) {
 			ev2::bind_image_indexed(ctx, bindings, "v_pre_proj", i, v_pre_proj_img[i]);
 			ev2::bind_image_indexed(ctx, bindings, "v_proj", i, v_proj_img[i]);
 		}
 
-		ev2::bind_buffer(ctx, bindings, "Particles", part_data, 
+		ev2::bind_buffer(ctx, bindings, "Particles", particles, 
 			0, particle_count * sizeof(FluidParticle)); 
 		ev2::bind_buffer(ctx, bindings, "VelocityBuffer", deposit_buf, 0, deposit_buf_size);  
 
@@ -204,7 +255,7 @@ struct FLIPFluidSim
 		uint32_t gx = 1 + grid_w/group_size;
 		uint32_t gy = 1 + grid_h/group_size;
 
-		ev2::PassID pass = ev2::begin_compute_pass(ctx);
+		ev2::PassID pass = ev2::begin_compute_pass(ctx, "fluid_sim_step");
 
 		struct alignas(sizeof(glm::vec2)) {
 			uint32_t count;
@@ -244,7 +295,7 @@ struct FLIPFluidSim
 			ev2::cmd_use_image(pass, v_pre_proj_img[i], ev2::USAGE_STORAGE_READ_COMPUTE);
 			ev2::cmd_use_image(pass, v_proj_img[i], ev2::USAGE_STORAGE_READ_COMPUTE);
 		}
-		ev2::cmd_use_buffer(pass, part_data, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
+		ev2::cmd_use_buffer(pass, particles, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 
 		ev2::cmd_bind_compute_pipeline(pass, p_advect);
 		ev2::cmd_dispatch(pass, 1 + (particle_count - 1)/32, 1, 1);
@@ -252,7 +303,7 @@ struct FLIPFluidSim
 		//------------------------------------------------------------------------------
 		// scatter/deposit stage
 
-		ev2::cmd_use_buffer(pass, part_data, ev2::USAGE_STORAGE_READ_COMPUTE);
+		ev2::cmd_use_buffer(pass, particles, ev2::USAGE_STORAGE_READ_COMPUTE);
 		ev2::cmd_use_buffer(pass, deposit_buf, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 		ev2::cmd_use_image(pass, solid_mask_img, ev2::USAGE_STORAGE_READ_COMPUTE);
 		ev2::cmd_use_image(pass, bd_mask_img, ev2::USAGE_STORAGE_WRITE_COMPUTE);
@@ -266,15 +317,77 @@ struct FLIPFluidSim
 		ev2::cmd_use_buffer(pass, deposit_buf, ev2::USAGE_STORAGE_READ_COMPUTE);
 		ev2::cmd_use_image(pass, lap_p_img, ev2::USAGE_STORAGE_WRITE_COMPUTE);
 		ev2::cmd_use_image(pass, bd_mask_img, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
+		ev2::cmd_use_image(pass, fill_mask_img, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 
 		ev2::cmd_bind_compute_pipeline(pass, p_divergence);
 		ev2::cmd_dispatch(pass, gx, gy, 1);
 
 		//------------------------------------------------------------------------------
+		// sort particles
+
+		ev2::BufferID sort_input[] = {
+			particles,
+			particles_mirror
+		};
+
+		constexpr uint32_t MORTON_CODE_MAX_DIM = (1 << (MORTON_CODE_BITS + DIMS - 1)/DIMS);
+
+		struct {
+			glm::vec2 scale;
+		} sort_pc = {
+			.scale = glm::vec2(
+				(MORTON_CODE_MAX_DIM + grid_w - 1)/grid_w,
+				(MORTON_CODE_MAX_DIM + grid_h - 1)/grid_h
+			)
+		};
+
+		assert(sort_input[0] != sort_input[1]);
+
+		sorter->record(pass, MORTON_CODE_BITS, sort_input, particle_count, sizeof(FluidParticle), &sort_pc, sizeof(sort_pc));
+		//particles_mirror = particles == sort_input[0] ? sort_input[1] : sort_input[0];
+
+		//------------------------------------------------------------------------------
+		// compute bvh
+
+		ev2::ComputePipelineID p_bvh_level = ev2::load_compute_pipeline(ctx, "shader/fluid/linear_bvh_2d_fluid", "compute_level");
+
+		struct {
+			uint32_t in_start;
+			uint32_t in_count;
+			uint32_t elem_count;
+			VkDeviceAddress bvh;
+			VkDeviceAddress data;
+		} bvh_pc = {
+			.in_start = 0,
+			.in_count = particle_count,
+			.elem_count = particle_count,
+			.bvh = ev2::get_buffer_device_address(ctx, particle_bvh),
+			.data = ev2::get_buffer_device_address(ctx, particles)
+		};
+
+		ev2::cmd_bind_compute_pipeline(pass, p_bvh_level);
+
+		// First pass, compute from data
+		ev2::cmd_push_constant(pass, p_bvh_level, 0, sizeof(bvh_pc), &bvh_pc);
+		ev2::cmd_use_buffer(pass, particles, ev2::USAGE_STORAGE_READ_COMPUTE);
+		ev2::cmd_use_buffer(pass, particle_bvh, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
+		ev2::cmd_dispatch(pass, (bvh_pc.in_count + BVH_GROUP_SIZE - 1)/BVH_GROUP_SIZE, 1, 1);
+
+		do {
+			bvh_pc.in_count = (bvh_pc.in_count + BVH_INTERNAL_SIZE - 1) / BVH_INTERNAL_SIZE;
+
+			ev2::cmd_push_constant(pass, p_bvh_level, 0, offsetof(decltype(bvh_pc), elem_count), &bvh_pc);
+			ev2::cmd_use_buffer(pass, particle_bvh, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
+			ev2::cmd_dispatch(pass, (bvh_pc.in_count + BVH_GROUP_SIZE - 1)/BVH_GROUP_SIZE, 1, 1);
+
+			bvh_pc.in_start += bvh_pc.in_count;
+		} while (bvh_pc.in_count > 1);
+
+		//------------------------------------------------------------------------------
 		// pressure_solve
 
 		pressure_solver->record_setup(pass);
-		for (int i = 0; i < ((step == 0) ? 32 : 32); ++i) 
+		for (int i = 0; i < ((step == 0) ? 4*config.num_v_cycles : config.num_v_cycles); ++i) 
 			pressure_solver->record_v_cycle(pass);
 
 		ev2::end_pass(ctx, pass);
@@ -344,8 +457,12 @@ struct FLIPFluidSim
 		ev2::destroy_image(ctx, solid_mask_img);
 		ev2::destroy_image(ctx, bd_mask_img);
 
-		ev2::destroy_buffer(ctx, part_data);
+		ev2::destroy_buffer(ctx, particles);
 		ev2::destroy_bindings(ctx, bindings);
+
+		pressure_solver->destroy(ctx);
+
+		sorter.reset();
 	}
 };
 
@@ -375,6 +492,7 @@ struct FluidApp : public App
 	bool m_stopped = true;
 	uint64_t m_step = 0;
 	float m_rate = 1.f;
+	int bvh_level = 0;
 
 	FluidApp() : App(1200, 1200, "fluid") {
 	}
@@ -398,7 +516,7 @@ int FluidApp::initialize(int argc, char **argv)
 	main_panel.reset(new ImageViewerPanel(this, 200, 0, 500, 500,
 		"pipelines/fluid_viz.yaml", "Interactive Simulation"));
 	right_panel.reset(new ImageViewerPanel(this, 700, 0, 500, 500, 
-		"pipelines/pressure_viz.yaml", "Pressure Debug"));
+		"pipelines/residuals.yaml", "Residuals"));
 
 	boundary_editor.reset(new BoundaryEditor(this, 100, 100, 500, 500, "Boundary Mask"));
 
@@ -419,7 +537,7 @@ int FluidApp::initialize(int argc, char **argv)
 		return result;
 	main_panel->panel->set_closable(false);
 
-	result = right_panel->init(ctx, sim->p_img); 
+	result = right_panel->init(ctx, sim->pressure_solver->R1); 
 	if (result)
 		return result;
 	right_panel->panel->set_closable(false);
@@ -463,6 +581,7 @@ int FluidApp::update()
 	}
 
 	ImGui::SliderFloat("Sim update rate", &m_rate, 1.f/256.f, 1.f);
+	ImGui::SliderInt("V-cycles", &sim->config.num_v_cycles, 1, 64);
 
 	if (ImGui::Button("Reset")) {
 		sim->reset(ctx);
@@ -502,7 +621,7 @@ int FluidApp::update()
 			main_panel->panel->is_content_selected();
 
 	if (is_panel_clicked) {
-		glm::vec2 pos = main_panel->get_world_cursor_pos();
+		glm::vec2 pos = main_panel->get_grid_cursor_pos();
 		params.cursor1 = params.cursor_flags ? params.cursor2 : pos;
 		params.cursor2 = pos;
 		params.cursor_flags = true; 
@@ -514,16 +633,34 @@ int FluidApp::update()
 }
 void FluidApp::render()
 {
-	// First render base image into the main panel
-	main_panel->render(ctx);
+	float aspect = (float)sim->grid_w/(float)sim->grid_h;
+	glm::mat3x2 world = glm::mat3x2(
+		glm::vec2(2.f*aspect/(float)sim->grid_w, 0),
+		glm::vec2(0, 2.f/(float)sim->grid_h),
+		glm::vec2(-aspect, -1.f)
+	);
 
 	// second pass renders with alpha blending
 	ev2::GfxPassInfo pass_info = {
 		.target = main_panel->panel->get_target(),
 		.view = main_panel->rd.camera,
-		.clear_color = false,
+		.clear_color = true,
+		.name = main_panel->panel->get_name()
 	};
 	ev2::PassID pass = ev2::begin_gfx_pass(ctx, &pass_info);
+
+	struct {
+		glm::vec2 size;
+		VkDeviceAddress bvh;
+		VkDeviceAddress parts;
+	} panel_pc = {
+		.size = glm::vec2(sim->grid_w , sim->grid_h),
+		.bvh = ev2::get_buffer_device_address(ctx, sim->particle_bvh),
+		.parts = ev2::get_buffer_device_address(ctx, sim->particles),
+	};
+
+	ev2::cmd_push_constant(pass, main_panel->rd.pipeline, 0, sizeof(panel_pc), &panel_pc);
+	main_panel->record_draw(pass);
 
 	if (b_enable_flux_arrows) {
 		ev2::GfxPipelineID flux_arrows = ev2::load_graphics_pipeline(ctx, "pipelines/flux.yaml");
@@ -551,30 +688,50 @@ void FluidApp::render()
 			vkCmdDraw(cmds, 9, count, 0, 0);
 		});
 	}
-
 	ev2::reset_bindings(ctx, particle_bindings);
 	ev2::bind_buffer(ctx, particle_bindings, "Particles", 
-		sim->part_data, 0, sim->particle_count * sizeof(FluidParticle));
-
+		sim->particles, 0, sim->particle_count * sizeof(FluidParticle));
 	ev2::flush_bindings(ctx, particle_bindings);
 
-	struct {
-		glm::mat3x2 world;
-	} pc {
-		.world = glm::mat3x2(
-			glm::vec2(2.f/(float)sim->grid_w, 0),
-			glm::vec2(0, 2.f/(float)sim->grid_h),
-			glm::vec2(0, 0)
-		)
-	};
-
-	ev2::cmd_use_buffer(pass, sim->part_data, ev2::USAGE_STORAGE_READ_GRAPHICS);
+	ev2::cmd_use_buffer(pass, sim->particles, ev2::USAGE_STORAGE_READ_GRAPHICS);
 	ev2::cmd_bind_gfx_pipeline(pass, particles);
 	ev2::cmd_bind_resources(pass, particle_bindings);
-	ev2::cmd_push_constant(pass, particles, 0, sizeof(pc), &pc);
+	ev2::cmd_push_constant(pass, particles, 0, sizeof(world), &world);
 	ev2::cmd_custom(pass, [this](VkCommandBuffer cmds){
 		vkCmdDraw(cmds, 6, sim->particle_count, 0, 0);
 	});
+
+	ImGui::Begin("Editor");
+	ImGui::SliderInt("BVH level", &bvh_level, 0, int(floor(log(sim->particle_count)/log(FLIPFluidSim::BVH_INTERNAL_SIZE)))); 
+	ImGui::End();
+
+	uint32_t bvh_offset = 0;
+	uint32_t bvh_count = sim->particle_count;
+	for (int i = 0; i < bvh_level; ++i) {
+		bvh_count = (bvh_count + FLIPFluidSim::BVH_INTERNAL_SIZE - 1)/FLIPFluidSim::BVH_INTERNAL_SIZE;
+		bvh_offset += bvh_count;
+	}
+
+	struct {
+		glm::mat3x2 world;
+		uint32_t level;
+		uint32_t offset;
+		VkDeviceAddress bvh;
+	} box_pc {
+		.world = world,
+		.level = (uint32_t)bvh_level,
+		.offset = bvh_offset,
+		.bvh = ev2::get_buffer_device_address(ctx, sim->particle_bvh)
+	};
+
+	ev2::GfxPipelineID p_boxes = ev2::load_graphics_pipeline(ctx, "pipelines/core/box_2d.yaml");
+	ev2::cmd_use_buffer(pass, sim->particle_bvh, ev2::USAGE_STORAGE_READ_GRAPHICS);
+	ev2::cmd_push_constant(pass, p_boxes, 0, sizeof(box_pc), &box_pc);
+	ev2::cmd_bind_gfx_pipeline(pass, p_boxes);
+	ev2::cmd_custom(pass, [bvh_count](VkCommandBuffer cmds) {
+		vkCmdDraw(cmds, 5, (bvh_count + FLIPFluidSim::BVH_INTERNAL_SIZE - 1)/FLIPFluidSim::BVH_INTERNAL_SIZE, 0, 0);
+	});
+
 
 	ev2::end_pass(ctx, pass);
 
@@ -594,6 +751,24 @@ void FluidApp::destroy()
 	App::terminate();
 }
 
+__attribute__((noinline)) int frame(FluidApp * app)
+{
+	int status = app->begin_frame();
+	if (should_exit(status))
+		return status;
+
+	status = app->update();
+	if (should_exit(status))
+		return status;
+	
+	app->render();
+
+	status = app->end_frame();
+	if (should_exit(status))
+		return status;
+	return status;
+}
+
 int main(int argc, char *argv[])
 {
 	std::unique_ptr<FluidApp> app (new FluidApp{});
@@ -601,23 +776,8 @@ int main(int argc, char *argv[])
 	if (app->initialize(argc, argv) != App::OK)
 		return EXIT_FAILURE;
 
-	int status = App::OK;
-
-	for(;;)
+	for(int status = App::OK; !should_exit(status); status = frame(app.get()))
 	{
-		status = app->begin_frame();
-		if (should_exit(status))
-			break;
-
-		status = app->update();
-		if (should_exit(status))
-			break;
-		
-		app->render();
-
-		status = app->end_frame();
-		if (should_exit(status))
-			break;
 	}
 
 	app->destroy();

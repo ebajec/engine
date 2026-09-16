@@ -95,6 +95,10 @@ void PoissonSolver::destroy(ev2::GfxContext *ctx)
 {
 	ev2::destroy_image(ctx, R1);
 	ev2::destroy_image(ctx, R2);
+	ev2::destroy_image(ctx, tmp_lhs);
+	ev2::destroy_bindings(ctx, bindings0);
+	ev2::destroy_bindings(ctx, bindings1);
+	ev2::destroy_bindings(ctx, mipgen_bindings);
 }
 
 void PoissonSolver::record_setup(ev2::PassID pass)

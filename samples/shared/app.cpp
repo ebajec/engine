@@ -224,11 +224,14 @@ int App::begin_frame()
 	if (ev2_result != ev2::SUCCESS)
 		return App::ERROR;
 
-	gui_pass = ev2::begin_gfx_pass(
-		ctx, 
-		{}, {}, 
-		ev2::Rect{0,0,(uint32_t)win.width, (uint32_t)win.height}
-	);
+	ev2::GfxPassInfo pass_info = {
+		.viewport = ev2::Rect{0,0,(uint32_t)win.width, (uint32_t)win.height},
+		.clear_color = true,
+		.clear_depth = true,
+		.name = "UI Pass",
+	};
+
+	gui_pass = ev2::begin_gfx_pass(ctx, &pass_info);
 
 	for (const auto&[image, viewer] : image_viewers) {
 		if (viewer->update(ctx) == App::SHOULD_CLOSE) {

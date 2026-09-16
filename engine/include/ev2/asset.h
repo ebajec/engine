@@ -20,6 +20,7 @@ GfxPipelineID load_graphics_pipeline(GfxContext *ctx, const char *path);
 void unload_graphics_pipeline(GfxContext *ctx, GfxPipelineID pipe);
 
 ComputePipelineID load_compute_pipeline(GfxContext *ctx, const char *path);
+ComputePipelineID load_compute_pipeline(GfxContext *ctx, const char *path, const char *entrypoint);
 void unload_compute_pipeline(GfxContext *ctx, ComputePipelineID pipe);
 
 ImageAssetID load_image_asset(GfxContext *ctx, const char *path);

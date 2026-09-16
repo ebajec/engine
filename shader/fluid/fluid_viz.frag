@@ -57,7 +57,7 @@ void main()
 
 	vec4 val = texture(u_tex,uv);
 
-	const float S = 0.3f;
+	const float S = 0.6f;
 
 	vec2 grad_x = S*vec2(grad.du.x,grad.dv.x);
 
@@ -76,7 +76,7 @@ void main()
 
 	val = abs(val);
 
-	vec4 color = tanh(val.r)*vec4(jet_palette(S*val.r), 1);//vec4(track_color, color_val);
+	vec4 color = 0.f*tanh(val.r)*vec4(jet_palette(S*val.r), 1);//vec4(track_color, color_val);
 
 	ivec2 pix = ivec2(uv*vec2(size));
 

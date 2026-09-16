@@ -4,9 +4,9 @@
 #include "nvs2_flip.glsl"
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-#define BETA 0.25
-#define PARTS_PER_CELL 128
-#define RHO_REST 1.f
+#define PARTS_PER_CELL 32
+#define BETA (PARTS_PER_CELL/256.f)
+#define RHO_REST 1.0f
 
 const ivec2 stencil[4] = {
 	ivec2(1,0),
@@ -15,6 +15,24 @@ const ivec2 stencil[4] = {
 	ivec2(0,-1)
 };
 
+float face_wt(ivec2 c, ivec2 p)
+{
+	float wt_c = imageLoad(solid_mask, c).r;
+
+	ivec2 size = imageSize(solid_mask);
+	float wt_p = all(greaterThanEqual(p, ivec2(0))) && all(lessThan(p, size)) ?
+		imageLoad(solid_mask, p).r : 0.f;
+
+	return min(wt_c, wt_p);
+}
+
+ivec2 basis2(int k)
+{
+	ivec2 x = ivec2(0);
+	x[k] = 1;
+	return x;
+}
+
 float rhs(ivec2 p)
 {
 	float div = 0;
@@ -22,6 +40,8 @@ float rhs(ivec2 p)
 	ivec2 size = imageSize(f_out);
 
 	float rho = 0;
+
+	float face_wts[2*DIMS];
 
 	int offset = 0;
 	for (int i = 0; i < DIMS; ++i) {
@@ -39,17 +59,18 @@ float rhs(ivec2 p)
 		float v2 = s_vel[idx2].acc;
 
 		if (wt1 > 1e-3 && wt2 > 1e-3) {
-			div += (v2 / wt2 - v1 / wt1)/(2*DELTA_X);
-			rho += (wt1 + wt2) * RHO_REST/PARTS_PER_CELL;
+			div += (v2 / wt2 - v1 / wt1)/(DELTA_X);
 		}
-	}
 
-	if (p.y <= 0 || p.x <= 0 || p.x == size.x - 1 || p.y == size.y - 1)
-	{
-		rho *= 8;
+		float face1 = face_wt(p, p - basis2(i));
+		float face2 = face_wt(p, p + basis2(i));
+
+		rho += (mix(wt2, wt1, face1) + mix(wt1, wt2, face2)) * RHO_REST/PARTS_PER_CELL;
 	}
 
 	float bd = imageLoad(bd_mask, p).r;
+
+	imageStore(fill_mask, p, vec4(0.125f - rho));
 
 
 	float f_rho = bd < 0 ? 0.f : -BETA*bd*(rho - RHO_REST)/(RHO_REST);
@@ -84,7 +105,7 @@ void flood_fill(ivec2 p)
 
 	float bd = imageLoad(bd_mask, p).r;
 
-	if (bd > 0 && count > 0) {
+	if (bd > 0 && count > 2) {
 		imageStore(bd_mask, p, vec4(1.f));
 	}
 }

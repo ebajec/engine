@@ -11,6 +11,7 @@ struct framedata_t
 	uint t_seconds;
 	float t_fract;
 	float dt;
+	ivec2 display_res;
 };
 
 struct viewdata_t

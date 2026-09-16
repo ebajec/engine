@@ -535,8 +535,15 @@ static ev2::Result create_logical_device(ev2::GfxContext *ctx,
     }
     
     // device features
+
+	VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT atomicFloat2Features{
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_2_FEATURES_EXT,
+		.shaderSharedFloat32AtomicMinMax = VK_TRUE
+	};
+
 	VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomicFloatFeatures{
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT,
+		.pNext = &atomicFloat2Features,
 		.shaderSharedFloat32AtomicAdd = VK_TRUE,
 	};
 
@@ -549,7 +556,9 @@ static ev2::Result create_logical_device(ev2::GfxContext *ctx,
 		.descriptorBindingUpdateUnusedWhilePending = VK_TRUE,
 		.descriptorBindingVariableDescriptorCount = VK_TRUE,
     	.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
-		.shaderInt8 = VK_TRUE
+		.bufferDeviceAddress = VK_TRUE,
+		.bufferDeviceAddressCaptureReplay = VK_TRUE,
+		.shaderInt8 = VK_TRUE,
 	};
 
 	VkPhysicalDeviceVulkan13Features features13{
@@ -570,7 +579,9 @@ static ev2::Result create_logical_device(ev2::GfxContext *ctx,
 	if (!atomicFloatFeatures.shaderSharedFloat32AtomicAdd)
 		return set_error(EINIT_FAILED, "shaderSharedFloat32AtomicAdd is unsupported"); 
 
-	VkPhysicalDeviceFeatures device_features{};
+	VkPhysicalDeviceFeatures device_features{
+		.shaderInt64 = VK_TRUE
+	};
 
     VkDeviceCreateInfo createInfo = {
 		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -585,8 +596,7 @@ static ev2::Result create_logical_device(ev2::GfxContext *ctx,
 	VkResult result = vkCreateDevice(ctx->physicalDevice, 
 								  &createInfo, nullptr, &ctx->device); 
     if (result != VK_SUCCESS) {
-        
-		return set_error(EINIT_FAILED, "failed to create logical device!");
+		return check_vk_result(result, "vkCreateDevice failed!");
     }
 
     vkGetDeviceQueue(ctx->device, indices.presentFamily.value(), 0,
@@ -803,7 +813,7 @@ static void destroy_swap_chain(GfxContext *ctx, SwapChain &swap_chain)
 static ev2::Result create_allocator(ev2::GfxContext *ctx)
 {
 	VmaAllocatorCreateInfo create_info = {
-		.flags = 0,
+		.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
 		.physicalDevice = ctx->physicalDevice,
 		.device = ctx->device,
 		.preferredLargeHeapBlockSize = 0,
@@ -1516,6 +1526,11 @@ error:
 	return nullptr;
 }
 
+const VkPhysicalDeviceLimits *get_vulkan_physical_device_limits(GfxContext *ctx)
+{
+	return &ctx->caps.limits;
+}
+
 ev2::Result resize_swapchain(GfxContext *ctx, uint32_t width, uint32_t height)
 {
 	uint32_t old_width = ctx->desired_surface_width;
@@ -1532,6 +1547,11 @@ ev2::Result resize_swapchain(GfxContext *ctx, uint32_t width, uint32_t height)
 
 ev2::Result init_for_vulkan(const ev2::VulkanInitOptions &opts)
 {
+	Result result = ev2::platform::init();
+
+	if (result < ev2::SUCCESS)
+		return result;
+	
 	if (opts.enableValidationLayers && !checkValidationLayerSupport(opts)) {
 		log_error("Validation layers required, but not available");
 		return ev2::EINIT_FAILED;

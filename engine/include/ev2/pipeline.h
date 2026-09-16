@@ -184,6 +184,8 @@ struct GfxPassInfo
 
 	bool clear_color : 1 = true;
 	bool clear_depth : 1 = true;
+
+	const char *name = nullptr;
 };
 
 PassID begin_gfx_pass(GfxContext *ctx, const GfxPassInfo *info);
@@ -198,7 +200,7 @@ PassID begin_gfx_pass(
 
 // @brief Begin a compute pass.  Does not bind any descriptor sets.   
 PassID begin_compute_pass(
-	GfxContext *ctx 
+	GfxContext *ctx, const char *name = nullptr
 );
 
 // @brief End a pass.  The ordering of this call determines the read/write

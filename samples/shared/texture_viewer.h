@@ -56,7 +56,7 @@ struct ImageViewerPanel
 	// @return Whether this panel should close;
 	bool imgui();
 
-	glm::vec2 get_world_cursor_pos();
+	glm::vec2 get_grid_cursor_pos();
 };
 
 #endif // TEXTURE_VIEWER_H

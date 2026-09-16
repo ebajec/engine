@@ -515,9 +515,12 @@ PassID begin_gfx_pass(GfxContext *ctx, const GfxPassInfo *info)
 
 	FrameContext *frame = ctx->get_current_frame();
 
+	std::string name = info->name ? 
+		info->name : ("graphics" + std::to_string((int)frame->passes.size())); 
+
 	Pass *pass = rg_create_pass(
 		ctx, frame, 
-		"graphics" + std::to_string((int)frame->passes.size()),
+		std::move(name),
 		ctx->graphics_family->index
 	);
 
@@ -592,15 +595,18 @@ PassID begin_gfx_pass(GfxContext *ctx, const GfxPassInfo *info)
 	return pass_id; 
 }
 
-PassID begin_compute_pass(GfxContext *ctx)
+PassID begin_compute_pass(GfxContext *ctx, const char *name)
 {
 	ctx->assert_inside_frame();
-
 	FrameContext *frame = ctx->get_current_frame();
+
+	std::string name_str = name ? 
+		name : ("graphics" + std::to_string((int)frame->passes.size())); 
+
 	Pass *pass = rg_create_pass(
 		ctx, 
 		frame, 
-		"compute" + std::to_string((int)frame->passes.size()),
+		std::move(name_str),
 		ctx->graphics_family->index
 	);
 
@@ -1192,7 +1198,8 @@ Result begin_frame(GfxContext *ctx)
 	GPUFramedata gpu_data = {
 		.t_seconds = (uint32_t)frame->t,
 		.t_fract = (float)fmod(frame->t, 1.),
-		.dt = (float)frame->dt
+		.dt = (float)frame->dt,
+		.display_res = glm::ivec2(ctx->swap_chain.extent.width, ctx->swap_chain.extent.height)
 	};
 
 	UploadContext uc = begin_upload(ctx, sizeof(GPUFramedata), alignof(GPUFramedata));

@@ -78,7 +78,7 @@ static void image_entry_imgui(PoolID id, const Image *image)
 	}
 }
 
-static void buffer_entry_imgui(PoolID id, const Buffer *buffer)
+static void buffer_entry_imgui(GfxContext *ctx, PoolID id, const Buffer *buffer)
 {
 	bool isSelected = (g_state.selected == id);
 
@@ -92,7 +92,15 @@ static void buffer_entry_imgui(PoolID id, const Buffer *buffer)
 	bool is_selected =  g_state.selected == id;
 
 	if (is_selected) {
+
+		VkBufferDeviceAddressInfo addr_info = {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+			.buffer = buffer->buffer
+		};
+		VkDeviceAddress addr = vkGetBufferDeviceAddress(ctx->device, &addr_info);
+
         ImGui::Indent();
+		ImGui::Text("addr: 0x%llx\n", (unsigned long long)addr);
 		ImGui::Text("size: %lld\n", (unsigned long long)buffer->size);
 		state_info_imgui(&buffer->state);
         ImGui::Unindent();
@@ -124,7 +132,7 @@ static void buffer_list_imgui(GfxContext *ctx)
 					.gen = page->generation[j]
 				};
 
-				buffer_entry_imgui(id, &page->values[j]);
+				buffer_entry_imgui(ctx, id, &page->values[j]);
 			}
 		}
 

@@ -8,6 +8,7 @@ project(ev2_fluid)
 add_executable(ev2_fluid 
 	main.cpp 
 	poisson_solver.cpp
+	grid_sim.cpp
 )
 
 target_link_libraries(ev2_fluid PRIVATE

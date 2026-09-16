@@ -7,7 +7,7 @@
 #define PATH_MAX 4096
 #endif
 
-glm::vec2 ImageViewerPanel::get_world_cursor_pos()
+glm::vec2 ImageViewerPanel::get_grid_cursor_pos()
 {
 	glm::ivec2 panel_size = panel->get_size();
 	glm::ivec2 panel_pos = panel->get_pos();
@@ -17,10 +17,16 @@ glm::vec2 ImageViewerPanel::get_world_cursor_pos()
 		glm::vec2(panel_pos.x, panel_pos.y)) / 
 		glm::vec2(panel_size.x, panel_size.y); 
 
+	glm::uvec2 image_size;
+
+	ev2::get_image_dims(app->ctx, image, &image_size.x, &image_size.y, nullptr);
+
 	uv = glm::vec2(uv.x, 1.f - uv.y);
 
+	float aspect = float(image_size.x)/float(image_size.y);
+
 	uv = screen_to_world * glm::vec4(2.f*uv - glm::vec2(1.f),0,1);
-	uv = 0.5f * (uv + glm::vec2(1.f));
+	uv = 0.5f * (uv + glm::vec2(aspect, 1.f));
 
 	return glm::vec2(uv); 
 }
@@ -203,7 +209,7 @@ int ImageViewerPanel::set_image(ev2::GfxContext *ctx,
 	if (rd.tex.is_valid())
 		ev2::destroy_texture(ctx, rd.tex);
 
-	rd.tex = ev2::create_texture(ctx, image, ev2::FILTER_BILINEAR, level, layer);
+	rd.tex = ev2::create_texture(ctx, image, ev2::FILTER_NEAREST, level, layer);
 
 	return rd.tex.is_valid() ? App::OK : App::ERROR;
 }
@@ -234,7 +240,8 @@ void ImageViewerPanel::render(ev2::GfxContext *ctx)
 		.target = panel->get_target(),
 		.view = rd.camera,
 		.clear_color = true,
-		.clear_depth = true
+		.clear_depth = true,
+		.name = panel->get_name()
 	};
 	ev2::PassID pass = ev2::begin_gfx_pass(ctx, &pass_info);
 	record_draw(pass);
