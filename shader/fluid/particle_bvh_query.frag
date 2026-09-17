@@ -72,8 +72,6 @@ float min_dist(vec2 p_search, float d_search)
 	sp = root - 1;
 	stack[sp] = 0x1;
 
-	#define K 2
-
 	float value = 100.f;
 
 	uint hit_ctr = 0;
@@ -121,7 +119,7 @@ float min_dist(vec2 p_search, float d_search)
 		}
 	}
 
-	return bool(hit_ctr) ? value - 0.3 : 0;
+	return bool(hit_ctr) ? value - 0.1 : 0;
 }
 
 void main()

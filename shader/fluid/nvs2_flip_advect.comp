@@ -112,10 +112,11 @@ vec2 apply_solid_boundary(vec2 p1, vec2 p2, inout vec2 v, float R)
 
 	if (D > 1e-4) {
 		vec2 dir = -grad/D;
-		vec2 proj = dir * dot(v,dir);
-		v -= 2*proj;
+		vec2 proj = dir * min(dot(v,dir), 0.f);
+		v -= proj;
 
-		p2 += grad;
+		float d = (wc - 0.97)/D;
+		p2 += -dir * max(0.f, R - d);
 	}
 
 	return p2;

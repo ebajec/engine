@@ -31,8 +31,8 @@ void main()
 
 	float c = texture(u_tex, in_uv).r;
 
-	vec2 d = 0*grad[0];
+	vec2 d = grad[0];
 
-	FragColor = vec4(d.y, -d.y, c, 1.f);
+	FragColor = vec4(d.x, -d.x, c, 1.f);
 }
 

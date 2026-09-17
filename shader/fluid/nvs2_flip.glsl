@@ -6,8 +6,8 @@
 #include "fluid_particle.glsl"
 
 #define PARTS_PER_CELL 16
-#define BETA 1.f
-#define GRID_WT 0.15
+#define BETA 0.20f
+#define GRID_WT 0.20
 #define TIMESTEP 0.02
 #define DELTA_X 2.0f
 #define RHO_MAX 100.f
