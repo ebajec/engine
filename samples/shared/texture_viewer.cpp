@@ -75,6 +75,15 @@ ImageViewerPanel::ImageViewerPanel(App *app,
 			}
 		}
 
+		if (ImGui::CollapsingHeader("Filter")) {
+			if (ImGui::Selectable("Nearest", this->rd.filter == ev2::FILTER_NEAREST)) {
+				set_texture_filter(ev2::FILTER_NEAREST);
+			}
+			if (ImGui::Selectable("Bilinear", this->rd.filter == ev2::FILTER_BILINEAR)) {
+				set_texture_filter(ev2::FILTER_BILINEAR);
+			}
+		}
+
 		if (sel_level != level || sel_layer == layer) {
 			this->level = sel_level;
 			this->layer = sel_layer;
@@ -110,6 +119,15 @@ ImageViewerPanel::ImageViewerPanel(App *app,
 	});
 
 	pipeline_path = pipeline;
+}
+
+void ImageViewerPanel::set_texture_filter(ev2::TextureFilter filter)
+{
+	if (filter != rd.filter) {
+		ev2::destroy_texture(app->ctx, rd.tex);
+		rd.tex = ev2::create_texture(app->ctx, image, filter, level, layer);
+	}
+	rd.filter = filter;
 }
 
 int ImageViewerPanel::set_pipeline(const char *path)
@@ -209,7 +227,7 @@ int ImageViewerPanel::set_image(ev2::GfxContext *ctx,
 	if (rd.tex.is_valid())
 		ev2::destroy_texture(ctx, rd.tex);
 
-	rd.tex = ev2::create_texture(ctx, image, ev2::FILTER_NEAREST, level, layer);
+	rd.tex = ev2::create_texture(ctx, image, rd.filter, level, layer);
 
 	return rd.tex.is_valid() ? App::OK : App::ERROR;
 }

@@ -17,19 +17,35 @@ void main()
 	if (any(greaterThanEqual(idx, size)) || any(lessThan(idx, ivec2(0))))
 		return;
 
-	vec4 samples[4] = {
-		imageLoad(levels[u_level], 2*idx),
-		imageLoad(levels[u_level], 2*idx + ivec2(1,0)),
-		imageLoad(levels[u_level], 2*idx + ivec2(0,1)),
-		imageLoad(levels[u_level], 2*idx + ivec2(1,1)),
+	float samples[4] = {
+		imageLoad(levels[u_level], 2*idx).r,
+		imageLoad(levels[u_level], 2*idx + ivec2(1,0)).r,
+		imageLoad(levels[u_level], 2*idx + ivec2(0,1)).r,
+		imageLoad(levels[u_level], 2*idx + ivec2(1,1)).r,
 	};
 
-	vec4 avg = vec4(0);
+	float air = 0;
+	float fluid = 0;
+
+	float wt_air = 0;
+	float wt_fluid = 0;
+
+	bool has_air = false;
+
 	for (int i = 0; i < 4; ++i) {
-		avg += samples[i]; 
+		float samp = samples[i]; 
+		if (samp < 0) {
+			fluid += samp;
+			wt_fluid += 1;
+		} else {
+			air += samp;
+			wt_air += 1;
+		}
 	}
 
-	avg /= 4.f;
+	float avg = false && (wt_fluid > 0) ? 
+		(fluid / wt_fluid) : ((fluid + air) / (wt_fluid + wt_air));
+
 
 	imageStore(levels[u_level + 1], idx, vec4(avg));
 }

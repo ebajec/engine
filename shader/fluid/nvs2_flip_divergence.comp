@@ -4,8 +4,6 @@
 #include "nvs2_flip.glsl"
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-#define PARTS_PER_CELL 32
-#define BETA (PARTS_PER_CELL/256.f)
 #define RHO_REST 1.0f
 
 const ivec2 stencil[4] = {
@@ -31,6 +29,11 @@ ivec2 basis2(int k)
 	ivec2 x = ivec2(0);
 	x[k] = 1;
 	return x;
+}
+
+float srelu(float x, float inv4k, float k) {
+    float t = max(k - abs(x), 0.0f);
+    return max(x, 0.0f) + t * t * inv4k;
 }
 
 float rhs(ivec2 p)
@@ -70,9 +73,15 @@ float rhs(ivec2 p)
 
 	float wt = imageLoad(solid_mask, p).r;
 
-	imageStore(fill_mask, p, vec4(0.125f - rho));
+	rho = min(rho, RHO_MAX)/max(wt, 0.25);
 
-	float f_rho = -wt*BETA*(rho - RHO_REST)/(RHO_REST);
+	float phi = wt > 0 ? (0.3f - rho) : 0;
+
+	imageStore(fill_mask, p, vec4(phi));
+
+	float d_rho = wt*rho - RHO_REST;
+
+	float f_rho = phi > 0 ? 0 : -BETA*(d_rho)/(RHO_REST);
 	float f_div = div;
 
 	return f_div + f_rho;

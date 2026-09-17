@@ -30,11 +30,6 @@ void main()
 	float wt_c;
 	float p_c = get_p(idx, wt_c);
 
-	// reset the air mask
-	//if (any(lessThan(idx, imageSize(solid_mask)))) {
-	//	imageStore(bd_mask, idx, vec4(wt_c > 0.f ? -1 : wt_c));
-	//}
-
 	ivec2 size = imageSize(p_in);
 
 	for (int i = 0; i < DIMS; ++i) {

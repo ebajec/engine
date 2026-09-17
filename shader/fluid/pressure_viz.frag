@@ -11,6 +11,14 @@ layout (location = 1) in vec2 in_uv;
 
 layout (location = 0) out vec4 FragColor;
 
+float get_p(ivec2 p)
+{
+	ivec2 size = textureSize(u_tex,0);
+	if (any(lessThan(p, ivec2(0))) || any(greaterThanEqual(p, size)))
+		return 0.f;
+	return texelFetch(u_tex, p, 0).r;
+}
+
 void main()
 {
 	ivec2 size = textureSize(u_tex, 0);
@@ -28,19 +36,20 @@ void main()
 
 	vec3 rgb;
 	if (false) {
-		float l = texelFetch(u_tex, clamp(texc + ivec2(-1, 0), ivec2(0), lim), 0).r;
-		float r = texelFetch(u_tex, clamp(texc + ivec2(1, 0), ivec2(0), lim), 0).r;
-		float b = texelFetch(u_tex, clamp(texc + ivec2(0, -1), ivec2(0), lim), 0).r;
-		float t = texelFetch(u_tex, clamp(texc + ivec2(0, 1), ivec2(0), lim), 0).r;
+		float l = get_p(texc + ivec2(-1, 0));
+		float r = get_p(texc + ivec2(1, 0));
+		float b = get_p(texc + ivec2(0, -1));
+		float t = get_p(texc + ivec2(0, 1));
 
 		vec2 grad = 0.5 * vec2(r - l, t - b); 
 
-		float k = 0.1*length(grad);
+		float k = grad.y;
 		//rgb = 10*vec3(-grad.y, grad.y, 0);
-		rgb = vec3(k);
+		rgb = vec3(k, -k, 0);
 	} else {
-		rgb = vec3(c, c, -c);
-		//rgb = jet_palette(abs(c));
+		//rgb = vec3(c, c, -c);
+		vec3 jet = jet_palette(abs(c));
+		rgb = jet;
 	}
 
 	if (in_uv.x < 0.f || in_uv.y < 0.f || in_uv.x > 1.f || in_uv.y > 1.f) {

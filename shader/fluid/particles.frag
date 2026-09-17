@@ -34,7 +34,9 @@ void main()
 
 	float f = 1.f;
 
-	vec4 c = vec4(morton_palette(in_idx), 1.f);
+	vec4 c = vec4(length(in_vel));
+
+	c = vec4(vec3(0.1 + 0.01*length(in_vel)), 1);
 
 	if (dot(r,r) > in_w*in_w)
 		discard;

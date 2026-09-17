@@ -5,9 +5,6 @@
 
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
-#define DAMP 0.8
-#define G 5
-
 #define declare_sample(image)\
 float sample_##image(int coord, vec2 p)\
 {\
@@ -68,10 +65,10 @@ vec2 cursor_jet(vec2 c)
 	vec2 p2 = world_to_grid(pc.cursor2);
 	vec2 vel = p2 - p1;
 
-	vel = vec2(0, 0.2);
-	vec2 d = c - p1;
-	float f = length(d)/20;
-	return -normalize(d) * 1/(1 + f * f);;
+	//vel = vec2(0, 0.2);
+	//vec2 d = c - p1;
+	//float f = length(d);
+	//return -normalize(d) * 1/(1 + 0.1*f);;
 
 	vec2 O = p2 - vel*0.25;
 
@@ -79,7 +76,7 @@ vec2 cursor_jet(vec2 c)
 
 	bool valid = speed > 1e-3; 
 
-	float S = sqrt((valid ? 6*speed : 1.f));
+	float S = sqrt((valid ? 8*speed : 1.f));
 	vec2 V = valid ? normalize(vel) : vec2(0);
 	vec2 X = vec2(V.y, -V.x);
 
@@ -89,9 +86,40 @@ vec2 cursor_jet(vec2 c)
 	return S * V * exp(-dot(r,r)/10);
 }
 
-vec2 bounce(vec2 p1, vec2 p2, vec2 v, float R)
+float solid_wt(vec2 p)
 {
-	return vec2(0);
+	vec2 size = vec2(imageSize(solid_mask));
+	return texture(solid_mask_tex, p/size).r;
+}
+
+vec2 apply_solid_boundary(vec2 p1, vec2 p2, inout vec2 v, float R)
+{
+	ivec2 size = imageSize(solid_mask);
+
+	p2 = clamp(p2, vec2(R), vec2(size) - vec2(R));
+
+	float wc = solid_wt(p2);
+
+	float h = 0.5;
+
+	float wl = solid_wt(p2 + 0.5*vec2(-h,0));
+	float wr = solid_wt(p2 + 0.5*vec2(h,0));
+	float wb = solid_wt(p2 + 0.5*vec2(0,-h));
+	float wt = solid_wt(p2 + 0.5*vec2(0,h));
+
+	vec2 grad = vec2(wr - wl, wt - wb)/(2*h);
+	float D = length(grad);
+
+	if (D > 1e-4) {
+		vec2 dir = -grad/D;
+		vec2 proj = dir * min(dot(v,dir), 0.f);
+		v -= proj;
+
+		float d = (wc - 0.97)/D;
+		p2 += -dir * max(0.f, R - d);
+	}
+
+	return p2;
 }
 
 void main()
@@ -105,8 +133,8 @@ void main()
 
 	int quo = idx/size.x;
 
-	uint h1 = pcg_hash(idx);
-	uint h2 = pcg_hash(idx + 1);
+	uint h1 = pcg_hash(pc.step + idx);
+	uint h2 = pcg_hash(pc.step + idx + 1);
 
 	float r1 = hash_to_float(h1);
 	float r2 = hash_to_float(h2); 
@@ -136,29 +164,18 @@ void main()
 	vec2 k3 = get_v_proj(p_old - TIMESTEP * k2); 
 
 	vec2 p_new = p_old + TIMESTEP * (1./6.) * (k1 + 4*k2 + k3);
-	vec2 v_new = mix(k1, v_grid, 0.03);
+	vec2 v_new = mix(k1, v_grid, GRID_WT);
 
 	// The current trick for avoiding "clumping"
-	p_new += 0.003*normalize(vec2(1.f) - 2.f*vec2(r1, r2));
+	p_new += 0.001*normalize(vec2(1.f) - 2.f*vec2(r1, r2));
 
 	float S = length(v_new);
 	float R = max(S*TIMESTEP, 0.5f);
 
-	vec2 p_clamped = clamp(p_new, vec2(R), vec2(size) - vec2(R));
+	p_new = apply_solid_boundary(p_old, p_new, v_new, R);
 
-	if (p_new.x != p_clamped.x) {
-		v_new.x = -DAMP*v_new.x;
-	}
-
-	if (abs(p_new.y - p_clamped.y) > 1e-3) {
-		v_new.y = -DAMP*v_new.y;
-	} else {
-		v_new.y += -G*TIMESTEP;
-	}
-
-	p_new = p_clamped;
-
+	v_new.y += -G*TIMESTEP;
 	v_new += cursor_jet(p_new);
 
-	u_parts[idx] = FluidParticle(p_new, 0.995*v_new);
+	u_parts[idx] = FluidParticle(p_new, v_new);
 }

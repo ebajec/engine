@@ -25,6 +25,8 @@ struct ImageViewerPanel
 
 	struct RenderData {
 		ev2::TextureID tex {};
+		ev2::TextureFilter filter = ev2::FILTER_NEAREST;
+
 		ev2::GfxPipelineID pipeline {};
 		ev2::BindingsID bindings {};
 
@@ -42,6 +44,8 @@ struct ImageViewerPanel
 					const char * pipeline = "pipelines/core/screen_quad.yaml", const char *name = nullptr);
 
 	int set_pipeline(const char *path);
+
+	void set_texture_filter(ev2::TextureFilter filter);
 
 	int set_image(ev2::GfxContext *ctx, ev2::ImageID image, uint32_t level, uint32_t layer);
 
