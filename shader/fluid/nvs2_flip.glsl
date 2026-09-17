@@ -5,12 +5,17 @@
 
 #include "fluid_particle.glsl"
 
-#define GRID_WT 0.05
-
-#define TIMESTEP 0.04
+#define PARTS_PER_CELL 16
+#define BETA 1.f
+#define GRID_WT 0.15
+#define TIMESTEP 0.02
 #define DELTA_X 2.0f
-#define NU 0.0
+#define RHO_MAX 100.f
 #define RHO 1.0f
+#define G 8
+
+#define NU 0.0
+#define DAMP 0.8
 
 #define DIMS 2
 
@@ -20,6 +25,8 @@ layout (set = 0, r8, binding = 0) readonly uniform image2D solid_mask;
 // 0 < x < 1 -> solid 
 // 1 -> fluid
 layout (set = 0, binding = 1, r8_snorm) uniform image2D fill_mask;
+
+layout (set = 0, binding = 2) uniform sampler2D solid_mask_tex;
 
 layout (set = 0, r32f, binding = 3) uniform image2D v_pre_proj[DIMS];
 layout (set = 0, r32f, binding = 4) uniform image2D v_proj[DIMS];

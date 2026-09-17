@@ -72,6 +72,8 @@ float min_dist(vec2 p_search, float d_search)
 	sp = root - 1;
 	stack[sp] = 0x1;
 
+	#define K 2
+
 	float value = 100.f;
 
 	uint hit_ctr = 0;
@@ -110,7 +112,7 @@ float min_dist(vec2 p_search, float d_search)
 					bool hit = dot(r,r) < d_search;
 					if (hit) {
 						++hit_ctr;
-						value = min(value, 0.4*length(r));
+						value = min(value, dot(r,r));
 					}
 				}
 			}
@@ -119,7 +121,7 @@ float min_dist(vec2 p_search, float d_search)
 		}
 	}
 
-	return bool(hit_ctr) ? value : 0;
+	return bool(hit_ctr) ? value - 0.3 : 0;
 }
 
 void main()
@@ -127,8 +129,8 @@ void main()
 	vec2 p_search = pc.size * in_uv;
 	float d_search = 1.0f;
 
-	float value = 0.1f;//min_dist(p_search, d_search);
+	float value = min_dist(p_search, d_search);
 
-	vec3 rgb = vec3(value);
+	vec3 rgb = vec3(value, 0, -value);
 	out_color = vec4(rgb, 1.f);
 }

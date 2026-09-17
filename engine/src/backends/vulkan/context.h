@@ -411,14 +411,11 @@ typedef void (*ResourceDeleteFn)(GfxContext *, TaggedResource);
 
 struct DeferredDeleteQueue
 {
-	union Entry {
-		struct {
-			TaggedResource resource;
-			ResourceDeleteFn delete_fn;
-			uint64_t enqueued_frame_index;
-			uint32_t sync_count;
-		};
-		ResourceSync sync;
+	struct Entry {
+		TaggedResource resource;
+		ResourceDeleteFn delete_fn;
+		uint64_t enqueued_frame_index;
+		uint32_t sync_count;
 	};
 	std::list<Entry> queue;
 	robin_hood::unordered_map<TaggedResource, std::function<void()>> callbacks; 

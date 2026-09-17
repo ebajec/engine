@@ -4,8 +4,6 @@
 #include "nvs2_flip.glsl"
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-#define PARTS_PER_CELL 32
-#define BETA (PARTS_PER_CELL/256.f)
 #define RHO_REST 1.0f
 
 const ivec2 stencil[4] = {
@@ -65,14 +63,18 @@ float rhs(ivec2 p)
 		float face1 = face_wt(p, p - basis2(i));
 		float face2 = face_wt(p, p + basis2(i));
 
-		rho += (mix(wt2, wt1, face1) + mix(wt1, wt2, face2)) * RHO_REST/PARTS_PER_CELL;
+		rho += (mix(2*wt2, wt1, face1) + mix(2*wt1, wt2, face2)) * RHO_REST/PARTS_PER_CELL;
 	}
+
+	rho = min(rho, RHO_MAX);
 
 	float wt = imageLoad(solid_mask, p).r;
 
-	imageStore(fill_mask, p, vec4(0.125f - rho));
+	float phi = (0.5f - rho);
 
-	float f_rho = -wt*BETA*(rho - RHO_REST)/(RHO_REST);
+	imageStore(fill_mask, p, vec4(phi));
+
+	float f_rho = phi > 0 ? 0 : -wt*BETA*(rho - RHO_REST)/(RHO_REST);
 	float f_div = div;
 
 	return f_div + f_rho;

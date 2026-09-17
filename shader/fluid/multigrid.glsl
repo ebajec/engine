@@ -78,7 +78,7 @@ const float SIGMA = 0.066;
 float face_frac(float phi_c, float phi_n)
 {
 	float tht = phi_c / (phi_c - phi_n); 
-	return 1.f/max(tht, 0.01);
+	return 1.f/max(tht, 0.05);
 }
 
 float LHS(bool is_fetch, ivec2 idx, out float wt, out float phi)
@@ -133,7 +133,7 @@ float jacobi_it(bool is_fetch, ivec2 idx, float rhs, float u_prev, float h)
 		float u = LHS(is_fetch, p, wt, phi);
 
 		const bool is_air = phi > 0.f;
-		wt = is_air ? face_frac(phi_c, phi) / min(wt_c, wt) : wt; 
+		wt = is_air ? face_frac(phi_c, phi) : min(wt_c, wt); 
 
 		den += wt;
 		sum += is_air ? 0.f : wt * u;

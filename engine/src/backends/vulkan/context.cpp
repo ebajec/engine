@@ -550,23 +550,23 @@ static ev2::Result create_logical_device(ev2::GfxContext *ctx,
 	VkPhysicalDeviceVulkan12Features features12{
 		.sType             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
 		.pNext = &atomicFloatFeatures,
-		.timelineSemaphore = VK_TRUE,
-		.runtimeDescriptorArray = VK_TRUE,
-		.descriptorBindingPartiallyBound = VK_TRUE,
-		.descriptorBindingUpdateUnusedWhilePending = VK_TRUE,
-		.descriptorBindingVariableDescriptorCount = VK_TRUE,
+		.shaderInt8 = VK_TRUE,
     	.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
+		.descriptorBindingUpdateUnusedWhilePending = VK_TRUE,
+		.descriptorBindingPartiallyBound = VK_TRUE,
+		.descriptorBindingVariableDescriptorCount = VK_TRUE,
+		.runtimeDescriptorArray = VK_TRUE,
+		.timelineSemaphore = VK_TRUE,
 		.bufferDeviceAddress = VK_TRUE,
 		.bufferDeviceAddressCaptureReplay = VK_TRUE,
-		.shaderInt8 = VK_TRUE,
 	};
 
 	VkPhysicalDeviceVulkan13Features features13{
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
 		.pNext = &features12,
+		.shaderDemoteToHelperInvocation = VK_TRUE,
 		.synchronization2 = VK_TRUE,
 		.dynamicRendering = VK_TRUE,
-		.shaderDemoteToHelperInvocation = VK_TRUE,
 	};
 
     VkPhysicalDeviceFeatures2 deviceFeatures2{
@@ -1351,13 +1351,13 @@ void DeferredDeleteQueue::enqueue(GfxContext *ctx, TaggedResource resource, Reso
 
 	queue.push_back(Entry{
 		.resource = resource,
-		.sync_count = (uint32_t)syncs.size(),
 		.delete_fn = fn,
-		.enqueued_frame_index = ctx->frame_counter
+		.enqueued_frame_index = ctx->frame_counter,
+		.sync_count = (uint32_t)syncs.size(),
 	});
 
 	for (const ResourceSync &sync : syncs) {
-		queue.push_back(Entry{.sync = sync});
+		queue.push_back(Entry{});
 	}
 }
 
