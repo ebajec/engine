@@ -81,7 +81,7 @@ struct PoissonSolverApp : public App
 	{
 		ev2::PassID pass = ev2::begin_compute_pass(ctx);
 
-		constexpr uint group_size = 16;
+		constexpr uint32_t group_size = 16;
 
 		if (true) {
 			Uniforms pc = uniforms;
