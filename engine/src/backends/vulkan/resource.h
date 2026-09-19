@@ -197,9 +197,9 @@ union TaggedResource {
 #pragma clang diagnostic ignored "-Wbitfield-enum-conversion"
 struct ImageViewKey
 {
-	// This produces a warning because the vulkan spec
-	// puts MAX_ENUM at 0x7FFFFFFF
-    VkImageViewType 	type : 16;
+	// VkImageViewType, stored as an integer: the vulkan spec puts MAX_ENUM at
+	// 0x7FFFFFFF, so an enum-typed 16 bit field warns (unconditionally on gcc)
+    uint32_t 			type : 16;
 
 	// This produces a warning because the vulkan spec
 	// puts MAX_ENUM at 0x7FFFFFFF
@@ -218,6 +218,7 @@ struct ImageViewKey
 			levelCount == other.levelCount &&
 			baseArrayLayer == other.baseArrayLayer && 
 			layerCount == other.layerCount && 
+			aspectMask == other.aspectMask && 
 			format == other.format;
 	};
 
@@ -244,6 +245,7 @@ struct ImageViewKey
 		}
 	};
 };
+#pragma gcc diagnostic pop
 #pragma clang diagnostic pop
 
 //------------------------------------------------------------------------------
@@ -317,6 +319,8 @@ static inline VkFormat image_format_to_vk(ev2::ImageFormat fmt)
 			return VK_FORMAT_R8_UNORM;
 		case ev2::IMAGE_FORMAT_R8_SNORM:
 			return VK_FORMAT_R8_SNORM;
+		default:
+			return VK_FORMAT_MAX_ENUM;
 	}
 }
 

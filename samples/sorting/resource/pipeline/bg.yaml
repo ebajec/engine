@@ -1,0 +1,3 @@
+shaders:
+  vert: test_sort://shader/test_bg.vert
+  frag: test_sort://shader/test_bg.frag

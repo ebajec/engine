@@ -177,7 +177,7 @@ void begin_frame(Device *ctx)
 	ctx->view_data.update(ctx);
 
 	GPUFramedata gpu_data = {
-		.t_seconds = (uint32_t)ctx->frame.t,
+		.t_sec = (uint32_t)ctx->frame.t,
 		.t_fract = (float)fmod(ctx->frame.t, 1.),
 		.dt = (float)ctx->frame.dt
 	};

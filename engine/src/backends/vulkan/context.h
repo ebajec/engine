@@ -18,6 +18,8 @@
 #include <glm/mat4x4.hpp>
 #include <list>
 
+#define ENV_MOUNTS "EV2_MOUNTS"
+
 #define EV2_MAX_FRAMES_IN_FLIGHT 2
 #define EV2_FRAME_TIMEOUT 1e9
 
@@ -50,7 +52,7 @@ __attribute__((noinline)) Type *get_##TypeLower##_unchecked(Type##ID h) {\
 inline Type *get_##TypeLower(Type##ID h) {\
 	AssetID id = static_cast<uint32_t>(h.id);\
 	AssetEntry *ent = assets->get_entry(id);\
-	return (Type*)ent->usr;\
+	return ent ? (Type*)ent->usr : nullptr;\
 }\
 inline const char *get_##TypeLower##_name(Type##ID h) {\
 	AssetID id = static_cast<uint32_t>(h.id);\
@@ -72,6 +74,10 @@ extern struct VulkanGlobals
 {
 	bool allow_resource_inspection = true;
 } g_vk;
+
+extern VkInstance g_vk_instance;
+extern VkDebugUtilsMessengerEXT g_vk_messenger;
+extern bool g_enable_reloading;
 
 struct VulkanOptions
 {
@@ -209,10 +215,11 @@ struct FrameContext
 
 struct GPUFramedata 
 {
-	uint32_t t_seconds;
+	uint32_t t_sec;
 	float t_fract;
+	float t;
 	float dt;
-	alignas(8) glm::ivec2 display_res;
+	alignas(8) glm::ivec2 resolution;
 };
 
 //------------------------------------------------------------------------------
@@ -502,6 +509,7 @@ struct GfxContext
 		nullptr, UploadPool::destroy
 	};
 
+	std::unique_ptr<Vfs> vfs = nullptr;
 	// Assets
 	std::unique_ptr<AssetTable, void(*)(AssetTable*)> assets = {
 		nullptr, AssetTable::destroy
@@ -536,7 +544,7 @@ struct GfxContext
 	ev2::Result wait_for_frame_completion(uint64_t frame_index);
 
 	constexpr double seconds_since_start(struct timespec ts) {
-		uint64_t time_ns = (uint64_t)ts.tv_sec + (uint64_t)ts.tv_nsec; 
+		uint64_t time_ns = (uint64_t)(ts.tv_sec) * 1000000000 + (uint64_t)ts.tv_nsec; 
 		return (double)(time_ns - start_time_ns)/1e9;
 	}
 

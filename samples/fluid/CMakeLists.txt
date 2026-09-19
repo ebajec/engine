@@ -16,6 +16,8 @@ target_link_libraries(ev2_fluid PRIVATE
 	engine
 )
 
+ev2_add_mount(ev2_fluid NAME fluid DIR resource)
+
 add_executable(ev2_poisson_test 
 	poisson_test.cpp 
 	poisson_solver.cpp
@@ -25,4 +27,6 @@ target_link_libraries(ev2_poisson_test PRIVATE
 	samples-shared
 	engine
 )
+
+ev2_add_mount(ev2_poisson_test NAME fluid DIR resource)
 

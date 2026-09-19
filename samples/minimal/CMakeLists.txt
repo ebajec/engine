@@ -11,7 +11,9 @@ file(GLOB SOURCES "*.cpp" "*.c")
 add_executable(${TARGET} ${SOURCES})
 
 target_link_libraries(${TARGET} PRIVATE
-	samples-shared
 	engine
+	glfw
 )
+
+ev2_add_mount(${TARGET} NAME minimal DIR resource)
 

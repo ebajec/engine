@@ -16,7 +16,7 @@ namespace ev2 {
 
 struct GPUFramedata
 {
-	uint32_t t_seconds;
+	uint32_t t_sec;
 	float t_fract;
 	float dt;
 };

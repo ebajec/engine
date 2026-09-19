@@ -5,6 +5,9 @@
 
 #define EV2_IMGUI_COMPATIBILITY
 
+#define EV2_SHADER_BUILD_MOUNT_NAME "spirv"
+#define EV2_CORE_MOUNT_NAME "core"
+
 #include "ev2/defines.h"
 #include "vulkan/vulkan.h"
 
@@ -37,6 +40,8 @@ enum Result
 	ERENDER_GRAPH = -6,
 	EBAD_SWAPCHAIN = -7,
 	EVULKAN = -8,
+	EBAD_MOUNT = -9,
+	EBAD_PATH = -10,
 	EUNKNOWN = -1024
 };
 
@@ -71,13 +76,15 @@ struct GfxContextVulkanInfo
 
 ev2::Result init_for_vulkan(const VulkanInitOptions &opts);
 VkInstance get_vulkan_instance();
-GfxContext *create_context_for_vulkan(const char *path, const GfxContextVulkanInfo &params);
+GfxContext *create_context_for_vulkan(const GfxContextVulkanInfo &params);
+
+ev2::Result add_mount(GfxContext *ctx, const char *name, const char *path);
+
 const VkPhysicalDeviceLimits *get_vulkan_physical_device_limits(GfxContext *ctx);
 
 void destroy_context(GfxContext *ctx);
 
 ev2::Result resize_swapchain(GfxContext *ctx, uint32_t width, uint32_t height);
-ev2::Result wait_complete(GfxContext *ctx, uint64_t sync);
 
 #ifdef EV2_IMGUI_COMPATIBILITY
 void populate_imgui_vulkan_init_info(GfxContext *ctx, ImGui_ImplVulkan_InitInfo *info);

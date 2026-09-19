@@ -136,15 +136,22 @@ Result ensure_mesh_buffers_loaded(GfxContext *ctx, MeshID mesh_id)
 
 static ev2::Result mesh_reload_callback(ev2::GfxContext *ctx, void** usr, const char *path)
 {
+	// TODO...
+	assert(false);
+	return ev2::SUCCESS;
 }
 
 static void mesh_destroy_callback(ev2::GfxContext *ctx, void* usr)
 {
+	// TODO...
+	assert(false);
 }
 
-static Mesh *load_mesh_from_file(const char * path)
+static Mesh *mesh_create_callback(const char * path)
 {
-
+	// TODO...
+	assert(false);
+	return nullptr;
 }
 
 #pragma pack(push, 1)
@@ -159,7 +166,12 @@ struct RawTri {
 
 MeshID load_mesh(GfxContext *ctx, const char *path)
 {
-	AssetID id = ctx->assets->load(path);
+	AssetID id;
+	ev2::Result result = ctx->assets->load(path, &id);
+
+	if (result < ev2::SUCCESS)
+		return EV2_NULL_HANDLE(Mesh);
+
 	if (id)
 		return MeshID{id};
 
@@ -168,11 +180,7 @@ MeshID load_mesh(GfxContext *ctx, const char *path)
 		.destroy = mesh_destroy_callback,
 	};
 
-	std::string sys_path = ctx->assets->get_system_path(path);
-
-	ev2::Mesh *mesh = load_mesh_from_file(sys_path.c_str()); 
-
-	Result result = SUCCESS;
+	ev2::Mesh *mesh = mesh_create_callback(path); 
 
 	if (result == SUCCESS) {
 		id = ctx->assets->allocate(&vtbl, mesh, path); 

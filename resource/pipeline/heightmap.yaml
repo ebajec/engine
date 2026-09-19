@@ -1,0 +1,7 @@
+shaders:
+  vert: core://shader/heightmap.vert
+  frag: core://shader/default_mesh3d.frag
+states:
+  cull: front
+  depth_test: less_equal
+  blend: opaque

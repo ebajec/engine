@@ -46,7 +46,7 @@ struct monitor_event_t
  * for more info see https://man7.org/linux/man-pages/man7/inotify.7.html.
  *
  */
-class monitor
+class FileMonitor
 {
 public:
     typedef void(*callback_t)(void*, monitor_event_t);
@@ -62,12 +62,12 @@ public:
      * @param dir - Path to directory to be monitored.
      *
      */
-    monitor(callback_t callback, void* usr, const char *dir);
+    FileMonitor(callback_t callback, void* usr, const char *dir);
 
     /**
     * On deletion, the monitoring thread is interrupted after it completes its current update. 
     */
-    ~monitor();
+    ~FileMonitor();
 
 private:
     void watch();
@@ -80,7 +80,11 @@ private:
 
     std::atomic<bool> m_watching;
 #ifdef WIN32
-    void*             m_watchEvent;   
+    void*             m_watchEvent;
+#endif
+
+#ifdef __linux__
+    int               m_wakeFd = -1; // eventfd used to wake the watcher thread on shutdown
 #endif
 
 #ifdef __APPLE__

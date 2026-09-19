@@ -1,0 +1,7 @@
+shaders:
+  vert: globe://shader/globe_tile.vert
+  frag: globe://shader/globe_tile.frag
+states:
+  cull: front
+  depth_test: less_equal
+  blend: opaque

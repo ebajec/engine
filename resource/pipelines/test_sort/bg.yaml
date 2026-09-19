@@ -1,3 +1,0 @@
-shaders:
-  vert: shader/sort/test_bg.vert.spv
-  frag: shader/sort/test_bg.frag.spv

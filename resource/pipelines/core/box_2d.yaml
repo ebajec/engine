@@ -1,6 +1,0 @@
-shaders:
-  vert: shader/core/box_2d.vert.spv
-  frag: shader/core/solidcolor.frag.spv
-input:
-  topology: LINE_STRIP
-

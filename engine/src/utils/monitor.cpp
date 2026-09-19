@@ -3,6 +3,11 @@
 #include <string.h>
 #include <cstdlib>
 
+#ifdef __linux__
+#include <sys/eventfd.h>
+#include <unistd.h>
+#endif
+
 #ifndef KILOBYTE
 #define KILOBYTE 1024
 #endif
@@ -33,24 +38,34 @@ static int pathcat(char* dest, const char* src, size_t maxlen)
 namespace utils
 {
 
-monitor::monitor(void (*callback)(void*, monitor_event_t event), void* usr, const char *dir) 
+FileMonitor::FileMonitor(void (*callback)(void*, monitor_event_t event), void* usr, const char *dir) 
 : m_callback(callback), m_dir(dir), m_usr(usr)
 {
 #ifdef WIN32
     m_watchEvent = nullptr;
 #endif
+#ifdef __linux__
+    m_wakeFd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+    if (m_wakeFd < 0)
+        perror("eventfd");
+#endif
 	m_watching = true;
-    m_watcherThread = std::thread(&monitor::watch,this);
+    m_watcherThread = std::thread(&FileMonitor::watch,this);
 }
 
-monitor::~monitor()
-{   
+FileMonitor::~FileMonitor()
+{
     interrupt();
 
 	m_watching = false;
-     
+
     if (m_watcherThread.joinable())
         m_watcherThread.join();
+
+#ifdef __linux__
+    if (m_wakeFd >= 0)
+        close(m_wakeFd);
+#endif
 }
 };
 
@@ -208,7 +223,6 @@ void monitor::watch()
 #include <sys/types.h>
 #include <unistd.h>
 #include <errno.h>
-#include <signal.h>
 #include <poll.h>
 
 // C
@@ -260,15 +274,10 @@ static int add_watch_recursive(int inotifyFd, std::unordered_map<int,std::string
     return 1;
 }
 
-static void interrupt_handler(int) 
-{
-    
-}
-
 namespace utils
 {
 
-void monitor::watch() {
+void FileMonitor::watch() {
     int inotifyFd;
     inotifyFd = inotify_init1(IN_NONBLOCK);
     ssize_t numRead;
@@ -290,20 +299,15 @@ void monitor::watch() {
     | IN_MOVED_FROM;
     
 
-    struct sigaction sa;
-    sa.sa_handler = interrupt_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-
-    if (sigaction(SIGINT, &sa, NULL) < 0)
-    {
-        perror("sigaction");
-        return;
-    }
-
-    struct pollfd fds[1];
+    // fds[1] is an eventfd signalled by interrupt(), so shutdown wakes poll immediately.
+    struct pollfd fds[2];
     fds[0].fd = inotifyFd;
     fds[0].events = POLLIN;
+    fds[1].fd = m_wakeFd; // negative fds are ignored by poll
+    fds[1].events = POLLIN;
+
+    // If the eventfd could not be created, fall back to periodically checking m_watching.
+    const int pollTimeoutMs = m_wakeFd >= 0 ? -1 : 1000;
 
     std::unordered_map<int,std::string> activeWatches;
 
@@ -311,22 +315,23 @@ void monitor::watch() {
 
     while (m_watching)
     {
-        int pollNum = poll(fds, 1, 1000);  // Timeout after 1 second
+        int pollNum = poll(fds, 2, pollTimeoutMs);
         if (pollNum < 0) {
-            if (errno == EINTR) {
-                printf("Poll interrupted by signal\n");
-                break;
-            }
+            if (errno == EINTR)
+                continue;
             perror("poll");
             break;
         }
+
+        if (fds[1].revents & POLLIN)
+            break; // interrupted
 
         if (pollNum == 0) {
             // Timeout - continue loop
             continue;
         }
 
-        if (! (fds[0].revents & POLLIN)) 
+        if (! (fds[0].revents & POLLIN))
         {
             continue;
         }
@@ -358,6 +363,7 @@ void monitor::watch() {
             if (!activeWatches.count(event->wd))
             {
                 fprintf(stderr, "ERROR: Watch not tracked for %d\n",event->wd);
+                p += sizeof(struct inotify_event) + event->len;
                 continue;
             }
 
@@ -404,10 +410,16 @@ void monitor::watch() {
     close(inotifyFd);
 }
 
-void monitor::interrupt()
+void FileMonitor::interrupt()
 {
     m_watching = false;
-    //pthread_kill(m_watcherThread.native_handle(),SIGINT);
+
+    if (m_wakeFd >= 0)
+    {
+        uint64_t one = 1;
+        ssize_t n = write(m_wakeFd, &one, sizeof(one));
+        (void)n;
+    }
 }
 
 };

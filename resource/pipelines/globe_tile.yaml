@@ -1,7 +1,0 @@
-shaders:
-  vert: shader/core/globe_tile.vert.spv
-  frag: shader/core/globe_tile.frag.spv
-states:
-  cull: front
-  depth_test: less_equal
-  blend: opaque

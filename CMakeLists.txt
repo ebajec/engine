@@ -15,10 +15,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(OpenGL_GL_PREFERENCE GLVND)  
 
-set(RESOURCE_PATH "${CMAKE_SOURCE_DIR}/resource")
+set(DEV_SHADER_BUILD_MOUNT "${CMAKE_BINARY_DIR}/spirv")
+set(DEV_CORE_MOUNT "${CMAKE_SOURCE_DIR}/resource")
 
-if(RESOURCE_PATH)
-	message(STATUS "Default resource path : ${RESOURCE_PATH}") 
+include(ev2)
+
+if(CORE_MOUNT)
+	message(STATUS "Core mount : ${CORE_MOUNT}") 
 endif()
 
 # Windows things

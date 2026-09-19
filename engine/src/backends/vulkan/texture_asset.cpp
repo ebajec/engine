@@ -5,10 +5,6 @@
 
 #include "stb_image.h"
 
-#include <filesystem>
-
-namespace fs = std::filesystem;
-
 namespace ev2 {
 
 static ev2::Result create(GfxContext *ctx, ImageAsset * asset, const char *path);
@@ -45,24 +41,22 @@ static ev2::Result reload(GfxContext *ctx, void **usr, const char *path)
 
 static ev2::Result create(GfxContext *ctx, ImageAsset * asset, const char *path)
 {
-	std::string syspath = 
-		ctx->assets->get_system_path(path);
+	std::vector<unsigned char> bytes;
 
-
-	if (!fs::exists(syspath)) {
-		log_error("Image does not exist : %s", path);
-		return ev2::ELOAD_FAILED;
-	}
+	ev2::Result result = ctx->vfs->read_all(path, [&bytes](size_t size) -> unsigned char*{
+		bytes.resize(size);
+		return bytes.data();
+	});
 
 	int width, height, channels;
-	int stbi_res = stbi_info(syspath.c_str(), &width, &height, &channels);
+	int stbi_res = stbi_info_from_memory(bytes.data(), (size_t)bytes.size(), &width, &height, &channels);
 
 	if (!stbi_res) {
 		log_error("Failed to load image_file : %s",path);
 		return ev2::ELOAD_FAILED;
 	}
 
-	uint8_t* rgba = stbi_load(syspath.c_str(),&width,&height,&channels,STBI_rgb_alpha);
+	uint8_t* rgba = stbi_load_from_memory(bytes.data(), (size_t)bytes.size(), &width,&height,&channels,STBI_rgb_alpha);
 
 	if (!rgba) {
 		log_error("Failed to load image_file : %s",path);
@@ -77,8 +71,6 @@ static ev2::Result create(GfxContext *ctx, ImageAsset * asset, const char *path)
 	// TODO : upload the data
 
 	log_error("unimplemented");
-
-	//image_upload_gl(ctx, img, rgba, sizeof(uint32_t)*width*height);
 
 	asset->img = img;
 

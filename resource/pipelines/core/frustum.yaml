@@ -1,3 +1,0 @@
-shaders:
-  vert: shader/core/frustum.vert.spv
-  frag: shader/core/solidcolor.frag.spv

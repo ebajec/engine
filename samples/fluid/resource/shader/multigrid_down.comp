@@ -1,0 +1,271 @@
+#version 430 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "fluid/shader/multigrid.glsl"
+
+// solving for H(phi) = f
+// 				[lhs]   [rhs]
+//
+// R1 and R2 are intermediate grids for residuals and corrections.
+// The "downwards" passes perform some jacobi iterations on the
+// initial guess, then compute residuals for H(phi) = f and write
+// these to R1.  Subsequenct passes downsample the grid in R1 for 
+// the previous passes level and use it for f, write the smoothed
+// residuals to R2 for use in later stages
+
+// The level 0 iteration fetches directly from f. Subsequent iterations
+// downsample the residuals from the previous pass
+
+float RHS(ivec2 idx, uint level, out float wt, out float phi)
+{
+	vec2 mask = get_bd_mask(idx,level);
+	wt = mask.r;
+	phi = mask.g;
+
+	return (wt > 0.f) ? imageLoad(R1[level], idx).r : 0;
+}
+
+//float LHS(ivec2 idx, out float wt, out float phi)
+//{
+//	vec2 mask = get_bd_mask(idx,0);
+//	wt = mask.r;
+//	phi = mask.g;
+//
+//	return (wt > 0.f) ? imageLoad(in_lhs, idx).r : 0;
+//}
+
+float residual(ivec2 idx, float rhs, float h)
+{
+	vec2 bd = get_bd(idx);
+	float wt_c = bd.r;
+	float phi_c = bd.g;
+
+	float u = wt_c * block[idx.x][idx.y];
+
+	if (wt_c < OOB_CELL_THRES || phi_c > 0) {
+		return 0.f;
+	}
+
+	ivec2 stencil[4] = {
+		ivec2(-1,0),
+		ivec2(1,0), 
+		ivec2(0,1), 
+		ivec2(0,-1)
+	};
+
+	float lap = 0.f;
+
+	for (int i = 0; i < 4; ++i) {
+		ivec2 p = clamp(idx + stencil[i], ivec2(0), ivec2(GROUPS -1));
+
+		vec2 bd = get_bd(p);
+		const bool is_air = bd.g > 0;
+
+		float val = is_air ? 0.f : block[p.x][p.y];
+		float wt = is_air ? face_frac(phi_c, bd.g) : bd.r;
+
+		lap += mix(u, val, wt);
+	}
+
+	lap -= 4.f * u;
+	lap /= h*h;
+
+	//ivec2 l_idx = clamp(idx + ivec2(-1,0), ivec2(0), ivec2(GROUPS -1));
+	//ivec2 r_idx = clamp(idx + ivec2(1,0), ivec2(0), ivec2(GROUPS - 1));
+	//ivec2 t_idx = clamp(idx + ivec2(0,1), ivec2(0), ivec2(GROUPS - 1));
+	//ivec2 b_idx = clamp(idx + ivec2(0,-1), ivec2(0), ivec2(GROUPS - 1));
+
+	//float fill_l;
+	//float fill_r;
+	//float fill_t;
+	//float fill_b;
+
+	//vec2 bd_l = get_bd(l_idx, fill_l);
+	//vec2 bd_r = get_bd(r_idx, fill_r);
+	//vec2 bd_t = get_bd(t_idx, fill_t);
+	//vec2 bd_b = get_bd(b_idx, fill_b);
+
+	//float l = bd_l.g > 0 ? 0.f : block[l_idx.x][l_idx.y];
+	//float r = bd_l.g > 0 ? 0.f : block[r_idx.x][r_idx.y];
+	//float t = bd_l.g > 0 ? 0.f : block[t_idx.x][t_idx.y];
+	//float b = bd_l.g > 0 ? 0.f : block[b_idx.x][b_idx.y];
+
+	//float lap = (
+	//	mix(u, l, bd_l.r) + mix(u, r, bd_r.r) + 
+	//	mix(u, t, bd_t.r) + mix(u, b, bd_b.r) 
+	//	- 4.f*u
+	//)/(h*h);
+
+	return lap - rhs;
+}
+
+float fetch_lhs(ivec2 grid_idx, float rhs, float h)
+{
+	if (u_level > 0)
+		return 0;
+#if 0
+
+	float wt;
+	return LHS(true, grid_idx, wt);
+#else
+	return jacobi_it(true, grid_idx, rhs, 0, h); 
+	//// When fetching from the starting grid, perform one 
+	//// jacobi iteration on retrieval.
+	//ivec2 stencil[4] = {
+	//	grid_idx + ivec2(-1, 0),
+	//	grid_idx + ivec2(1, 0),
+	//	grid_idx + ivec2(0, 1),
+	//	grid_idx + ivec2(0, -1)
+	//};
+
+	//float phi_c;
+	//float wt_c;
+	//float c = LHS(grid_idx, wt_c, fill_c);
+
+	//c *= wt_c;
+
+	//if (!bool(wt_c))
+	//	return 0.f;
+
+	//float sum = 0;
+	//float den = 0;
+
+	//for (int i = 0; i < 4; ++i) {
+	//	float wt;
+	//	float phi;
+	//	float v = LHS(stencil[i], wt, phi);
+
+	//	const bool is_air = phi > 0.f;
+	//	wt = is_air ? face_frac(phi_c, phi) / min(wt_c, wt); 
+
+	//	den += wt;
+	//	sum += is_air ? 0.f : wt * block[p.x][p.y];
+	//}
+
+	//float u_next = den > 0 ? (sum - h*h*rhs)/den : 0;
+
+	//return fill_c * mix(c, u_next, OMEGA); 
+#endif
+}
+
+float fetch_rhs(ivec2 idx)
+{
+	// u_level == 0 is the original rhs; > 0
+	// we downsample the residuals from the previous level
+	if (u_level > 0) {
+		ivec2 stencil[9] = {
+			2*idx,
+
+			2*idx + ivec2(-1,0),
+			2*idx + ivec2(1,0),
+			2*idx + ivec2(0,-1),
+			2*idx + ivec2(0,1),
+
+			2*idx + ivec2(-1,-1),
+			2*idx + ivec2(-1,1),
+			2*idx + ivec2(1,-1),
+			2*idx + ivec2(1,1),
+		};
+
+		uint L = u_level - 1;
+
+		float wt[9] = {1, 2,2,2,2, 1,1,1,1};
+
+		float phi_c;
+		float wt_c;
+		float center = RHS(2*idx, L, wt_c, phi_c);
+
+		center *= float(phi_c <= 0);
+
+		float num = 0;
+		float den = 0;
+		for (int i = 0; i < 9; ++i) {
+			float phi_i;
+			float wt_i;
+			float value = RHS(stencil[i], L, wt_i, phi_i);
+
+			const bool is_air = phi_i > 0;
+
+			num += is_air ? 0 : wt_i * wt[i] * mix(center,value,wt_i);
+			den += wt_i * wt[i];
+		}
+		return den > 0 ? num/den : 0;
+	}
+
+	return imageLoad(in_rhs, idx).x;
+}
+
+void main()
+{
+	// index in local block
+	ivec2 idx = ivec2(gl_LocalInvocationID.xy);
+
+	// index in grid coordinates 
+	// I.e., for groups = 8, j = 2
+	// i i i i i i i i            
+	// i i i i i i i i                             
+	// i i o o o o i i                             
+	// i i o o o o i i                             
+	// i i o o o o i i                             
+	// i i o o o o i i                             
+	// i i i i i i i i                             
+	// i i i i i i i i                             
+	ivec2 out_idx = idx - ivec2(u_iterations); 
+
+	int out_width = GROUPS - 2*int(u_iterations);
+
+	ivec2 grid_idx = 
+		ivec2(gl_WorkGroupID.xy) * out_width + out_idx;
+
+	const float h = DELTA_X;
+
+	float rhs = fetch_rhs(grid_idx);
+	float lhs = fetch_lhs(grid_idx, rhs, h);
+	vec2 bd = get_bd_mask(grid_idx, u_level);
+
+	if (bd.r < OOB_CELL_THRES) {
+		rhs = 0;
+		lhs = 0;
+	}
+
+	set_bd(idx, bd);
+	block[idx.x][idx.y] = lhs;  
+
+	float u_prev = lhs;
+
+	for (int i = 0; i < u_iterations - 1; ++i) {
+		barrier();
+
+		float old = lhs;
+		lhs = jacobi_it(false, idx, rhs, u_prev, h);
+		u_prev = old;
+
+		barrier();
+
+		block[idx.x][idx.y] = lhs;
+	}
+	barrier();
+
+	bool outside = 
+		out_idx.x < 0 || out_idx.y < 0 || 
+		out_idx.x >= out_width || out_idx.y >= out_width; 
+
+	if (outside)
+		return;
+
+	if (bd.r < OOB_CELL_THRES) { 
+		lhs = 0;
+		rhs = 0;
+	}
+
+	if (u_level < N) {
+		float res = residual(idx, rhs, h);
+		imageStore(R1[u_level], grid_idx, vec4(res,0,0,0));
+	}
+
+	if (u_level > 0) {
+		imageStore(R2[u_level - 1], grid_idx, vec4(lhs,0,0,0));
+	} else { 
+		imageStore(tmp_lhs, grid_idx, vec4(lhs,0,0,0));
+	}
+}

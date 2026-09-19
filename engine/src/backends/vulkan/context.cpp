@@ -13,6 +13,7 @@
 
 #include <cstdarg>
 #include <csignal>
+#include <format>
 #include <algorithm>
 #include <sstream>
 #include <set>
@@ -24,6 +25,7 @@ namespace ev2 {
 
 VkInstance g_vk_instance = VK_NULL_HANDLE;
 VkDebugUtilsMessengerEXT g_vk_messenger = VK_NULL_HANDLE;
+bool g_enable_reloading = true;
 
 struct VulkanGlobals g_vk;
 //------------------------------------------------------------------------------
@@ -488,7 +490,7 @@ static ev2::Result create_physical_device(ev2::GfxContext *ctx,
 	msg << "Physical device: \n"
 		<< "\t'" << properties.deviceName << "'" << "\n"
 		<< "\tAPI Version: " << properties.apiVersion << "\n"
-		<< "\tDriver Version: " << properties.driverVersion << "\n"
+		<< "\tDriver Version: " << properties.driverVersion
 	;
 
 	log_info("%s", msg.str().c_str());
@@ -1033,7 +1035,7 @@ static ev2::Result create_frame_context(ev2::GfxContext *ctx,
 	return ev2::SUCCESS;
 }
 
-static ev2::Result create_device_resources(const char * path, ev2::GfxContext *ctx)
+static ev2::Result create_device_resources(ev2::GfxContext *ctx)
 {
 	ev2::Result result = ev2::SUCCESS;
 
@@ -1053,8 +1055,11 @@ static ev2::Result create_device_resources(const char * path, ev2::GfxContext *c
 	);
 
 	ctx->worker_pool.reset(new ThreadPool(ctx->caps.max_workers, "gfx_worker"));
-	ctx->start_time_ns = 
-		std::chrono::high_resolution_clock::now().time_since_epoch().count();
+
+	struct timespec ts_now = platform::monotonic_clock_time();
+
+	ctx->last_frame_ts = ts_now;
+	ctx->start_time_ns = (uint64_t)(ts_now.tv_sec) * 1000000000 + (uint64_t)(ts_now.tv_nsec); 
 
 	ctx->last_frame_ts = platform::monotonic_clock_time();
 
@@ -1164,7 +1169,7 @@ static ev2::Result create_device_resources(const char * path, ev2::GfxContext *c
 	ctx->default_view = EV2_HANDLE_CAST(View,ctx->view_data.add(viewdata));
 
 	// Assets
-	ctx->assets.reset(AssetTable::create(ctx, path));
+	ctx->assets.reset(AssetTable::create(ctx));
 
 	// Upload pools
 	size_t upload_capacity = (1 << 9) * (1 << 20);
@@ -1460,11 +1465,91 @@ void GfxContext::process_deferred_deletions()
 	deferred_delete.process(this);
 }
 
+Result init_vfs(GfxContext *ctx)
+{
+	ctx->vfs.reset(Vfs::create());
+
+	ev2::Result result = ev2::SUCCESS;
+
+#ifdef DEV_SHADER_BUILD_MOUNT
+	if (!ctx->vfs->add_mount(
+		EV2_SHADER_BUILD_MOUNT_NAME, 
+		DEV_SHADER_BUILD_MOUNT,
+		MOUNT_TYPE_FILESYSTEM,
+		ev2::g_enable_reloading
+	))
+		result = ev2::EINIT_FAILED;
+#endif
+
+#ifdef DEV_CORE_MOUNT
+	if (!ctx->vfs->add_mount(
+		EV2_CORE_MOUNT_NAME, 
+		DEV_CORE_MOUNT,
+		MOUNT_TYPE_FILESYSTEM,
+		ev2::g_enable_reloading
+	))
+		result = ev2::EINIT_FAILED;
+#endif
+
+	const char *mounts = getenv(ENV_MOUNTS);
+
+	std::vector<std::pair<std::string, std::string>> failures;
+
+	if (mounts) {
+		std::string_view str (mounts);
+
+		for(;;) {
+			size_t next = str.find_first_of(",");
+
+			if (size_t sep_idx = str.find_first_of(":");
+				sep_idx != std::string::npos && sep_idx < next
+			) {
+				std::string name (str.substr(0, sep_idx));	
+				std::string path (str.substr(1 + sep_idx, next - sep_idx - 1));	
+
+				const VfsMount *mnt = ctx->vfs->add_mount(
+					name.c_str(),
+					path.c_str(), 
+					MOUNT_TYPE_FILESYSTEM,
+					ev2::g_enable_reloading
+				);
+
+				if (!mnt) {
+					failures.push_back({
+						std::move(name), std::move(path)
+					});
+				}
+			}
+
+			if (next == std::string::npos || 1 + next >= str.length())
+				break;
+
+			str = str.substr(1 + next);
+		}
+
+		std::stringstream msg;
+		
+		int idx = 0;
+		for (const auto &[name, path] : failures) {
+			msg << std::format("\t" ANSI_YELLOW({}) ":{}", name, path);
+			if (++idx < failures.size())
+				msg << "\n";
+		}
+
+		if (!failures.empty())
+			log_warn("The following mounts failed from EV2_MOUNTS:\n%s", msg.str().c_str());
+
+	} else {
+		log_info(ANSI_GREEN(EV2_MOUNTS is not set));
+	}
+
+	return result;
+}
+
 //------------------------------------------------------------------------------
 // Interface
 
-GfxContext *create_context_for_vulkan(const char *path, 
-								 const GfxContextVulkanInfo &params)
+GfxContext *create_context_for_vulkan(const GfxContextVulkanInfo &params)
 {
 	if (!g_vk_instance) {
 		log_error(
@@ -1503,7 +1588,7 @@ GfxContext *create_context_for_vulkan(const char *path,
 	if (result)
 		goto error;
 
-	log_info("initialized vulkan");
+	log_info(ANSI_GREEN(Initialized vulkan));
 
 	// Resource pools
 	ctx->buffer_pool.reset(Pool<ev2::Buffer>::create());
@@ -1515,7 +1600,11 @@ GfxContext *create_context_for_vulkan(const char *path,
 	// images can be obtained
 	ctx->reset_swap_chain();
 
-	result = create_device_resources(path, ctx);
+	result = init_vfs(ctx);
+	if (result)
+		goto error;
+
+	result = create_device_resources(ctx);
 	if (result)
 		goto error;
 	
@@ -1684,6 +1773,14 @@ void destroy_context(GfxContext *ctx)
 	destroy_swap_chain(ctx, ctx->swap_chain);
 
 	delete ctx;
+}
+
+ev2::Result add_mount(GfxContext *ctx, const char *name, const char *path)
+{
+	if (!ctx->vfs->add_mount(name, path, MOUNT_TYPE_FILESYSTEM, g_enable_reloading))
+		return ev2::EBAD_MOUNT;
+
+	return ev2::SUCCESS;
 }
 
 Result _set_error_internal(Result result, const char *file, int line, const char *msg, ...)

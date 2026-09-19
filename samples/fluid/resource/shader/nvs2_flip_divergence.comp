@@ -1,0 +1,101 @@
+#version 430 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "fluid/shader/nvs2_flip.glsl"
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+#define RHO_REST 1.0f
+
+const ivec2 stencil[4] = {
+	ivec2(1,0),
+	ivec2(0,1),
+	ivec2(-1,0),
+	ivec2(0,-1)
+};
+
+float face_wt(ivec2 c, ivec2 p)
+{
+	float wt_c = imageLoad(solid_mask, c).r;
+
+	ivec2 size = imageSize(solid_mask);
+	float wt_p = all(greaterThanEqual(p, ivec2(0))) && all(lessThan(p, size)) ?
+		imageLoad(solid_mask, p).r : 0.f;
+
+	return min(wt_c, wt_p);
+}
+
+ivec2 basis2(int k)
+{
+	ivec2 x = ivec2(0);
+	x[k] = 1;
+	return x;
+}
+
+float srelu(float x, float inv4k, float k) {
+    float t = max(k - abs(x), 0.0f);
+    return max(x, 0.0f) + t * t * inv4k;
+}
+
+float rhs(ivec2 p)
+{
+	float div = 0;
+
+	ivec2 size = imageSize(f_out);
+
+	float rho = 0;
+
+	float face_wts[2*DIMS];
+
+	int offset = 0;
+	for (int i = 0; i < DIMS; ++i) {
+		uint row_size = size[i] + 1;
+		uint idx = row_size * p[(i + 1) % DIMS] + p[i];
+		uint offset = s_offsets[i];
+
+		uint idx1 = offset + idx;
+		uint idx2 = offset + idx + 1;
+
+		float wt1 = s_vel[idx1].wt;
+		float wt2 = s_vel[idx2].wt;
+
+		float v1 = s_vel[idx1].acc;
+		float v2 = s_vel[idx2].acc;
+
+		if (wt1 > 1e-3 && wt2 > 1e-3) {
+			div += (v2 / wt2 - v1 / wt1)/(DELTA_X);
+		}
+
+		float face1 = face_wt(p, p - basis2(i));
+		float face2 = face_wt(p, p + basis2(i));
+
+		rho += (mix(wt2, wt1, face1) + mix(wt1, wt2, face2)) * RHO_REST/PARTS_PER_CELL;
+	}
+
+	float wt = imageLoad(solid_mask, p).r;
+
+	rho = min(rho, RHO_MAX)/max(wt, 0.25);
+
+	float phi = wt > 0 ? (0.3f - rho) : 0;
+
+	imageStore(fill_mask, p, vec4(phi));
+
+	float d_rho = wt*rho - RHO_REST;
+
+	float f_rho = phi > 0 ? 0 : -BETA*(d_rho)/(RHO_REST);
+	float f_div = div;
+
+	return f_div + f_rho;
+}
+
+void main()
+{
+    ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 size = imageSize(f_out);
+
+	if (idx.x >= size.x || idx.y >= size.y)
+		return;
+
+	float f = rhs(idx);
+
+	imageStore(f_out, idx, vec4(f, 0, 0, 0));
+}

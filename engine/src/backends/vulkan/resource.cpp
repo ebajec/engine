@@ -427,7 +427,7 @@ VkImageView get_image_view(GfxContext *ctx, Image *image, const ImageViewKey &ke
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 		.flags = 0,
 		.image = image->image,
-		.viewType = key.type,
+		.viewType = static_cast<VkImageViewType>(key.type),
 		.format = key.format,
 		.subresourceRange = VkImageSubresourceRange{
 			.aspectMask = aspect_mask,

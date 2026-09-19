@@ -5,6 +5,8 @@
 #include <ev2/resource.h>
 #include <ev2/pipeline.h>
 
+#include "project_mounts.h"
+
 #include <glad/glad.h>
 
 #define ENABLE_IMGUI
@@ -131,6 +133,21 @@ struct App
 	static void image_viewer_open_callback(void *usr, ev2::ImageID image);
 	static void image_viewer_close_callback(void *usr, ev2::ImageID image);
 };
+
+// @brief Initialize app, then mount the resource directories the calling
+// executable registered with ev2_add_mount. Call this instead of
+// App::initialize; it is defined here so it is compiled into the executable,
+// where its mount list is visible (see project_mounts.h).
+static inline int app_initialize(App *app, int argc, char *argv[])
+{
+	int result = app->App::initialize(argc, argv);
+	if (result != App::OK)
+		return result;
+
+	add_project_mounts(app->ctx);
+
+	return App::OK;
+}
 
 static bool should_exit(int status)
 {

@@ -1,3 +1,0 @@
-shaders:
-  vert: shader/fluid/particles.vert.spv
-  frag: shader/fluid/particles.frag.spv

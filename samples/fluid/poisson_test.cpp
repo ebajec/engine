@@ -47,11 +47,11 @@ struct PoissonSolverApp : public App
 
 	int initialize(int argc, char **argv)
 	{
-		App::initialize(argc, argv);
+		app_initialize(this, argc, argv);
 		lhs_panel.reset(new ImageViewerPanel(this, 0, 0, 500, 500, 
-			"pipelines/core/pressure_viz.yaml", "lhs"));
+			"fluid://pipeline/pressure_viz.yaml", "lhs"));
 		rhs_panel.reset(new ImageViewerPanel(this, 0, 0, 500, 500, 
-			"pipelines/core/pressure_viz.yaml", "rhs"));
+			"fluid://pipeline/pressure_viz.yaml", "rhs"));
 
 		bd_panel.reset(new BoundaryEditor(this, 0, 0, 500, 500, "BdMask"));
 
@@ -71,7 +71,7 @@ struct PoissonSolverApp : public App
 		if (result < App::OK)
 			return result;
 
-		cursor = ev2::load_compute_pipeline(ctx, "shader/fluid/cursor_r32f");
+		cursor = ev2::load_compute_pipeline(ctx, "fluid://shader/cursor_r32f.comp");
 		bindings = ev2::create_bindings(ctx, cursor, 0, ev2::BINDING_MODE_DYNAMIC);
 
 		return App::OK;

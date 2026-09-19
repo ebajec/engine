@@ -83,7 +83,7 @@ struct FLIPFluidSim
 	static constexpr uint32_t DIMS = 2;
 
 	struct Config {
-		int num_v_cycles = 16;
+		int num_v_cycles = 12;
 	} config;
 
 	ev2::ImageID v_pre_proj_img[DIMS];
@@ -202,16 +202,16 @@ struct FLIPFluidSim
 			return result;
 		}
 
-		sorter.reset(GPUSort::create(ctx, particle_count, MORTON_CODE_BITS, "shader/fluid/sort_particles"));
+		sorter.reset(GPUSort::create(ctx, particle_count, MORTON_CODE_BITS, "fluid://shader/sort_particles.slang"));
 
 		if (!sorter) {
 			return EXIT_FAILURE;
 		}
 
-		p_advect = ev2::load_compute_pipeline(ctx, "shader/fluid/nvs2_flip_advect");
-		p_deposit = ev2::load_compute_pipeline(ctx, "shader/fluid/nvs2_flip_deposit");
-		p_divergence = ev2::load_compute_pipeline(ctx, "shader/fluid/nvs2_flip_divergence");
-		p_project = ev2::load_compute_pipeline(ctx, "shader/fluid/nvs2_flip_project");
+		p_advect = ev2::load_compute_pipeline(ctx, "fluid://shader/nvs2_flip_advect.comp");
+		p_deposit = ev2::load_compute_pipeline(ctx, "fluid://shader/nvs2_flip_deposit.comp");
+		p_divergence = ev2::load_compute_pipeline(ctx, "fluid://shader/nvs2_flip_divergence.comp");
+		p_project = ev2::load_compute_pipeline(ctx, "fluid://shader/nvs2_flip_project.comp");
 
 		bindings = ev2::create_bindings(ctx, p_advect, 0, ev2::BINDING_MODE_STATIC);
 
@@ -344,7 +344,7 @@ struct FLIPFluidSim
 			//------------------------------------------------------------------------------
 			// compute bvh
 
-			ev2::ComputePipelineID p_bvh_level = ev2::load_compute_pipeline(ctx, "shader/fluid/linear_bvh_2d_fluid", "compute_level");
+			ev2::ComputePipelineID p_bvh_level = ev2::load_compute_pipeline(ctx, "fluid://shader/linear_bvh_2d_fluid.slang", "compute_level");
 
 			struct {
 				uint32_t in_start;
@@ -504,16 +504,16 @@ struct FluidApp : public App
 
 int FluidApp::initialize(int argc, char **argv)
 {
-	int result = App::initialize(argc, argv);
+	int result = app_initialize(this, argc, argv);
 	if (result)
 		return result;
 
 	sim.reset(new FLIPFluidSim);
 
 	main_panel.reset(new ImageViewerPanel(this, 200, 0, 500, 500,
-		"pipelines/core/screen_quad.yaml", "Interactive Simulation"));
+		"core://pipeline/screen_quad.yaml", "Interactive Simulation"));
 	right_panel.reset(new ImageViewerPanel(this, 700, 0, 500, 500, 
-		"pipelines/residuals.yaml", "Residuals"));
+		"fluid://pipeline/residuals.yaml", "Residuals"));
 
 	boundary_editor.reset(new BoundaryEditor(this, 100, 100, 500, 500, "Boundary Mask"));
 
@@ -551,7 +551,7 @@ int FluidApp::initialize(int argc, char **argv)
 
 	sim->reset(ctx);
 
-	particles = ev2::load_graphics_pipeline(ctx, "pipelines/pde/fluid_particles.yaml");
+	particles = ev2::load_graphics_pipeline(ctx, "fluid://pipeline/fluid_particles.yaml");
 	particle_bindings = ev2::create_bindings(ctx, particles, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_DYNAMIC);
 
 	return result;
@@ -665,7 +665,7 @@ void FluidApp::render()
 	main_panel->record_draw(pass);
 
 	if (b_enable_flux_arrows) {
-		ev2::GfxPipelineID flux_arrows = ev2::load_graphics_pipeline(ctx, "pipelines/flux.yaml");
+		ev2::GfxPipelineID flux_arrows = ev2::load_graphics_pipeline(ctx, "fluid://pipeline/flux.yaml");
 		
 		for (int i = 0; i < GridFluidSim::DIMS; ++i) {
 			ev2::cmd_use_image(pass, sim->v_pre_proj_img[i], ev2::USAGE_SAMPLED_GRAPHICS);
@@ -727,7 +727,7 @@ void FluidApp::render()
 			.bvh = ev2::get_buffer_device_address(ctx, sim->particle_bvh)
 		};
 
-		ev2::GfxPipelineID p_boxes = ev2::load_graphics_pipeline(ctx, "pipelines/core/box_2d.yaml");
+		ev2::GfxPipelineID p_boxes = ev2::load_graphics_pipeline(ctx, "core://pipeline/box_2d.yaml");
 		ev2::cmd_use_buffer(pass, sim->particle_bvh, ev2::USAGE_STORAGE_READ_GRAPHICS);
 		ev2::cmd_push_constant(pass, p_boxes, 0, sizeof(box_pc), &box_pc);
 		ev2::cmd_bind_gfx_pipeline(pass, p_boxes);

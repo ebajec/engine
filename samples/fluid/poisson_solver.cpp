@@ -84,10 +84,10 @@ int PoissonSolver::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 	tmp_lhs = ev2::create_image(ctx, sim_w, sim_h, 1, ev2::IMAGE_FORMAT_32F, usage);
 	ev2::set_image_name(ctx, tmp_lhs, "tmp_lhs");
 
-	multigrid_down = ev2::load_compute_pipeline(ctx, "shader/fluid/multigrid_down");
-	multigrid_up = ev2::load_compute_pipeline(ctx, "shader/fluid/multigrid_up");
-	mipgen_r8 = ev2::load_compute_pipeline(ctx, "shader/core/mipgen_r8");
-	mipgen_r8_snorm = ev2::load_compute_pipeline(ctx, "shader/core/mipgen_r8_snorm");
+	multigrid_down = ev2::load_compute_pipeline(ctx, "fluid://shader/multigrid_down.comp");
+	multigrid_up = ev2::load_compute_pipeline(ctx, "fluid://shader/multigrid_up.comp");
+	mipgen_r8 = ev2::load_compute_pipeline(ctx, "core://shader/mipgen_r8.comp");
+	mipgen_r8_snorm = ev2::load_compute_pipeline(ctx, "core://shader/mipgen_r8_snorm.comp");
 
 	//-----------------------------------------------------------------------------
 	// setup bindings
@@ -240,8 +240,8 @@ void PoissonSolver::record_v_cycle(ev2::PassID pass)
 
 int MeanSubtractor::init(ev2::GfxContext *ctx, uint32_t w, uint32_t h)
 {
-	accumulate = ev2::load_compute_pipeline(ctx, "shader/fluid/accumulate");
-	subtract_img = ev2::load_compute_pipeline(ctx, "shader/fluid/subtract_img");
+	accumulate = ev2::load_compute_pipeline(ctx, "fluid://shader/accumulate.comp");
+	subtract_img = ev2::load_compute_pipeline(ctx, "fluid://shader/subtract_img.comp");
 
 	width = w;
 	height = h;

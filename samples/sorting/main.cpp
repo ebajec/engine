@@ -55,7 +55,7 @@ struct TestApp : public App
 
 int TestApp::initialize(int argc, char **argv)
 {
-	int result = App::initialize(argc, argv);
+	int result = app_initialize(this, argc, argv);
 	if (result)
 		return result;
 
@@ -72,7 +72,7 @@ int TestApp::initialize(int argc, char **argv)
 
 void TestApp::on_count_changed()
 {
-	sorter.reset(GPUSort::create(ctx, count, 32, "shader/sort/sort_uint"));
+	sorter.reset(GPUSort::create(ctx, count, 32, "core://shader/sort/sort_uint.slang"));
 
 	size_t sz = count * sizeof(uint32_t);
 
@@ -215,8 +215,8 @@ void TestApp::exec_sort()
 
 void TestApp::render()
 {
-	ev2::GfxPipelineID p_points = ev2::load_graphics_pipeline(ctx, "pipelines/test_sort/points.yaml");
-	ev2::GfxPipelineID p_background = ev2::load_graphics_pipeline(ctx, "pipelines/test_sort/bg.yaml");
+	ev2::GfxPipelineID p_points = ev2::load_graphics_pipeline(ctx, "test_sort://pipeline/points.yaml");
+	ev2::GfxPipelineID p_background = ev2::load_graphics_pipeline(ctx, "test_sort://pipeline/bg.yaml");
 
 	if (perpetual_sort)
 		exec_sort();

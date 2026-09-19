@@ -15,3 +15,5 @@ target_link_libraries(${TARGET} PRIVATE
 	engine
 )
 
+ev2_add_mount(${TARGET} NAME test_sort DIR resource)
+

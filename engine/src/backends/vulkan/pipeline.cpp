@@ -20,11 +20,7 @@
 #include <vector>
 #include <vector>
 #include <cstring>
-#include <filesystem>
-#include <fstream>
 #include <format>
-
-namespace fs = std::filesystem;
 
 static inline bool _check_or_log(const char *s){
 	if (s)
@@ -33,27 +29,43 @@ static inline bool _check_or_log(const char *s){
 }
 #define check_or_log(cond) _check_or_log((cond) ? nullptr : #cond)
 
-static ev2::Result read_spv_file(const fs::path& path, std::vector<uint32_t> &data)
+// @brief Resolve a shader spec ("mount://rel/shader.ext#entry") to the vfs path
+// of its compiled module ("spirv://mount/rel/shader.ext.spv") and entrypoint.
+// A spec without '#' uses "main".
+static bool resolve_shader_spec(std::string_view spec, std::string *spv_path, std::string *entry)
 {
-	size_t size = fs::file_size(path);
+	size_t hash_idx = spec.find('#');
+	std::string_view src = spec.substr(0, hash_idx);
+	*entry = hash_idx == std::string_view::npos ? "main" : std::string(spec.substr(hash_idx + 1));
 
-	if (size % sizeof(uint32_t) != 0) {
-		return set_error(ev2::ELOAD_FAILED, "spir-v file size is not aligned to 4 bytes");
+	size_t sep_idx = src.find("://");
+	if (sep_idx == std::string_view::npos || entry->empty()) {
+		std::string tmp(spec);
+		log_error("Invalid shader path %s; expected mount://path[#entry]", tmp.c_str());
+		return false;
 	}
 
-	data.resize(size/sizeof(uint32_t));
-
-	std::ifstream file = std::ifstream(path, std::ios::binary);
-
-	if (!file) {
-		return set_error(ev2::ELOAD_FAILED, "failed to read spir-v");
-	}
-
-	file.read(reinterpret_cast<char*>(data.data()), (intptr_t)size);
-
-	return ev2::SUCCESS;
+	*spv_path = std::format(EV2_SHADER_BUILD_MOUNT_NAME "://{}/{}.spv",
+		src.substr(0, sep_idx), src.substr(sep_idx + 3));
+	return true;
 }
 
+ev2::Result read_spv(ev2::GfxContext *ctx, std::string_view path, std::vector<uint32_t> &code)
+{
+	ev2::Result result =  ctx->vfs->read_all(path, [&code](size_t size) -> unsigned char* {
+		if (size % sizeof(uint32_t) != 0) {
+			log_error("spir-v file size is not aligned to 4 bytes");
+			return nullptr;
+		}
+		code.resize(size/sizeof(uint32_t));
+		return reinterpret_cast<unsigned char*>(code.data());
+	});
+
+	if (result < 0)
+		return result;
+
+	return result;
+}
 static std::string get_layout_string(const ev2::ShaderLayoutMapping& layout)
 {
 	std::string info;
@@ -71,99 +83,57 @@ static std::string get_layout_string(const ev2::ShaderLayoutMapping& layout)
 
 static std::string get_shader_info(ev2::Shader *shader)
 {
-	const char *stage;
-	switch (shader->stage) {
-		case ev2::STAGE_VERTEX: stage = "vertex"; break;
-		case ev2::STAGE_FRAGMENT: stage = "fragment"; break;
-		case ev2::STAGE_COMPUTE: stage = "compute"; break;
-		default:
-			stage = "???";
-	}
+	std::string stages_str = string_VkShaderStageFlags(shader->stage_flags);
 
 	char id[100];
 	snprintf(id, sizeof(id), "\tVkShaderModule: " ANSI_BLUE(0x%LX), (unsigned long long)shader->shader_module); 
 
 	std::string info;
 	info += std::string(id) + "\n";
-	info += "\tstage : " + std::string(stage) + "\n";
+	info += "\tstages : " + stages_str + "\n";
 	std::string layout_string = get_layout_string(*shader->layout_map); 
 	info += layout_string.empty() ? "\t(no bindings)" : std::move(layout_string);
 
 	return info;
-
 }
 
 
 //------------------------------------------------------------------------------
 // NEW GOOD
 
-static ev2::Result get_shader_stage_from_path(const fs::path &path, 
-									   ev2::ShaderStage *stage)
+static ev2::Result get_vk_shader_stage_flags_from_glsl(
+	const std::string_view path, 
+	VkShaderStageFlags *flags)
 {
-	std::string filestr = path.string(); 
-
-	if (!fs::is_regular_file(path)) {
-		return set_error(ev2::ELOAD_FAILED, "File does not exist: %s", filestr.c_str());
-	}
-
-	std::string ext = path.extension().string();
+	size_t pos = path.find_last_of(".");
+	std::string_view ext = path.substr(pos);
 
 	// turn .stage.spv into .stage
 	if (ext == ".spv") {
-		const char* str = filestr.c_str();
+		size_t prev = path.substr(0, pos).find_last_of(".");
 
-		const char *c = str;
-		while (*c) 
-			c++;
-		c--;
-
-		// go to next .
-		for(; c && *c != '.'; --c) {
+		if (prev == std::string::npos) {
+			std::string tmp (path);
+			log_warn("No extension detected before .spv for %s", path);
+		} else {
+			ext = path.substr(0, pos).substr(prev);
 		}
-
-		const char* end = c;
-
-		for(; c && *(--c) != '.'; --c) {
-		}
-
-		const char* start = c;
-
-		if (c == str) {
-			return set_error(ev2::ELOAD_FAILED, "Wrong extension");
-		}
-
-		size_t len = (size_t)(end - start);
-
-		ext.resize(len);
-		memcpy(ext.data(), start, len);
 	} else {
-		return set_error(ev2::ELOAD_FAILED, "Filename extension must be '.spv'");
+		std::string tmp (path);
+		return set_error(ev2::ELOAD_FAILED, "Filename extension for %s must be '.spv'", tmp.c_str());
 	}
 
-	if (ext == ".comp")
-		*stage = ev2::STAGE_COMPUTE;
-	else if (ext == ".vert")
-		*stage = ev2::STAGE_VERTEX;
-	else if (ext == ".frag")
-		*stage = ev2::STAGE_FRAGMENT;
-	else 
-		return set_error(ev2::ELOAD_FAILED, "Invalid shader file extension");
+	if (ext == ".comp") {
+		*flags |= VK_SHADER_STAGE_COMPUTE_BIT;
+	} else if (ext == ".vert") {
+		*flags |= VK_SHADER_STAGE_VERTEX_BIT;
+	} else if (ext == ".frag") {
+		*flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+	} else {
+		*flags = VK_SHADER_STAGE_ALL;
+	}
 
 	return ev2::SUCCESS;
-}
-
-static VkShaderStageFlags get_vk_shader_stage_flags(ev2::ShaderStage stage)
-{
-	switch (stage) {
-		case ev2::STAGE_COMPUTE:
-			return VK_SHADER_STAGE_COMPUTE_BIT;
-		case ev2::STAGE_FRAGMENT:
-			return VK_SHADER_STAGE_FRAGMENT_BIT;
-		case ev2::STAGE_VERTEX:
-			return VK_SHADER_STAGE_VERTEX_BIT;
-		default:
-			return 0;
-	}
 }
 
 static ev2::Result parse_shader_bindings(
@@ -193,7 +163,7 @@ static ev2::Result parse_shader_bindings(
 
 		if (
 			binding->set < EV2_BASE_SET_COUNT && 
-			shader->stage != ev2::STAGE_COMPUTE
+			!(shader->stage_flags & VK_SHADER_STAGE_COMPUTE_BIT)
 		) {
 			shader->layout_map->set_binding_infos[binding->set] = {};
 			continue;
@@ -246,7 +216,7 @@ static ev2::Result parse_shader_bindings(
 			.binding = binding->binding,
 			.descriptorType = (VkDescriptorType)binding->descriptor_type,
 			.descriptorCount = descriptor_count,
-			.stageFlags = get_vk_shader_stage_flags(shader->stage),
+			.stageFlags = shader->stage_flags,
 			.pImmutableSamplers = nullptr,
 		});		
 
@@ -274,7 +244,7 @@ static ev2::Result parse_shader_push_constants(
 		const SpvReflectBlockVariable *block = blocks[i];
 
 		VkPushConstantRange range = {
-			.stageFlags = get_vk_shader_stage_flags(shader->stage),
+			.stageFlags = shader->stage_flags,
 			.offset = block->offset,
 			.size = block->size,
 		};
@@ -318,29 +288,20 @@ static ev2::Result parse_shader_reflection(ev2::Shader *shader,
 
 static ev2::Result load_shader_file(ev2::GfxContext *ctx, const char *path, ev2::Shader* out)
 {
-	fs::path file (path);
-
-	std::string filestr = file.string(); 
-
-	if (!fs::is_regular_file(file)) {
-		return set_error(
-			ev2::ELOAD_FAILED,
-			"File does not exist: %s", filestr.c_str());
-	}
-
-	ev2::ShaderStage stage;
-	ev2::Result result = get_shader_stage_from_path(file, &stage);
+	std::vector<uint32_t> code;
+	ev2::Result result = read_spv(ctx, path, code);
 
 	if (result)
 		return result;
 
-	std::vector<uint32_t> code;
-	result = read_spv_file(file,code); 
-	if (result) 
+	VkShaderStageFlags flags;
+	result = get_vk_shader_stage_flags_from_glsl(path, &flags);
+
+	if (result)
 		return result;
 
 	ev2::Shader shader {
-		.stage = stage,
+		.stage_flags = flags,
 		.layout_map = std::make_shared<ev2::ShaderLayoutMapping>()
 	};
 
@@ -370,8 +331,7 @@ static ev2::Result shader_create_callback(ev2::GfxContext *ctx, ev2::Shader **pp
 {
 	ev2::Shader *p_shader = new ev2::Shader{};
 
-	std::string syspath = ctx->assets->get_system_path(path);
-	ev2::Result res = load_shader_file(ctx, syspath.c_str(), p_shader);
+	ev2::Result res = load_shader_file(ctx, path, p_shader);
 
 	if (res != ev2::SUCCESS) {
 		delete p_shader;
@@ -420,15 +380,29 @@ static ev2::Result shader_reload_callback(ev2::GfxContext *ctx, void **usr, cons
 
 struct GfxPipelineInfo
 {
-	std::string vert_path; 
-	std::string frag_path; 
+	// vfs paths of the compiled modules (spirv://...)
+	std::string vert_path;
+	std::string frag_path;
+
+	std::string vert_entry;
+	std::string frag_entry;
 
 	VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 };
 
-static ev2::Result parse_gfx_pipeline_file(GfxPipelineInfo *info, const char *path)
+static ev2::Result parse_gfx_pipeline_file(ev2::GfxContext *ctx, GfxPipelineInfo *info, const char *path)
 {
-	YAML::Node root = YAML::LoadFile(path);
+    std::string text;
+	ev2::Result result = ctx->vfs->read_all(path, [&text](size_t size) -> unsigned char* {
+		text.resize(size);
+		//for good measure
+		return (unsigned char*)text.data();
+	});
+
+	if (result < 0)
+         return result;
+
+    YAML::Node root = YAML::Load(text);
 
 	if (const YAML::Node &node = root["shaders"]; node.IsDefined()) {
 		if (!node) {
@@ -454,8 +428,10 @@ static ev2::Result parse_gfx_pipeline_file(GfxPipelineInfo *info, const char *pa
 					   "Pipeline %s does not contain a vertex shader", path);
 		}
 
-		info->frag_path = frag.as<std::string>();
-		info->vert_path = vert.as<std::string>();
+		if (!resolve_shader_spec(frag.as<std::string>(), &info->frag_path, &info->frag_entry) ||
+			!resolve_shader_spec(vert.as<std::string>(), &info->vert_path, &info->vert_entry)) {
+			return set_error(ev2::ELOAD_FAILED, "Pipeline %s has an invalid shader path", path);
+		}
 	} else {
 		return set_error(ev2::ELOAD_FAILED, "Graphics pipeline config must contain a shaders node");
 	}
@@ -500,10 +476,10 @@ struct VertexInputLayout
 	std::vector<VkVertexInputAttributeDescription> attributes;
 };
 
-static ev2::Result parse_vertex_layout(const char *path, VertexInputLayout *p_out)
+static ev2::Result parse_vertex_layout(ev2::GfxContext *ctx, const char *path, VertexInputLayout *p_out)
 {
 	std::vector<uint32_t> data;
-	if (read_spv_file(path, data) < 0)
+	if (read_spv(ctx, path, data) < 0)
 		return ev2::ELOAD_FAILED;
 
 	SpvReflectShaderModule reflection;
@@ -810,8 +786,7 @@ static ev2::Result initialize_gfx_pipeline_vk_pipeline(
 
 	VertexInputLayout vertex_layout {};
 
-	std::string sys_vert_path = ctx->assets->get_system_path(info->vert_path.c_str());
-	ev2::Result result = parse_vertex_layout(sys_vert_path.c_str(), &vertex_layout);
+	ev2::Result result = parse_vertex_layout(ctx, info->vert_path.c_str(), &vertex_layout);
 
 	if (result)
 		return result;
@@ -837,14 +812,14 @@ static ev2::Result initialize_gfx_pipeline_vk_pipeline(
     	.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
     	.stage = VK_SHADER_STAGE_VERTEX_BIT,
     	.module = vert->shader_module,
-    	.pName = "main",
+    	.pName = info->vert_entry.c_str(),
 	};
 
     VkPipelineShaderStageCreateInfo fragShaderStageInfo{
     	.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
     	.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
     	.module = frag->shader_module,
-    	.pName = "main",
+    	.pName = info->frag_entry.c_str(),
 	};
 
     VkPipelineShaderStageCreateInfo shaderStages[] = {
@@ -1041,7 +1016,7 @@ static std::string get_gfx_pipeline_info(ev2::GfxContext *ctx, ev2::GfxPipeline 
 	const char *fmt = 
 		"\tVkPipeline: " ANSI_BLUE(0x%LX)"\n"
 		"\tvert: " COLORIZE_PATH(%s)"\n"
-		"\tfrag: " COLORIZE_PATH(%s)"\n";
+		"\tfrag: " COLORIZE_PATH(%s);
 
 	std::string buf;
 	buf.resize((strlen(fmt) + strlen(vert) + strlen(frag)) + 1);
@@ -1067,18 +1042,12 @@ static ev2::Result gfx_pipeline_create_callback(
 )
 {
 	ev2::Result result = ev2::SUCCESS;
-	std::string syspath = ctx->assets->get_system_path(path);
-
-	if (!fs::exists(syspath)) {
-		log_error("File does not exist: %s", syspath.c_str());
-		return ev2::ELOAD_FAILED;
-	}
 
 	std::unique_ptr<ev2::GfxPipeline> p_pipeline(new ev2::GfxPipeline{});
 
 	GfxPipelineInfo gfx_info;
 	try {
-		result = parse_gfx_pipeline_file(&gfx_info,syspath.c_str());
+		result = parse_gfx_pipeline_file(ctx, &gfx_info, path);
 	}catch (const YAML::BadFile& e) {
 		return set_error(ev2::ELOAD_FAILED, "Error while parsing YAML: %s",e.what());
 	}  catch (const YAML::Exception& e) {
@@ -1176,19 +1145,18 @@ static ev2::Result compute_pipeline_create_callback(
 {
 	ev2::ShaderID shader_handle = EV2_NULL_HANDLE(Shader);
 
-	const char *sep = ".";
-
 	std::string_view name = in_name;
-	size_t sep_idx = name.find_last_of(sep);
 
-	std::string path_str = std::string(name.substr(0, sep_idx));
-	std::string entrypoint = sep_idx == std::string::npos ? "main" : std::string(name.substr(1 + sep_idx));
+	const bool is_from_config = name.ends_with(".yaml");
 
-	const bool is_from_config = path_str.ends_with(".yaml");
+	std::string spv_path;
+	std::string entrypoint;
 
 	if ((!is_from_config)) {
-		path_str += ".comp.spv";
-		shader_handle = ev2::load_shader(ctx, path_str.c_str());
+		if (!resolve_shader_spec(name, &spv_path, &entrypoint))
+			return ev2::ELOAD_FAILED;
+
+		shader_handle = ev2::load_shader(ctx, spv_path.c_str());
 	} else {
 		log_error("Compute pipeline .yaml configs are not yet supported; must load as shader directly");
 	}
@@ -1303,7 +1271,10 @@ namespace ev2 {
 
 ShaderID load_shader(GfxContext *ctx, const char *path)
 {
-	AssetID id = ctx->assets->load(path);
+	AssetID id;
+	if (ctx->assets->load(path, &id) < ev2::SUCCESS)
+		return ShaderID();
+
 	if (id)
 		return ShaderID{id};
 
@@ -1319,6 +1290,8 @@ ShaderID load_shader(GfxContext *ctx, const char *path)
 	if (res == ev2::SUCCESS) {
 		id = ctx->assets->allocate(&vtbl, shader, path); 
 		return ShaderID{id};
+	} else {
+		log_warn("Failed to load shader: " COLORIZE_PATH(%s), path);
 	}
 
 	return EV2_NULL_HANDLE(Shader);
@@ -1332,7 +1305,10 @@ void unload_shader(GfxContext *ctx, ShaderID shader)
 
 GfxPipelineID load_graphics_pipeline(GfxContext *ctx, const char *path)
 {
-	AssetID id = ctx->assets->load(path);
+	AssetID id;
+	if (ctx->assets->load(path, &id) < ev2::SUCCESS) {
+		return GfxPipelineID();
+	}
 
 	if (id)
 		return GfxPipelineID{id};
@@ -1347,13 +1323,12 @@ GfxPipelineID load_graphics_pipeline(GfxContext *ctx, const char *path)
 
 	if (res == ev2::SUCCESS) {
 		id = ctx->assets->allocate(&vtbl, pipeline, path);
-
-		if (ctx->assets->reloader) {
-			ctx->assets->reloader->add_dependency((AssetID)pipeline->vert.id, id);
-			ctx->assets->reloader->add_dependency((AssetID)pipeline->frag.id, id);
-		}
+		ctx->assets->add_dependency((AssetID)pipeline->vert.id, id);
+		ctx->assets->add_dependency((AssetID)pipeline->frag.id, id);
 
 		return GfxPipelineID{id};
+	} else {
+		log_warn("Failed to load graphics pipeline: " COLORIZE_PATH(%s), path);
 	}
 
 	return EV2_NULL_HANDLE(GfxPipeline);
@@ -1367,12 +1342,10 @@ void unload_graphics_pipeline(GfxContext *ctx, GfxPipelineID pipe)
 
 ComputePipelineID load_compute_pipeline(GfxContext *ctx, const char *path)
 {
-	std::string_view path_str (path);
-	if (path_str.ends_with(".comp.spv") || path_str.ends_with(".comp")) {
-		log_warn("Compute pipeline loaded via shader file path: internal name will trim extension");
-	}
+	AssetID id;
 
-	AssetID id = ctx->assets->load(path);
+	if (ctx->assets->load(path, &id) < ev2::SUCCESS)
+		return ComputePipelineID();
 
 	if (id)
 		return ComputePipelineID{id};
@@ -1388,11 +1361,11 @@ ComputePipelineID load_compute_pipeline(GfxContext *ctx, const char *path)
 	if (res == ev2::SUCCESS) {
 		id = ctx->assets->allocate(&vtbl, pipeline, path);
 
-		if (ctx->assets->reloader) {
-			ctx->assets->reloader->add_dependency((AssetID)pipeline->shader.id, id);
-		}
+		ctx->assets->add_dependency((AssetID)pipeline->shader.id, id);
 
 		return ComputePipelineID{id};
+	} else {
+		log_warn("Failed to load compute pipeline: " COLORIZE_PATH(%s), path);
 	}
 
 	return EV2_NULL_HANDLE(ComputePipeline);
@@ -1403,7 +1376,7 @@ ComputePipelineID load_compute_pipeline(GfxContext *ctx, const char *path)
 ComputePipelineID load_compute_pipeline(GfxContext *ctx, const char *path, const char *entrypoint)
 {
 	char buf[1024];
-	size_t len = snprintf(buf, sizeof(buf), "%s.%s", path, entrypoint);
+	size_t len = snprintf(buf, sizeof(buf), "%s#%s", path, entrypoint);
 
 	if (len >= sizeof(buf))
 		return EV2_NULL_HANDLE(ComputePipeline);

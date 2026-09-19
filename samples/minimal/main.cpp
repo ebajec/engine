@@ -16,6 +16,9 @@ struct App {
 
 	int width = 500;
 	int height = 500;
+	bool enable_validation_layers = false;
+	bool needs_resize = true;
+
 } g_;
 
 #if defined (__linux__) || defined(__APPLE__)
@@ -24,17 +27,6 @@ struct App {
 #include <unistd.h>
 
 static std::atomic_int g_should_close = false;;
-
-void framebuffer_size_callback(GLFWwindow* window, int width, int height)
-{
-	App *app = static_cast<App*>(glfwGetWindowUserPointer(window));
-
-	if (app->width != width || app->height != height)
-		ev2::resize_swapchain(app->ctx, width, height);
-
-	app->width = width;
-	app->height = height;
-}
 void handle_sigint(int sig)
 {
 	(void)sig;
@@ -42,6 +34,27 @@ void handle_sigint(int sig)
 	log_info("received SIGINT");
 }
 #endif
+
+static inline int add_project_mounts(ev2::GfxContext *ctx)
+{
+	struct Mount {
+		const char *name;
+		const char *path;
+	};
+
+	int failures = 0;
+#ifdef EV2_PROJECT_MOUNTS
+	static constexpr Mount mounts[] = { EV2_PROJECT_MOUNTS };
+
+	for (const Mount &mount : mounts) {
+		if (ev2::add_mount(ctx, mount.name, mount.path) != ev2::SUCCESS) {
+			log_warn("Failed to mount %s:// at %s", mount.name, mount.path);
+			++failures;
+		}
+	}
+#endif
+	return failures;
+}
 
 static void print_glfw_platform()
 {
@@ -55,18 +68,79 @@ static void print_glfw_platform()
 	}
 	printf("\x1b[32mGLFW is running on %s\x1b[0m\n", s); 
 }
+
+void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+{
+	App *app = static_cast<App*>(glfwGetWindowUserPointer(window));
+
+	if (app->width != width || app->height != height)
+		g_.needs_resize = true;
+	
+
+	app->width = width;
+	app->height = height;
+}
+ev2::GfxContext *ev2_init_from_glfw(GLFWwindow *win)
+{
+	if (!glfwVulkanSupported()) {
+		log_error("Vulkan not supported by GLFW");
+		return nullptr;
+	}
+
+	std::vector<const char *> validationLayers = {
+		"VK_LAYER_KHRONOS_validation",
+	};
+
+	uint32_t glfwExtensionCount = 0;
+    const char** glfwExtensions;
+
+    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+    std::vector<const char*> extensions(
+		glfwExtensions, glfwExtensions + glfwExtensionCount);
+
+	ev2::VulkanInitOptions init_opts = {
+		.validationLayers = validationLayers.data(),
+		.validationLayerCount = validationLayers.size(),
+		.instanceExtensions = extensions.data(),
+		.instanceExtensionCount = extensions.size(),
+		.enableValidationLayers = g_.enable_validation_layers,
+	};
+
+	ev2::Result ev2_res = ev2::init_for_vulkan(init_opts);
+	if (ev2_res != ev2::SUCCESS)
+		return nullptr;
+
+	VkInstance vk_instance = ev2::get_vulkan_instance(); 
+	VkSurfaceKHR surface = VK_NULL_HANDLE;
+
+	VkResult vk_res = glfwCreateWindowSurface(vk_instance, g_.win, nullptr, &surface); 
+
+	if (vk_res < VK_SUCCESS) {
+        log_error("failed to create window surface!");
+		return nullptr;
+    }
+
+	ev2::GfxContextVulkanInfo vulkan_params = {
+		.surface = surface		
+	};
+
+	ev2::GfxContext *ctx = ev2::create_context_for_vulkan(vulkan_params);
+	add_project_mounts(ctx);
+	std::signal(SIGINT, handle_sigint);
+
+	return ctx;
+}
 	
 int init(int argc, char *argv[])
 {
-	bool enable_validation_layers = false;
-
 	for (int i = 0; i < argc; ++i) {
 		if (!strcmp(argv[i],"--wayland")) {
 			glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
 		} else if (!strcmp(argv[i],"--x11")) {
 			glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
 		} else if (!strcmp(argv[i],"--vk-validation"))
-			enable_validation_layers = true;
+			g_.enable_validation_layers = true;
 	}
 
 	if (!glfwInit()) {
@@ -89,56 +163,11 @@ int init(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
-	if (!glfwVulkanSupported()) {
-		log_error("Vulkan not supported by GLFW");
-		return EXIT_FAILURE;
-	}
+	g_.ctx = ev2_init_from_glfw(g_.win);
 
-	std::vector<const char *> validationLayers = {
-		"VK_LAYER_KHRONOS_validation",
-	};
-
-
-	uint32_t glfwExtensionCount = 0;
-    const char** glfwExtensions;
-
-    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-    std::vector<const char*> extensions(
-		glfwExtensions, glfwExtensions + glfwExtensionCount);
-
-	ev2::VulkanInitOptions init_opts = {
-		.validationLayers = validationLayers.data(),
-		.validationLayerCount = validationLayers.size(),
-		.instanceExtensions = extensions.data(),
-		.instanceExtensionCount = extensions.size(),
-		.enableValidationLayers = enable_validation_layers,
-	};
-
-	ev2::Result ev2_res = ev2::init_for_vulkan(init_opts);
-	if (ev2_res != ev2::SUCCESS)
-		return EXIT_FAILURE;
-
-	VkInstance vk_instance = ev2::get_vulkan_instance(); 
-	VkSurfaceKHR surface = VK_NULL_HANDLE;
-
-	VkResult vk_res = glfwCreateWindowSurface(vk_instance, g_.win, nullptr, &surface); 
-
-	if (vk_res < VK_SUCCESS) {
-        log_error("failed to create window surface!");
-		return EXIT_FAILURE;
-    }
-
-	ev2::GfxContextVulkanInfo vulkan_params = {
-		.surface = surface		
-	};
-
-	g_.ctx = ev2::create_context_for_vulkan(RESOURCE_PATH, vulkan_params);
-
+	glfwSetWindowUserPointer(g_.win, &g_);
 	glfwSetFramebufferSizeCallback(g_.win, &framebuffer_size_callback);
-	glfwSetWindowUserPointer(g_.win, g_.ctx);
 	
-	std::signal(SIGINT, handle_sigint);
 	return 0;
 }
 
@@ -150,7 +179,10 @@ int main(int argc, char *argv[])
 
 	ev2::GfxContext * ctx = g_.ctx;
 
-	ev2::GfxPipelineID pipeline = ev2::load_graphics_pipeline(ctx, "pipelines/test.yaml");
+	ev2::GfxPipelineID pipeline = ev2::load_graphics_pipeline(ctx, "minimal://pipeline/test.yaml");
+
+	if (!pipeline.is_valid())
+		return EXIT_FAILURE;
 
 	ev2::ViewID view = ev2::create_view(ctx, nullptr, nullptr);
 
@@ -170,6 +202,11 @@ int main(int argc, char *argv[])
 	while (!glfwWindowShouldClose(g_.win) && !g_should_close) {
 		glfwPollEvents();
 
+		if (g_.needs_resize) {
+			ev2::resize_swapchain(ctx, g_.width, g_.height);
+			g_.needs_resize = false;
+		}
+
 		ev2::update_view(ctx, view, &view_mat[0][0], &proj_mat[0][0]);
 
 		ev2::begin_frame(ctx);
@@ -177,7 +214,7 @@ int main(int argc, char *argv[])
 		ev2::GfxPassInfo pass_info = {
 			.target = {}, // passing a null target renders to the screen
 			.view = view,
-			.viewport = ev2::Rect{0,0,(uint32_t)g_.width, (uint32_t)g_.height},
+			.viewport = ev2::Rect{0, 0, (uint32_t)g_.width, (uint32_t)g_.height},
 		};
 
 		ev2::PassID pass = ev2::begin_gfx_pass(ctx, &pass_info);

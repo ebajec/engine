@@ -1,3 +1,0 @@
-shaders:
-  vert: shader/sort/points.vert.spv
-  frag: shader/sort/points.frag.spv

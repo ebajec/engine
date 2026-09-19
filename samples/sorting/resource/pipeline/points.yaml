@@ -1,0 +1,3 @@
+shaders:
+  vert: test_sort://shader/points.vert
+  frag: test_sort://shader/points.frag

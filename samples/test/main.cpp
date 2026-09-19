@@ -92,13 +92,13 @@ struct WaveSim
 int WaveSim::init(ev2::GfxContext *ctx)
 {
 	sim_pipelines[0] = ev2::load_compute_pipeline(ctx, 
-		"shader/pde/pde0");
+		"pde://shader/pde0.comp");
 
 	if (!EV2_VALID(sim_pipelines[0]))
 		return EXIT_FAILURE;
 
 	sim_pipelines[1] = ev2::load_compute_pipeline(ctx, 
-		"shader/pde/pde1");
+		"pde://shader/pde1.comp");
 
 	if (!EV2_VALID(sim_pipelines[1]))
 		return EXIT_FAILURE;
@@ -244,7 +244,7 @@ struct TestApp : public App
 
 int TestApp::initialize(int argc, char **argv)
 {
-	int result = App::initialize(argc, argv);
+	int result = app_initialize(this, argc, argv);
 	if (result)
 		return result;
 

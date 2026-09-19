@@ -1189,17 +1189,17 @@ Result begin_frame(GfxContext *ctx)
 	//------------------------------------------------------------------------------
 	// Update stuff
 
-	if (ctx->assets->reloader) {
-		ctx->assets->reloader->update();
-	}
+	ctx->assets->process_reloads();
+
 	ctx->transforms.update(ctx);
 	ctx->view_data.update(ctx);
 
 	GPUFramedata gpu_data = {
-		.t_seconds = (uint32_t)frame->t,
+		.t_sec = static_cast<uint32_t>(frame->t),
 		.t_fract = (float)fmod(frame->t, 1.),
+		.t = (float)frame->t,
 		.dt = (float)frame->dt,
-		.display_res = glm::ivec2(ctx->swap_chain.extent.width, ctx->swap_chain.extent.height)
+		.resolution = glm::ivec2(ctx->swap_chain.extent.width, ctx->swap_chain.extent.height)
 	};
 
 	UploadContext uc = begin_upload(ctx, sizeof(GPUFramedata), alignof(GPUFramedata));

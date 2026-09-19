@@ -1,3 +1,0 @@
-shaders:
-  vert: shader/core/screen_quad2.vert.spv
-  frag: shader/core/gradient.frag.spv

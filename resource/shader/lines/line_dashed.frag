@@ -1,0 +1,39 @@
+#version 460 core
+#extension GL_GOOGLE_include_directive : require
+
+//------------------------------------------------------------------------------
+// Impl
+
+#include "core/shader/lines/line.glsl"
+#include "core/shader/lines/line_frag_defs.glsl"
+
+const uint type = JOIN_TYPE_ROUND;
+
+void main()
+{
+	JoinInfo join = create_join();
+
+	vec2 p = in_pos - join.center;
+	vec2 d = transpose(join.frame)*p;
+
+	FragColor = vec4(0,0,0,0);
+
+	if (clip_join(p,d,join,type)) 
+		discard;
+
+	vec2 uv = compute_corner_uv(p,d,join,type);
+ 	uv.x -= ftime();
+
+	float dash_scale = 3;
+	float dash_weight = 0.4;
+
+	float fx = mod(uv.x,(1 + dash_weight)*dash_scale) < dash_scale ? 1 : 0;
+
+	vec4 color = vec4(0.5,0,0,0.5);
+
+	FragColor = color * fx;
+
+	//if (d.x > 0)
+	//	FragColor = vec4(0,0,1,0.5);
+
+}

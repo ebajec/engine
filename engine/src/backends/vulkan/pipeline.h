@@ -58,7 +58,7 @@ struct ShaderLayoutMapping
 struct Shader
 {
 	VkShaderModule 	shader_module;
-	ShaderStage stage;
+	VkShaderStageFlags stage_flags;
 	std::shared_ptr<ShaderLayoutMapping> layout_map;
 };
 

@@ -341,7 +341,7 @@ int App::initialize(int argc, char *argv[])
 		.surface = surface		
 	};
 
-	ctx = ev2::create_context_for_vulkan(RESOURCE_PATH, vulkan_params);
+	ctx = ev2::create_context_for_vulkan(vulkan_params);
 
 #ifdef ENABLE_IMGUI
 	IMGUI_CHECKVERSION();
@@ -487,7 +487,7 @@ std::shared_ptr<ImageViewerPanel> App::open_image_viewer(ev2::ImageID image)
 
 	std::shared_ptr<ImageViewerPanel> panel( 
 		new ImageViewerPanel(this, pos.x, pos.y, width, height, 
-			"pipelines/core/screen_quad.yaml", panel_name.c_str())
+			"core://pipeline/screen_quad.yaml", panel_name.c_str())
 	);
 
 	if (panel->init(ctx, image) != App::OK) {

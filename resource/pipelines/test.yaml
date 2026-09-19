@@ -1,3 +1,0 @@
-shaders:
-  vert: shader/test.vert.spv
-  frag: shader/test.frag.spv

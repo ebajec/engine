@@ -14,13 +14,6 @@ MAKE_HANDLE_VERSIONED(Bindings);
 
 namespace ev2 {
 
-enum ShaderStage
-{
-	STAGE_VERTEX,
-	STAGE_FRAGMENT,
-	STAGE_COMPUTE,
-};
-
 enum Usage
 {
     USAGE_UNDEFINED,
