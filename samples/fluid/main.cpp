@@ -489,7 +489,7 @@ struct FluidApp : public App
 	uint64_t m_step = 0;
 	float m_rate = 1.f;
 	int bvh_level = 0;
-	int steps_per = 1;
+	int steps_per = 2;
 
 	FluidApp() : App(1200, 1200, "fluid") {
 	}
