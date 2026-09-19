@@ -470,8 +470,8 @@ ev2::Result parse_vertex_layout(const char *path, VertexInputLayout *p_out)
 			continue;
 
 		VkVertexInputAttributeDescription desc = {
-			.binding = 0,
 			.location = var->location,
+			.binding = 0,
 			.format = (VkFormat)var->format,
 			.offset = offset
 		};
@@ -1006,8 +1006,8 @@ ev2::Result bind_buffer(
 
 	binding->buf = BufferBinding{
 		.handle = buf_id,
-		.size = size,
 		.offset = offset,
+		.size = size,
 	};
 	return ev2::SUCCESS;
 }
