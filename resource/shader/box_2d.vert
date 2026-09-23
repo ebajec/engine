@@ -27,6 +27,8 @@ layout (push_constant) uniform PC
 	BVH bvh;
 } pc;
 
+layout (location = 0) out uint out_idx;
+
 void main()
 {
 	uint idx = gl_InstanceIndex;
@@ -42,6 +44,8 @@ void main()
 	uint vtx = gl_VertexIndex & 0x3;
 
 	vec2 pos = corners[vtx];
+
+	out_idx = gl_InstanceIndex;
 
 	gl_Position = u_view.pv * vec4(pc.world * vec3(pos, 1), 0, 1);
 }
