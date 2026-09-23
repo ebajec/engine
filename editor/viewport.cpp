@@ -1,79 +1,84 @@
-#include "panel.h"
+#include "editor.h"
+
+#include "viewport.h"
 #include "backends/imgui_impl_vulkan.h"
 #include "imgui_internal.h"
 
-ev2::RenderTargetID Viewport::get_target() {
+#include <format>
+#include <atomic>
+
+ev2::RenderTargetID Viewport2::get_target() {
 	return m_target;
 }
 
-glm::ivec2 Viewport::get_size() {
+glm::ivec2 Viewport2::get_size() {
 	return m_size;
 }
 
-glm::ivec2 Viewport::get_pos()
+glm::ivec2 Viewport2::get_pos()
 {
 	return m_pos;
 }
 
-bool Viewport::is_hovered() {
+bool Viewport2::is_hovered() {
 	return m_hovered;
 }
 
-bool Viewport::is_content_selected() {
+bool Viewport2::is_content_selected() {
 	return m_content_hovered && m_focused;
 }
 
-bool Viewport::is_focused() {
+bool Viewport2::is_focused() {
 	return m_focused;
 }
 
-Viewport::Viewport(
-	App * app,
-	ev2::GfxContext *ctx,
+static std::atomic_uint32_t g_ctr = 0;
+
+Viewport2::Viewport2(
 	const char *name, 
 	uint32_t x, uint32_t y,
 	uint32_t w, uint32_t h,
 	ev2::RenderTargetFlags flags
 )
 {
-	m_ctx = ctx;
-	m_app = app;
+	m_id = ++g_ctr;
 
 	m_target_flags = flags;
 
 	m_pos = glm::ivec2(x,y);
 	m_size = glm::ivec2(w,h);
-	m_name = name;
-	m_settings_name = m_name + "_Settings";
+	m_name = name ? name : std::format("Viewport2{}", m_id);
 }
 
-Viewport::~Viewport()
+Viewport2::~Viewport2()
 {
 	cleanup_render_target();
 }
 
-void Viewport::cleanup_render_target()
+void Viewport2::cleanup_render_target()
 {
 	if (m_target.is_valid()) {
-		ev2::destroy_render_target(m_ctx, m_target);
+		ev2::destroy_render_target(Editor::ctx(), m_target);
 	}
 	m_target = EV2_NULL_HANDLE(RenderTarget);
 }
 
-int Viewport::update(bool *was_resized)
+int Viewport2::update(int *p_flags)
 {
+	ev2::GfxContext *ctx = Editor::ctx();
+
 	if (m_needs_resize) {
 		cleanup_render_target();
 		imgui_texture = VK_NULL_HANDLE;
 
 		if (m_size.x <= 0 || m_size.y <= 0) {
-			return App::OK;
+			return Editor::OK;
 		}
 
-		m_target = ev2::create_render_target(m_ctx, (uint32_t)m_size.x, (uint32_t)m_size.y,
+		m_target = ev2::create_render_target(ctx, (uint32_t)m_size.x, (uint32_t)m_size.y,
 						 m_target_flags);
 		if (!m_target.is_valid()) {
-			return App::ERROR;
+			return Editor::ERROR;
 		}
 
 		VkImageView view = ev2::get_render_target_color_view(m_target);
@@ -85,28 +90,37 @@ int Viewport::update(bool *was_resized)
 		ev2::ImageID color_img = {};
 		ev2::get_render_target_images(m_target, &color_img, nullptr);
 
-		ev2::pre_destroy_callback(m_app->ctx, color_img,
-		[color_img, tex = imgui_texture](){
+		ev2::pre_destroy_callback(ctx, color_img,
+		[tex = imgui_texture](){
 			ImGui_ImplVulkan_RemoveTexture(tex);
 		});
 
-		if (was_resized)
-			*was_resized = true;
+		if (p_flags)
+			*p_flags |= RESIZED_BIT;
 		m_needs_resize = false;
 	}
 
-	return App::OK;
+	return Editor::OK;
 }
 
-bool Viewport::imgui()
+Viewport2 &Viewport2::extend_settings(std::function<void()>&& callback)
 {
+	settings_callbacks.push_back(std::move(callback));
+	return *this;
+}
+
+int Viewport2::imgui(int *p_flags)
+{
+	int status = update(p_flags);
+
+	if (status < Editor::OK)
+		return status;
+
 	if (ImGuiWindow* window = ImGui::FindWindowByName(m_name.c_str())) {
 		bool isDraggingThisWindow = ImGui::GetCurrentContext()->MovingWindow == window;
 
 		if (isDraggingThisWindow) {
 			ImVec2 pos = window->Pos;
-			ImVec2 size = window->Size;
-			ImVec2 displaySize = ImGui::GetIO().DisplaySize;
 
 			ImVec2 clamped = pos;
 			clamped.y = ImMax(pos.y, 0.0f);
@@ -118,12 +132,10 @@ bool Viewport::imgui()
 				window->Pos = clamped;
 			}
 		}
-
-		glm::ivec2 size = glm::ivec2(window->Size.x, window->Size.y);
 	}
 
-	ImGui::SetNextWindowPos(ImVec2(m_pos.x, m_pos.y), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowSize(ImVec2(m_size.x, m_size.y), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowPos(ImVec2((float)m_pos.x, (float)m_pos.y), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2((float)m_size.x, (float)m_size.y), ImGuiCond_FirstUseEver);
 
 	bool open = true;
 
@@ -137,8 +149,8 @@ bool Viewport::imgui()
 			}
 			if (ImGui::BeginPopup("panel_settings")) {
 				ImGui::Text("Settings");
-				if (settings_callback)
-					settings_callback();
+				for (const std::function<void()> &callback : settings_callbacks)
+		 			callback();
 				ImGui::EndPopup();
 			}
 			ImGui::EndMenuBar();
@@ -171,7 +183,7 @@ bool Viewport::imgui()
 			if (open && imgui_texture) {
 				ev2::ImageID color;
 				ev2::get_render_target_images(m_target, &color, nullptr);
-				ev2::cmd_use_image(m_app->gui_pass, color, ev2::USAGE_SAMPLED_GRAPHICS);
+				ev2::cmd_use_image(Editor::gui_pass(), color, ev2::USAGE_SAMPLED_GRAPHICS);
 
 				ImGui::ImageWithBg(
 					(ImTextureID)imgui_texture, 
@@ -186,5 +198,8 @@ bool Viewport::imgui()
 	}
 	ImGui::End();
 
-	return open;
+	if (!open && p_flags)
+		*p_flags |= SHOULD_CLOSE_BIT;
+
+	return open ? Editor::OK : Editor::SHOULD_CLOSE;
 }

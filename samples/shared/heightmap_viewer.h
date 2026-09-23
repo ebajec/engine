@@ -12,7 +12,7 @@
 struct HeightmapViewerPanel
 {
 	App *app;
-	std::unique_ptr<Panel> panel;
+	std::unique_ptr<Viewport> panel;
 
 	MotionCamera control;
 	glm::vec3 keydir = glm::vec3(0,0,0);

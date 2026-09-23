@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.27)
 set(CMAKE_CXX_STANDARD 20)
 
-include(clang-warnings)
+include(warnings)
 
 set(TARGET "engine")
 project(${TARGET})
@@ -77,4 +77,4 @@ endif()
 
 target_compile_options(${TARGET} PUBLIC -g)
 
-enable_clang_warnings(${TARGET})
+enable_warnings(${TARGET})

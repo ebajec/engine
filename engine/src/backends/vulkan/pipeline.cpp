@@ -50,7 +50,7 @@ static bool resolve_shader_spec(std::string_view spec, std::string *spv_path, st
 	return true;
 }
 
-ev2::Result read_spv(ev2::GfxContext *ctx, std::string_view path, std::vector<uint32_t> &code)
+static ev2::Result read_spv(ev2::GfxContext *ctx, std::string_view path, std::vector<uint32_t> &code)
 {
 	ev2::Result result =  ctx->vfs->read_all(path, [&code](size_t size) -> unsigned char* {
 		if (size % sizeof(uint32_t) != 0) {

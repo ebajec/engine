@@ -25,7 +25,7 @@ int HeightmapViewerPanel::init(App *app_, ev2::GfxContext *ctx, ev2::TextureID t
 {
 	app = app_;
 
-	panel = std::make_unique<Panel>(app_, ctx, "3D view", 700, 0, 500, 500, 
+	panel = std::make_unique<Viewport>(app_, ctx, "3D view", 700, 0, 500, 500, 
 		 ev2::RENDER_TARGET_CREATE_DEPTH_BIT | ev2::RENDER_TARGET_CREATE_COLOR_BIT
 	 );
 
@@ -116,6 +116,7 @@ int HeightmapViewerPanel::update(ev2::GfxContext *ctx)
 	if (app->input.mouse_mode == GLFW_CURSOR_DISABLED && panel->is_focused()) {
 		glm::dvec2 delta = app->input.get_mouse_delta()/(double)panel_size.x;
 		control.rotate(-delta.x, delta.y);
+		// TODO: Switch to using Editor::InputData
 		control.move(app->input.dt * glm::dvec3(speed*keydir));
 
 	}

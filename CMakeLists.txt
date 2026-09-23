@@ -81,5 +81,6 @@ endif()
 
 add_subdirectory(external)
 add_subdirectory(engine)
+add_subdirectory(editor)
 add_subdirectory(samples)
 

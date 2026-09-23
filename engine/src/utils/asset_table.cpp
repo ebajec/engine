@@ -68,7 +68,7 @@ static void monitor_callback(void *usr, utils::monitor_event_t event)
 	fs::path relpath;
 	try {
 		relpath = fs::relative(fullpath, monitor->mount->system_path);
-	} catch (std::exception e) {
+	} catch (const std::exception& e) {
 		log_error("%s", e.what());
 		return;
 	}

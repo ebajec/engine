@@ -22,7 +22,7 @@
 
 struct TestApp : public App
 {
-	std::unique_ptr<Panel> panel;
+	std::unique_ptr<Viewport> panel;
 	std::unique_ptr<GPUSort> sorter;
 	ev2::BufferID buffers[2] = {};
 	ev2::BufferID disp_buffer = {};
@@ -59,7 +59,7 @@ int TestApp::initialize(int argc, char **argv)
 	if (result)
 		return result;
 
-	panel.reset(new Panel(this, ctx, "Visualization", 100, 100, 250, 250));
+	panel.reset(new Viewport(this, ctx, "Visualization", 100, 100, 250, 250));
 
 	on_count_changed();
 	randomize();
@@ -268,6 +268,10 @@ void TestApp::destroy()
 {
 	App::terminate();
 }
+
+class Editor {
+	static int init();
+};
 
 int main(int argc, char *argv[])
 {

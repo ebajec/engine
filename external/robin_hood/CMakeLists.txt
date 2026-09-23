@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.27)
 set(CMAKE_CXX_STANDARD 20)
 
-include(clang-warnings)
+include(warnings)
 
 project(robin_hood)
 add_library(robin_hood INTERFACE)

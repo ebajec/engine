@@ -1,4 +1,6 @@
-#include "texture_viewer.h"
+#include "editor.h"
+
+#include "image_viewer.h"
 #include "ev2/utils/camera.h"
 
 #include "ev2/utils/log.h"
@@ -7,19 +9,19 @@
 #define PATH_MAX 4096
 #endif
 
-glm::vec2 ImageViewerPanel::get_grid_cursor_pos()
+glm::vec2 ImageViewer2::get_grid_cursor_pos()
 {
-	glm::ivec2 panel_size = panel->get_size();
-	glm::ivec2 panel_pos = panel->get_pos();
+	glm::ivec2 viewport_size = Viewport2::get_size();
+	glm::ivec2 viewport_pos = Viewport2::get_pos();
 	glm::mat4 screen_to_world = glm::inverse(rd.proj*rd.view);
 
-	glm::vec2 uv = (glm::vec2(app->input.mouse_pos[0]) -
-		glm::vec2(panel_pos.x, panel_pos.y)) / 
-		glm::vec2(panel_size.x, panel_size.y); 
+	glm::vec2 uv = (glm::vec2(Editor::input().mouse_pos[0]) -
+		glm::vec2(viewport_pos.x, viewport_pos.y)) / 
+		glm::vec2(viewport_size.x, viewport_size.y); 
 
 	glm::uvec2 image_size;
 
-	ev2::get_image_dims(app->ctx, image, &image_size.x, &image_size.y, nullptr);
+	ev2::get_image_dims(Editor::ctx(), image, &image_size.x, &image_size.y, nullptr);
 
 	uv = glm::vec2(uv.x, 1.f - uv.y);
 
@@ -31,21 +33,16 @@ glm::vec2 ImageViewerPanel::get_grid_cursor_pos()
 	return glm::vec2(uv); 
 }
 
-ImageViewerPanel::ImageViewerPanel(App *app, 
-	uint32_t x, uint32_t y, uint32_t w, uint32_t h, const char *pipeline, const char *name) : 
-	app(app)
+ImageViewer2::ImageViewer2(
+	uint32_t x, 
+	uint32_t y, 
+	uint32_t w, 
+	uint32_t h, 
+	const char *pipeline,
+	const char *name) :
+	Viewport2(name, x, y, w, h)
 {
-	static uint32_t ctr = 0;
-
-	panel_idx = ++ctr;
-
-	if (!name) {
-		std::string name_str = "Texture" + std::to_string(panel_idx);
-		name = name_str.c_str();
-	}
-
-	panel.reset(new Viewport(app, app->ctx, name, x, y, w, h));
-	panel->set_settings([this, ctx = app->ctx]{
+	extend_settings([this, ctx = Editor::ctx()]{
 		ImGui::BeginChild("FixedWidthWrapper", ImVec2(250, 0), ImGuiChildFlags_AutoResizeY);
 
 		uint32_t max_levels = 0, max_layers = 0;
@@ -54,9 +51,9 @@ ImageViewerPanel::ImageViewerPanel(App *app,
 		ev2::get_image_dims(ctx, this->image, nullptr, nullptr, &max_layers, &max_levels);
 
 		if (ImGui::CollapsingHeader("Mip level selector")) {
-			for (int i = 0; i <= max_levels - 1; ++i) {
+			for (uint32_t i = 0; i < max_levels; ++i) {
 				char namebuf[100];
-				sprintf(namebuf, "level_%d", i);
+				snprintf(namebuf, sizeof(namebuf), "level_%u", i);
 
 				if (ImGui::Selectable(namebuf, this->level == i)) {
 					sel_level = i;
@@ -65,9 +62,9 @@ ImageViewerPanel::ImageViewerPanel(App *app,
 		}
 
 		if (ImGui::CollapsingHeader("Layer selector")) {
-			for (int i = 0; i <= max_layers - 1; ++i) {
+			for (uint32_t i = 0; i < max_layers; ++i) {
 				char namebuf[100];
-				sprintf(namebuf, "layer_%d", i);
+				snprintf(namebuf, sizeof(namebuf), "layer_%u", i);
 
 				if (ImGui::Selectable(namebuf, this->layer == i)) {
 					sel_layer = i;
@@ -84,7 +81,7 @@ ImageViewerPanel::ImageViewerPanel(App *app,
 			}
 		}
 
-		if (sel_level != level || sel_layer == layer) {
+		if (sel_level != level || sel_layer != layer) {
 			this->level = sel_level;
 			this->layer = sel_layer;
 
@@ -92,7 +89,7 @@ ImageViewerPanel::ImageViewerPanel(App *app,
 		}
 		if (ImGui::CollapsingHeader("Pipeline", ImGuiTreeNodeFlags_DefaultOpen)) {
 
-			ImGui::PushID(this->panel_idx);
+			ImGui::PushID(Viewport2::get_id());
 
 			char path[PATH_MAX] {};
 			std::string text = "" + pipeline_path;
@@ -107,7 +104,7 @@ ImageViewerPanel::ImageViewerPanel(App *app,
 				if (this->pipeline_path.compare(path)) {
 					if (set_pipeline(path) != ev2::SUCCESS) {
 						log_warn("%s: Failed to set pipeline to %s", 
-							this->panel->get_name(),
+							this->get_name(),
 							path
 						);
 					}
@@ -121,50 +118,59 @@ ImageViewerPanel::ImageViewerPanel(App *app,
 	pipeline_path = pipeline;
 }
 
-void ImageViewerPanel::set_texture_filter(ev2::TextureFilter filter)
+ImageViewer2::~ImageViewer2()
 {
+	destroy(Editor::ctx());
+}
+
+void ImageViewer2::set_texture_filter(ev2::TextureFilter filter)
+{
+	ev2::GfxContext *ctx = Editor::ctx();
+
 	if (filter != rd.filter) {
-		ev2::destroy_texture(app->ctx, rd.tex);
-		rd.tex = ev2::create_texture(app->ctx, image, filter, level, layer);
+		ev2::destroy_texture(ctx, rd.tex);
+		rd.tex = ev2::create_texture(ctx, image, filter, level, layer);
 	}
 	rd.filter = filter;
 }
 
-int ImageViewerPanel::set_pipeline(const char *path)
+int ImageViewer2::set_pipeline(const char *path)
 {
-	ev2::GfxPipelineID pipeline = ev2::load_graphics_pipeline(app->ctx, path);
+	ev2::GfxContext *ctx = Editor::ctx();
+
+	ev2::GfxPipelineID pipeline = ev2::load_graphics_pipeline(ctx, path);
 
 	if (rd.pipeline.is_valid() && rd.pipeline == pipeline)
 		return 0;
 
 	if (!EV2_VALID(pipeline))
-		return App::ERROR;
+		return Editor::ERROR;
 
 	if (rd.bindings.is_valid()) {
-		ev2::destroy_bindings(app->ctx, rd.bindings);
+		ev2::destroy_bindings(ctx, rd.bindings);
 	}
 
 	ev2::BindingsID bindings = ev2::create_bindings(
-		app->ctx, pipeline, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_DYNAMIC);
+		ctx, pipeline, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_DYNAMIC);
 	rd.pipeline = pipeline;
 	rd.bindings = bindings;
 	pipeline_path = path;
 
-	return App::OK;
+	return Editor::OK;
 }
 
-int ImageViewerPanel::init(ev2::GfxContext *ctx, ev2::ImageID image) 
+int ImageViewer2::init(ev2::GfxContext *ctx, ev2::ImageID img)
 {
 	rd.camera = ev2::create_view(ctx, nullptr, nullptr);
 
-	int result = App::OK;
-	
-	result = set_image(ctx, image, 0, 0);
+	int result = Editor::OK;
+
+	result = set_image(ctx, img, 0, 0);
 	if (result)
 		return result;
 
 	if (!rd.camera.is_valid() || !rd.tex.is_valid()) {
-		result = App::ERROR;
+		result = Editor::ERROR;
 		goto error;
 	}
 
@@ -178,61 +184,61 @@ error:
 	return result;
 }
 
-int ImageViewerPanel::update(ev2::GfxContext *ctx)
+int ImageViewer2::update(ev2::GfxContext *ctx)
 {
-	bool was_resized = false;
+	int status = Editor::OK;
+	int flags = 0;
 
-	if (panel->update(&was_resized) != App::OK) {
-		return App::ERROR;
-	}
-
-	if (!panel->imgui()) {
-		return App::SHOULD_CLOSE;
+	if (status = Viewport2::imgui(&flags); status != Editor::OK) {
+		return status;
 	}
 
 	ev2::Result res = ev2::reset_bindings(ctx, rd.bindings);
 	if (res != ev2::SUCCESS)
-		return App::ERROR;
+		return Editor::ERROR;
 
-	res = ev2::bind_texture(app->ctx, rd.bindings, "u_tex", rd.tex);
+	res = ev2::bind_texture(ctx, rd.bindings, "u_tex", rd.tex);
 	if (res != ev2::SUCCESS)
-		return App::ERROR;
+		return Editor::ERROR;
 
-	ev2::flush_bindings(app->ctx, rd.bindings);
+	ev2::flush_bindings(ctx, rd.bindings);
 
-	glm::ivec2 panel_size = panel->get_size();
-	glm::ivec2 panel_pos = panel->get_pos();
+	glm::ivec2 viewport_size = get_size();
 
-	float aspect = (float)panel_size.y/(float)panel_size.x;
+	float aspect = (float)viewport_size.y/(float)viewport_size.x;
 
-	if (was_resized || panel->is_content_selected()) {
-		rd.zoom *= pow(2, app->input.scroll_delta.y);
+	const Editor::InputData &input = Editor::input();
+
+	const bool was_resized = flags & Viewport2::RESIZED_BIT;
+
+	if (was_resized || is_content_selected()) {
+		rd.zoom *= powf(2.f, (float)input.scroll_delta.y);
 		rd.proj = camera_proj_2d(aspect, rd.zoom);
 
-		if (!was_resized && app->input.left_mouse_pressed) {
-			glm::dvec2 delta = app->input.get_mouse_delta()/(double)panel->get_size().x; 
+		if (!was_resized && input.left_mouse_pressed) {
+			glm::dvec2 delta = input.get_mouse_delta()/(double)get_size().x; 
 			rd.center += 2.f*glm::vec2(glm::vec4(delta.x, -delta.y,0,0)/(aspect*rd.zoom));
 			rd.view[3] = glm::vec4(glm::inverse(glm::mat2(rd.view))*rd.center,0,1);
 		}
 
 		ev2::update_view(ctx, rd.camera, glm::value_ptr(rd.view), glm::value_ptr(rd.proj));
 	}
-	return EXIT_SUCCESS;
+	return Editor::OK;
 }
 
-int ImageViewerPanel::set_image(ev2::GfxContext *ctx, 
-	ev2::ImageID image, uint32_t level, uint32_t layer)
+int ImageViewer2::set_image(ev2::GfxContext *ctx,
+	ev2::ImageID img, uint32_t lvl, uint32_t lyr)
 {
-	this->image = image;
+	this->image = img;
 	if (rd.tex.is_valid())
 		ev2::destroy_texture(ctx, rd.tex);
 
-	rd.tex = ev2::create_texture(ctx, image, rd.filter, level, layer);
+	rd.tex = ev2::create_texture(ctx, img, rd.filter, lvl, lyr);
 
-	return rd.tex.is_valid() ? App::OK : App::ERROR;
+	return rd.tex.is_valid() ? Editor::OK : Editor::ERROR;
 }
 
-void ImageViewerPanel::record_draw(ev2::PassID pass)
+void ImageViewer2::record_draw(ev2::PassID pass)
 {
 	ev2::cmd_use_image(pass, image, ev2::USAGE_SAMPLED_GRAPHICS);
 	ev2::cmd_bind_gfx_pipeline(pass, rd.pipeline);
@@ -242,7 +248,7 @@ void ImageViewerPanel::record_draw(ev2::PassID pass)
 	});
 }
 
-void ImageViewerPanel::render(ev2::GfxContext *ctx)
+void ImageViewer2::render(ev2::GfxContext *ctx)
 {
 	if (!image.is_valid()) {
 		log_error("Image not initialized.");
@@ -255,18 +261,18 @@ void ImageViewerPanel::render(ev2::GfxContext *ctx)
 	}
 
 	ev2::GfxPassInfo pass_info = {
-		.target = panel->get_target(),
+		.target = get_target(),
 		.view = rd.camera,
 		.clear_color = true,
 		.clear_depth = true,
-		.name = panel->get_name()
+		.name = get_name()
 	};
 	ev2::PassID pass = ev2::begin_gfx_pass(ctx, &pass_info);
 	record_draw(pass);
 	ev2::end_pass(ctx, pass);
 }
 
-void ImageViewerPanel::destroy(ev2::GfxContext *ctx)
+void ImageViewer2::destroy(ev2::GfxContext *ctx)
 {
 	if (rd.bindings.is_valid())
 		ev2::destroy_bindings(ctx, rd.bindings);
@@ -274,6 +280,5 @@ void ImageViewerPanel::destroy(ev2::GfxContext *ctx)
 		ev2::destroy_texture(ctx, rd.tex);
 	if (rd.camera.is_valid())
 		ev2::destroy_view(ctx, rd.camera);
-	panel.reset();
 }
 

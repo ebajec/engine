@@ -1,23 +1,16 @@
-#ifndef TEXTURE_VIEWER_H
-#define TEXTURE_VIEWER_H
+#ifndef IMAGE_VIEWER_H
+#define IMAGE_VIEWER_H
 
-#include "app.h"
-#include "panel.h"
+#include "viewport.h"
 
 #include <ev2/pipeline.h>
 #include <ev2/resource.h>
 
-#include <memory>
+#include <glm/mat4x4.hpp>
 
-struct ImageViewerPanel
+struct ImageViewer2 : public Viewport2
 {
-	App *app;
-
-	std::unique_ptr<Viewport> panel;
-
 	std::string pipeline_path;
-
-	uint32_t panel_idx;
 
 	ev2::ImageID image;
 	uint32_t level = 0;
@@ -39,20 +32,20 @@ struct ImageViewerPanel
 		float zoom = 1.f;
 	} rd;
 
-	glm::vec2 world_cursor;
-	ImageViewerPanel(App *app, uint32_t x, uint32_t y, uint32_t w, uint32_t h, 
+	ImageViewer2(uint32_t x, uint32_t y, uint32_t w, uint32_t h, 
 					const char * pipeline = "core://pipeline/screen_quad.yaml", const char *name = nullptr);
+	~ImageViewer2();
 
 	int set_pipeline(const char *path);
 
 	void set_texture_filter(ev2::TextureFilter filter);
 
-	int set_image(ev2::GfxContext *ctx, ev2::ImageID image, uint32_t level, uint32_t layer);
+	int set_image(ev2::GfxContext *ctx, ev2::ImageID img, uint32_t lvl, uint32_t lyr);
 
-	int init(ev2::GfxContext *ctx, ev2::ImageID image);
+	int init(ev2::GfxContext *ctx, ev2::ImageID img);
 	int update(ev2::GfxContext *ctx);
 
-	// Render into the underlying panel's target, clearing old values
+	// Render into the underlying viewport's target, clearing old values
 	void render(ev2::GfxContext *ctx);
 	void destroy(ev2::GfxContext *ctx);
 	void record_draw(ev2::PassID pass);
@@ -60,4 +53,4 @@ struct ImageViewerPanel
 	glm::vec2 get_grid_cursor_pos();
 };
 
-#endif // TEXTURE_VIEWER_H
+#endif // IMAGE_VIEWER_H

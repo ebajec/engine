@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.27)
 set(CMAKE_CXX_STANDARD 23)
 
-include(clang-warnings)
+include(warnings)
 
 set(TARGET ev2_minimal)
 project(${TARGET})

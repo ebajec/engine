@@ -77,12 +77,12 @@ struct App
 		SHOULD_CLOSE = 1
 	};
 
-	uint64_t frame_counter = 0;
-
 	InputData input;
 	WindowData win;
 
 	ev2::GfxContext *ctx;
+
+	uint64_t frame_counter = 0;
 
 	std::vector<key_callback_t> key_callbacks;
 

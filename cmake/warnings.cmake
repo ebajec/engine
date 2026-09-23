@@ -1,0 +1,40 @@
+function(enable_warnings target)
+    target_compile_options(${target} PRIVATE
+		# Base warnings
+		-Wall                  # all the important warnings
+		-Wextra                # extra, useful warnings
+		-Wpedantic             # ISO-compliance
+		# Conversion and sign
+		-Wconversion           # detect implicit conversions
+		# Code correctness
+		-Wshadow               # shadowed variables
+		-Wnull-dereference     # null-pointer derefs
+		-Wdouble-promotion     # implicit float→double
+		-Wformat=2             # printf/scanf format checking
+		-Wcast-align           # cast increases alignment requirement
+		-Wmissing-declarations # non-static functions must be declared
+		# Unused / unreachable
+		#-Wunused-variable      # unused local variables
+		-Wunreachable-code     # code that can never be reached
+		# Control flow
+		-Wimplicit-fallthrough # switch-case fall-through
+		-Wswitch-enum          # switches over enums should handle all values
+		-Wno-unused-variable
+
+		-Wno-unused-parameter
+		-Wno-format-nonliteral
+		-Wno-sign-conversion
+		-Wno-missing-field-initializers
+    )
+  	if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR
+      	CMAKE_C_COMPILER_ID  MATCHES "Clang")
+    	target_compile_options(${target} PRIVATE
+			-Wmissing-prototypes   # use of functions without declarations
+			-Wno-gnu-zero-variadic-macro-arguments
+			-Wno-gnu-anonymous-struct
+			-Wno-nullability-extension
+			-Wno-nested-anon-types
+			-Wthread-safety
+		)
+  	endif()
+endfunction()

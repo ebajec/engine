@@ -245,7 +245,6 @@ struct ImageViewKey
 		}
 	};
 };
-#pragma gcc diagnostic pop
 #pragma clang diagnostic pop
 
 //------------------------------------------------------------------------------
