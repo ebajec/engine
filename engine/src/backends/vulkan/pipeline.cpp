@@ -66,6 +66,7 @@ static ev2::Result read_spv(ev2::GfxContext *ctx, std::string_view path, std::ve
 
 	return result;
 }
+
 static std::string get_layout_string(const ev2::ShaderLayoutMapping& layout)
 {
 	std::string info;
@@ -96,10 +97,6 @@ static std::string get_shader_info(ev2::Shader *shader)
 
 	return info;
 }
-
-
-//------------------------------------------------------------------------------
-// NEW GOOD
 
 static ev2::Result get_vk_shader_stage_flags_from_glsl(
 	const std::string_view path, 
@@ -294,7 +291,7 @@ static ev2::Result load_shader_file(ev2::GfxContext *ctx, const char *path, ev2:
 	if (result)
 		return result;
 
-	VkShaderStageFlags flags;
+	VkShaderStageFlags flags = 0;
 	result = get_vk_shader_stage_flags_from_glsl(path, &flags);
 
 	if (result)
