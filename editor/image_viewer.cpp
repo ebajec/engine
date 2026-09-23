@@ -38,6 +38,7 @@ ImageViewer2::ImageViewer2(
 	uint32_t y, 
 	uint32_t w, 
 	uint32_t h, 
+	uint32_t flags,
 	const char *pipeline,
 	const char *name) :
 	Viewport2(name, x, y, w, h)
@@ -159,37 +160,12 @@ int ImageViewer2::set_pipeline(const char *path)
 	return Editor::OK;
 }
 
-int ImageViewer2::init(ev2::GfxContext *ctx, ev2::ImageID img)
-{
-	rd.camera = ev2::create_view(ctx, nullptr, nullptr);
-
-	int result = Editor::OK;
-
-	result = set_image(ctx, img, 0, 0);
-	if (result)
-		return result;
-
-	if (!rd.camera.is_valid() || !rd.tex.is_valid()) {
-		result = Editor::ERROR;
-		goto error;
-	}
-
-	result = set_pipeline(pipeline_path.c_str());
-	if (result)
-		goto error;;
-
-	return result;
-error:
-	destroy(ctx);
-	return result;
-}
-
 int ImageViewer2::update(ev2::GfxContext *ctx)
 {
 	int status = Editor::OK;
-	int flags = 0;
+	int update_flags = 0;
 
-	if (status = Viewport2::imgui(&flags); status != Editor::OK) {
+	if (status = Viewport2::imgui(&update_flags); status != Editor::OK) {
 		return status;
 	}
 
@@ -209,7 +185,7 @@ int ImageViewer2::update(ev2::GfxContext *ctx)
 
 	const Editor::InputData &input = Editor::input();
 
-	const bool was_resized = flags & Viewport2::RESIZED_BIT;
+	const bool was_resized = update_flags & Viewport2::RESIZED_BIT;
 
 	if (was_resized || is_content_selected()) {
 		rd.zoom *= powf(2.f, (float)input.scroll_delta.y);
@@ -229,6 +205,18 @@ int ImageViewer2::update(ev2::GfxContext *ctx)
 int ImageViewer2::set_image(ev2::GfxContext *ctx,
 	ev2::ImageID img, uint32_t lvl, uint32_t lyr)
 {
+	int  result = Editor::OK;
+
+	if (!rd.camera.is_valid())
+		rd.camera = ev2::create_view(ctx, nullptr, nullptr);
+
+	if (!rd.pipeline.is_valid()) {
+		result = set_pipeline(pipeline_path.c_str());
+	}
+
+	if (result)
+		return result;
+
 	this->image = img;
 	if (rd.tex.is_valid())
 		ev2::destroy_texture(ctx, rd.tex);

@@ -16,6 +16,7 @@
 #include <csignal>
 #include <atomic>
 #include <memory>
+#include <unordered_set>
 
 #if defined (__linux__) || defined(__APPLE__)
 // posix
@@ -40,17 +41,17 @@ struct EditorState {
 
 	std::unordered_map<
 		ev2::ImageID, 
-		std::shared_ptr<ImageViewer2>
-	> image_viewers;
-
-	std::vector<ev2::ImageID> to_close_viewers;
+		std::weak_ptr<ImageViewer2>
+	> inspector_image_viewers;
+	std::unordered_set<std::shared_ptr<ImageViewer2>> image_viewers;
 
 	ev2::PassID gui_pass;
 
 	ImGuiID root_dockspace;
 
-	bool should_close = false;
-	bool has_shutdown = false;
+	std::atomic_bool should_close = false;
+	std::atomic_bool has_shutdown = false;
+	std::atomic_bool has_initialized = false;
 
 	//------------------------------------------------------------------------------
 	
@@ -59,8 +60,12 @@ struct EditorState {
 	void setup_root_dockspace();
 	void imgui();
 
-	std::shared_ptr<ImageViewer2> open_image_viewer(ev2::ImageID image);
-	void close_image_viewer(ev2::ImageID image);
+	std::shared_ptr<ImageViewer2> open_image_viewer(
+		ev2::ImageID image,
+		const char *name = nullptr,
+		const char *pipeline = nullptr,
+		bool auto_render = true
+	);
 } g;
 
 void EditorState::update_input()
@@ -141,12 +146,13 @@ void EditorState::setup_root_dockspace()
     ImGui::End();
 }
 
-std::shared_ptr<ImageViewer2> EditorState::open_image_viewer(ev2::ImageID image)
+std::shared_ptr<ImageViewer2> EditorState::open_image_viewer(
+	ev2::ImageID image,
+	const char *name,
+	const char *pipeline,
+	bool auto_render
+)
 {
-	auto it = image_viewers.find(image);
-	if (it != image_viewers.end())
-		return it->second;
-
 	static int width = 500;
 	static int height = 500;
 
@@ -155,37 +161,35 @@ std::shared_ptr<ImageViewer2> EditorState::open_image_viewer(ev2::ImageID image)
 		glm::vec2(width, height)
 	));
 
-	const char *name = ev2::get_image_name(ctx, image);
+	if (!pipeline) {
+		pipeline = "core://pipeline/screen_quad.yaml";
+	}
 
 	std::string panel_name = "Viewer: "; 
+
 	if (name)
-		panel_name += name;
+		panel_name = name;
+	if (const char *img_name = ev2::get_image_name(ctx, image))
+		panel_name += img_name;
 	else 
 		panel_name += "Image" + std::to_string(image.id);
 
+	uint32_t flags = 
+		ImageViewer2::EDITOR_OWNED_BIT |
+		(auto_render * ImageViewer2::AUTO_RENDERED_BIT);
+
 	std::shared_ptr<ImageViewer2> viewer( 
-		new ImageViewer2(pos.x, pos.y, width, height, 
-			"core://pipeline/screen_quad.yaml", panel_name.c_str())
+		new ImageViewer2(pos.x, pos.y, width, height, flags, 
+			pipeline, name)
 	);
 
-	if (viewer->init(ctx, image) != OK) {
+	if (viewer->set_image(ctx, image, 0, 0) != OK) {
 		return nullptr;
 	}
 
-	image_viewers[image] = viewer;
+	image_viewers.insert(viewer);
+
 	return viewer;
-}
-
-void EditorState::close_image_viewer(ev2::ImageID image)
-{
-	auto it = image_viewers.find(image);
-
-	if (it == image_viewers.end())
-		return;
-
-	it->second.reset();
-	
-	image_viewers.erase(it);
 }
 
 static inline void plot_frame_times(float delta)
@@ -255,13 +259,28 @@ void EditorState::imgui()
 
 void image_viewer_open_callback(void *usr, ev2::ImageID image)
 {
-	EditorState *app = static_cast<EditorState*>(usr);
-	app->open_image_viewer(image);
+	auto it = g.inspector_image_viewers.find(image);
+	if (it != g.inspector_image_viewers.end())
+		return;
+
+	std::shared_ptr<ImageViewer2> viewer = g.open_image_viewer(image);
+
+	g.inspector_image_viewers[image] = viewer;
 }
 void image_viewer_close_callback(void *usr, ev2::ImageID image)
 {
 	EditorState *app = static_cast<EditorState*>(usr);
-	app->close_image_viewer(image);
+
+	auto it = g.inspector_image_viewers.find(image);
+
+	if (it == g.inspector_image_viewers.end())
+		return;
+
+	if (std::shared_ptr<ImageViewer2> viewer = it->second.lock()) {
+		g.image_viewers.erase(viewer);
+	}
+
+	g.inspector_image_viewers.erase(it);
 }
 
 //------------------------------------------------------------------------------
@@ -519,7 +538,9 @@ int init(int argc, char *argv[], const char *title, int w, int h)
 
 	std::signal(SIGINT, handle_sigint);
 
-	return ERROR;
+	g.has_initialized = true;
+
+	return OK;
 }
 
 int begin_frame()
@@ -578,24 +599,34 @@ int begin_frame()
 
 	g.gui_pass = ev2::begin_gfx_pass(g.ctx, &pass_info);
 
-	for (const auto&[image, viewer] : g.image_viewers) {
-		if (viewer->update(g.ctx) == SHOULD_CLOSE) {
-			g.to_close_viewers.push_back(image);
+	for (auto it = g.image_viewers.begin(); it != g.image_viewers.end();) {
+		ImageViewer2 &viewer = *(*it); 
+		if (viewer.update(g.ctx) == SHOULD_CLOSE) {
+			it = g.image_viewers.erase(it);
+		} else {
+			++it;
 		}
 	}
-	std::vector<ev2::ImageID> delete_list = std::move(g.to_close_viewers);
 
-	for (ev2::ImageID image : delete_list) {
-		g.close_image_viewer(image);
-	}
+	//std::vector<ev2::ImageID> delete_list;
+	//for (const auto&[image, viewer] : g.inspector_image_viewers) {
+	//	if (viewer->update(g.ctx) == SHOULD_CLOSE) {
+	//		delete_list.push_back(image);
+	//	}
+	//}
+
+	//for (ev2::ImageID image : delete_list) {
+	//	g.close_inspector_image_viewer(image);
+	//}
 
 	return result;
 }
 
 int end_frame()
 {
-	for (const auto &[image, viewer] : g.image_viewers) {
-		viewer->render(g.ctx);
+	for (const std::shared_ptr<ImageViewer2> & viewer : g.image_viewers) {
+		if (viewer->is_auto_rendered())
+			viewer->render(g.ctx);
 	}
 
 #ifdef ENABLE_IMGUI
@@ -615,7 +646,7 @@ int end_frame()
 
 void shutdown()
 {
-	g.image_viewers.clear();
+	g.inspector_image_viewers.clear();
 #ifdef ENABLE_IMGUI
 	ImGui_ImplVulkan_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
@@ -634,32 +665,43 @@ void shutdown()
 
 ev2::GfxContext *ctx()
 {
-	assert(!g.has_shutdown);
+	assert(!g.has_shutdown && g.has_initialized);
 	return g.ctx;
 }
 
 const InputData &input()
 {
-	assert(!g.has_shutdown);
+	assert(!g.has_shutdown && g.has_initialized);
 	return g.input;
 }
 
 WindowData &window()
 {
-	assert(!g.has_shutdown);
+	assert(!g.has_shutdown && g.has_initialized);
 	return g.win;
 }
 
 bool should_close()
 {
-	assert(!g.has_shutdown);
+	assert(!g.has_shutdown && g.has_initialized);
 	return g.should_close;
 }
 
 ev2::PassID gui_pass()
 {
-	assert(!g.has_shutdown);
+	assert(!g.has_shutdown && g.has_initialized);
 	return g.gui_pass;
+}
+
+std::shared_ptr<ImageViewer2> open_image_viewer(
+	ev2::ImageID image,
+	const char *name,
+	const char *pipeline,
+	bool auto_render
+)
+{
+	assert(!g.has_shutdown && g.has_initialized);
+	return g.open_image_viewer(image, name, pipeline, auto_render);
 }
 
 } // namespace Editor

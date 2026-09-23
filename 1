@@ -40,10 +40,11 @@ struct EditorState {
 
 	uint64_t frame_counter = 0;
 
+	// Image viewers created from the resource inspector menu
 	std::unordered_map<
 		ev2::ImageID, 
 		std::shared_ptr<ImageViewer2>
-	> image_viewers;
+	> image_viewers_internal;
 
 	std::vector<ev2::ImageID> to_close_viewers;
 
@@ -145,8 +146,8 @@ void EditorState::setup_root_dockspace()
 
 std::shared_ptr<ImageViewer2> EditorState::open_image_viewer(ev2::ImageID image)
 {
-	auto it = image_viewers.find(image);
-	if (it != image_viewers.end())
+	auto it = image_viewers_internal.find(image);
+	if (it != image_viewers_internal.end())
 		return it->second;
 
 	static int width = 500;
@@ -166,7 +167,7 @@ std::shared_ptr<ImageViewer2> EditorState::open_image_viewer(ev2::ImageID image)
 		panel_name += "Image" + std::to_string(image.id);
 
 	std::shared_ptr<ImageViewer2> viewer( 
-		new ImageViewer2(pos.x, pos.y, width, height, 
+		new ImageViewer2(pos.x, pos.y, width, height, 0, 
 			"core://pipeline/screen_quad.yaml", panel_name.c_str())
 	);
 
@@ -174,20 +175,20 @@ std::shared_ptr<ImageViewer2> EditorState::open_image_viewer(ev2::ImageID image)
 		return nullptr;
 	}
 
-	image_viewers[image] = viewer;
+	image_viewers_internal[image] = viewer;
 	return viewer;
 }
 
 void EditorState::close_image_viewer(ev2::ImageID image)
 {
-	auto it = image_viewers.find(image);
+	auto it = image_viewers_internal.find(image);
 
-	if (it == image_viewers.end())
+	if (it == image_viewers_internal.end())
 		return;
 
 	it->second.reset();
 	
-	image_viewers.erase(it);
+	image_viewers_internal.erase(it);
 }
 
 static inline void plot_frame_times(float delta)
@@ -580,7 +581,7 @@ int begin_frame()
 
 	g.gui_pass = ev2::begin_gfx_pass(g.ctx, &pass_info);
 
-	for (const auto&[image, viewer] : g.image_viewers) {
+	for (const auto&[image, viewer] : g.image_viewers_internal) {
 		if (viewer->update(g.ctx) == SHOULD_CLOSE) {
 			g.to_close_viewers.push_back(image);
 		}
@@ -596,7 +597,7 @@ int begin_frame()
 
 int end_frame()
 {
-	for (const auto &[image, viewer] : g.image_viewers) {
+	for (const auto &[image, viewer] : g.image_viewers_internal) {
 		viewer->render(g.ctx);
 	}
 
@@ -617,7 +618,7 @@ int end_frame()
 
 void shutdown()
 {
-	g.image_viewers.clear();
+	g.image_viewers_internal.clear();
 #ifdef ENABLE_IMGUI
 	ImGui_ImplVulkan_Shutdown();
 	ImGui_ImplGlfw_Shutdown();

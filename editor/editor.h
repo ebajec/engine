@@ -17,6 +17,11 @@
 #include <imgui.h>
 #include <implot.h>
 
+//stl
+#include <memory>
+
+struct ImageViewer2;
+
 namespace Editor
 {
 	enum {
@@ -72,6 +77,13 @@ namespace Editor
 
 	bool should_close();
 	ev2::PassID gui_pass();
+
+	std::shared_ptr<ImageViewer2> open_image_viewer(
+		ev2::ImageID image,
+		const char *name,
+		const char *pipeline,
+		bool auto_render = true
+	);
 }
 
 #endif //EDITOR_H

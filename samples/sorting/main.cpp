@@ -1,6 +1,8 @@
-#include "app.h"
-#include "panel.h"
 #include "gpu_sort.h"
+
+#include "editor.h"
+#include "viewport.h"
+#include "project_mounts.h"
 
 #include <ev2/utils/log.h>
 #include <ev2/utils/camera.h>
@@ -20,9 +22,11 @@
 #include <algorithm>
 #include <cstdlib>
 
-struct TestApp : public App
+struct TestApp
 {
-	std::unique_ptr<Viewport> panel;
+	ev2::GfxContext *ctx;
+
+	std::unique_ptr<Viewport2> viewport;
 	std::unique_ptr<GPUSort> sorter;
 	ev2::BufferID buffers[2] = {};
 	ev2::BufferID disp_buffer = {};
@@ -40,8 +44,6 @@ struct TestApp : public App
 
 	bool perpetual_sort = false;
 
-	TestApp() : App(1200, 500, "GPU Sorting") {}
-
 	void on_count_changed();
 	void reset();
 	void randomize();
@@ -55,11 +57,9 @@ struct TestApp : public App
 
 int TestApp::initialize(int argc, char **argv)
 {
-	int result = app_initialize(this, argc, argv);
-	if (result)
-		return result;
+	ctx = Editor::ctx();
 
-	panel.reset(new Viewport(this, ctx, "Visualization", 100, 100, 250, 250));
+	viewport.reset(new Viewport2("Visualization", 100, 100, 250, 250));
 
 	on_count_changed();
 	randomize();
@@ -67,7 +67,7 @@ int TestApp::initialize(int argc, char **argv)
 
 	camera = ev2::create_view(ctx, nullptr, nullptr);
 
-	return result;
+	return Editor::OK;
 }
 
 void TestApp::on_count_changed()
@@ -156,7 +156,7 @@ void TestApp::reset()
 
 int TestApp::update()
 {
-	int result = EXIT_SUCCESS;
+	int result = Editor::OK;
 
 	ImGui::Begin("Editor");
 
@@ -187,12 +187,12 @@ int TestApp::update()
 
 	ImGui::End();
 
-	panel->update();
-	panel->imgui();
+	if (result = viewport->imgui(nullptr); result != Editor::OK)
+		return result;
 
-	zoom *= (float)pow(1.2, input.scroll_delta.y);
+	zoom *= (float)pow(1.2, Editor::input().scroll_delta.y);
 
-	glm::vec2 size = panel->get_size();
+	glm::vec2 size = viewport->get_size();
 	glm::mat4 view = glm::mat4(1.f);
 	view[0][0] = 2.f; 
 	view[1][1] = 2.f; 
@@ -202,6 +202,8 @@ int TestApp::update()
 	glm::mat4 proj = camera_proj_2d(size.y/size.x, zoom);
 
 	ev2::update_view(ctx, camera, glm::value_ptr(view), glm::value_ptr(proj));
+
+	render();
 
 	return result;
 }
@@ -225,7 +227,7 @@ void TestApp::render()
 		return;
 
 	ev2::GfxPassInfo pass_info = {
-		.target = panel->get_target(),
+		.target = viewport->get_target(),
 		.view = camera
 	};
 	ev2::PassID pass = ev2::begin_gfx_pass(ctx, &pass_info);
@@ -254,37 +256,46 @@ void TestApp::render()
 		vkCmdDraw(cmds, 6, count, 0, 0);
 	});
 
-	pc.values = ev2::get_buffer_device_address(ctx, real_buffer);
-	pc.color = 0xFF0000FF;
+	if (real_buffer.is_valid()) {
+		pc.values = ev2::get_buffer_device_address(ctx, real_buffer);
+		pc.color = 0xFF0000FF;
 
-	ev2::cmd_push_constant(pass, p_points, 0, sizeof(pc), &pc);
-	ev2::cmd_custom(pass, [count = count](VkCommandBuffer cmds) {
-		vkCmdDraw(cmds, 6, count, 0, 0);
-	});
+		ev2::cmd_push_constant(pass, p_points, 0, sizeof(pc), &pc);
+		ev2::cmd_custom(pass, [count = count](VkCommandBuffer cmds) {
+			vkCmdDraw(cmds, 6, count, 0, 0);
+		});
+	}
 
 	ev2::end_pass(ctx, pass);
 }
 void TestApp::destroy()
 {
-	App::terminate();
 }
 
-class Editor {
-	static int init();
-};
+bool should_exit(int status)
+{
+	return status != Editor::OK;
+}
 
 int main(int argc, char *argv[])
 {
 	std::unique_ptr<TestApp> app (new TestApp{});
 
-	if (app->initialize(argc, argv) != App::OK)
+	int result = Editor::OK;
+
+	if (result = Editor::init(argc, argv); result < Editor::OK)
+		return result;
+
+	add_project_mounts(Editor::ctx());
+
+	if (app->initialize(argc, argv) != Editor::OK)
 		return EXIT_FAILURE;
 
 	int status;
 
 	for (;;)
 	{
-		status = app->begin_frame();
+		status = Editor::begin_frame();
 		if (should_exit(status))
 			break;
 
@@ -292,9 +303,7 @@ int main(int argc, char *argv[])
 		if (should_exit(status))
 			break;
 
-		app->render();
-
-		status = app->end_frame();
+		status = Editor::end_frame();
 		if (should_exit(status))
 			break;
 	}

@@ -12,6 +12,7 @@ add_executable(${TARGET} ${SOURCES})
 
 target_link_libraries(${TARGET} PRIVATE
 	samples-shared
+	ev2-editor
 	engine
 )
 
