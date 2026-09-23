@@ -1,0 +1,5 @@
+shaders:
+  vert: core://shader/box_2d.vert
+  frag: fluid://shader/box_color.frag
+input:
+  topology: LINE_STRIP

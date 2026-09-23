@@ -529,7 +529,7 @@ int FluidApp::initialize(int argc, char **argv)
 		v_tex[i] = ev2::create_texture(ctx, sim->v_proj_img[i], ev2::FILTER_BILINEAR);
 	}
 
-	result = main_panel->init(ctx, sim->solid_mask_img); 
+	result = main_panel->init(ctx, sim->lap_p_img); 
 	if (result)
 		return result;
 	main_panel->panel->set_closable(false);
@@ -727,7 +727,7 @@ void FluidApp::render()
 			.bvh = ev2::get_buffer_device_address(ctx, sim->particle_bvh)
 		};
 
-		ev2::GfxPipelineID p_boxes = ev2::load_graphics_pipeline(ctx, "core://pipeline/box_2d.yaml");
+		ev2::GfxPipelineID p_boxes = ev2::load_graphics_pipeline(ctx, "fluid://pipeline/particle_box.yaml");
 		ev2::cmd_use_buffer(pass, sim->particle_bvh, ev2::USAGE_STORAGE_READ_GRAPHICS);
 		ev2::cmd_push_constant(pass, p_boxes, 0, sizeof(box_pc), &box_pc);
 		ev2::cmd_bind_gfx_pipeline(pass, p_boxes);

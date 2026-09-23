@@ -68,7 +68,7 @@ vec2 cursor_jet(vec2 c)
 
 	vec2 d = c - p1;
 	float f = length(d)/15;
-	return -2*((speed > 1e-3 ? 0.1*normalize(vel) : vec2(0)) + normalize(d)) * 1/(1 + f*f*f);;
+	return -3*((speed > 1e-3 ? 0.1*normalize(vel) : vec2(0)) + normalize(d)) * 1/(1 + f*f*f);;
 
 	vec2 O = p2 - vel*0.25;
 
