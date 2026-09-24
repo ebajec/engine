@@ -16,7 +16,7 @@
 #include <ev2/pipeline.h>
 #include <ev2/resource.h>
 
-#include <ev2/utils/camera.h>
+#include <ev2/utils/camera_math.h>
 #include <ev2/utils/geometry.h>
 
 // glm

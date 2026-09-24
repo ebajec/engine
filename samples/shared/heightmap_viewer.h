@@ -4,7 +4,7 @@
 #include "app.h"
 #include "panel.h"
 
-#include <ev2/utils/camera.h>
+#include <ev2/utils/camera_math.h>
 
 
 #include <memory>

@@ -1,16 +1,20 @@
 #include "gpu_sort.h"
 
-#include "editor.h"
-#include "viewport.h"
+#include "ev2/editor.h"
+#include "ev2/viewport.h"
+
+#include "ev2/panning_camera.h"
+#include "ev2/motion_camera.h"
+
 #include "project_mounts.h"
 
 #include <ev2/utils/log.h>
-#include <ev2/utils/camera.h>
+#include <ev2/utils/camera_math.h>
 
 #include <ev2/context.h>
 #include <ev2/resource.h>
 
-#include <ev2/utils/camera.h>
+#include <ev2/utils/camera_math.h>
 #include <ev2/utils/geometry.h>
 
 // glm
@@ -27,11 +31,12 @@ struct TestApp
 	ev2::GfxContext *ctx;
 
 	std::unique_ptr<Viewport2> viewport;
+	std::shared_ptr<PanningCamera> camera;
+
 	std::unique_ptr<GPUSort> sorter;
 	ev2::BufferID buffers[2] = {};
 	ev2::BufferID disp_buffer = {};
 	ev2::BufferID real_buffer = {};
-	ev2::ViewID camera = {};
 
 	int bits = 4;
 	int count = 16;
@@ -52,20 +57,30 @@ struct TestApp
 	int initialize(int argc, char **argv);
 	int update();
 	void render();
-	void destroy();
+
+	~TestApp();
 };
+
+TestApp::~TestApp()
+{
+	if (real_buffer.is_valid())
+		ev2::destroy_buffer(ctx, real_buffer);
+	for (int i = 0; i < 2; ++i)
+		if (buffers[i].is_valid())
+			ev2::destroy_buffer(ctx, buffers[i]);
+}
 
 int TestApp::initialize(int argc, char **argv)
 {
 	ctx = Editor::ctx();
 
+	camera = std::make_shared<PanningCamera>(glm::dvec2(0.5, 0.5), 1.0);
 	viewport.reset(new Viewport2("Visualization", 100, 100, 250, 250));
+	viewport->set_camera(camera);
 
 	on_count_changed();
 	randomize();
 	reset();
-
-	camera = ev2::create_view(ctx, nullptr, nullptr);
 
 	return Editor::OK;
 }
@@ -82,6 +97,9 @@ void TestApp::on_count_changed()
 		buffers[i] = ev2::create_buffer(ctx, sz,
 			ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT | ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT); 
 	}
+	if (real_buffer.is_valid())
+		ev2::destroy_buffer(ctx, real_buffer);
+
 	real_buffer = ev2::create_buffer(ctx, sz,
 		ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT | ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT); 
 }
@@ -187,25 +205,13 @@ int TestApp::update()
 
 	ImGui::End();
 
-	if (result = viewport->imgui(nullptr); result != Editor::OK)
+	// never close the viewport
+	if (result = viewport->imgui(nullptr); result < Editor::OK)
 		return result;
-
-	zoom *= (float)pow(1.2, Editor::input().scroll_delta.y);
-
-	glm::vec2 size = viewport->get_size();
-	glm::mat4 view = glm::mat4(1.f);
-	view[0][0] = 2.f; 
-	view[1][1] = 2.f; 
-	view[3][0] = -1.f; 
-	view[3][1] = -1.f; 
-
-	glm::mat4 proj = camera_proj_2d(size.y/size.x, zoom);
-
-	ev2::update_view(ctx, camera, glm::value_ptr(view), glm::value_ptr(proj));
 
 	render();
 
-	return result;
+	return Editor::OK;
 }
 
 void TestApp::exec_sort()
@@ -228,7 +234,7 @@ void TestApp::render()
 
 	ev2::GfxPassInfo pass_info = {
 		.target = viewport->get_target(),
-		.view = camera
+		.view = viewport->get_view()
 	};
 	ev2::PassID pass = ev2::begin_gfx_pass(ctx, &pass_info);
 
@@ -268,13 +274,10 @@ void TestApp::render()
 
 	ev2::end_pass(ctx, pass);
 }
-void TestApp::destroy()
-{
-}
 
 bool should_exit(int status)
 {
-	return status != Editor::OK;
+	return status < Editor::OK || status == Editor::SHOULD_CLOSE;
 }
 
 int main(int argc, char *argv[])
@@ -283,7 +286,7 @@ int main(int argc, char *argv[])
 
 	int result = Editor::OK;
 
-	if (result = Editor::init(argc, argv); result < Editor::OK)
+	if (result = Editor::init(argc, argv, "Sorting", 1200, 800); result < Editor::OK)
 		return result;
 
 	add_project_mounts(Editor::ctx());
@@ -308,7 +311,8 @@ int main(int argc, char *argv[])
 			break;
 	}
 
-	app->destroy();
+	app.reset(nullptr);
+	Editor::shutdown();
 
-	return status;
+	return status < 0 ? status : 0;
 }

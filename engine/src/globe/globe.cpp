@@ -6,8 +6,6 @@
 #include <ev2/globe/globe.h>
 #include <ev2/globe/tiling.h>
 
-#include <ev2/utils/camera.h>
-#include <ev2/utils/geometry.h>
 #include <ev2/utils/geometry.h>
 
 #include "debug/box_debug_view.h"
@@ -889,7 +887,7 @@ ev2::Result globe_update(Globe *globe, GlobeUpdateInfo *info)
 	double resolution = tile_factor((uint8_t)globe->dbg.zoom);
 
 	glm::mat4 pv = p_camera->proj*p_camera->view;
-	glm::dvec3 pos = camera_get_pos(p_camera->view);
+	glm::dvec3 pos = -glm::vec3(p_camera->view[3])*glm::mat3(p_camera->view);
 
 	frustum_t frust = camera_frustum(pv);
 

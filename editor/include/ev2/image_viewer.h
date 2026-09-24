@@ -1,12 +1,14 @@
-#ifndef IMAGE_VIEWER_H
-#define IMAGE_VIEWER_H
+#ifndef EV2_IMAGE_VIEWER_H
+#define EV2_IMAGE_VIEWER_H
 
-#include "viewport.h"
+#include "ev2/viewport.h"
 
 #include <ev2/pipeline.h>
 #include <ev2/resource.h>
 
 #include <glm/mat4x4.hpp>
+
+struct PanningCamera;
 
 class ImageViewer2 : public Viewport2
 {
@@ -24,6 +26,8 @@ public:
 		AUTO_RENDERED_BIT = 0x2
 	};
 private:
+	std::shared_ptr<PanningCamera> camera;
+
 	std::string pipeline_path;
 
 	ev2::ImageID image;
@@ -38,14 +42,6 @@ private:
 
 		ev2::GfxPipelineID pipeline {};
 		ev2::BindingsID bindings {};
-
-		glm::vec2 center = glm::vec2(0);
-
-		glm::mat4 proj = glm::mat4(1.f);
-		glm::mat4 view = glm::mat4(1.f);
-		ev2::ViewID camera = {};
-
-		float zoom = 1.f;
 	} rd;
 
 	void destroy(ev2::GfxContext *ctx);
@@ -77,4 +73,4 @@ public:
 	void record_draw(ev2::PassID pass);
 };
 
-#endif // IMAGE_VIEWER_H
+#endif // EV2_IMAGE_VIEWER_H

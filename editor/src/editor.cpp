@@ -1,5 +1,5 @@
-#include "editor.h"
-#include "image_viewer.h"
+#include "ev2/editor.h"
+#include "ev2/image_viewer.h"
 
 // ev2
 #include <ev2/imgui/inspector.h>
@@ -52,6 +52,9 @@ struct EditorState {
 	std::atomic_bool should_close = false;
 	std::atomic_bool has_shutdown = false;
 	std::atomic_bool has_initialized = false;
+
+	// admitting defeat...
+	std::unordered_set<std::string> names;
 
 	//------------------------------------------------------------------------------
 	
@@ -180,7 +183,7 @@ std::shared_ptr<ImageViewer2> EditorState::open_image_viewer(
 
 	std::shared_ptr<ImageViewer2> viewer( 
 		new ImageViewer2(pos.x, pos.y, width, height, flags, 
-			pipeline, name)
+			pipeline, panel_name.c_str())
 	);
 
 	if (viewer->set_image(ctx, image, 0, 0) != OK) {
@@ -608,16 +611,14 @@ int begin_frame()
 		}
 	}
 
-	//std::vector<ev2::ImageID> delete_list;
-	//for (const auto&[image, viewer] : g.inspector_image_viewers) {
-	//	if (viewer->update(g.ctx) == SHOULD_CLOSE) {
-	//		delete_list.push_back(image);
-	//	}
-	//}
-
-	//for (ev2::ImageID image : delete_list) {
-	//	g.close_inspector_image_viewer(image);
-	//}
+	std::vector<ev2::ImageID> delete_list;
+	for (auto it = g.inspector_image_viewers.begin(); it != g.inspector_image_viewers.end();) {
+		if (it->second.expired()) {
+			it = g.inspector_image_viewers.erase(it);
+		} else {
+			++it;
+		}
+	}
 
 	return result;
 }

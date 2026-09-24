@@ -3,7 +3,7 @@
 #include <ev2/context.h>
 #include <ev2/resource.h>
 
-#include <ev2/utils/camera.h>
+#include <ev2/utils/camera_math.h>
 #include <ev2/globe/globe.h>
 
 #include "app.h"

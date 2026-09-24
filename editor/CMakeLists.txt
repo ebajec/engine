@@ -3,12 +3,15 @@ cmake_minimum_required(VERSION 3.27)
 include(warnings)
 
 add_library(ev2-editor STATIC
-	editor.cpp
-	viewport.cpp
-	image_viewer.cpp
+	src/editor.cpp
+	src/viewport.cpp
+	src/image_viewer.cpp
+
+	src/motion_camera.cpp
+	src/panning_camera.cpp
 )
 
-target_include_directories(ev2-editor PUBLIC .)
+target_include_directories(ev2-editor PUBLIC include)
 
 target_link_libraries(ev2-editor PUBLIC
 	engine

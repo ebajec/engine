@@ -1,6 +1,6 @@
-#include "editor.h"
+#include "ev2/editor.h"
 
-#include "viewport.h"
+#include "ev2/viewport.h"
 #include "backends/imgui_impl_vulkan.h"
 #include "imgui_internal.h"
 
@@ -9,27 +9,6 @@
 
 ev2::RenderTargetID Viewport2::get_target() {
 	return m_target;
-}
-
-glm::ivec2 Viewport2::get_size() {
-	return m_size;
-}
-
-glm::ivec2 Viewport2::get_pos()
-{
-	return m_pos;
-}
-
-bool Viewport2::is_hovered() {
-	return m_hovered;
-}
-
-bool Viewport2::is_content_selected() {
-	return m_content_hovered && m_focused;
-}
-
-bool Viewport2::is_focused() {
-	return m_focused;
 }
 
 static std::atomic_uint32_t g_ctr = 0;
@@ -45,6 +24,8 @@ Viewport2::Viewport2(
 
 	m_target_flags = flags;
 
+	m_view = ev2::create_view(Editor::ctx(), nullptr, nullptr);
+
 	m_pos = glm::ivec2(x,y);
 	m_size = glm::ivec2(w,h);
 	m_name = name ? name : std::format("Viewport2{}", m_id);
@@ -53,6 +34,7 @@ Viewport2::Viewport2(
 Viewport2::~Viewport2()
 {
 	cleanup_render_target();
+	ev2::destroy_view(Editor::ctx(), m_view);
 }
 
 void Viewport2::cleanup_render_target()
@@ -111,7 +93,11 @@ Viewport2 &Viewport2::extend_settings(std::function<void()>&& callback)
 
 int Viewport2::imgui(int *p_flags)
 {
-	int status = update(p_flags);
+	int update_flags = 0;
+	int status = update(&update_flags);
+
+	if (p_flags)
+		*p_flags |= update_flags;
 
 	if (status < Editor::OK)
 		return status;
@@ -149,6 +135,10 @@ int Viewport2::imgui(int *p_flags)
 			}
 			if (ImGui::BeginPopup("panel_settings")) {
 				ImGui::Text("Settings");
+
+				if (std::shared_ptr<ICameraController> cam = m_cam.lock())
+					cam->imgui();
+
 				for (const std::function<void()> &callback : settings_callbacks)
 		 			callback();
 				ImGui::EndPopup();
@@ -198,8 +188,47 @@ int Viewport2::imgui(int *p_flags)
 	}
 	ImGui::End();
 
+	// Update the view after the ui has processed. Note that render target size
+	// is updated on the frame after.
+	const Editor::InputData &input = Editor::input();
+
+	const bool is_active = is_content_selected(); 
+
+	CameraInput cam_input = {
+		.cursor = glm::vec2(input.mouse_pos[0]) - glm::vec2(m_pos),
+		.cursor_delta = input.get_mouse_delta(),
+		.size = get_size(), 
+		.scroll_delta = (float)input.scroll_delta.y,
+		.dt = (float)input.dt,
+		.move_dir = input.move_dir,
+		.active = is_active,
+		.capture_mouse = is_active && input.mouse_mode == GLFW_CURSOR_DISABLED,
+		.left_down = input.left_mouse_pressed,
+		.right_down = input.right_mouse_pressed,
+	};
+
+	const bool is_empty = (m_size.x * m_size.y) == 0; 
+
+	if (std::shared_ptr<ICameraController> camera = m_cam.lock(); camera && !is_empty) {
+		if (!(update_flags & RESIZED_BIT) && is_content_selected())
+			camera->update(cam_input);
+
+		glm::mat4 view = camera->view();
+		glm::mat4 proj = camera->proj(glm::vec2(get_size()));
+
+		m_screen_to_world = glm::inverse(proj * view);
+
+		ev2::update_view(Editor::ctx(), m_view, glm::value_ptr(view), glm::value_ptr(proj));
+	}
+
 	if (!open && p_flags)
 		*p_flags |= SHOULD_CLOSE_BIT;
 
 	return open ? Editor::OK : Editor::SHOULD_CLOSE;
 }
+
+void Viewport2::set_camera(std::shared_ptr<ICameraController> camera)
+{
+	m_cam = camera;
+}
+

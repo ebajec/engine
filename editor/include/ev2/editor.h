@@ -1,5 +1,5 @@
-#ifndef EDITOR_H
-#define EDITOR_H
+#ifndef EV2_EDITOR_H
+#define EV2_EDITOR_H
 
 #include <ev2/context.h>
 #include <ev2/resource.h>
@@ -20,7 +20,7 @@
 //stl
 #include <memory>
 
-struct ImageViewer2;
+class ImageViewer2;
 
 namespace Editor
 {
@@ -86,4 +86,4 @@ namespace Editor
 	);
 }
 
-#endif //EDITOR_H
+#endif //EV2_EDITOR_H

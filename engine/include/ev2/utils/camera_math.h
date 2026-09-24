@@ -1,6 +1,8 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
+#include "ev2/math_defs.h"
+
 #include <glm/vec3.hpp>
 #include <glm/matrix.hpp>
 #include <glm/ext/quaternion_common.hpp>
@@ -9,26 +11,6 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <cfloat>
-
-#ifndef HALFPIf
-#define HALFPIf 1.57079632679f
-#endif
-
-#ifndef HALFPI
-#define HALFPI 1.57079632679
-#endif
-
-#ifndef PI
-#define PI 3.14159265359
-#endif
-
-#ifndef PIf
-#define PIf 3.14159265359f
-#endif
-
-#ifndef TWOPI
-#define TWOPI (2.0*3.141592654)
-#endif
 
 static inline glm::mat3 quat_to_mat3(const glm::quat& q) {
     float w=q.w, x=q.x, y=q.y, z=q.z;
@@ -195,8 +177,6 @@ struct MotionCamera
 {
 	glm::dvec3 up;
 	glm::dvec3 p;
-
-	glm::dvec3 dir = glm::vec3(0);
 
 	double phi;
 	double tht;

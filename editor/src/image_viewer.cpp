@@ -1,7 +1,6 @@
-#include "editor.h"
-
-#include "image_viewer.h"
-#include "ev2/utils/camera.h"
+#include "ev2/editor.h"
+#include "ev2/panning_camera.h"
+#include "ev2/image_viewer.h"
 
 #include "ev2/utils/log.h"
 
@@ -13,7 +12,7 @@ glm::vec2 ImageViewer2::get_grid_cursor_pos()
 {
 	glm::ivec2 viewport_size = Viewport2::get_size();
 	glm::ivec2 viewport_pos = Viewport2::get_pos();
-	glm::mat4 screen_to_world = glm::inverse(rd.proj*rd.view);
+	glm::mat4 screen_to_world = Viewport2::get_screen_to_world();
 
 	glm::vec2 uv = (glm::vec2(Editor::input().mouse_pos[0]) -
 		glm::vec2(viewport_pos.x, viewport_pos.y)) / 
@@ -116,6 +115,9 @@ ImageViewer2::ImageViewer2(
 		ImGui::EndChild();
 	});
 
+	camera = std::make_shared<PanningCamera>();
+	set_camera(camera);
+
 	pipeline_path = pipeline;
 }
 
@@ -165,7 +167,8 @@ int ImageViewer2::update(ev2::GfxContext *ctx)
 	int status = Editor::OK;
 	int update_flags = 0;
 
-	if (status = Viewport2::imgui(&update_flags); status != Editor::OK) {
+	if (status = Viewport2::imgui(&update_flags);
+		status < Editor::OK || status == Editor::SHOULD_CLOSE) {
 		return status;
 	}
 
@@ -179,26 +182,6 @@ int ImageViewer2::update(ev2::GfxContext *ctx)
 
 	ev2::flush_bindings(ctx, rd.bindings);
 
-	glm::ivec2 viewport_size = get_size();
-
-	float aspect = (float)viewport_size.y/(float)viewport_size.x;
-
-	const Editor::InputData &input = Editor::input();
-
-	const bool was_resized = update_flags & Viewport2::RESIZED_BIT;
-
-	if (was_resized || is_content_selected()) {
-		rd.zoom *= powf(2.f, (float)input.scroll_delta.y);
-		rd.proj = camera_proj_2d(aspect, rd.zoom);
-
-		if (!was_resized && input.left_mouse_pressed) {
-			glm::dvec2 delta = input.get_mouse_delta()/(double)get_size().x; 
-			rd.center += 2.f*glm::vec2(glm::vec4(delta.x, -delta.y,0,0)/(aspect*rd.zoom));
-			rd.view[3] = glm::vec4(glm::inverse(glm::mat2(rd.view))*rd.center,0,1);
-		}
-
-		ev2::update_view(ctx, rd.camera, glm::value_ptr(rd.view), glm::value_ptr(rd.proj));
-	}
 	return Editor::OK;
 }
 
@@ -206,9 +189,6 @@ int ImageViewer2::set_image(ev2::GfxContext *ctx,
 	ev2::ImageID img, uint32_t lvl, uint32_t lyr)
 {
 	int  result = Editor::OK;
-
-	if (!rd.camera.is_valid())
-		rd.camera = ev2::create_view(ctx, nullptr, nullptr);
 
 	if (!rd.pipeline.is_valid()) {
 		result = set_pipeline(pipeline_path.c_str());
@@ -250,7 +230,7 @@ void ImageViewer2::render(ev2::GfxContext *ctx)
 
 	ev2::GfxPassInfo pass_info = {
 		.target = get_target(),
-		.view = rd.camera,
+		.view = get_view(),
 		.clear_color = true,
 		.clear_depth = true,
 		.name = get_name()
@@ -266,7 +246,5 @@ void ImageViewer2::destroy(ev2::GfxContext *ctx)
 		ev2::destroy_bindings(ctx, rd.bindings);
 	if (rd.tex.is_valid())
 		ev2::destroy_texture(ctx, rd.tex);
-	if (rd.camera.is_valid())
-		ev2::destroy_view(ctx, rd.camera);
 }
 
