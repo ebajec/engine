@@ -37,11 +37,17 @@ ImageViewer2::ImageViewer2(
 	uint32_t y, 
 	uint32_t w, 
 	uint32_t h, 
-	uint32_t flags,
+	uint32_t in_flags,
 	const char *pipeline,
 	const char *name) :
 	Viewport2(name, x, y, w, h)
 {
+	camera = std::make_shared<PanningCamera>();
+	set_camera(camera);
+	pipeline_path = pipeline;
+
+	flags = in_flags;
+
 	extend_settings([this, ctx = Editor::ctx()]{
 		ImGui::BeginChild("FixedWidthWrapper", ImVec2(250, 0), ImGuiChildFlags_AutoResizeY);
 
@@ -96,11 +102,11 @@ ImageViewer2::ImageViewer2(
 
 			ImGui::Text("%s",text.c_str());
 
-			ImGuiInputTextFlags flags =
+			ImGuiInputTextFlags text_flags =
 				ImGuiInputTextFlags_EnterReturnsTrue |
 				ImGuiInputTextFlags_ElideLeft; 
 
-			if (ImGui::InputTextWithHint("","Enter pipeline", path, sizeof(path), flags)) {
+			if (ImGui::InputTextWithHint("","Enter pipeline", path, sizeof(path), text_flags)) {
 				if (this->pipeline_path.compare(path)) {
 					if (set_pipeline(path) != ev2::SUCCESS) {
 						log_warn("%s: Failed to set pipeline to %s", 
@@ -115,10 +121,6 @@ ImageViewer2::ImageViewer2(
 		ImGui::EndChild();
 	});
 
-	camera = std::make_shared<PanningCamera>();
-	set_camera(camera);
-
-	pipeline_path = pipeline;
 }
 
 ImageViewer2::~ImageViewer2()

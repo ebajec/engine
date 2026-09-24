@@ -52,7 +52,7 @@ public:
 		uint32_t y,
 		uint32_t w,
 		uint32_t h, 
-		uint32_t flags = 0,
+		uint32_t in_flags = 0,
 		const char * pipeline = "core://pipeline/screen_quad.yaml",
 		const char *name = nullptr
 	);
@@ -66,6 +66,7 @@ public:
 	void set_texture_filter(ev2::TextureFilter filter);
 	int set_image(ev2::GfxContext *ctx, ev2::ImageID img, uint32_t lvl, uint32_t lyr);
 
+	ev2::GfxPipelineID get_pipeline() const { return rd.pipeline; }
 	glm::vec2 get_grid_cursor_pos();
 
 	// Render into the underlying viewport's target, clearing old values

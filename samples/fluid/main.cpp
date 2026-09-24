@@ -661,6 +661,7 @@ void FluidApp::render()
 		.parts = ev2::get_buffer_device_address(ctx, sim->particles),
 	};
 
+	// TODO: Only set these if the pipeline is fluid_viz.yaml.
 	ev2::cmd_push_constant(pass, main_panel->rd.pipeline, 0, sizeof(panel_pc), &panel_pc);
 	main_panel->record_draw(pass);
 

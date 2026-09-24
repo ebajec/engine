@@ -62,13 +62,6 @@ struct EditorState {
 	int resize(int width, int height);
 	void setup_root_dockspace();
 	void imgui();
-
-	std::shared_ptr<ImageViewer2> open_image_viewer(
-		ev2::ImageID image,
-		const char *name = nullptr,
-		const char *pipeline = nullptr,
-		bool auto_render = true
-	);
 } g;
 
 void EditorState::update_input()
@@ -149,52 +142,6 @@ void EditorState::setup_root_dockspace()
     ImGui::End();
 }
 
-std::shared_ptr<ImageViewer2> EditorState::open_image_viewer(
-	ev2::ImageID image,
-	const char *name,
-	const char *pipeline,
-	bool auto_render
-)
-{
-	static int width = 500;
-	static int height = 500;
-
-	glm::ivec2 pos = glm::ivec2(0.5f*(
-		glm::vec2(win.width, win.height) -
-		glm::vec2(width, height)
-	));
-
-	if (!pipeline) {
-		pipeline = "core://pipeline/screen_quad.yaml";
-	}
-
-	std::string panel_name = "Viewer: "; 
-
-	if (name)
-		panel_name = name;
-	if (const char *img_name = ev2::get_image_name(ctx, image))
-		panel_name += img_name;
-	else 
-		panel_name += "Image" + std::to_string(image.id);
-
-	uint32_t flags = 
-		ImageViewer2::EDITOR_OWNED_BIT |
-		(auto_render * ImageViewer2::AUTO_RENDERED_BIT);
-
-	std::shared_ptr<ImageViewer2> viewer( 
-		new ImageViewer2(pos.x, pos.y, width, height, flags, 
-			pipeline, panel_name.c_str())
-	);
-
-	if (viewer->set_image(ctx, image, 0, 0) != OK) {
-		return nullptr;
-	}
-
-	image_viewers.insert(viewer);
-
-	return viewer;
-}
-
 static inline void plot_frame_times(float delta)
 {
 	delta *= 1000.f;
@@ -266,7 +213,7 @@ void image_viewer_open_callback(void *usr, ev2::ImageID image)
 	if (it != g.inspector_image_viewers.end())
 		return;
 
-	std::shared_ptr<ImageViewer2> viewer = g.open_image_viewer(image);
+	std::shared_ptr<ImageViewer2> viewer = open_image_viewer(image, nullptr, nullptr);
 
 	g.inspector_image_viewers[image] = viewer;
 }
@@ -648,6 +595,8 @@ int end_frame()
 void shutdown()
 {
 	g.inspector_image_viewers.clear();
+	g.image_viewers.clear();
+
 #ifdef ENABLE_IMGUI
 	ImGui_ImplVulkan_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
@@ -698,11 +647,52 @@ std::shared_ptr<ImageViewer2> open_image_viewer(
 	ev2::ImageID image,
 	const char *name,
 	const char *pipeline,
-	bool auto_render
+	bool auto_render,
+	uint32_t w,
+	uint32_t h,
+	uint32_t x,
+	uint32_t y
 )
 {
 	assert(!g.has_shutdown && g.has_initialized);
-	return g.open_image_viewer(image, name, pipeline, auto_render);
+
+	static int width = 500;
+	static int height = 500;
+
+	glm::ivec2 pos = glm::ivec2(0.5f*(
+		glm::vec2(g.win.width, g.win.height) -
+		glm::vec2(width, height)
+	));
+
+	if (!pipeline) {
+		pipeline = "core://pipeline/screen_quad.yaml";
+	}
+
+	std::string panel_name = "Viewer: "; 
+
+	if (name)
+		panel_name = name;
+	if (const char *img_name = ev2::get_image_name(g.ctx, image))
+		panel_name += img_name;
+	else 
+		panel_name += "Image" + std::to_string(image.id);
+
+	uint32_t flags = 
+		ImageViewer2::EDITOR_OWNED_BIT |
+		(auto_render * ImageViewer2::AUTO_RENDERED_BIT);
+
+	std::shared_ptr<ImageViewer2> viewer( 
+		new ImageViewer2(pos.x, pos.y, width, height, flags, 
+			pipeline, panel_name.c_str())
+	);
+
+	if (viewer->set_image(g.ctx, image, 0, 0) != OK) {
+		return nullptr;
+	}
+
+	g.image_viewers.insert(viewer);
+
+	return viewer;
 }
 
 } // namespace Editor
