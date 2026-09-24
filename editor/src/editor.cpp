@@ -649,19 +649,14 @@ std::shared_ptr<ImageViewer2> open_image_viewer(
 	const char *pipeline,
 	bool auto_render,
 	uint32_t w,
-	uint32_t h,
-	uint32_t x,
-	uint32_t y
+	uint32_t h
 )
 {
 	assert(!g.has_shutdown && g.has_initialized);
 
-	static int width = 500;
-	static int height = 500;
-
 	glm::ivec2 pos = glm::ivec2(0.5f*(
 		glm::vec2(g.win.width, g.win.height) -
-		glm::vec2(width, height)
+		glm::vec2(w, h)
 	));
 
 	if (!pipeline) {
@@ -682,7 +677,7 @@ std::shared_ptr<ImageViewer2> open_image_viewer(
 		(auto_render * ImageViewer2::AUTO_RENDERED_BIT);
 
 	std::shared_ptr<ImageViewer2> viewer( 
-		new ImageViewer2(pos.x, pos.y, width, height, flags, 
+		new ImageViewer2(pos.x, pos.y, w, h, flags, 
 			pipeline, panel_name.c_str())
 	);
 

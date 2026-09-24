@@ -84,9 +84,7 @@ namespace Editor
 		const char *pipeline,
 		bool auto_render = true,
 		uint32_t w = 500,
-		uint32_t h = 500,
-		uint32_t x = 0,
-		uint32_t y = 0
+		uint32_t h = 500
 	);
 }
 
