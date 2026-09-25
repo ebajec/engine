@@ -20,7 +20,6 @@ target_link_libraries(ev2-editor PUBLIC
 	glm::glm
 )
 
-# Only editor.cpp reads this; samples get the GUI through this library.
-target_compile_definitions(ev2-editor PRIVATE ENABLE_IMGUI)
+target_compile_definitions(ev2-editor PRIVATE EV2_ENABLE_IMGUI)
 
 enable_warnings(ev2-editor)

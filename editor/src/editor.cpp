@@ -82,7 +82,7 @@ void EditorState::update_input()
 
 	glfwGetCursorPos(win.ptr, &input.mouse_pos[0].x, &input.mouse_pos[0].y);
 
-#ifdef ENABLE_IMGUI
+#ifdef EV2_ENABLE_IMGUI
 	ImGuiIO& io = ImGui::GetIO();
 	input.mouse_in_gui = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) || io.WantCaptureMouse;
 
@@ -258,7 +258,7 @@ void image_viewer_close_callback(void *usr, ev2::ImageID image)
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-#ifdef ENABLE_IMGUI
+#ifdef EV2_ENABLE_IMGUI
 	ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
 	ImGuiIO& io = ImGui::GetIO();
 #endif
@@ -271,7 +271,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 			g.input.mouse_mode = GLFW_CURSOR_DISABLED;
 			g.capture_owner = g.hot_viewport;
 
-#ifdef ENABLE_IMGUI
+#ifdef EV2_ENABLE_IMGUI
 			io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
 #endif
 			glfwSetInputMode(window, GLFW_CURSOR, g.input.mouse_mode);
@@ -280,7 +280,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 }
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
-#ifdef ENABLE_IMGUI
+#ifdef EV2_ENABLE_IMGUI
 	ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
 #endif
 	if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS) {
@@ -299,7 +299,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
-#ifdef ENABLE_IMGUI
+#ifdef EV2_ENABLE_IMGUI
 	ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
 #endif
 	g.input.scroll.x += xoffset;
@@ -311,7 +311,7 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 
 void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
 {
-#ifdef ENABLE_IMGUI
+#ifdef EV2_ENABLE_IMGUI
 	ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
 #endif
 }
@@ -436,7 +436,7 @@ int init(int argc, char *argv[], const char *title, int w, int h)
 
 	g.ctx = ev2::create_context_for_vulkan(vulkan_params);
 
-#ifdef ENABLE_IMGUI
+#ifdef EV2_ENABLE_IMGUI
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
@@ -496,7 +496,7 @@ int begin_frame()
 		g.input.t0 = glfwGetTime();
 	}
 
-#ifdef ENABLE_IMGUI
+#ifdef EV2_ENABLE_IMGUI
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
@@ -518,7 +518,7 @@ int begin_frame()
 		g.input.needs_resize = false;
 	}
 
-#ifdef ENABLE_IMGUI
+#ifdef EV2_ENABLE_IMGUI
 	g.imgui();
 #endif
 
@@ -566,7 +566,7 @@ int end_frame()
 			viewer->render(g.ctx);
 	}
 
-#ifdef ENABLE_IMGUI
+#ifdef EV2_ENABLE_IMGUI
 	ImGui::Render();
 	ImDrawData *draw_data = ImGui::GetDrawData();
 	ev2::cmd_custom(g.gui_pass, [draw_data](VkCommandBuffer cmds) {
@@ -586,7 +586,7 @@ void shutdown()
 	g.inspector_image_viewers.clear();
 	g.image_viewers.clear();
 
-#ifdef ENABLE_IMGUI
+#ifdef EV2_ENABLE_IMGUI
 	ImGui_ImplVulkan_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
@@ -655,7 +655,7 @@ void release_capture()
 	g.hot_viewport = 0;
 	g.hot_viewport_flags = 0;
 	g.input.mouse_mode = GLFW_CURSOR_NORMAL;
-#ifdef ENABLE_IMGUI
+#ifdef EV2_ENABLE_IMGUI
 	ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
 #endif
 	glfwSetInputMode(g.win.ptr, GLFW_CURSOR, g.input.mouse_mode);

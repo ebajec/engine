@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(PROJECT_NAME "engine")
 project(${PROJECT_NAME})
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -16,7 +16,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(OpenGL_GL_PREFERENCE GLVND)  
 
 set(DEV_SHADER_BUILD_MOUNT "${CMAKE_BINARY_DIR}/spirv")
-set(DEV_CORE_MOUNT "${CMAKE_SOURCE_DIR}/resource")
+set(DEV_CORE_MOUNT "${CMAKE_CURRENT_SOURCE_DIR}/resource")
+
+option(EV2_BUILD_SAMPLES "Build samples" OFF)
 
 include(ev2)
 
@@ -71,8 +73,6 @@ endif()
 find_package(OpenGL REQUIRED)
 find_package(Vulkan REQUIRED)
 
-add_compile_options(-g)
-
 if(NOT WIN32 AND NOT APPLE)
     # Processor specific flags
     set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -mavx2")
@@ -82,5 +82,8 @@ endif()
 add_subdirectory(external)
 add_subdirectory(engine)
 add_subdirectory(editor)
-add_subdirectory(samples)
+
+if (EV2_BUILD_SAMPLES)
+	add_subdirectory(samples)
+endif()
 
