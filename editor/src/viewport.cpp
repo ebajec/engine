@@ -7,13 +7,13 @@
 #include <format>
 #include <atomic>
 
-ev2::RenderTargetID Viewport2::get_target() {
+ev2::RenderTargetID Viewport::get_target() {
 	return m_target;
 }
 
 static std::atomic_uint32_t g_ctr = 0;
 
-Viewport2::Viewport2(
+Viewport::Viewport(
 	const char *name, 
 	uint32_t x, uint32_t y,
 	uint32_t w, uint32_t h,
@@ -31,13 +31,17 @@ Viewport2::Viewport2(
 	m_name = name ? name : std::format("Viewport2{}", m_id);
 }
 
-Viewport2::~Viewport2()
+Viewport::~Viewport()
 {
 	cleanup_render_target();
 	ev2::destroy_view(Editor::ctx(), m_view);
+
+	if (Editor::get_capture_owner() == m_id || Editor::get_hot_viewport() == m_id) {
+		Editor::release_capture();
+	}
 }
 
-void Viewport2::cleanup_render_target()
+void Viewport::cleanup_render_target()
 {
 	if (m_target.is_valid()) {
 		ev2::destroy_render_target(Editor::ctx(), m_target);
@@ -45,7 +49,7 @@ void Viewport2::cleanup_render_target()
 	m_target = EV2_NULL_HANDLE(RenderTarget);
 }
 
-int Viewport2::update(int *p_flags)
+int Viewport::update(int *p_flags)
 {
 	ev2::GfxContext *ctx = Editor::ctx();
 
@@ -85,13 +89,20 @@ int Viewport2::update(int *p_flags)
 	return Editor::OK;
 }
 
-Viewport2 &Viewport2::extend_settings(std::function<void()>&& callback)
+Viewport &Viewport::extend_settings(std::function<void()>&& callback)
 {
 	settings_callbacks.push_back(std::move(callback));
 	return *this;
 }
 
-int Viewport2::imgui(int *p_flags)
+bool Viewport::is_content_selected()
+{
+	if (uint32_t capture_owner = Editor::get_capture_owner())
+		return m_id == capture_owner;
+	return m_content_hovered && m_focused;
+}
+
+int Viewport::imgui(int *p_flags)
 {
 	int update_flags = 0;
 	int status = update(&update_flags);
@@ -136,8 +147,9 @@ int Viewport2::imgui(int *p_flags)
 			if (ImGui::BeginPopup("panel_settings")) {
 				ImGui::Text("Settings");
 
-				if (std::shared_ptr<ICameraController> cam = m_cam.lock())
-					cam->imgui();
+				if (std::shared_ptr<ICameraController> cam = m_cam.lock()) {
+						cam->imgui();
+				}
 
 				for (const std::function<void()> &callback : settings_callbacks)
 		 			callback();
@@ -201,17 +213,21 @@ int Viewport2::imgui(int *p_flags)
 		.scroll_delta = (float)input.scroll_delta.y,
 		.dt = (float)input.dt,
 		.move_dir = input.move_dir,
-		.active = is_active,
-		.capture_mouse = is_active && input.mouse_mode == GLFW_CURSOR_DISABLED,
+		.capture_mouse = Editor::get_capture_owner() == m_id,
 		.left_down = input.left_mouse_pressed,
 		.right_down = input.right_mouse_pressed,
 	};
 
 	const bool is_empty = (m_size.x * m_size.y) == 0; 
 
+	HotViewportFlags hot_viewport_flags = 0;
+
 	if (std::shared_ptr<ICameraController> camera = m_cam.lock(); camera && !is_empty) {
 		if (!(update_flags & RESIZED_BIT) && is_content_selected())
 			camera->update(cam_input);
+
+		if (camera->want_capture_mouse())
+			hot_viewport_flags |= HOT_VIEWPORT_WANT_CAPTURE;
 
 		glm::mat4 view = camera->view();
 		glm::mat4 proj = camera->proj(glm::vec2(get_size()));
@@ -224,10 +240,14 @@ int Viewport2::imgui(int *p_flags)
 	if (!open && p_flags)
 		*p_flags |= SHOULD_CLOSE_BIT;
 
-	return open ? Editor::OK : Editor::SHOULD_CLOSE;
+	if (is_active) {
+		Editor::set_hot_viewport(m_id, hot_viewport_flags);
+	}
+
+	return Editor::OK;
 }
 
-void Viewport2::set_camera(std::shared_ptr<ICameraController> camera)
+void Viewport::set_camera(std::shared_ptr<ICameraController> camera)
 {
 	m_cam = camera;
 }

@@ -10,9 +10,9 @@
 
 glm::vec2 ImageViewer2::get_grid_cursor_pos()
 {
-	glm::ivec2 viewport_size = Viewport2::get_size();
-	glm::ivec2 viewport_pos = Viewport2::get_pos();
-	glm::mat4 screen_to_world = Viewport2::get_screen_to_world();
+	glm::ivec2 viewport_size = Viewport::get_size();
+	glm::ivec2 viewport_pos = Viewport::get_pos();
+	glm::mat4 screen_to_world = Viewport::get_screen_to_world();
 
 	glm::vec2 uv = (glm::vec2(Editor::input().mouse_pos[0]) -
 		glm::vec2(viewport_pos.x, viewport_pos.y)) / 
@@ -40,7 +40,7 @@ ImageViewer2::ImageViewer2(
 	uint32_t in_flags,
 	const char *pipeline,
 	const char *name) :
-	Viewport2(name, x, y, w, h)
+	Viewport(name, x, y, w, h)
 {
 	camera = std::make_shared<PanningCamera>();
 	set_camera(camera);
@@ -57,6 +57,7 @@ ImageViewer2::ImageViewer2(
 		ev2::get_image_dims(ctx, this->image, nullptr, nullptr, &max_layers, &max_levels);
 
 		if (ImGui::CollapsingHeader("Mip level selector")) {
+			ImGui::Indent();
 			for (uint32_t i = 0; i < max_levels; ++i) {
 				char namebuf[100];
 				snprintf(namebuf, sizeof(namebuf), "level_%u", i);
@@ -65,9 +66,11 @@ ImageViewer2::ImageViewer2(
 					sel_level = i;
 				}
 			}
+			ImGui::Unindent();
 		}
 
 		if (ImGui::CollapsingHeader("Layer selector")) {
+			ImGui::Indent();
 			for (uint32_t i = 0; i < max_layers; ++i) {
 				char namebuf[100];
 				snprintf(namebuf, sizeof(namebuf), "layer_%u", i);
@@ -76,15 +79,18 @@ ImageViewer2::ImageViewer2(
 					sel_layer = i;
 				}
 			}
+			ImGui::Unindent();
 		}
 
 		if (ImGui::CollapsingHeader("Filter")) {
+			ImGui::Indent();
 			if (ImGui::Selectable("Nearest", this->rd.filter == ev2::FILTER_NEAREST)) {
 				set_texture_filter(ev2::FILTER_NEAREST);
 			}
 			if (ImGui::Selectable("Bilinear", this->rd.filter == ev2::FILTER_BILINEAR)) {
 				set_texture_filter(ev2::FILTER_BILINEAR);
 			}
+			ImGui::Unindent();
 		}
 
 		if (sel_level != level || sel_layer != layer) {
@@ -94,8 +100,9 @@ ImageViewer2::ImageViewer2(
 			this->set_image(ctx, this->image, sel_level, sel_layer);
 		}
 		if (ImGui::CollapsingHeader("Pipeline", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::Indent();
 
-			ImGui::PushID(Viewport2::get_id());
+			ImGui::PushID(Viewport::get_id());
 
 			char path[PATH_MAX] {};
 			std::string text = "" + pipeline_path;
@@ -117,6 +124,7 @@ ImageViewer2::ImageViewer2(
 				}
 			}
 			ImGui::PopID();
+			ImGui::Unindent();
 		}
 		ImGui::EndChild();
 	});
@@ -164,15 +172,21 @@ int ImageViewer2::set_pipeline(const char *path)
 	return Editor::OK;
 }
 
-int ImageViewer2::update(ev2::GfxContext *ctx)
+int ImageViewer2::update(ev2::GfxContext *ctx, int *p_flags)
 {
 	int status = Editor::OK;
 	int update_flags = 0;
 
-	if (status = Viewport2::imgui(&update_flags);
-		status < Editor::OK || status == Editor::SHOULD_CLOSE) {
+	if (status = Viewport::imgui(&update_flags); status < Editor::OK) {
 		return status;
 	}
+
+	if (p_flags)
+		*p_flags |= update_flags;
+
+	// Nothing to bind for a panel that is going away this frame.
+	if (update_flags & Viewport::SHOULD_CLOSE_BIT)
+		return Editor::OK;
 
 	ev2::Result res = ev2::reset_bindings(ctx, rd.bindings);
 	if (res != ev2::SUCCESS)

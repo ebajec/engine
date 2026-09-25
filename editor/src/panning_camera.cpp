@@ -5,6 +5,10 @@
 
 void PanningCamera::update(const CameraInput &input)
 {
+	// Panning should do nothing when cursor is disabled
+	if (input.capture_mouse)
+		return;
+
 	constexpr double alpha = 2.0;
 
 	glm::dvec2 size = input.size;

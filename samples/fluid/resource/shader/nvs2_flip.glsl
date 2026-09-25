@@ -6,7 +6,7 @@
 #include "fluid/shader/fluid_particle.glsl"
 
 #define PARTS_PER_CELL 16
-#define BETA 0.22
+#define BETA 0.5
 #define GRID_WT 0.2
 #define TIMESTEP 0.02
 #define DELTA_X 2.0f

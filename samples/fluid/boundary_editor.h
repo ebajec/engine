@@ -1,27 +1,40 @@
-#include "texture_viewer.h"
+#ifndef BOUNDARY_EDITOR_H
+#define BOUNDARY_EDITOR_H
 
-struct BoundaryEditor : public ImageViewerPanel 
+#include "ev2/editor.h"
+#include "ev2/image_viewer.h"
+
+// An image viewer that paints into the image it is displaying. Sample owned:
+// Editor::open_image_viewer always builds a plain ImageViewer2, and the
+// editor's update loop is not virtual, so the owner drives this one.
+struct BoundaryEditor : public ImageViewer2
 {
 	ev2::ComputePipelineID cursor;
 	ev2::BindingsID cursor_bindings;
 
 	BoundaryEditor(
-		App *app, 
-		uint32_t x, uint32_t y, 
-		uint32_t w, uint32_t h, 
+		uint32_t x, uint32_t y,
+		uint32_t w, uint32_t h,
 		const char *name = nullptr
-	) :  ImageViewerPanel(app, x, y, w, h, "core://pipeline/screen_quad.yaml", name) 
+	) : ImageViewer2(x, y, w, h, 0, "core://pipeline/screen_quad.yaml", name)
 	{
-		cursor = ev2::load_compute_pipeline(app->ctx, "fluid://shader/bd_cursor.comp");
-		cursor_bindings = ev2::create_bindings(app->ctx, cursor, 0, 
+		ev2::GfxContext *ctx = Editor::ctx();
+
+		cursor = ev2::load_compute_pipeline(ctx, "fluid://shader/bd_cursor.comp");
+		cursor_bindings = ev2::create_bindings(ctx, cursor, 0,
 											ev2::BINDING_MODE_DYNAMIC);
 	}
 
-	int update(ev2::GfxContext *ctx)
+	int update(ev2::GfxContext *ctx, int *p_flags = nullptr)
 	{
-		int res = ImageViewerPanel::update(ctx);
+		int res = ImageViewer2::update(ctx, p_flags);
 
-		if (app->input.right_mouse_pressed && panel->is_hovered()) {
+		if (res < Editor::OK)
+			return res;
+
+		ev2::ImageID image = get_image();
+
+		if (Editor::input().right_mouse_pressed && is_hovered() && image.is_valid()) {
 			ev2::reset_bindings(ctx, cursor_bindings);
 			ev2::bind_image(ctx, cursor_bindings, "img_out", image);
 			ev2::flush_bindings(ctx, cursor_bindings);
@@ -46,3 +59,4 @@ struct BoundaryEditor : public ImageViewerPanel
 	}
 };
 
+#endif // BOUNDARY_EDITOR_H

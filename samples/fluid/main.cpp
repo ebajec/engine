@@ -1,8 +1,9 @@
-#include "app.h"
 #include "utils.h"
-#include "panel.h"
-#include "texture_viewer.h"
 #include "heightmap_viewer.h"
+#include "project_mounts.h"
+
+#include "ev2/editor.h"
+#include "ev2/image_viewer.h"
 
 #include "poisson_solver.h"
 #include "boundary_editor.h"
@@ -461,13 +462,15 @@ struct FLIPFluidSim
 	}
 };
 
-struct FluidApp : public App
+struct FluidApp
 {
+	ev2::GfxContext *ctx = nullptr;
+
 	std::unique_ptr<FLIPFluidSim> sim;
-	std::unique_ptr<ImageViewerPanel> main_panel;
-	std::unique_ptr<ImageViewerPanel> right_panel;
+	std::shared_ptr<ImageViewer2> main_panel;
+	std::shared_ptr<ImageViewer2> right_panel;
 	std::unique_ptr<BoundaryEditor> boundary_editor;
-	std::unique_ptr<HeightmapViewerPanel> heightmap_panel;
+	std::unique_ptr<HeightmapViewer> heightmap_panel;
 
 	SimParams params {};
 
@@ -491,35 +494,27 @@ struct FluidApp : public App
 	int bvh_level = 0;
 	int steps_per = 2;
 
-	FluidApp() : App(1200, 1200, "fluid") {
-	}
+	~FluidApp();
 
 	int initialize(int argc, char **argv);
 	int update();
 	void render();
-	void destroy();
 
 	void reset_images();
 };
 
 int FluidApp::initialize(int argc, char **argv)
 {
-	int result = app_initialize(this, argc, argv);
-	if (result)
-		return result;
+	(void)argc; (void)argv;
+
+	ctx = Editor::ctx();
 
 	sim.reset(new FLIPFluidSim);
 
-	main_panel.reset(new ImageViewerPanel(this, 200, 0, 500, 500,
-		"core://pipeline/screen_quad.yaml", "Interactive Simulation"));
-	right_panel.reset(new ImageViewerPanel(this, 700, 0, 500, 500, 
-		"fluid://pipeline/residuals.yaml", "Residuals"));
+	boundary_editor.reset(new BoundaryEditor(100, 100, 500, 500, "Boundary Mask"));
+	heightmap_panel.reset(new HeightmapViewer());
 
-	boundary_editor.reset(new BoundaryEditor(this, 100, 100, 500, 500, "Boundary Mask"));
-
-	heightmap_panel.reset(new HeightmapViewerPanel());
-
-	result = sim->init(ctx, 256, 256);
+	int result = sim->init(ctx, 256, 256);
 	if (result)
 		return result;
 
@@ -529,25 +524,29 @@ int FluidApp::initialize(int argc, char **argv)
 		v_tex[i] = ev2::create_texture(ctx, sim->v_proj_img[i], ev2::FILTER_BILINEAR);
 	}
 
-	result = main_panel->init(ctx, sim->lap_p_img); 
-	if (result)
-		return result;
-	main_panel->panel->set_closable(false);
+	// Not auto rendered: this sample records its own pass into the panel's
+	// target so it can draw particles and debug geometry over the image.
+	main_panel = Editor::open_image_viewer(sim->lap_p_img, "Interactive Simulation",
+		"core://pipeline/screen_quad.yaml", false);
+	if (!main_panel)
+		return Editor::ERROR;
+	main_panel->set_closable(false);
 
-	result = right_panel->init(ctx, sim->pressure_solver->R1); 
-	if (result)
-		return result;
-	right_panel->panel->set_closable(false);
+	right_panel = Editor::open_image_viewer(sim->pressure_solver->R1, "Residuals",
+		"fluid://pipeline/residuals.yaml");
+	if (!right_panel)
+		return Editor::ERROR;
+	right_panel->set_closable(false);
 
-	result = heightmap_panel->init(this, ctx, phi_tex); 
+	result = heightmap_panel->set_texture(ctx, phi_tex);
 	if(result)
 		return result;
-	heightmap_panel->panel->set_closable(false);
+	heightmap_panel->viewport()->set_closable(false);
 
-	result = boundary_editor->init(ctx, sim->solid_mask_img); 
+	result = boundary_editor->set_image(ctx, sim->solid_mask_img, 0, 0);
 	if(result)
 		return result;
-	boundary_editor->panel->set_closable(false);
+	boundary_editor->set_closable(false);
 
 	sim->reset(ctx);
 
@@ -603,24 +602,17 @@ int FluidApp::update()
 			sim->step_sim(ctx, params);
 		}
 	}
-	result = main_panel->update(ctx);
-	if (result < App::OK)
-		return result;
-
-	result = right_panel->update(ctx);
-	if (result < App::OK)
-		return result;
-
+	// main_panel and right_panel are editor owned, so the editor updates them.
 	result = boundary_editor->update(ctx);
-	if (result < App::OK)
-		return result;
-	
-	result = heightmap_panel->update(ctx);
-	if (result < App::OK)
+	if (result < Editor::OK)
 		return result;
 
-	bool is_panel_clicked = this->input.right_mouse_pressed && 
-			main_panel->panel->is_content_selected();
+	result = heightmap_panel->update(ctx);
+	if (result < Editor::OK)
+		return result;
+
+	bool is_panel_clicked = Editor::input().right_mouse_pressed &&
+			main_panel->is_content_selected();
 
 	if (is_panel_clicked) {
 		glm::vec2 pos = main_panel->get_grid_cursor_pos();
@@ -644,10 +636,10 @@ void FluidApp::render()
 
 	// second pass renders with alpha blending
 	ev2::GfxPassInfo pass_info = {
-		.target = main_panel->panel->get_target(),
-		.view = main_panel->rd.camera,
+		.target = main_panel->get_target(),
+		.view = main_panel->get_view(),
 		.clear_color = true,
-		.name = main_panel->panel->get_name()
+		.name = main_panel->get_name()
 	};
 	ev2::PassID pass = ev2::begin_gfx_pass(ctx, &pass_info);
 
@@ -662,7 +654,9 @@ void FluidApp::render()
 	};
 
 	// TODO: Only set these if the pipeline is fluid_viz.yaml.
-	ev2::cmd_push_constant(pass, main_panel->rd.pipeline, 0, sizeof(panel_pc), &panel_pc);
+	if(main_panel->get_pipeline() == ev2::load_graphics_pipeline(ctx, "fluid://pipeline/fluid_viz.yaml")) {
+		ev2::cmd_push_constant(pass, main_panel->get_pipeline(), 0, sizeof(panel_pc), &panel_pc);
+	}
 	main_panel->record_draw(pass);
 
 	if (b_enable_flux_arrows) {
@@ -738,50 +732,50 @@ void FluidApp::render()
 	}
 	ev2::end_pass(ctx, pass);
 
-	right_panel->render(ctx);
+	// right_panel is editor owned and auto rendered.
 	boundary_editor->render(ctx);
 	heightmap_panel->render(ctx);
 }
-void FluidApp::destroy()
+FluidApp::~FluidApp()
 {
-	main_panel->destroy(ctx);
-	right_panel->destroy(ctx);
-	boundary_editor->destroy(ctx);
-	heightmap_panel->destroy(ctx);
-
-	sim->destroy(ctx);
-
-	App::terminate();
+	heightmap_panel.reset(nullptr);
+	if (sim)
+		sim->destroy(ctx);
 }
 
 __attribute__((noinline)) int frame(FluidApp * app)
 {
-	int status = app->begin_frame();
-	if (should_exit(status))
+	int status = Editor::begin_frame();
+	if (status != Editor::OK)
 		return status;
 
 	status = app->update();
-	if (should_exit(status))
+	if (status != Editor::OK)
 		return status;
-	
+
 	app->render();
 
-	status = app->end_frame();
-	if (should_exit(status))
-		return status;
-	return status;
+	return Editor::end_frame();
 }
 
 int main(int argc, char *argv[])
 {
 	std::unique_ptr<FluidApp> app (new FluidApp{});
 
-	if (app->initialize(argc, argv) != App::OK)
+	int result = Editor::init(argc, argv, "fluid", 1200, 1200);
+	if (result < Editor::OK)
+		return result;
+
+	add_project_mounts(Editor::ctx());
+
+	if (app->initialize(argc, argv) != Editor::OK)
 		return EXIT_FAILURE;
 
-	for(int status = App::OK; !should_exit(status); status = frame(app.get())) {}
+	int status = Editor::OK;
+	for(; status == Editor::OK; status = frame(app.get())) {}
 
-	app->destroy();
+	app.reset(nullptr);
+	Editor::shutdown();
 
-	return EXIT_SUCCESS;
+	return status < 0 ? status : 0;
 }

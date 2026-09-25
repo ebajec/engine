@@ -2,12 +2,12 @@
 #define EV2_MOTION_CAMERA_H
 
 #include "ev2/camera_controller.h"
-#include "ev2/math_defs.h"
 
-struct MotionCamera2 : public ICameraController
+struct MotionCamera : public ICameraController
 {
-	float fov = PIf/4.f;
-	float sensitivity = 1.f;
+	// degrees for slider readability
+	float fov = 60.f;
+	float sensitivity = 0.05f;
 	float far_plane = 1e2f;
 	float near_plane = 1e-3f;
 	float speed = 1.0;
@@ -20,10 +20,10 @@ struct MotionCamera2 : public ICameraController
 	// only the position is kept as a double 
 	glm::dvec3 pos = glm::dvec3(0,0,0);
 
-	MotionCamera2() = default;
+	MotionCamera() = default;
 
 	// @brief Initialize the camera looking from 'eye' to 'center'
-	MotionCamera2(glm::dvec3 in_center, glm::dvec3 in_eye, glm::dvec3 in_up); 
+	MotionCamera(glm::dvec3 in_center, glm::dvec3 in_eye, glm::dvec3 in_up); 
 
 	virtual void update(const CameraInput &input) final;
 	virtual glm::mat4 view() const final;
@@ -31,6 +31,8 @@ struct MotionCamera2 : public ICameraController
 
 	virtual void imgui() final;
 	virtual const char *name() const final;
+
+	virtual bool want_capture_mouse() const final { return true; }
 
 	void rotate(float dtht, float dphi);
 	void move(glm::dvec3 motion); 

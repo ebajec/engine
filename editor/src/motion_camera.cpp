@@ -5,7 +5,9 @@
 
 #include "imgui.h"
 
-MotionCamera2::MotionCamera2(glm::dvec3 in_center, glm::dvec3 in_eye, glm::dvec3 in_up) 
+#include <cstdio>
+
+MotionCamera::MotionCamera(glm::dvec3 in_center, glm::dvec3 in_eye, glm::dvec3 in_up) 
 {
 	glm::vec3 n = glm::normalize(glm::vec3(in_eye - in_center));
 
@@ -16,17 +18,21 @@ MotionCamera2::MotionCamera2(glm::dvec3 in_center, glm::dvec3 in_eye, glm::dvec3
 	up = in_up;
 }
 
-void MotionCamera2::update(const CameraInput &input)
+void MotionCamera::update(const CameraInput &input)
 {
 	glm::vec2 delta = sensitivity * (PIf/180.f) * input.cursor_delta;
 
 	if (input.capture_mouse) {
 		rotate(-delta.x, delta.y);
-		move(input.dt * speed * input.move_dir);
+		float norm = length(input.move_dir);
+
+		if (norm > 1e-3f) {
+			move(input.dt * speed * input.move_dir / norm);
+		}
 	}
 }
 
-glm::mat4 MotionCamera2::view() const
+glm::mat4 MotionCamera::view() const
 {
 	glm::mat3 TBN = s2_frame((float)phi,(float)tht);
 	glm::vec3 v = -pos * TBN;
@@ -36,33 +42,42 @@ glm::mat4 MotionCamera2::view() const
 	return view;
 }
 
-glm::mat4 MotionCamera2::proj(glm::vec2 size) const
+glm::mat4 MotionCamera::proj(glm::vec2 size) const
 {
 	float aspect = (float)size.y/(float)size.x;
-	return camera_proj_3d(fov, aspect, far_plane, near_plane);
+	return camera_proj_3d(fov * (PIf/180.f), aspect, far_plane, near_plane);
 }
 
-void MotionCamera2::imgui()
+void MotionCamera::imgui()
 {
-	ImGui::SliderFloat("Move Speed", &speed, 0, 1.f);
-	ImGui::SliderFloat("Sensitivity (deg/pix)", &sensitivity, 0, 1.f);
-	ImGui::SliderFloat("Near Plane", &near_plane, 0, 1.f);
-	ImGui::SliderFloat("Far Plane", &far_plane, near_plane, 1000.f);
+	ImGui::BeginChild("FixedWidthWrapper", ImVec2(250, 0), ImGuiChildFlags_AutoResizeY);
+	char namebuf[100];
+	snprintf(namebuf, sizeof(namebuf), "Camera");
+	if (ImGui::CollapsingHeader(namebuf)) {
+		ImGui::Indent();
+		ImGui::SliderFloat("Move Speed", &speed, 0, 1.f);
+		ImGui::SliderFloat("Sensitivity (deg/pix)", &sensitivity, 0, 1.f);
+		ImGui::SliderFloat("FOV (deg)", &fov, 1, 179.f);
+		ImGui::SliderFloat("Near Plane", &near_plane, 0, 1.f);
+		ImGui::SliderFloat("Far Plane", &far_plane, near_plane, 1000.f);
+		ImGui::Unindent();
+	}
+	ImGui::EndChild();
 }
 
-const char *MotionCamera2::name() const
+const char *MotionCamera::name() const
 {
 	return "Motion Camera";
 }
 
-void MotionCamera2::rotate(float dtht, float dphi)
+void MotionCamera::rotate(float dtht, float dphi)
 {
 	float phi1 = phi + dphi;
 	phi = glm::clamp(phi1, -HALFPIf, HALFPIf);
 	tht = fmodf(tht + dtht, TWOPIf);
 }
 
-void MotionCamera2::move(glm::dvec3 motion)
+void MotionCamera::move(glm::dvec3 motion)
 {
 	float sin_tht = sinf(tht);
 	float cos_tht = cosf(tht);

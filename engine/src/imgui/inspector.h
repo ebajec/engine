@@ -27,12 +27,12 @@ extern struct InspectorPanelState
 {
 	PoolID selected;
 
-	ImageCallback image_viewer_open;
-	ImageCallback image_viewer_close;
+	ImageCallback image_viewer_open = {};
+	ImageCallback image_viewer_close = {};
 
-	bool render_graph_window_open;
-	uint32_t selected_edge_idx;
-	uint32_t hovered_edge;
+	bool render_graph_window_open = false;
+	uint32_t selected_edge = UINT32_MAX;
+	uint32_t hovered_edge = UINT32_MAX;
 } g_state;
 
 extern void on_destroy_image(ev2::ImageID image);

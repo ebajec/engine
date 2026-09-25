@@ -1,5 +1,12 @@
 #include "heightmap_viewer.h"
 
+#include "ev2/editor.h"
+
+#include <ev2/utils/log.h>
+
+#include <cstring>
+#include <vector>
+
 static std::vector<uint32_t> create_quad_indices(uint32_t n)
 {
 	std::vector<uint32_t> indices;
@@ -8,9 +15,9 @@ static std::vector<uint32_t> create_quad_indices(uint32_t n)
 			uint32_t in = std::min(i + 1,n - 1);
 			uint32_t jn = std::min(j + 1,n - 1);
 
-			indices.push_back((n) * i  + j); 
-			indices.push_back((n) * in + j); 
-			indices.push_back((n) * in + jn); 
+			indices.push_back((n) * i  + j);
+			indices.push_back((n) * in + j);
+			indices.push_back((n) * in + jn);
 
 			indices.push_back((n) * i  + j);
 			indices.push_back((n) * in + jn);
@@ -21,51 +28,47 @@ static std::vector<uint32_t> create_quad_indices(uint32_t n)
 	return indices;
 }
 
-int HeightmapViewerPanel::init(App *app_, ev2::GfxContext *ctx, ev2::TextureID tex)
+HeightmapViewer::HeightmapViewer(ev2::TextureID tex)
 {
-	app = app_;
+	m_viewport = std::make_unique<Viewport>("3D view", 700, 0, 500, 500,
+		ev2::RENDER_TARGET_CREATE_DEPTH_BIT | ev2::RENDER_TARGET_CREATE_COLOR_BIT
+	);
 
-	panel = std::make_unique<Viewport>(app_, ctx, "3D view", 700, 0, 500, 500, 
-		 ev2::RENDER_TARGET_CREATE_DEPTH_BIT | ev2::RENDER_TARGET_CREATE_COLOR_BIT
-	 );
+	m_camera = std::make_shared<MotionCamera>(
+		glm::dvec3(0,0,0), glm::dvec3(1,1,1), glm::dvec3(0,0,1));
 
-	panel->set_settings([this](){
+	m_camera->near_plane = 0.01f;
+	m_camera->far_plane = 10.f;
+
+	m_viewport->set_camera(m_camera);
+
+	m_viewport->extend_settings([this](){
 		ImGui::BeginChild("FixedWidthWrapper", ImVec2(250, 0), ImGuiChildFlags_AutoResizeY);
-		ImGui::SliderFloat("Scale", &uniforms.scale, 0, 1.f);
+		ImGui::SliderFloat("Scale", &m_uniforms.scale, 0, 1.f);
 		ImGui::EndChild();
 	});
 
 	//-----------------------------------------------------------------------------
-	// Input
-
-	app->insert_key_callback([this](int key, int scancode, int action, int mods){
-		glfw_wasd_to_motion(this->keydir, key, action);
-	});
-
-	rd.camera = ev2::create_view(ctx, nullptr, nullptr);
-
-	control = MotionCamera::look_at(glm::vec3(0,0,0), glm::dvec3(1,1,1), glm::dvec3(0,0,1));
-
-	//-----------------------------------------------------------------------------
 	// Setup pipeline
-	
+
+	ev2::GfxContext *ctx = Editor::ctx();
+
 	rd.pipeline = ev2::load_graphics_pipeline(ctx, "core://pipeline/heightmap.yaml");
-
-	if (!EV2_VALID(rd.pipeline))
-		return EXIT_FAILURE;
-
 	rd.bindings = ev2::create_bindings(
 		ctx, rd.pipeline, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_STATIC);
 
-	int result = this->set_texture(ctx, tex);
-
-	if (result)
-		return EXIT_FAILURE;
-
-	return 0;
+	if (tex.is_valid() && set_texture(ctx, tex) != Editor::OK) {
+		log_error("Failed to set texture");
+	}
+	return;
 }
 
-int HeightmapViewerPanel::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
+HeightmapViewer::~HeightmapViewer()
+{
+	destroy(Editor::ctx());
+}
+
+int HeightmapViewer::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
 {
 	uint32_t h, w;
 	ev2::get_texture_dims(ctx, tex, &w, &h, nullptr);
@@ -77,16 +80,19 @@ int HeightmapViewerPanel::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
 
 		size_t indices_size = indices.size()*sizeof(uint32_t);
 
+		if (rd.ibo.is_valid())
+			ev2::destroy_buffer(ctx, rd.ibo);
+
 		rd.ibo = ev2::create_buffer(ctx, indices_size, ev2::BUFFER_USAGE_INDEX_BUFFER_BIT);
 
-		ev2::UploadContext uc = ev2::begin_upload(ctx, indices_size, alignof(uint32_t)); 
-		memcpy(uc.ptr, indices.data(), indices_size); 
+		ev2::UploadContext uc = ev2::begin_upload(ctx, indices_size, alignof(uint32_t));
+		memcpy(uc.ptr, indices.data(), indices_size);
 		ev2::BufferUpload up = {.size = indices_size};
-		uint64_t sync = ev2::commit_buffer_uploads(ctx, uc, rd.ibo, &up, 1);
+		ev2::commit_buffer_uploads(ctx, uc, rd.ibo, &up, 1);
 	}
 
 	if (ev2::bind_texture(ctx, rd.bindings, "u_tex", tex) != ev2::SUCCESS) {
-		return -1;
+		return Editor::ERROR;
 	}
 	ev2::flush_bindings(ctx, rd.bindings);
 
@@ -94,37 +100,21 @@ int HeightmapViewerPanel::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
 	rd.w = w;
 	rd.h = h;
 
-	return 0;
+	return Editor::OK;
 }
 
-int HeightmapViewerPanel::update(ev2::GfxContext *ctx)
+int HeightmapViewer::update(ev2::GfxContext *ctx, int *p_flags)
 {
-	panel->update();
-	panel->imgui();
-
-	glm::ivec2 panel_size = panel->get_size();
-
-	float aspect = (float)panel_size.y/(float)panel_size.x;
-
-	rd.proj = camera_proj_3d(PIf/4.f, aspect, 10.f, 0.01f);
-	rd.view = control.get_view();
-	
-	ev2::update_view(ctx, rd.camera, glm::value_ptr(rd.view), glm::value_ptr(rd.proj));
-
-	static float speed = 1.f;
-
-	if (app->input.mouse_mode == GLFW_CURSOR_DISABLED && panel->is_focused()) {
-		glm::dvec2 delta = app->input.get_mouse_delta()/(double)panel_size.x;
-		control.rotate(-delta.x, delta.y);
-		// TODO: Switch to using Editor::InputData
-		control.move(app->input.dt * glm::dvec3(speed*keydir));
-
-	}
-	return 0;
+	(void)ctx;
+	return m_viewport->imgui(p_flags);
 }
-void HeightmapViewerPanel::render(ev2::GfxContext *ctx)
+
+void HeightmapViewer::render(ev2::GfxContext *ctx)
 {
-	glm::ivec2 panel_size = panel->get_size();
+	glm::ivec2 panel_size = m_viewport->get_size();
+
+	if (panel_size.x * panel_size.y == 0)
+		return;
 
 	ev2::Rect rect = {
 		.x0 = 0, .y0 = 0,
@@ -132,12 +122,12 @@ void HeightmapViewerPanel::render(ev2::GfxContext *ctx)
 	};
 
 	ev2::GfxPassInfo pass_info = {
-		.target = panel->get_target(),
-		.view = rd.camera,
+		.target = m_viewport->get_target(),
+		.view = m_viewport->get_view(),
 		.viewport = rect,
 		.clear_color = true,
 		.clear_depth = true,
-		.name = panel->get_name(),
+		.name = m_viewport->get_name(),
 	};
 
 	ev2::PassID pass = ev2::begin_gfx_pass(ctx, &pass_info);
@@ -147,7 +137,7 @@ void HeightmapViewerPanel::render(ev2::GfxContext *ctx)
 	ev2::cmd_use_image(pass, image, ev2::USAGE_SAMPLED_GRAPHICS);
 
 	ev2::cmd_bind_gfx_pipeline(pass, rd.pipeline);
-	ev2::cmd_push_constant(pass, rd.pipeline, 0, sizeof(Uniforms), &uniforms);
+	ev2::cmd_push_constant(pass, rd.pipeline, 0, sizeof(Uniforms), &m_uniforms);
 
 	ev2::cmd_bind_resources(pass, rd.bindings);
 	ev2::cmd_bind_index_buffer(pass, rd.ibo, 0);
@@ -155,17 +145,19 @@ void HeightmapViewerPanel::render(ev2::GfxContext *ctx)
 	uint32_t idx_count = 6 * rd.w * rd.h;
 
 	ev2::cmd_custom(pass, [idx_count](VkCommandBuffer cmds){
-		vkCmdDrawIndexed(cmds, idx_count, 1, 0, 0, 0); 
+		vkCmdDrawIndexed(cmds, idx_count, 1, 0, 0, 0);
 	});
 
 	ev2::end_pass(ctx, pass);
 }
 
-void HeightmapViewerPanel::destroy(ev2::GfxContext *ctx)
+void HeightmapViewer::destroy(ev2::GfxContext *ctx)
 {
-	ev2::destroy_bindings(ctx, rd.bindings);
-	ev2::destroy_buffer(ctx, rd.ibo);
-	ev2::destroy_view(ctx, rd.camera);
-	panel.reset();
-}
+	if (rd.bindings.is_valid())
+		ev2::destroy_bindings(ctx, rd.bindings);
+	if (rd.ibo.is_valid())
+		ev2::destroy_buffer(ctx, rd.ibo);
 
+	m_viewport.reset();
+	m_camera.reset();
+}

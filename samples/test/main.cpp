@@ -1,7 +1,8 @@
-#include "app.h"
-#include "panel.h"
-#include "texture_viewer.h"
 #include "heightmap_viewer.h"
+#include "project_mounts.h"
+
+#include "ev2/editor.h"
+#include "ev2/image_viewer.h"
 
 #include <ev2/utils/log.h>
 
@@ -202,7 +203,7 @@ int WaveSim::update(ev2::GfxContext *ctx)
 
 	ev2::end_pass(ctx, pass);
 
-	return App::OK;
+	return Editor::OK;
 }
 
 void WaveSim::destroy(ev2::GfxContext *ctx)
@@ -217,11 +218,13 @@ void WaveSim::destroy(ev2::GfxContext *ctx)
 	ev2::destroy_image(ctx, swap_img[1]);
 }
 
-struct TestApp : public App
+struct TestApp
 {
+	ev2::GfxContext *ctx = nullptr;
+
 	std::unique_ptr<WaveSim> sim;
-	std::unique_ptr<ImageViewerPanel> main_panel;
-	std::unique_ptr<HeightmapViewerPanel> heightmap_panel;
+	std::shared_ptr<ImageViewer2> main_panel;
+	std::unique_ptr<HeightmapViewer> heightmap_panel;
 
 	ev2::TextureID phi_tex;
 	ev2::TextureID f_tex;
@@ -233,105 +236,106 @@ struct TestApp : public App
 	} uniforms;
 	ev2::BufferID ubo;
 
-	TestApp() : App(1200, 500, "fluid") {
-	}
+	~TestApp();
 
 	int initialize(int argc, char **argv);
 	int update();
 	void render();
-	void destroy();
 };
 
 int TestApp::initialize(int argc, char **argv)
 {
-	int result = app_initialize(this, argc, argv);
-	if (result)
-		return result;
+	(void)argc; (void)argv;
+
+	ctx = Editor::ctx();
 
 	sim.reset(new WaveSim);
+	heightmap_panel.reset(new HeightmapViewer);
 
-	main_panel.reset(new ImageViewerPanel(this, EDITOR_PANEL_WIDTH, 0, 500, 500));
-	heightmap_panel.reset(new HeightmapViewerPanel);
-
-	result = sim->init(ctx);
+	int result = sim->init(ctx);
 	if (result)
 		return result;
 
-	result = main_panel->init(ctx, sim->swap_img[1]); 
+	main_panel = Editor::open_image_viewer(sim->swap_img[1], "Simulation", nullptr);
+	if (!main_panel)
+		return Editor::ERROR;
+	main_panel->set_closable(false);
+
+	result = heightmap_panel->set_texture(ctx, sim->swap_tex[1]);
 	if (result)
 		return result;
 
-	result = heightmap_panel->init(this, ctx, sim->swap_tex[1]); 
-	if (result)
-		return result;
+	heightmap_panel->viewport()->set_closable(false);
 
-
-	return result;
+	return Editor::OK;
 }
 int TestApp::update()
 {
-	int result = EXIT_SUCCESS;
+	int result = Editor::OK;
 
-	if ((result = main_panel->update(ctx)))
+	// main_panel is editor owned, so the editor drives its update and render.
+	if ((result = heightmap_panel->update(ctx)) < Editor::OK)
 		return result;
 
-	if ((result = heightmap_panel->update(ctx)))
-		return result;
-
-	if ((result = sim->update(ctx)))
+	if ((result = sim->update(ctx)) < Editor::OK)
 		return result;
 
 	sim->uniforms.cursor1 = sim->uniforms.cursor2;
 	sim->uniforms.cursor2 = main_panel->get_grid_cursor_pos();
-	sim->uniforms.active = 
-		this->input.right_mouse_pressed && 
-		main_panel->panel->is_content_selected();
+	sim->uniforms.active =
+		Editor::input().right_mouse_pressed &&
+		main_panel->is_content_selected();
 
 	ev2::flush_uploads(ctx);
 
-	return result;
+	return Editor::OK;
 }
 void TestApp::render()
 {
-	main_panel->render(ctx);
 	heightmap_panel->render(ctx);
 }
-void TestApp::destroy()
+TestApp::~TestApp()
 {
-	heightmap_panel->destroy(ctx);
-	main_panel->destroy(ctx);
-	sim->destroy(ctx);
-
-	App::terminate();
+	if (heightmap_panel)
+		heightmap_panel.reset(nullptr);
+	if (sim)
+		sim->destroy(ctx);
 }
 
 int main(int argc, char *argv[])
 {
 	std::unique_ptr<TestApp> app (new TestApp{});
 
-	if (app->initialize(argc, argv) != App::OK)
+	int result = Editor::init(argc, argv, "Wave Sim", 1200, 800);
+	if (result < Editor::OK)
+		return result;
+
+	add_project_mounts(Editor::ctx());
+
+	if (app->initialize(argc, argv) != Editor::OK)
 		return EXIT_FAILURE;
 
 	int status;
 
 	for (;;)
 	{
-		status = app->begin_frame();
-		if (should_exit(status))
+		status = Editor::begin_frame();
+		if (status != Editor::OK)
 			break;
 
 		status = app->update();
-		if (should_exit(status))
+		if (status != Editor::OK)
 			break;
 
 		app->render();
 
-		status = app->end_frame();
-		if (should_exit(status))
+		status = Editor::end_frame();
+		if (status != Editor::OK)
 			break;
 	}
 
-	app->destroy();
+	app.reset(nullptr);
+	Editor::shutdown();
 
-	return status;
+	return status < 0 ? status : 0;
 }

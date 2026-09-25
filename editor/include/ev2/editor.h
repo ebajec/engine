@@ -22,6 +22,11 @@
 
 class ImageViewer2;
 
+enum HotViewportFlagBits{
+	HOT_VIEWPORT_WANT_CAPTURE = 0x1
+};
+typedef uint32_t HotViewportFlags;
+
 namespace Editor
 {
 	enum {
@@ -77,6 +82,12 @@ namespace Editor
 
 	bool should_close();
 	ev2::PassID gui_pass();
+
+	uint32_t get_capture_owner();
+	uint32_t get_hot_viewport();
+
+	void set_hot_viewport(uint32_t id, HotViewportFlags flags = 0);
+	void release_capture();
 
 	std::shared_ptr<ImageViewer2> open_image_viewer(
 		ev2::ImageID image,

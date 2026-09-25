@@ -12,6 +12,8 @@
 #include <backends/imgui_impl_glfw.h>
 #include "backends/imgui_impl_vulkan.h"
 
+#include "GLFW/glfw3.h"
+
 #include <cstdio>
 #include <csignal>
 #include <atomic>
@@ -39,6 +41,14 @@ struct EditorState {
 
 	uint64_t frame_counter = 0;
 
+	// id of viewport
+	uint32_t capture_owner = 0;
+	uint32_t hot_viewport = 0;
+	HotViewportFlags hot_viewport_flags = 0;
+
+	// set on release of mouse capture
+	bool discard_mouse_delta = false;
+
 	std::unordered_map<
 		ev2::ImageID, 
 		std::weak_ptr<ImageViewer2>
@@ -53,9 +63,6 @@ struct EditorState {
 	std::atomic_bool has_shutdown = false;
 	std::atomic_bool has_initialized = false;
 
-	// admitting defeat...
-	std::unordered_set<std::string> names;
-
 	//------------------------------------------------------------------------------
 	
 	void update_input();
@@ -67,16 +74,28 @@ struct EditorState {
 void EditorState::update_input()
 {
 	std::swap(input.mouse_pos[0], input.mouse_pos[1]);
+
+	if (discard_mouse_delta) {
+		discard_mouse_delta = false;
+		input.mouse_pos[1] = input.mouse_pos[0];
+	}
+
 	glfwGetCursorPos(win.ptr, &input.mouse_pos[0].x, &input.mouse_pos[0].y);
 
 #ifdef ENABLE_IMGUI
 	ImGuiIO& io = ImGui::GetIO();
 	input.mouse_in_gui = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) || io.WantCaptureMouse;
 
-	if (io.WantCaptureKeyboard) {
-		// Prevents infinite movement
-		input.move_dir = glm::vec3(0);
+	glm::vec3 dir(0);
+	if (!io.WantTextInput) {
+		if (glfwGetKey(g.win.ptr, GLFW_KEY_W)) dir += glm::vec3(1,0,0);
+		if (glfwGetKey(g.win.ptr, GLFW_KEY_A)) dir += glm::vec3(0,-1,0);
+		if (glfwGetKey(g.win.ptr, GLFW_KEY_S)) dir += glm::vec3(-1,0,0);
+		if (glfwGetKey(g.win.ptr, GLFW_KEY_D)) dir += glm::vec3(0,1,0);
+		if (glfwGetKey(g.win.ptr, GLFW_KEY_LEFT_SHIFT)) dir += glm::vec3(0,0,-1);
+		if (glfwGetKey(g.win.ptr, GLFW_KEY_SPACE)) dir += glm::vec3(0,0,1);
 	}
+	input.move_dir = dir;
 #endif
 }
 
@@ -233,63 +252,30 @@ void image_viewer_close_callback(void *usr, ev2::ImageID image)
 	g.inspector_image_viewers.erase(it);
 }
 
+
 //------------------------------------------------------------------------------
 // GLFW input callbacks
-
-static inline void glfw_wasd_to_motion(glm::vec3& dir, int key, int action) 
-{
-	static const int key_fwd = GLFW_KEY_W;
-	static const int key_bkwd = GLFW_KEY_S; 
-	static const int key_left = GLFW_KEY_A;
-	static const int key_right = GLFW_KEY_D;
-	static const int key_up = GLFW_KEY_SPACE;
-	static const int key_down = GLFW_KEY_LEFT_SHIFT;
-
-	if (key == key_fwd && action == GLFW_PRESS) 
-		dir += glm::vec3(1,0,0);
-	if (key == key_right && action == GLFW_PRESS) 
-		dir += glm::vec3(0,1,0);
-	if (key == key_up && action == GLFW_PRESS) 
-		dir += glm::vec3(0,0,1);
-	if (key == key_bkwd && action == GLFW_PRESS) 
-		dir += glm::vec3(-1,0,0);
-	if (key == key_left && action == GLFW_PRESS) 
-		dir += glm::vec3(0,-1,0);
-	if (key == key_down && action == GLFW_PRESS) 
-		dir += glm::vec3(0,0,-1);
-
-	if (key == key_fwd && action == GLFW_RELEASE) 
-		dir -= glm::vec3(1,0,0);
-	if (key == key_right && action == GLFW_RELEASE) 
-		dir -= glm::vec3(0,1,0);
-	if (key == key_up && action == GLFW_RELEASE) 
-		dir -= glm::vec3(0,0,1);
-	if (key == key_bkwd && action == GLFW_RELEASE) 
-		dir -= glm::vec3(-1,0,0);
-	if (key == key_left && action == GLFW_RELEASE) 
-		dir -= glm::vec3(0,-1,0);
-	if (key == key_down && action == GLFW_RELEASE) 
-		dir -= glm::vec3(0,0,-1);
-}
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
 #ifdef ENABLE_IMGUI
 	ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
+	ImGuiIO& io = ImGui::GetIO();
 #endif
+
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) 
 	{
 		if (g.input.mouse_mode == GLFW_CURSOR_DISABLED) {
-			g.input.mouse_mode = GLFW_CURSOR_NORMAL;
-		} else  {
+			Editor::release_capture();
+		} else if (g.hot_viewport && (g.hot_viewport_flags & HOT_VIEWPORT_WANT_CAPTURE)) {
 			g.input.mouse_mode = GLFW_CURSOR_DISABLED;
+			g.capture_owner = g.hot_viewport;
+
+#ifdef ENABLE_IMGUI
+			io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
+#endif
+			glfwSetInputMode(window, GLFW_CURSOR, g.input.mouse_mode);
 		}
-
-		glfwSetInputMode(window, GLFW_CURSOR, g.input.mouse_mode);
-	}
-
-	if (!ImGui::GetIO().WantCaptureKeyboard) {
-		glfw_wasd_to_motion(g.input.move_dir, key, action);
 	}
 }
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
@@ -550,8 +536,11 @@ int begin_frame()
 	g.gui_pass = ev2::begin_gfx_pass(g.ctx, &pass_info);
 
 	for (auto it = g.image_viewers.begin(); it != g.image_viewers.end();) {
-		ImageViewer2 &viewer = *(*it); 
-		if (viewer.update(g.ctx) == SHOULD_CLOSE) {
+		ImageViewer2 &viewer = *(*it);
+		int viewer_flags = 0;
+		viewer.update(g.ctx, &viewer_flags);
+
+		if (viewer_flags & Viewport::SHOULD_CLOSE_BIT) {
 			it = g.image_viewers.erase(it);
 		} else {
 			++it;
@@ -643,6 +632,35 @@ ev2::PassID gui_pass()
 	return g.gui_pass;
 }
 
+uint32_t get_capture_owner()
+{
+	return g.capture_owner;
+}
+
+uint32_t get_hot_viewport()
+{
+	return g.hot_viewport;
+}
+
+void set_hot_viewport(uint32_t id, HotViewportFlags flags)
+{
+	g.hot_viewport = id;
+	g.hot_viewport_flags = flags;
+}
+
+void release_capture()
+{
+	g.discard_mouse_delta = true;
+	g.capture_owner = 0;
+	g.hot_viewport = 0;
+	g.hot_viewport_flags = 0;
+	g.input.mouse_mode = GLFW_CURSOR_NORMAL;
+#ifdef ENABLE_IMGUI
+	ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+#endif
+	glfwSetInputMode(g.win.ptr, GLFW_CURSOR, g.input.mouse_mode);
+}
+
 std::shared_ptr<ImageViewer2> open_image_viewer(
 	ev2::ImageID image,
 	const char *name,
@@ -667,7 +685,7 @@ std::shared_ptr<ImageViewer2> open_image_viewer(
 
 	if (name)
 		panel_name = name;
-	if (const char *img_name = ev2::get_image_name(g.ctx, image))
+	else if (const char *img_name = ev2::get_image_name(g.ctx, image))
 		panel_name += img_name;
 	else 
 		panel_name += "Image" + std::to_string(image.id);

@@ -30,7 +30,7 @@ struct TestApp
 {
 	ev2::GfxContext *ctx;
 
-	std::unique_ptr<Viewport2> viewport;
+	std::unique_ptr<Viewport> viewport;
 	std::shared_ptr<PanningCamera> camera;
 
 	std::unique_ptr<GPUSort> sorter;
@@ -75,7 +75,7 @@ int TestApp::initialize(int argc, char **argv)
 	ctx = Editor::ctx();
 
 	camera = std::make_shared<PanningCamera>(glm::dvec2(0.5, 0.5), 1.0);
-	viewport.reset(new Viewport2("Visualization", 100, 100, 250, 250));
+	viewport.reset(new Viewport("Visualization", 100, 100, 250, 250));
 	viewport->set_camera(camera);
 
 	on_count_changed();
@@ -282,15 +282,13 @@ bool should_exit(int status)
 
 int main(int argc, char *argv[])
 {
-	std::unique_ptr<TestApp> app (new TestApp{});
-
 	int result = Editor::OK;
 
 	if (result = Editor::init(argc, argv, "Sorting", 1200, 800); result < Editor::OK)
 		return result;
-
 	add_project_mounts(Editor::ctx());
 
+	std::unique_ptr<TestApp> app (new TestApp{});
 	if (app->initialize(argc, argv) != Editor::OK)
 		return EXIT_FAILURE;
 

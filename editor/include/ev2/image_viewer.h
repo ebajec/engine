@@ -10,7 +10,7 @@
 
 struct PanningCamera;
 
-class ImageViewer2 : public Viewport2
+class ImageViewer2 : public Viewport
 {
 public:
 	enum FlagsBits 
@@ -58,7 +58,9 @@ public:
 	);
 	~ImageViewer2();
 
-	int update(ev2::GfxContext *ctx);
+	// @param p_flags receives Viewport2::UpdateFlagBits; SHOULD_CLOSE_BIT means
+	// this panel was closed in the gui, not that the application should exit.
+	int update(ev2::GfxContext *ctx, int *p_flags = nullptr);
 
 	constexpr bool is_auto_rendered() const {return flags & AUTO_RENDERED_BIT;}
 
@@ -67,6 +69,7 @@ public:
 	int set_image(ev2::GfxContext *ctx, ev2::ImageID img, uint32_t lvl, uint32_t lyr);
 
 	ev2::GfxPipelineID get_pipeline() const { return rd.pipeline; }
+	ev2::ImageID get_image() const { return image; }
 	glm::vec2 get_grid_cursor_pos();
 
 	// Render into the underlying viewport's target, clearing old values

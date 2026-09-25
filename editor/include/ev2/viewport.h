@@ -17,7 +17,7 @@
 
 // A GUI window with it's own render target that gets
 // displayed inside each frame
-class Viewport2
+class Viewport
 {
 	std::vector<std::function<void()>> settings_callbacks;
 
@@ -29,7 +29,6 @@ class Viewport2
 	glm::mat4 m_screen_to_world = glm::mat4(1.f);
 
 	// A global viewport index obtained from a global monotonic counter.
-	// Used for ImGui
 	uint32_t m_id;
 
 	ev2::RenderTargetID m_target = 
@@ -59,13 +58,13 @@ public:
 
 	ev2::RenderTargetID get_target();
 
-	Viewport2 &extend_settings(std::function<void()>&& callback);
+	Viewport &extend_settings(std::function<void()>&& callback);
 	void set_closable(bool closable) {m_closable = closable;}
 	void set_camera(std::shared_ptr<ICameraController> camera);
 
+	bool is_content_selected();
 	bool is_focused() { return m_focused; }
 	bool is_hovered() {return m_hovered; }
-	bool is_content_selected() { return m_focused && m_content_hovered; }
 
 	glm::ivec2 get_size() const { return m_size; }
 	glm::ivec2 get_pos() const { return m_pos; }
@@ -74,10 +73,10 @@ public:
 	ev2::ViewID get_view() const { return m_view; }
 	const glm::mat4 &get_screen_to_world() const { return m_screen_to_world; }
 
-	Viewport2(const char *name, uint32_t x, uint32_t y, uint32_t w, uint32_t h, 
+	Viewport(const char *name, uint32_t x, uint32_t y, uint32_t w, uint32_t h, 
 	   	ev2::RenderTargetFlags flags = ev2::RENDER_TARGET_CREATE_COLOR_BIT);
 
-	~Viewport2();
+	~Viewport();
 
 	int imgui(int *p_flags);
 };

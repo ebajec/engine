@@ -20,7 +20,6 @@ struct CameraInput {
 
     glm::vec3 move_dir;
 
-    bool active;
     bool capture_mouse;
     bool left_down;
 	bool right_down;
@@ -36,6 +35,7 @@ struct ICameraController
 
 	virtual void imgui() {}
 	virtual const char *name() const = 0;
+	virtual bool want_capture_mouse() const { return false; }
 };
 
 #endif //EV2_CAMERA_CONTROLLER_H

@@ -453,6 +453,13 @@ void render_graph_imgui(const RenderGraph *rg)
 
 		std::string name;
 
+		g_state.hovered_edge = UINT32_MAX;
+
+		bool double_clicked = ImGui::IsMouseDoubleClicked(0);
+
+		if (double_clicked)
+			g_state.selected_edge = UINT32_MAX;
+
 		for (uint32_t e = 0; e < edge_count; ++e) {
 			if (rg->edges[e].dst_node == PASS_NODE_INDEX_OUT_OF_FRAME)
 				continue;
@@ -487,11 +494,10 @@ void render_graph_imgui(const RenderGraph *rg)
 			ImGui::InvisibleButton("resource_box", ImVec2_Sub(box_max, box_min));
 			bool hovered = ImGui::IsItemHovered();
 			bool clicked = ImGui::IsItemClicked();
-			bool double_clicked = ImGui::IsMouseDoubleClicked(0);
 			ImGui::PopID();
 
 			if (clicked)
-				g_state.selected_edge_idx = e;
+				g_state.selected_edge = e;
 			if (hovered) {
 				g_state.hovered_edge = e;
 				has_hovered_edge = true;
@@ -501,12 +507,13 @@ void render_graph_imgui(const RenderGraph *rg)
 				}
 			}
 
-			bool matches_selection = is_same_resource(rg, e, g_state.selected_edge_idx);
-			bool is_selected = (g_state.selected_edge_idx == e);
+			bool matches_selection = is_same_resource(rg, e, g_state.selected_edge);
+			bool matches_hover = is_same_resource(rg, e, g_state.hovered_edge);
+			bool is_selected = (g_state.selected_edge == e);
 
-			ImU32 box_bg = is_selected ? selected_bg_color
-						 : (hovered || matches_selection) ? hover_bg_color
-										: resource_bg_color;
+			ImU32 box_bg = (is_selected || matches_selection) ? selected_bg_color
+						 : ((hovered || matches_hover) ? hover_bg_color
+										: resource_bg_color);
 
 			dl->AddRectFilled(box_min, box_max, box_bg, 3.0f);
 			dl->AddRect(box_min, box_max, is_selected ? selected_border_color : border_color, 3.0f);
