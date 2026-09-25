@@ -178,7 +178,7 @@ void PoissonSolver::record_v_cycle(ev2::PassID pass)
 	// Downwards pass has 0 upto N passes inclusive: One pass of jacobi iterations
 	// on original, then N smooth + downsample passes on the residuals
 
-	constexpr uint its[] = {
+	constexpr uint32_t its[] = {
 		3, 3, 3, 2, 2, 2, 2, 1, 1
 	};
 
