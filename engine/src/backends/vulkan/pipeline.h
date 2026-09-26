@@ -124,6 +124,7 @@ struct ViewData
 	glm::mat4 v;
 	glm::mat4 pv;
 	glm::vec3 center;
+	glm::ivec2 resolution;
 };
 
 struct RenderTarget

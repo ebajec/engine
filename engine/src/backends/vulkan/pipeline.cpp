@@ -440,6 +440,8 @@ static ev2::Result parse_gfx_pipeline_file(ev2::GfxContext *ctx, GfxPipelineInfo
 				info->topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
 			else if (type == "LINE_STRIP")
 				info->topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+			else if (type == "TRIANGLE_STRIP")
+				info->topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 		}
 	}
 
