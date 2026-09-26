@@ -21,5 +21,6 @@ target_link_libraries(ev2-editor PUBLIC
 )
 
 target_compile_definitions(ev2-editor PRIVATE EV2_ENABLE_IMGUI)
+target_compile_options(ev2-editor PRIVATE -g)
 
 enable_warnings(ev2-editor)

@@ -58,7 +58,6 @@ if(ENABLE_TSAN AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU"))
 	target_compile_options(${TARGET} PUBLIC
 		-fsanitize=thread
 		-fno-omit-frame-pointer    
-		-g                          
   	)
 	target_link_options(${TARGET} PUBLIC
     	-fsanitize=thread
@@ -68,13 +67,12 @@ message(STATUS "AddressSanitizer Enabled")
 	target_compile_options(${TARGET} PUBLIC
 		-fsanitize=address
 		-fno-omit-frame-pointer    
-		-g                          
 	)
 	target_link_options(${TARGET} PUBLIC
     -fsanitize=address
   )
 endif()
 
-target_compile_options(${TARGET} PUBLIC -g)
+target_compile_options(${TARGET} PRIVATE -g)
 
 enable_warnings(${TARGET})
