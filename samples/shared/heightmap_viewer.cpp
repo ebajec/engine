@@ -30,11 +30,11 @@ static std::vector<uint32_t> create_quad_indices(uint32_t n)
 
 HeightmapViewer::HeightmapViewer(ev2::TextureID tex)
 {
-	m_viewport = std::make_unique<Viewport>("3D view", 700, 0, 500, 500,
+	m_viewport = std::make_unique<ev2::Viewport>("3D view", 700, 0, 500, 500,
 		ev2::RENDER_TARGET_CREATE_DEPTH_BIT | ev2::RENDER_TARGET_CREATE_COLOR_BIT
 	);
 
-	m_camera = std::make_shared<MotionCamera>(
+	m_camera = std::make_shared<ev2::MotionCamera>(
 		glm::dvec3(0,0,0), glm::dvec3(1,1,1), glm::dvec3(0,0,1));
 
 	m_camera->near_plane = 0.01f;
@@ -51,13 +51,13 @@ HeightmapViewer::HeightmapViewer(ev2::TextureID tex)
 	//-----------------------------------------------------------------------------
 	// Setup pipeline
 
-	ev2::GfxContext *ctx = Editor::ctx();
+	ev2::GfxContext *ctx = ev2::editor::ctx();
 
 	rd.pipeline = ev2::load_graphics_pipeline(ctx, "core://pipeline/heightmap.yaml");
 	rd.bindings = ev2::create_bindings(
 		ctx, rd.pipeline, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_STATIC);
 
-	if (tex.is_valid() && set_texture(ctx, tex) != Editor::OK) {
+	if (tex.is_valid() && set_texture(ctx, tex) != ev2::SUCCESS) {
 		log_error("Failed to set texture");
 	}
 	return;
@@ -65,7 +65,7 @@ HeightmapViewer::HeightmapViewer(ev2::TextureID tex)
 
 HeightmapViewer::~HeightmapViewer()
 {
-	destroy(Editor::ctx());
+	destroy(ev2::editor::ctx());
 }
 
 int HeightmapViewer::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
@@ -92,7 +92,7 @@ int HeightmapViewer::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
 	}
 
 	if (ev2::bind_texture(ctx, rd.bindings, "u_tex", tex) != ev2::SUCCESS) {
-		return Editor::ERROR;
+		return ev2::EUNKNOWN;
 	}
 	ev2::flush_bindings(ctx, rd.bindings);
 
@@ -100,7 +100,7 @@ int HeightmapViewer::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
 	rd.w = w;
 	rd.h = h;
 
-	return Editor::OK;
+	return ev2::SUCCESS;
 }
 
 int HeightmapViewer::update(ev2::GfxContext *ctx, int *p_flags)

@@ -28,8 +28,8 @@ struct PoissonSolverApp
 	std::unique_ptr<MeanSubtractor> mean_subtractor;
 
 	std::unique_ptr<HeightmapViewer> heightmap_panel;
-	std::shared_ptr<ImageViewer2> lhs_panel;
-	std::shared_ptr<ImageViewer2> rhs_panel;
+	std::shared_ptr<ev2::ImageViewer> lhs_panel;
+	std::shared_ptr<ev2::ImageViewer> rhs_panel;
 	std::unique_ptr<BoundaryEditor> bd_panel;
 
 	glm::uvec2 grid;
@@ -50,19 +50,19 @@ struct PoissonSolverApp
 	{
 		(void)argc; (void)argv;
 
-		ctx = Editor::ctx();
+		ctx = ev2::editor::ctx();
 
 		bd_panel.reset(new BoundaryEditor(0, 0, 500, 500, "BdMask"));
 		heightmap_panel.reset(new HeightmapViewer());
 
 		int result = on_sim_size_changed();
-		if (result < Editor::OK)
+		if (result < ev2::SUCCESS)
 			return result;
 
 		cursor = ev2::load_compute_pipeline(ctx, "fluid://shader/cursor_r32f.comp");
 		bindings = ev2::create_bindings(ctx, cursor, 0, ev2::BINDING_MODE_DYNAMIC);
 
-		return Editor::OK;
+		return ev2::SUCCESS;
 	}
 
 	void record_update()
@@ -74,10 +74,10 @@ struct PoissonSolverApp
 		if (true) {
 			Uniforms pc = uniforms;
 
-			if (!Editor::input().right_mouse_pressed) {
+			if (!ev2::editor::input().right_mouse_pressed) {
 				pc.power = 0.f;
 			}
-			pc.power *= (float)Editor::input().dt;
+			pc.power *= (float)ev2::editor::input().dt;
 
 			ev2::cmd_use_image(pass, rhs, ev2::USAGE_STORAGE_READ_WRITE_COMPUTE);
 			ev2::cmd_bind_compute_pipeline(pass, cursor);
@@ -133,23 +133,23 @@ struct PoissonSolverApp
 		}
 		ImGui::End();
 
-		int res = Editor::OK;
+		int res = ev2::SUCCESS;
 
 		if (needs_resize) {
 			res = on_sim_size_changed();
 
-			if (res < Editor::OK)
+			if (res < ev2::SUCCESS)
 				return res;
 		}
 
 		// lhs_panel and rhs_panel are editor owned, so the editor updates and
 		// renders them. bd_panel paints into its image, so we drive it here.
 		res = bd_panel->update(ctx);
-		if (res < Editor::OK)
+		if (res < ev2::SUCCESS)
 			return res;
 
 		res = heightmap_panel->update(ctx);
-		if (res < Editor::OK)
+		if (res < ev2::SUCCESS)
 			return res;
 
 		uniforms.p1 = rhs_panel->get_grid_cursor_pos();
@@ -166,7 +166,7 @@ struct PoissonSolverApp
 
 		do_v_cycle = false;
 
-		return Editor::OK;
+		return ev2::SUCCESS;
 	}
 
 	void render()
@@ -226,7 +226,7 @@ struct PoissonSolverApp
 
 		int res = solver->init(ctx, grid.x, grid.y);
 
-		if (res < Editor::OK)
+		if (res < ev2::SUCCESS)
 			return res;
 
 		lhs = ev2::create_image(ctx, grid.x, grid.y, 1, ev2::IMAGE_FORMAT_32F, 
@@ -235,7 +235,7 @@ struct PoissonSolverApp
 			ev2::IMAGE_USAGE_STORAGE_BIT);
 
 		if (!lhs.is_valid())
-			return Editor::ERROR;
+			return ev2::EUNKNOWN;
 
 		rhs = ev2::create_image(ctx, grid.x, grid.y, 1, ev2::IMAGE_FORMAT_32F, 
 			ev2::IMAGE_USAGE_TRANSFER_DST_BIT |
@@ -243,7 +243,7 @@ struct PoissonSolverApp
 			ev2::IMAGE_USAGE_STORAGE_BIT);
 
 		if (!rhs.is_valid())
-			return Editor::ERROR;
+			return ev2::EUNKNOWN;
 
 		bd = ev2::create_image(ctx, grid.x, grid.y, 1, ev2::IMAGE_FORMAT_R8_UNORM,
 			ev2::IMAGE_USAGE_TRANSFER_DST_BIT |
@@ -251,12 +251,12 @@ struct PoissonSolverApp
 			ev2::IMAGE_USAGE_STORAGE_BIT);
 
 		if (!bd.is_valid())
-			return Editor::ERROR;
+			return ev2::EUNKNOWN;
 
 		res = mean_subtractor->init(ctx, grid.x, grid.y);
 
 		if (res)
-			return Editor::ERROR;
+			return ev2::EUNKNOWN;
 
 		if (heightmap_tex.is_valid())
 			ev2::destroy_texture(ctx, heightmap_tex);
@@ -265,25 +265,25 @@ struct PoissonSolverApp
 		// The viewers outlive a resize: build them once, then just repoint them
 		// at the new images.
 		if (!lhs_panel) {
-			lhs_panel = Editor::open_image_viewer(lhs, "lhs",
+			lhs_panel = ev2::editor::open_image_viewer(lhs, "lhs",
 				"fluid://pipeline/pressure_viz.yaml");
-			rhs_panel = Editor::open_image_viewer(rhs, "rhs",
+			rhs_panel = ev2::editor::open_image_viewer(rhs, "rhs",
 				"fluid://pipeline/pressure_viz.yaml");
 
 			if (!lhs_panel || !rhs_panel)
-				return Editor::ERROR;
+				return ev2::EUNKNOWN;
 
 			lhs_panel->set_closable(false);
 			rhs_panel->set_closable(false);
 
 			res = heightmap_panel->set_texture(ctx, heightmap_tex);
-			if (res < Editor::OK)
+			if (res < ev2::SUCCESS)
 				return res;
 
 			heightmap_panel->viewport()->set_closable(false);
 		} else {
 			res = heightmap_panel->set_texture(ctx, heightmap_tex);
-			if (res < Editor::OK)
+			if (res < ev2::SUCCESS)
 				return res;
 		}
 
@@ -295,7 +295,7 @@ struct PoissonSolverApp
 		reset_rhs();
 		reset_bd();
 
-		return Editor::OK;
+		return ev2::SUCCESS;
 	}
 };
 
@@ -303,36 +303,36 @@ int main(int argc, char *argv[])
 {
 	std::unique_ptr<PoissonSolverApp> app (new PoissonSolverApp{});
 
-	int result = Editor::init(argc, argv, "poisson solver", 1200, 1200);
-	if (result < Editor::OK)
+	int result = ev2::editor::init(argc, argv, "poisson solver", 1200, 1200);
+	if (result < ev2::SUCCESS)
 		return result;
 
-	add_project_mounts(Editor::ctx());
+	add_project_mounts(ev2::editor::ctx());
 
-	if (app->initialize(argc, argv) != Editor::OK)
+	if (app->initialize(argc, argv) != ev2::SUCCESS)
 		return EXIT_FAILURE;
 
-	int status = Editor::OK;
+	int status = ev2::SUCCESS;
 
 	for(;;)
 	{
-		status = Editor::begin_frame();
-		if (status != Editor::OK)
+		status = ev2::editor::begin_frame();
+		if (status != ev2::SUCCESS)
 			break;
 
 		status = app->update();
-		if (status != Editor::OK)
+		if (status != ev2::SUCCESS)
 			break;
 
 		app->render();
 
-		status = Editor::end_frame();
-		if (status != Editor::OK)
+		status = ev2::editor::end_frame();
+		if (status != ev2::SUCCESS)
 			break;
 	}
 
 	app.reset(nullptr);
-	Editor::shutdown();
+	ev2::editor::shutdown();
 
 	return status < 0 ? status : 0;
 }

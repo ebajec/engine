@@ -3,6 +3,8 @@
 
 #include "ev2/camera_controller.h"
 
+namespace ev2 {
+
 struct PanningCamera : public ICameraController
 {
 	double zoom = 1.0;
@@ -19,4 +21,7 @@ struct PanningCamera : public ICameraController
 
 	virtual void imgui() final;
 };
+
+} // namespace ev2
+
 #endif // EV2_PANNING_CAMERA_H

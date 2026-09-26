@@ -7,6 +7,9 @@
 
 #include <cstdio>
 
+namespace ev2 {
+
+
 MotionCamera::MotionCamera(glm::dvec3 in_center, glm::dvec3 in_eye, glm::dvec3 in_up) 
 {
 	glm::vec3 n = glm::normalize(glm::vec3(in_eye - in_center));
@@ -91,3 +94,5 @@ void MotionCamera::move(glm::dvec3 motion)
 	glm::dvec3 v = V;
 	pos += v;
 }
+
+} // namespace ev2

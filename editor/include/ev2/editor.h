@@ -20,21 +20,17 @@
 //stl
 #include <memory>
 
-class ImageViewer2;
+namespace ev2 {
+
+class ImageViewer;
 
 enum HotViewportFlagBits{
 	HOT_VIEWPORT_WANT_CAPTURE = 0x1
 };
 typedef uint32_t HotViewportFlags;
 
-namespace Editor
+namespace editor
 {
-	enum {
-		OK = 0,
-		ERROR = -1,
-		SHOULD_CLOSE = 1
-	};
-
 	struct InputData
 	{
 		// for wasd + shift + space camera movement
@@ -71,9 +67,9 @@ namespace Editor
 		const char *title;
 	};
 
-	int init(int argc, char *argv[], const char *title = "Editor", int w = 800, int h = 800);
-	int begin_frame();
-	int end_frame();
+	ev2::Result init(int argc, char *argv[], const char *title = "Editor", int w = 800, int h = 800);
+	ev2::Result begin_frame();
+	ev2::Result end_frame();
 	void shutdown();
 
 	ev2::GfxContext *ctx();
@@ -89,7 +85,7 @@ namespace Editor
 	void set_hot_viewport(uint32_t id, HotViewportFlags flags = 0);
 	void release_capture();
 
-	std::shared_ptr<ImageViewer2> open_image_viewer(
+	std::shared_ptr<ImageViewer> open_image_viewer(
 		ev2::ImageID image,
 		const char *name,
 		const char *pipeline,
@@ -97,6 +93,8 @@ namespace Editor
 		uint32_t w = 500,
 		uint32_t h = 500
 	);
-}
+} // namespace editor
+
+} // namespace ev2
 
 #endif //EV2_EDITOR_H

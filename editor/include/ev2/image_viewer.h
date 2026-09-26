@@ -8,9 +8,11 @@
 
 #include <glm/mat4x4.hpp>
 
+namespace ev2 {
+
 struct PanningCamera;
 
-class ImageViewer2 : public Viewport
+class ImageViewer : public Viewport
 {
 public:
 	enum FlagsBits 
@@ -47,7 +49,7 @@ private:
 	void destroy(ev2::GfxContext *ctx);
 public:
 
-	ImageViewer2(
+	ImageViewer(
 		uint32_t x,
 		uint32_t y,
 		uint32_t w,
@@ -56,17 +58,17 @@ public:
 		const char * pipeline = "core://pipeline/screen_quad.yaml",
 		const char *name = nullptr
 	);
-	~ImageViewer2();
+	~ImageViewer();
 
 	// @param p_flags receives Viewport2::UpdateFlagBits; SHOULD_CLOSE_BIT means
 	// this panel was closed in the gui, not that the application should exit.
-	int update(ev2::GfxContext *ctx, int *p_flags = nullptr);
+	ev2::Result update(ev2::GfxContext *ctx, int *p_flags = nullptr);
 
 	constexpr bool is_auto_rendered() const {return flags & AUTO_RENDERED_BIT;}
 
-	int set_pipeline(const char *path);
+	ev2::Result set_pipeline(const char *path);
 	void set_texture_filter(ev2::TextureFilter filter);
-	int set_image(ev2::GfxContext *ctx, ev2::ImageID img, uint32_t lvl, uint32_t lyr);
+	ev2::Result set_image(ev2::GfxContext *ctx, ev2::ImageID img, uint32_t lvl, uint32_t lyr);
 
 	ev2::GfxPipelineID get_pipeline() const { return rd.pipeline; }
 	ev2::ImageID get_image() const { return image; }
@@ -76,5 +78,7 @@ public:
 	void render(ev2::GfxContext *ctx);
 	void record_draw(ev2::PassID pass);
 };
+
+} // namespace ev2
 
 #endif // EV2_IMAGE_VIEWER_H

@@ -109,7 +109,7 @@ int WaveSim::update()
 	if (app->input.mouse_mode == GLFW_CURSOR_DISABLED) 
 		control.rotate(-delta.y,delta.x);
 
-	// TODO: Switch to using Editor::InputData
+	// TODO: Switch to using ev2::editor::InputData
 	control.move(app->input.dt*glm::dvec3(speed*keydir));
 
 

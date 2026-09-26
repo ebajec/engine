@@ -3,6 +3,8 @@
 
 #include "ev2/camera_controller.h"
 
+namespace ev2 {
+
 struct MotionCamera : public ICameraController
 {
 	// degrees for slider readability
@@ -37,5 +39,7 @@ struct MotionCamera : public ICameraController
 	void rotate(float dtht, float dphi);
 	void move(glm::dvec3 motion); 
 };
+
+} // namespace ev2
 
 #endif //EV2_MOTION_CAMERA_H

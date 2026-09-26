@@ -3,6 +3,9 @@
 
 #include "ev2/utils/log.h"
 
+namespace ev2 {
+
+
 void PanningCamera::update(const CameraInput &input)
 {
 	// Panning should do nothing when cursor is disabled
@@ -53,3 +56,4 @@ const char *PanningCamera::name() const
 	return "Panning Camera";
 }
 
+} // namespace ev2

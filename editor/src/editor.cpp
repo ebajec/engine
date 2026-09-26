@@ -25,7 +25,7 @@
 #include <unistd.h>
 #endif
 
-namespace Editor 
+namespace ev2::editor
 {
 
 namespace {
@@ -51,9 +51,9 @@ struct EditorState {
 
 	std::unordered_map<
 		ev2::ImageID, 
-		std::weak_ptr<ImageViewer2>
+		std::weak_ptr<ImageViewer>
 	> inspector_image_viewers;
-	std::unordered_set<std::shared_ptr<ImageViewer2>> image_viewers;
+	std::unordered_set<std::shared_ptr<ImageViewer>> image_viewers;
 
 	ev2::PassID gui_pass;
 
@@ -66,7 +66,7 @@ struct EditorState {
 	//------------------------------------------------------------------------------
 	
 	void update_input();
-	int resize(int width, int height);
+	ev2::Result resize(int width, int height);
 	void setup_root_dockspace();
 	void imgui();
 } g;
@@ -99,15 +99,14 @@ void EditorState::update_input()
 #endif
 }
 
-int EditorState::resize(int width, int height)
+ev2::Result EditorState::resize(int width, int height)
 {
 	glfwSetWindowSize(win.ptr, width, height);
 
 	win.width = width;
 	win.height = height;
 
-	return ev2::resize_swapchain(ctx, width, height) == ev2::SUCCESS ? 
-		OK : ERROR;
+	return ev2::resize_swapchain(ctx, width, height);
 }
 
 static void build_default_layout(ImGuiID dockspaceID)
@@ -232,7 +231,7 @@ void image_viewer_open_callback(void *usr, ev2::ImageID image)
 	if (it != g.inspector_image_viewers.end())
 		return;
 
-	std::shared_ptr<ImageViewer2> viewer = open_image_viewer(image, nullptr, nullptr);
+	std::shared_ptr<ImageViewer> viewer = open_image_viewer(image, nullptr, nullptr);
 
 	g.inspector_image_viewers[image] = viewer;
 }
@@ -245,7 +244,7 @@ void image_viewer_close_callback(void *usr, ev2::ImageID image)
 	if (it == g.inspector_image_viewers.end())
 		return;
 
-	if (std::shared_ptr<ImageViewer2> viewer = it->second.lock()) {
+	if (std::shared_ptr<ImageViewer> viewer = it->second.lock()) {
 		g.image_viewers.erase(viewer);
 	}
 
@@ -266,7 +265,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) 
 	{
 		if (g.input.mouse_mode == GLFW_CURSOR_DISABLED) {
-			Editor::release_capture();
+			editor::release_capture();
 		} else if (g.hot_viewport && (g.hot_viewport_flags & HOT_VIEWPORT_WANT_CAPTURE)) {
 			g.input.mouse_mode = GLFW_CURSOR_DISABLED;
 			g.capture_owner = g.hot_viewport;
@@ -355,7 +354,7 @@ void print_glfw_platform()
 
 } //namespace
 
-int init(int argc, char *argv[], const char *title, int w, int h)
+ev2::Result init(int argc, char *argv[], const char *title, int w, int h)
 {
 	bool enable_validation_layers = false;
 
@@ -370,7 +369,7 @@ int init(int argc, char *argv[], const char *title, int w, int h)
 
 	if (!glfwInit()) {
 		log_error("Failed to initialize GLFW!");
-		return ERROR;
+		return ev2::EINIT_FAILED;
 	}
 
 	glfwWindowHint(GLFW_CLIENT_API,GLFW_NO_API);
@@ -387,12 +386,12 @@ int init(int argc, char *argv[], const char *title, int w, int h)
 
 	if (!g.win.ptr) {
 		log_error("Failed to create GLFW window");
-		return ERROR;
+		return ev2::EINIT_FAILED;
 	}
 
 	if (!glfwVulkanSupported()) {
 		log_error("Vulkan not supported by GLFW");
-		return ERROR;
+		return ev2::EINIT_FAILED;
 	}
 
 	std::vector<const char *> validationLayers = {
@@ -418,7 +417,7 @@ int init(int argc, char *argv[], const char *title, int w, int h)
 
 	ev2::Result ev2_res = ev2::init_for_vulkan(init_opts);
 	if (ev2_res != ev2::SUCCESS)
-		return ERROR;
+		return ev2_res;
 
 	VkInstance vk_instance = ev2::get_vulkan_instance(); 
 	VkSurfaceKHR surface = VK_NULL_HANDLE;
@@ -427,7 +426,7 @@ int init(int argc, char *argv[], const char *title, int w, int h)
 
 	if (vk_res < VK_SUCCESS) {
         log_error("failed to create window surface!");
-		return ERROR;
+		return ev2::EINIT_FAILED;
     }
 
 	ev2::GfxContextVulkanInfo vulkan_params = {
@@ -449,7 +448,7 @@ int init(int argc, char *argv[], const char *title, int w, int h)
 	ImGui::StyleColorsDark();
 	if (!ImGui_ImplGlfw_InitForVulkan(g.win.ptr, true)) {
 		log_error("Failed to initialize imgui for glfw");
-		return ERROR;
+		return ev2::EINIT_FAILED;
 	}
 
 	ImGui_ImplVulkan_InitInfo init_info;
@@ -457,7 +456,7 @@ int init(int argc, char *argv[], const char *title, int w, int h)
 
 	if (!ImGui_ImplVulkan_Init(&init_info)) {
 		log_error("Failed to initialize imgui for vulkan");
-		return ERROR;
+		return ev2::EINIT_FAILED;
 	}
 
 	ImPlot::CreateContext();
@@ -476,19 +475,19 @@ int init(int argc, char *argv[], const char *title, int w, int h)
 
 	g.has_initialized = true;
 
-	return OK;
+	return ev2::SUCCESS;
 }
 
-int begin_frame()
+ev2::Result begin_frame()
 {
 	if (glfwWindowShouldClose(g.win.ptr))
-		return SHOULD_CLOSE;
+		return ev2::SHOULD_CLOSE;
 	if (g.should_close) {
 		glfwSetWindowShouldClose(g.win.ptr, true);
-		return SHOULD_CLOSE;
+		return ev2::SHOULD_CLOSE;
 	}
 
-	int result = OK;
+	ev2::Result result = ev2::SUCCESS;
 
 	// I find it nicer to have ImGui captured wherever I need it to between frames
 	if (g.frame_counter++) {
@@ -512,7 +511,7 @@ int begin_frame()
 	g.update_input();
 
 	if (g.input.needs_resize) {
-		if ((result = g.resize(g.win.width, g.win.height)) != OK)
+		if ((result = g.resize(g.win.width, g.win.height)) != ev2::SUCCESS)
 			return result;
 
 		g.input.needs_resize = false;
@@ -524,7 +523,7 @@ int begin_frame()
 
 	ev2::Result ev2_result = ev2::begin_frame(g.ctx);
 	if (ev2_result != ev2::SUCCESS)
-		return ERROR;
+		return ev2_result;
 
 	ev2::GfxPassInfo pass_info = {
 		.viewport = ev2::Rect{0,0,(uint32_t)g.win.width, (uint32_t)g.win.height},
@@ -536,7 +535,7 @@ int begin_frame()
 	g.gui_pass = ev2::begin_gfx_pass(g.ctx, &pass_info);
 
 	for (auto it = g.image_viewers.begin(); it != g.image_viewers.end();) {
-		ImageViewer2 &viewer = *(*it);
+		ImageViewer &viewer = *(*it);
 		int viewer_flags = 0;
 		viewer.update(g.ctx, &viewer_flags);
 
@@ -559,9 +558,9 @@ int begin_frame()
 	return result;
 }
 
-int end_frame()
+ev2::Result end_frame()
 {
-	for (const std::shared_ptr<ImageViewer2> & viewer : g.image_viewers) {
+	for (const std::shared_ptr<ImageViewer> & viewer : g.image_viewers) {
 		if (viewer->is_auto_rendered())
 			viewer->render(g.ctx);
 	}
@@ -578,7 +577,7 @@ int end_frame()
 	ev2::end_pass(g.ctx, g.gui_pass);
 
 	ev2::end_frame(g.ctx);
-	return OK;
+	return ev2::SUCCESS;
 }
 
 void shutdown()
@@ -661,7 +660,7 @@ void release_capture()
 	glfwSetInputMode(g.win.ptr, GLFW_CURSOR, g.input.mouse_mode);
 }
 
-std::shared_ptr<ImageViewer2> open_image_viewer(
+std::shared_ptr<ImageViewer> open_image_viewer(
 	ev2::ImageID image,
 	const char *name,
 	const char *pipeline,
@@ -691,15 +690,15 @@ std::shared_ptr<ImageViewer2> open_image_viewer(
 		panel_name += "Image" + std::to_string(image.id);
 
 	uint32_t flags = 
-		ImageViewer2::EDITOR_OWNED_BIT |
-		(auto_render * ImageViewer2::AUTO_RENDERED_BIT);
+		ImageViewer::EDITOR_OWNED_BIT |
+		(auto_render * ImageViewer::AUTO_RENDERED_BIT);
 
-	std::shared_ptr<ImageViewer2> viewer( 
-		new ImageViewer2(pos.x, pos.y, w, h, flags, 
+	std::shared_ptr<ImageViewer> viewer( 
+		new ImageViewer(pos.x, pos.y, w, h, flags, 
 			pipeline, panel_name.c_str())
 	);
 
-	if (viewer->set_image(g.ctx, image, 0, 0) != OK) {
+	if (viewer->set_image(g.ctx, image, 0, 0) != ev2::SUCCESS) {
 		return nullptr;
 	}
 
@@ -708,4 +707,4 @@ std::shared_ptr<ImageViewer2> open_image_viewer(
 	return viewer;
 }
 
-} // namespace Editor
+} // namespace ev2::editor

@@ -8,8 +8,8 @@
 
 class HeightmapViewer
 {
-	std::unique_ptr<Viewport> m_viewport;
-	std::shared_ptr<MotionCamera> m_camera;
+	std::unique_ptr<ev2::Viewport> m_viewport;
+	std::shared_ptr<ev2::MotionCamera> m_camera;
 
 	struct Uniforms {
 		float scale = 1.f;
@@ -35,8 +35,8 @@ public:
 
 	void render(ev2::GfxContext *ctx);
 
-	Viewport *viewport() { return m_viewport.get(); }
-	MotionCamera *camera() { return m_camera.get(); }
+	ev2::Viewport *viewport() { return m_viewport.get(); }
+	ev2::MotionCamera *camera() { return m_camera.get(); }
 };
 
 #endif //HEIGHTMAP_VIEW_H

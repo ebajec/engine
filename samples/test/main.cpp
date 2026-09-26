@@ -203,7 +203,7 @@ int WaveSim::update(ev2::GfxContext *ctx)
 
 	ev2::end_pass(ctx, pass);
 
-	return Editor::OK;
+	return ev2::SUCCESS;
 }
 
 void WaveSim::destroy(ev2::GfxContext *ctx)
@@ -223,7 +223,7 @@ struct TestApp
 	ev2::GfxContext *ctx = nullptr;
 
 	std::unique_ptr<WaveSim> sim;
-	std::shared_ptr<ImageViewer2> main_panel;
+	std::shared_ptr<ev2::ImageViewer> main_panel;
 	std::unique_ptr<HeightmapViewer> heightmap_panel;
 
 	ev2::TextureID phi_tex;
@@ -247,7 +247,7 @@ int TestApp::initialize(int argc, char **argv)
 {
 	(void)argc; (void)argv;
 
-	ctx = Editor::ctx();
+	ctx = ev2::editor::ctx();
 
 	sim.reset(new WaveSim);
 	heightmap_panel.reset(new HeightmapViewer);
@@ -256,9 +256,9 @@ int TestApp::initialize(int argc, char **argv)
 	if (result)
 		return result;
 
-	main_panel = Editor::open_image_viewer(sim->swap_img[1], "Simulation", nullptr);
+	main_panel = ev2::editor::open_image_viewer(sim->swap_img[1], "Simulation", nullptr);
 	if (!main_panel)
-		return Editor::ERROR;
+		return ev2::EUNKNOWN;
 	main_panel->set_closable(false);
 
 	result = heightmap_panel->set_texture(ctx, sim->swap_tex[1]);
@@ -267,28 +267,28 @@ int TestApp::initialize(int argc, char **argv)
 
 	heightmap_panel->viewport()->set_closable(false);
 
-	return Editor::OK;
+	return ev2::SUCCESS;
 }
 int TestApp::update()
 {
-	int result = Editor::OK;
+	int result = ev2::SUCCESS;
 
 	// main_panel is editor owned, so the editor drives its update and render.
-	if ((result = heightmap_panel->update(ctx)) < Editor::OK)
+	if ((result = heightmap_panel->update(ctx)) < ev2::SUCCESS)
 		return result;
 
-	if ((result = sim->update(ctx)) < Editor::OK)
+	if ((result = sim->update(ctx)) < ev2::SUCCESS)
 		return result;
 
 	sim->uniforms.cursor1 = sim->uniforms.cursor2;
 	sim->uniforms.cursor2 = main_panel->get_grid_cursor_pos();
 	sim->uniforms.active =
-		Editor::input().right_mouse_pressed &&
+		ev2::editor::input().right_mouse_pressed &&
 		main_panel->is_content_selected();
 
 	ev2::flush_uploads(ctx);
 
-	return Editor::OK;
+	return ev2::SUCCESS;
 }
 void TestApp::render()
 {
@@ -306,36 +306,36 @@ int main(int argc, char *argv[])
 {
 	std::unique_ptr<TestApp> app (new TestApp{});
 
-	int result = Editor::init(argc, argv, "Wave Sim", 1200, 800);
-	if (result < Editor::OK)
+	int result = ev2::editor::init(argc, argv, "Wave Sim", 1200, 800);
+	if (result < ev2::SUCCESS)
 		return result;
 
-	add_project_mounts(Editor::ctx());
+	add_project_mounts(ev2::editor::ctx());
 
-	if (app->initialize(argc, argv) != Editor::OK)
+	if (app->initialize(argc, argv) != ev2::SUCCESS)
 		return EXIT_FAILURE;
 
 	int status;
 
 	for (;;)
 	{
-		status = Editor::begin_frame();
-		if (status != Editor::OK)
+		status = ev2::editor::begin_frame();
+		if (status != ev2::SUCCESS)
 			break;
 
 		status = app->update();
-		if (status != Editor::OK)
+		if (status != ev2::SUCCESS)
 			break;
 
 		app->render();
 
-		status = Editor::end_frame();
-		if (status != Editor::OK)
+		status = ev2::editor::end_frame();
+		if (status != ev2::SUCCESS)
 			break;
 	}
 
 	app.reset(nullptr);
-	Editor::shutdown();
+	ev2::editor::shutdown();
 
 	return status < 0 ? status : 0;
 }

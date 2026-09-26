@@ -5,6 +5,8 @@
 #include <glm/vec3.hpp>
 #include <glm/vec2.hpp>
 
+namespace ev2 {
+
 struct CameraInput {
  	// viewport local cursor location, pixel coords
     glm::vec2 cursor;
@@ -37,5 +39,7 @@ struct ICameraController
 	virtual const char *name() const = 0;
 	virtual bool want_capture_mouse() const { return false; }
 };
+
+} // namespace ev2
 
 #endif //EV2_CAMERA_CONTROLLER_H

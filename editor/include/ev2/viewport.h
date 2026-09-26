@@ -15,6 +15,8 @@
 #include <functional>
 #include <memory>
 
+namespace ev2 {
+
 // A GUI window with it's own render target that gets
 // displayed inside each frame
 class Viewport
@@ -47,7 +49,7 @@ class Viewport
 	bool m_closable : 1 = true;
 
 	void cleanup_render_target();
-	int update(int *p_flags);
+	ev2::Result update(int *p_flags);
 public:
 	enum UpdateFlagBits {
 		SHOULD_CLOSE_BIT = 0x1,
@@ -78,7 +80,9 @@ public:
 
 	~Viewport();
 
-	int imgui(int *p_flags);
+	ev2::Result imgui(int *p_flags);
 };
+
+} // namespace ev2
 
 #endif // EV2_VIEWPORT_H

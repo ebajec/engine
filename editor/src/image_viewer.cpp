@@ -4,23 +4,26 @@
 
 #include "ev2/utils/log.h"
 
+namespace ev2 {
+
+
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
 
-glm::vec2 ImageViewer2::get_grid_cursor_pos()
+glm::vec2 ImageViewer::get_grid_cursor_pos()
 {
 	glm::ivec2 viewport_size = Viewport::get_size();
 	glm::ivec2 viewport_pos = Viewport::get_pos();
 	glm::mat4 screen_to_world = Viewport::get_screen_to_world();
 
-	glm::vec2 uv = (glm::vec2(Editor::input().mouse_pos[0]) -
+	glm::vec2 uv = (glm::vec2(editor::input().mouse_pos[0]) -
 		glm::vec2(viewport_pos.x, viewport_pos.y)) / 
 		glm::vec2(viewport_size.x, viewport_size.y); 
 
 	glm::uvec2 image_size;
 
-	ev2::get_image_dims(Editor::ctx(), image, &image_size.x, &image_size.y, nullptr);
+	ev2::get_image_dims(editor::ctx(), image, &image_size.x, &image_size.y, nullptr);
 
 	uv = glm::vec2(uv.x, 1.f - uv.y);
 
@@ -32,7 +35,7 @@ glm::vec2 ImageViewer2::get_grid_cursor_pos()
 	return glm::vec2(uv); 
 }
 
-ImageViewer2::ImageViewer2(
+ImageViewer::ImageViewer(
 	uint32_t x, 
 	uint32_t y, 
 	uint32_t w, 
@@ -48,7 +51,7 @@ ImageViewer2::ImageViewer2(
 
 	flags = in_flags;
 
-	extend_settings([this, ctx = Editor::ctx()]{
+	extend_settings([this, ctx = editor::ctx()]{
 		ImGui::BeginChild("FixedWidthWrapper", ImVec2(250, 0), ImGuiChildFlags_AutoResizeY);
 
 		uint32_t max_levels = 0, max_layers = 0;
@@ -131,14 +134,14 @@ ImageViewer2::ImageViewer2(
 
 }
 
-ImageViewer2::~ImageViewer2()
+ImageViewer::~ImageViewer()
 {
-	destroy(Editor::ctx());
+	destroy(editor::ctx());
 }
 
-void ImageViewer2::set_texture_filter(ev2::TextureFilter filter)
+void ImageViewer::set_texture_filter(ev2::TextureFilter filter)
 {
-	ev2::GfxContext *ctx = Editor::ctx();
+	ev2::GfxContext *ctx = editor::ctx();
 
 	if (filter != rd.filter) {
 		ev2::destroy_texture(ctx, rd.tex);
@@ -147,17 +150,17 @@ void ImageViewer2::set_texture_filter(ev2::TextureFilter filter)
 	rd.filter = filter;
 }
 
-int ImageViewer2::set_pipeline(const char *path)
+ev2::Result ImageViewer::set_pipeline(const char *path)
 {
-	ev2::GfxContext *ctx = Editor::ctx();
+	ev2::GfxContext *ctx = editor::ctx();
 
 	ev2::GfxPipelineID pipeline = ev2::load_graphics_pipeline(ctx, path);
 
 	if (rd.pipeline.is_valid() && rd.pipeline == pipeline)
-		return 0;
+		return ev2::SUCCESS;
 
 	if (!EV2_VALID(pipeline))
-		return Editor::ERROR;
+		return ev2::ELOAD_FAILED;
 
 	if (rd.bindings.is_valid()) {
 		ev2::destroy_bindings(ctx, rd.bindings);
@@ -169,15 +172,15 @@ int ImageViewer2::set_pipeline(const char *path)
 	rd.bindings = bindings;
 	pipeline_path = path;
 
-	return Editor::OK;
+	return ev2::SUCCESS;
 }
 
-int ImageViewer2::update(ev2::GfxContext *ctx, int *p_flags)
+ev2::Result ImageViewer::update(ev2::GfxContext *ctx, int *p_flags)
 {
-	int status = Editor::OK;
+	ev2::Result status = ev2::SUCCESS;
 	int update_flags = 0;
 
-	if (status = Viewport::imgui(&update_flags); status < Editor::OK) {
+	if (status = Viewport::imgui(&update_flags); status < ev2::SUCCESS) {
 		return status;
 	}
 
@@ -186,25 +189,25 @@ int ImageViewer2::update(ev2::GfxContext *ctx, int *p_flags)
 
 	// Nothing to bind for a panel that is going away this frame.
 	if (update_flags & Viewport::SHOULD_CLOSE_BIT)
-		return Editor::OK;
+		return ev2::SUCCESS;
 
 	ev2::Result res = ev2::reset_bindings(ctx, rd.bindings);
 	if (res != ev2::SUCCESS)
-		return Editor::ERROR;
+		return res;
 
 	res = ev2::bind_texture(ctx, rd.bindings, "u_tex", rd.tex);
 	if (res != ev2::SUCCESS)
-		return Editor::ERROR;
+		return res;
 
 	ev2::flush_bindings(ctx, rd.bindings);
 
-	return Editor::OK;
+	return ev2::SUCCESS;
 }
 
-int ImageViewer2::set_image(ev2::GfxContext *ctx,
+ev2::Result ImageViewer::set_image(ev2::GfxContext *ctx,
 	ev2::ImageID img, uint32_t lvl, uint32_t lyr)
 {
-	int  result = Editor::OK;
+	ev2::Result result = ev2::SUCCESS;
 
 	if (!rd.pipeline.is_valid()) {
 		result = set_pipeline(pipeline_path.c_str());
@@ -219,10 +222,10 @@ int ImageViewer2::set_image(ev2::GfxContext *ctx,
 
 	rd.tex = ev2::create_texture(ctx, img, rd.filter, lvl, lyr);
 
-	return rd.tex.is_valid() ? Editor::OK : Editor::ERROR;
+	return rd.tex.is_valid() ? ev2::SUCCESS : ev2::EUNKNOWN;
 }
 
-void ImageViewer2::record_draw(ev2::PassID pass)
+void ImageViewer::record_draw(ev2::PassID pass)
 {
 	ev2::cmd_use_image(pass, image, ev2::USAGE_SAMPLED_GRAPHICS);
 	ev2::cmd_bind_gfx_pipeline(pass, rd.pipeline);
@@ -232,7 +235,7 @@ void ImageViewer2::record_draw(ev2::PassID pass)
 	});
 }
 
-void ImageViewer2::render(ev2::GfxContext *ctx)
+void ImageViewer::render(ev2::GfxContext *ctx)
 {
 	if (!image.is_valid()) {
 		log_error("Image not initialized.");
@@ -256,7 +259,7 @@ void ImageViewer2::render(ev2::GfxContext *ctx)
 	ev2::end_pass(ctx, pass);
 }
 
-void ImageViewer2::destroy(ev2::GfxContext *ctx)
+void ImageViewer::destroy(ev2::GfxContext *ctx)
 {
 	if (rd.bindings.is_valid())
 		ev2::destroy_bindings(ctx, rd.bindings);
@@ -264,3 +267,4 @@ void ImageViewer2::destroy(ev2::GfxContext *ctx)
 		ev2::destroy_texture(ctx, rd.tex);
 }
 
+} // namespace ev2

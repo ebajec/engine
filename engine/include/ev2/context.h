@@ -30,6 +30,7 @@ namespace ev2 {
 
 enum Result
 {
+	SHOULD_CLOSE = 2,
 	TIMEOUT = 1,
 	SUCCESS = 0,
 	ELOAD_FAILED = -1,

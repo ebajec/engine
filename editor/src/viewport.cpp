@@ -7,6 +7,9 @@
 #include <format>
 #include <atomic>
 
+namespace ev2 {
+
+
 ev2::RenderTargetID Viewport::get_target() {
 	return m_target;
 }
@@ -24,7 +27,7 @@ Viewport::Viewport(
 
 	m_target_flags = flags;
 
-	m_view = ev2::create_view(Editor::ctx(), nullptr, nullptr);
+	m_view = ev2::create_view(editor::ctx(), nullptr, nullptr);
 
 	m_pos = glm::ivec2(x,y);
 	m_size = glm::ivec2(w,h);
@@ -34,37 +37,37 @@ Viewport::Viewport(
 Viewport::~Viewport()
 {
 	cleanup_render_target();
-	ev2::destroy_view(Editor::ctx(), m_view);
+	ev2::destroy_view(editor::ctx(), m_view);
 
-	if (Editor::get_capture_owner() == m_id || Editor::get_hot_viewport() == m_id) {
-		Editor::release_capture();
+	if (editor::get_capture_owner() == m_id || editor::get_hot_viewport() == m_id) {
+		editor::release_capture();
 	}
 }
 
 void Viewport::cleanup_render_target()
 {
 	if (m_target.is_valid()) {
-		ev2::destroy_render_target(Editor::ctx(), m_target);
+		ev2::destroy_render_target(editor::ctx(), m_target);
 	}
 	m_target = EV2_NULL_HANDLE(RenderTarget);
 }
 
-int Viewport::update(int *p_flags)
+ev2::Result Viewport::update(int *p_flags)
 {
-	ev2::GfxContext *ctx = Editor::ctx();
+	ev2::GfxContext *ctx = editor::ctx();
 
 	if (m_needs_resize) {
 		cleanup_render_target();
 		imgui_texture = VK_NULL_HANDLE;
 
 		if (m_size.x <= 0 || m_size.y <= 0) {
-			return Editor::OK;
+			return ev2::SUCCESS;
 		}
 
 		m_target = ev2::create_render_target(ctx, (uint32_t)m_size.x, (uint32_t)m_size.y,
 						 m_target_flags);
 		if (!m_target.is_valid()) {
-			return Editor::ERROR;
+			return ev2::ERESIZE_FAILED;
 		}
 
 		VkImageView view = ev2::get_render_target_color_view(m_target);
@@ -86,7 +89,7 @@ int Viewport::update(int *p_flags)
 		m_needs_resize = false;
 	}
 
-	return Editor::OK;
+	return ev2::SUCCESS;
 }
 
 Viewport &Viewport::extend_settings(std::function<void()>&& callback)
@@ -97,20 +100,20 @@ Viewport &Viewport::extend_settings(std::function<void()>&& callback)
 
 bool Viewport::is_content_selected()
 {
-	if (uint32_t capture_owner = Editor::get_capture_owner())
+	if (uint32_t capture_owner = editor::get_capture_owner())
 		return m_id == capture_owner;
 	return m_content_hovered && m_focused;
 }
 
-int Viewport::imgui(int *p_flags)
+ev2::Result Viewport::imgui(int *p_flags)
 {
 	int update_flags = 0;
-	int status = update(&update_flags);
+	ev2::Result status = update(&update_flags);
 
 	if (p_flags)
 		*p_flags |= update_flags;
 
-	if (status < Editor::OK)
+	if (status < ev2::SUCCESS)
 		return status;
 
 	if (ImGuiWindow* window = ImGui::FindWindowByName(m_name.c_str())) {
@@ -185,7 +188,7 @@ int Viewport::imgui(int *p_flags)
 			if (open && imgui_texture) {
 				ev2::ImageID color;
 				ev2::get_render_target_images(m_target, &color, nullptr);
-				ev2::cmd_use_image(Editor::gui_pass(), color, ev2::USAGE_SAMPLED_GRAPHICS);
+				ev2::cmd_use_image(editor::gui_pass(), color, ev2::USAGE_SAMPLED_GRAPHICS);
 
 				ImGui::ImageWithBg(
 					(ImTextureID)imgui_texture, 
@@ -202,7 +205,7 @@ int Viewport::imgui(int *p_flags)
 
 	// Update the view after the ui has processed. Note that render target size
 	// is updated on the frame after.
-	const Editor::InputData &input = Editor::input();
+	const editor::InputData &input = editor::input();
 
 	const bool is_active = is_content_selected(); 
 
@@ -213,7 +216,7 @@ int Viewport::imgui(int *p_flags)
 		.scroll_delta = (float)input.scroll_delta.y,
 		.dt = (float)input.dt,
 		.move_dir = input.move_dir,
-		.capture_mouse = Editor::get_capture_owner() == m_id,
+		.capture_mouse = editor::get_capture_owner() == m_id,
 		.left_down = input.left_mouse_pressed,
 		.right_down = input.right_mouse_pressed,
 	};
@@ -234,17 +237,17 @@ int Viewport::imgui(int *p_flags)
 
 		m_screen_to_world = glm::inverse(proj * view);
 
-		ev2::update_view(Editor::ctx(), m_view, glm::value_ptr(view), glm::value_ptr(proj));
+		ev2::update_view(editor::ctx(), m_view, glm::value_ptr(view), glm::value_ptr(proj));
 	}
 
 	if (!open && p_flags)
 		*p_flags |= SHOULD_CLOSE_BIT;
 
 	if (is_active) {
-		Editor::set_hot_viewport(m_id, hot_viewport_flags);
+		editor::set_hot_viewport(m_id, hot_viewport_flags);
 	}
 
-	return Editor::OK;
+	return ev2::SUCCESS;
 }
 
 void Viewport::set_camera(std::shared_ptr<ICameraController> camera)
@@ -252,3 +255,4 @@ void Viewport::set_camera(std::shared_ptr<ICameraController> camera)
 	m_cam = camera;
 }
 
+} // namespace ev2

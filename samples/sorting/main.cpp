@@ -30,8 +30,8 @@ struct TestApp
 {
 	ev2::GfxContext *ctx;
 
-	std::unique_ptr<Viewport> viewport;
-	std::shared_ptr<PanningCamera> camera;
+	std::unique_ptr<ev2::Viewport> viewport;
+	std::shared_ptr<ev2::PanningCamera> camera;
 
 	std::unique_ptr<GPUSort> sorter;
 	ev2::BufferID buffers[2] = {};
@@ -72,17 +72,17 @@ TestApp::~TestApp()
 
 int TestApp::initialize(int argc, char **argv)
 {
-	ctx = Editor::ctx();
+	ctx = ev2::editor::ctx();
 
-	camera = std::make_shared<PanningCamera>(glm::dvec2(0.5, 0.5), 1.0);
-	viewport.reset(new Viewport("Visualization", 100, 100, 250, 250));
+	camera = std::make_shared<ev2::PanningCamera>(glm::dvec2(0.5, 0.5), 1.0);
+	viewport.reset(new ev2::Viewport("Visualization", 100, 100, 250, 250));
 	viewport->set_camera(camera);
 
 	on_count_changed();
 	randomize();
 	reset();
 
-	return Editor::OK;
+	return ev2::SUCCESS;
 }
 
 void TestApp::on_count_changed()
@@ -174,7 +174,7 @@ void TestApp::reset()
 
 int TestApp::update()
 {
-	int result = Editor::OK;
+	int result = ev2::SUCCESS;
 
 	ImGui::Begin("Editor");
 
@@ -206,12 +206,12 @@ int TestApp::update()
 	ImGui::End();
 
 	// never close the viewport
-	if (result = viewport->imgui(nullptr); result < Editor::OK)
+	if (result = viewport->imgui(nullptr); result < ev2::SUCCESS)
 		return result;
 
 	render();
 
-	return Editor::OK;
+	return ev2::SUCCESS;
 }
 
 void TestApp::exec_sort()
@@ -277,26 +277,26 @@ void TestApp::render()
 
 bool should_exit(int status)
 {
-	return status < Editor::OK || status == Editor::SHOULD_CLOSE;
+	return status < ev2::SUCCESS || status == ev2::SHOULD_CLOSE;
 }
 
 int main(int argc, char *argv[])
 {
-	int result = Editor::OK;
+	int result = ev2::SUCCESS;
 
-	if (result = Editor::init(argc, argv, "Sorting", 1200, 800); result < Editor::OK)
+	if (result = ev2::editor::init(argc, argv, "Sorting", 1200, 800); result < ev2::SUCCESS)
 		return result;
-	add_project_mounts(Editor::ctx());
+	add_project_mounts(ev2::editor::ctx());
 
 	std::unique_ptr<TestApp> app (new TestApp{});
-	if (app->initialize(argc, argv) != Editor::OK)
+	if (app->initialize(argc, argv) != ev2::SUCCESS)
 		return EXIT_FAILURE;
 
 	int status;
 
 	for (;;)
 	{
-		status = Editor::begin_frame();
+		status = ev2::editor::begin_frame();
 		if (should_exit(status))
 			break;
 
@@ -304,13 +304,13 @@ int main(int argc, char *argv[])
 		if (should_exit(status))
 			break;
 
-		status = Editor::end_frame();
+		status = ev2::editor::end_frame();
 		if (should_exit(status))
 			break;
 	}
 
 	app.reset(nullptr);
-	Editor::shutdown();
+	ev2::editor::shutdown();
 
 	return status < 0 ? status : 0;
 }
