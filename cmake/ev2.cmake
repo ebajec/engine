@@ -10,8 +10,9 @@ set(EV2_COMPILE_SHADERS_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/../compile_shaders.sh"
 set(EV2_SHADER_INCLUDE_ROOT "${CMAKE_BINARY_DIR}/shader_include")
 
 function(_ev2_link_shader_include name dir)
-	set(link "${EV2_SHADER_INCLUDE_ROOT}/${name}")
-	file(MAKE_DIRECTORY "${EV2_SHADER_INCLUDE_ROOT}")
+	set(root "${CMAKE_BINARY_DIR}/shader_include")
+  	set(link "${root}/${name}")
+  	file(MAKE_DIRECTORY "${root}")
 	file(REMOVE "${link}")
 	file(CREATE_LINK "${dir}" "${link}" SYMBOLIC)
 endfunction()
