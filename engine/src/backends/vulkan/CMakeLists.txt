@@ -7,11 +7,11 @@ file(GLOB SOURCES
 	"./*.cpp"
 )
 
-target_sources(engine PRIVATE 
+target_sources(ev2-engine PRIVATE 
 	${SOURCES}
 )
 
-target_link_libraries(engine 
+target_link_libraries(ev2-engine 
 	PUBLIC 
 		glad
 		OpenGL::GL

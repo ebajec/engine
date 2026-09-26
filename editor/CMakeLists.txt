@@ -14,7 +14,7 @@ add_library(ev2-editor STATIC
 target_include_directories(ev2-editor PUBLIC include)
 
 target_link_libraries(ev2-editor PUBLIC
-	engine
+	ev2-engine
 	glfw
 	imgui
 	glm::glm

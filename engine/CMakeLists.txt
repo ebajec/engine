@@ -3,7 +3,7 @@ set(CMAKE_CXX_STANDARD 20)
 
 include(warnings)
 
-set(TARGET "engine")
+set(TARGET "ev2-engine")
 project(${TARGET})
 
 file(GLOB CORE_SOURCES 
@@ -20,9 +20,9 @@ add_library(${TARGET})
 # core shaders, for targets that register no mounts of their own
 add_dependencies(${TARGET} ev2_shaders)
 
-target_compile_definitions(engine PUBLIC -DDEV_CORE_MOUNT="${DEV_CORE_MOUNT}")
-target_compile_definitions(engine PUBLIC -DDEV_SHADER_BUILD_MOUNT="${DEV_SHADER_BUILD_MOUNT}")
-target_compile_definitions(engine PUBLIC -DEV2_ENABLE_IMGUI)
+target_compile_definitions(ev2-engine PUBLIC -DDEV_CORE_MOUNT="${DEV_CORE_MOUNT}")
+target_compile_definitions(ev2-engine PUBLIC -DDEV_SHADER_BUILD_MOUNT="${DEV_SHADER_BUILD_MOUNT}")
+target_compile_definitions(ev2-engine PUBLIC -DEV2_ENABLE_IMGUI)
 
 target_include_directories(${TARGET} PUBLIC include)
 target_include_directories(${TARGET} PRIVATE 

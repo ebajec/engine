@@ -12,7 +12,7 @@ add_executable(${TARGET} ${SOURCES})
 
 target_link_libraries(${TARGET} PRIVATE
 	samples-shared
-	engine
+	ev2-engine
 )
 
 ev2_add_mount(${TARGET} NAME globe DIR resource)

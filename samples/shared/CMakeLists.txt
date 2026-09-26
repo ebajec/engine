@@ -9,7 +9,7 @@ add_library(samples-shared STATIC ${SOURCES})
 target_include_directories(samples-shared PUBLIC .)
 
 target_link_libraries(samples-shared PUBLIC
-	engine
+	ev2-engine
 	ev2-editor
 	glfw
     glad

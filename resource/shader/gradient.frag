@@ -33,6 +33,6 @@ void main()
 
 	vec2 d = grad[0];
 
-	FragColor = vec4(length(grad[0]), length(grad[1]), 0.1*c, 1.f);
+	FragColor = vec4(length(grad[0]), length(grad[1]), 0.0*c, 1.f);
 }
 

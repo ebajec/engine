@@ -23,6 +23,7 @@ void MotionCamera::update(const CameraInput &input)
 	glm::vec2 delta = sensitivity * (PIf/180.f) * input.cursor_delta;
 
 	if (input.capture_mouse) {
+		fov = glm::clamp(fov * powf(1.1f, -input.scroll_delta), 1.0f, 179.0f);
 		rotate(-delta.x, delta.y);
 		float norm = length(input.move_dir);
 

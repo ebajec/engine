@@ -13,7 +13,7 @@ add_executable(${TARGET} ${SOURCES})
 target_link_libraries(${TARGET} PRIVATE
 	samples-shared
 	ev2-editor
-	engine
+	ev2-engine
 )
 
 ev2_add_mount(${TARGET} NAME test_sort DIR resource)
