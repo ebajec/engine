@@ -20,7 +20,6 @@ set(DEV_SHADER_BUILD_MOUNT "${CMAKE_BINARY_DIR}/spirv")
 set(DEV_CORE_MOUNT "${CMAKE_CURRENT_SOURCE_DIR}/resource")
 
 option(EV2_BUILD_SAMPLES "Build samples" OFF)
-set(RESOURCE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/resource")
 
 include(ev2)
 
