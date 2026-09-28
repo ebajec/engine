@@ -55,6 +55,8 @@ struct EditorState {
 	> inspector_image_viewers;
 	std::unordered_set<std::shared_ptr<ImageViewer>> image_viewers;
 
+	std::vector<std::shared_ptr<ImageViewer>> to_close_viewers;
+
 	ev2::PassID gui_pass;
 
 	ImGuiID root_dockspace;
@@ -534,6 +536,11 @@ ev2::Result begin_frame()
 
 	g.gui_pass = ev2::begin_gfx_pass(g.ctx, &pass_info);
 
+	for (std::shared_ptr<ImageViewer> viewer : g.to_close_viewers) {
+		g.image_viewers.erase(viewer);
+	}
+	g.to_close_viewers.clear();
+
 	for (auto it = g.image_viewers.begin(); it != g.image_viewers.end();) {
 		ImageViewer &viewer = *(*it);
 		int viewer_flags = 0;
@@ -705,6 +712,11 @@ std::shared_ptr<ImageViewer> open_image_viewer(
 	g.image_viewers.insert(viewer);
 
 	return viewer;
+}
+
+void close_image_viewer(std::shared_ptr<ImageViewer> viewer)
+{
+	g.to_close_viewers.push_back(viewer);
 }
 
 } // namespace ev2::editor

@@ -1426,9 +1426,9 @@ Result DeferredDeleteQueue::process(GfxContext *ctx)
 		if (state) {
 			uint64_t last_used_by_frame = state->last_used_by_frame;
 			if (last_used_by_frame + 3 < current_frame) {
-				log_warn(
-					"%s %d on delete queue was last used on frame %lld, current frame is at %lld", 
-					resource.type_str(), resource.id(), ent.enqueued_frame_index, current_frame);
+				//log_warn(
+				//	"%s %d on delete queue was last used on frame %lld, current frame is at %lld", 
+				//	resource.type_str(), resource.id(), ent.enqueued_frame_index, current_frame);
 			}
 
 			if (last_used_by_frame >= current_frame) {

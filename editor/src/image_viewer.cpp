@@ -222,11 +222,25 @@ ev2::Result ImageViewer::set_image(ev2::GfxContext *ctx,
 
 	rd.tex = ev2::create_texture(ctx, img, rd.filter, lvl, lyr);
 
+	result = ev2::reset_bindings(ctx, rd.bindings);
+	if (result != ev2::SUCCESS)
+		return result;
+
+	result = ev2::bind_texture(ctx, rd.bindings, "u_tex", rd.tex);
+	if (result != ev2::SUCCESS)
+		return result;
+
+	ev2::flush_bindings(ctx, rd.bindings);
+
+
 	return rd.tex.is_valid() ? ev2::SUCCESS : ev2::EUNKNOWN;
 }
 
 void ImageViewer::record_draw(ev2::PassID pass)
 {
+	if (!rd.bindings.is_valid()) {
+		log_error("ImageViewer %s: bindings not initialized", this->get_name());
+	}
 	ev2::cmd_use_image(pass, image, ev2::USAGE_SAMPLED_GRAPHICS);
 	ev2::cmd_bind_gfx_pipeline(pass, rd.pipeline);
 	ev2::cmd_bind_resources(pass, rd.bindings);

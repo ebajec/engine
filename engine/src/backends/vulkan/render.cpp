@@ -1939,6 +1939,11 @@ static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBu
 			case BindResources: {
 				CmdBindResources cmd = base_cmd.bind_resources;
 				const Bindings *bindings = ctx->get_bindings(cmd.bindings);
+
+				if (!bindings->descriptor_set) {
+					log_error("%s, CmdBindResources: VkDescriptorSet = 0x0", node.name.c_str());
+				}
+
 				vkCmdBindDescriptorSets(
 					cmds, 
 					bindings->bind_point, 

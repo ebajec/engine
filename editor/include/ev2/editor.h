@@ -93,6 +93,7 @@ namespace editor
 		uint32_t w = 500,
 		uint32_t h = 500
 	);
+	void close_image_viewer(std::shared_ptr<ImageViewer> viewer);
 } // namespace editor
 
 } // namespace ev2
