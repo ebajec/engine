@@ -14,7 +14,7 @@
 
 #define MONITOR_MAX_EVENT_BUFFER 64*KILOBYTE
 
-static int pathcat(char* dest, const char* src, size_t maxlen)
+[[maybe_unused]] static int pathcat(char* dest, const char* src, size_t maxlen)
 {
     if (!dest || !src) return -1;
 
@@ -91,13 +91,13 @@ std::string utf16To8(const std::wstring& utf16String)
 namespace utils
 {
 
-void monitor::interrupt()
+void FileMonitor::interrupt()
 {
     m_watching = false;
     SetEvent(m_watchEvent);
 }
 
-void monitor::watch()
+void FileMonitor::watch()
 {
     HANDLE hDir = CreateFileA(
         m_dir.c_str(), 
@@ -457,10 +457,10 @@ static uint8_t to_monitor_flags(FSEventStreamEventFlags f) {
     return out;
 }
 
-void monitor::FSEventsCallback(ConstFSEventStreamRef, void* clientCallBackInfo, size_t numEvents,
+void FileMonitor::FSEventsCallback(ConstFSEventStreamRef, void* clientCallBackInfo, size_t numEvents,
     void* eventPaths, const FSEventStreamEventFlags eventFlags[], const FSEventStreamEventId[])
 {
-    monitor* self = (monitor*)clientCallBackInfo; // Retrieve this from ctx
+    FileMonitor* self = (FileMonitor*)clientCallBackInfo; // Retrieve this from ctx
     if (!self) return;
 
     char** paths = (char**)eventPaths;
@@ -474,7 +474,7 @@ void monitor::FSEventsCallback(ConstFSEventStreamRef, void* clientCallBackInfo, 
     }
 }
 
-void monitor::watch()
+void FileMonitor::watch()
 {
     CFStringRef dir = CFStringCreateWithCString(NULL, m_dir.c_str(), kCFStringEncodingUTF8);
     CFArrayRef pathsToWatch = CFArrayCreate(NULL, (const void**)&dir, 1, &kCFTypeArrayCallBacks);
@@ -535,7 +535,7 @@ void monitor::watch()
 #endif
 }
 
-void monitor::interrupt()
+void FileMonitor::interrupt()
 {
     m_watching = false;
 }

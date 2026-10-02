@@ -37,12 +37,15 @@ OUTPUT_DIR="$(realpath "$OUTPUT_DIR")"
 #------------------------------------------------------------------------------
 # Mounts
 
-# name -> absolute root path
-declare -A MOUNTS=()
+# Editted to support macOS bash (ver 3.2)
+# names and absolute root paths share the same index
 MOUNT_ORDER=()
+MOUNT_PATHS=()
+CORE_MOUNT_FOUND=0
 
 add_mount() {
 	local name="$1" path="$2"
+	local i
 
 	if [[ -z "$name" || -z "$path" ]]; then
 		echo "warning: ignoring malformed mount '$name:$path'" >&2
@@ -57,39 +60,47 @@ add_mount() {
 	path="$(realpath "$path")"
 
 	# the engine refuses duplicate mount names, so only the first one counts
-	if [[ -n "${MOUNTS[$name]+x}" ]]; then
-		if [[ "${MOUNTS[$name]}" != "$path" ]]; then
-			echo "warning: mount '$name' already maps to ${MOUNTS[$name]}; ignoring $path" >&2
+	for i in "${!MOUNT_ORDER[@]}"; do
+		if [[ "${MOUNT_ORDER[$i]}" != "$name" ]]; then
+			continue
+		fi
+		if [[ "${MOUNT_PATHS[$i]}" != "$path" ]]; then
+			echo "warning: mount '$name' already maps to ${MOUNT_PATHS[$i]}; ignoring $path" >&2
 		fi
 		return
-	fi
+	done
 
-	MOUNTS[$name]="$path"
 	MOUNT_ORDER+=("$name")
+	MOUNT_PATHS+=("$path")
+	if [[ "$name" == "$CORE_MOUNT_NAME" ]]; then
+		CORE_MOUNT_FOUND=1
+	fi
 }
 
 add_mount "$CORE_MOUNT_NAME" "${EV2_CORE_MOUNT:-$SCRIPT_DIR/resource}"
 
 # EV2_MOUNTS: comma separated name:path pairs; empty entries (e.g. a trailing
 # comma) are skipped. Split on the first ':' only, so paths may contain ':'.
-IFS=',' read -ra MOUNT_ENTRIES <<< "${EV2_MOUNTS:-}"
-for entry in "${MOUNT_ENTRIES[@]}"; do
-	[[ -z "$entry" ]] && continue
-	if [[ "$entry" != *:* ]]; then
-		echo "warning: ignoring malformed mount '$entry' (expected name:path)" >&2
-		continue
-	fi
-	add_mount "${entry%%:*}" "${entry#*:}"
-done
+if [[ -n "${EV2_MOUNTS:-}" ]]; then
+	IFS=',' read -ra MOUNT_ENTRIES <<< "$EV2_MOUNTS"
+	for entry in "${MOUNT_ENTRIES[@]}"; do
+		[[ -z "$entry" ]] && continue
+		if [[ "$entry" != *:* ]]; then
+			echo "warning: ignoring malformed mount '$entry' (expected name:path)" >&2
+			continue
+		fi
+		add_mount "${entry%%:*}" "${entry#*:}"
+	done
+fi
 
-if [[ -z "${MOUNTS[$CORE_MOUNT_NAME]+x}" ]]; then
+if [[ "$CORE_MOUNT_FOUND" -eq 0 ]]; then
 	echo "error: no core mount; set EV2_CORE_MOUNT" >&2
 	exit 1
 fi
 
 echo "Output : $OUTPUT_DIR"
-for name in "${MOUNT_ORDER[@]}"; do
-	echo "Mount  : $name -> ${MOUNTS[$name]}"
+for i in "${!MOUNT_ORDER[@]}"; do
+	echo "Mount  : ${MOUNT_ORDER[$i]} -> ${MOUNT_PATHS[$i]}"
 done
 
 #------------------------------------------------------------------------------
@@ -103,8 +114,8 @@ done
 
 INCLUDE_ROOT="$(dirname "$OUTPUT_DIR")/shader_include"
 mkdir -p "$INCLUDE_ROOT"
-for name in "${MOUNT_ORDER[@]}"; do
-	ln -sfn "${MOUNTS[$name]}" "$INCLUDE_ROOT/$name"
+for i in "${!MOUNT_ORDER[@]}"; do
+	ln -sfn "${MOUNT_PATHS[$i]}" "$INCLUDE_ROOT/${MOUNT_ORDER[$i]}"
 done
 
 #------------------------------------------------------------------------------
@@ -191,8 +202,8 @@ compile_mount() {
 	done < <(find "$root" -type f \( -name '*.slang' -o -name '*.hlsl' \) -print0)
 }
 
-for name in "${MOUNT_ORDER[@]}"; do
-	compile_mount "$name" "${MOUNTS[$name]}"
+for i in "${!MOUNT_ORDER[@]}"; do
+	compile_mount "${MOUNT_ORDER[$i]}" "${MOUNT_PATHS[$i]}"
 done
 
 if ((compiled == 0)); then
