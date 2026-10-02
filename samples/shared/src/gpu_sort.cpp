@@ -1,4 +1,4 @@
-#include "gpu_sort.h"
+#include "shared/gpu_sort.h"
 
 #include <cassert>
 #include <ev2/utils/common.h>

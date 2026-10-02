@@ -1007,6 +1007,16 @@ static ev2::Result create_frame_context(ev2::GfxContext *ctx,
 		}
 	}
 
+	uint64_t ubo_offset_alignment = 
+		ctx->caps.limits.minUniformBufferOffsetAlignment;
+
+	frame->gpu_pass_info = GPUTTable<ev2::PassData>(
+		(size_t)ubo_offset_alignment,
+		ev2::BUFFER_USAGE_TRANSFER_DST_BIT |
+		ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT
+	);
+
+
 	ev2::Result result = create_static_descriptor_pool(ctx, &frame->descriptor_pool);
 
 	if (result != ev2::SUCCESS)
@@ -1146,12 +1156,7 @@ static ev2::Result create_device_resources(ev2::GfxContext *ctx)
 		ev2::BUFFER_USAGE_TRANSFER_DST_BIT | 
 		ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT
 	);
-	ctx->view_data = GPUTTable<ev2::ViewData>(
-		(size_t)ubo_offset_alignment,
-		ev2::BUFFER_USAGE_TRANSFER_DST_BIT | 
-		ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT
-	);
-
+	ctx->view_pool.reset(Pool<ev2::View>::create());
 
 	for (uint32_t i = 0; i < ctx->max_frames_in_flight; ++i) {
 		result = create_frame_context(ctx, &ctx->frames[i]);
@@ -1163,10 +1168,10 @@ static ev2::Result create_device_resources(ev2::GfxContext *ctx)
 	glm::mat4 proj_def = glm::mat4(1.f);
 	glm::mat4 view_def = glm::mat4(1.f);
 
-	ev2::ViewData viewdata = ev2::view_data_from_matrices(
+	ev2::View viewdata = ev2::view_data_from_matrices(
 		glm::value_ptr(proj_def), glm::value_ptr(view_def));
 
-	ctx->default_view = EV2_HANDLE_CAST(View,ctx->view_data.add(viewdata));
+	ctx->default_view = ctx->emplace_view(std::move(viewdata));
 
 	// Assets
 	ctx->assets.reset(AssetTable::create(ctx));
@@ -1768,7 +1773,12 @@ void destroy_context(GfxContext *ctx)
 	ctx->pool.reset();
 
 	ctx->transforms.destroy(ctx);
-	ctx->view_data.destroy(ctx);
+
+	for (uint32_t i = 0; i < ctx->max_frames_in_flight; ++i) {
+		ctx->frames[i].gpu_pass_info.destroy(ctx);
+	}
+
+	ctx->view_pool.reset();
 
 	destroy_swap_chain(ctx, ctx->swap_chain);
 

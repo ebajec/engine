@@ -1,5 +1,5 @@
-#include "heightmap_viewer.h"
-#include "project_mounts.h"
+#include "shared/heightmap_viewer.h"
+#include "shared/project_mounts.h"
 
 #include "ev2/editor.h"
 #include "ev2/image_viewer.h"

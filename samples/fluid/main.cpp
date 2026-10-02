@@ -1,6 +1,6 @@
-#include "utils.h"
-#include "heightmap_viewer.h"
-#include "project_mounts.h"
+#include "shared/utils.h"
+#include "shared/heightmap_viewer.h"
+#include "shared/project_mounts.h"
 
 #include "ev2/editor.h"
 #include "ev2/image_viewer.h"
@@ -8,7 +8,7 @@
 #include "poisson_solver.h"
 #include "boundary_editor.h"
 #include "grid_sim.h"
-#include "gpu_sort.h"
+#include "shared/gpu_sort.h"
 
 #include <ev2/utils/log.h>
 #include <ev2/utils/common.h>
@@ -54,14 +54,7 @@ struct GpuAABB2f
 	glm::vec2 max;
 };
 
-static_assert(sizeof(FluidParticle) == 16);
-static_assert(offsetof(FluidParticle, pos) == 0);
-static_assert(offsetof(FluidParticle, vel) == 8);
-
-static_assert(sizeof(GPUSort::PushConstantHeader) == 32);
-static_assert(offsetof(GPUSort::PushConstantHeader, in_data) == 16);
-
-uint32_t bvh_size(uint32_t elem_count, uint32_t factor)
+static uint32_t bvh_size(uint32_t elem_count, uint32_t factor)
 {
 	uint32_t total = 0;
 	do {

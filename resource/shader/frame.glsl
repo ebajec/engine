@@ -15,14 +15,19 @@ struct framedata_t
 	ivec2 resolution;
 };
 
-struct viewdata_t
+struct passdata_t
 {
 	mat4 p;
 	mat4 v;
 	mat4 pv;
 	vec3 center;
 
-	ivec2 resolution; 
+	// Dimensions of viewport the pass renders into, in pixels. 
+	vec2 resolution;
+	vec2 inv_resolution;
+
+	float near_plane;
+	float far_plane;
 };
 
 layout (set = BINDLESS_SET, binding = 0) uniform sampler2D u_textures[];
@@ -32,10 +37,13 @@ layout (set = PER_FRAME_SET, std140, binding = 0) uniform FrameData
 	framedata_t u_frame;
 };
 
-layout (set = PER_PASS_SET, std140, binding = 0) uniform ViewData
+layout (set = PER_PASS_SET, std140, binding = 0) uniform PassData
 {
-	viewdata_t u_view;
+	passdata_t u_pass;
 };
+
+// Temporary band-aid fix so that other shaders don't need to change
+#define u_view u_pass
 
 float ftime()
 {

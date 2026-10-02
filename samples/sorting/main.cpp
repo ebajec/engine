@@ -1,4 +1,4 @@
-#include "gpu_sort.h"
+#include "shared/gpu_sort.h"
 
 #include "ev2/editor.h"
 #include "ev2/viewport.h"
@@ -6,7 +6,7 @@
 #include "ev2/panning_camera.h"
 #include "ev2/motion_camera.h"
 
-#include "project_mounts.h"
+#include "shared/project_mounts.h"
 
 #include <ev2/utils/log.h>
 #include <ev2/utils/camera_math.h>

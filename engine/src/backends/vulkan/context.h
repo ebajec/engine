@@ -66,6 +66,7 @@ MAKE_POOL_ID_CONVERSION(Buffer)
 MAKE_POOL_ID_CONVERSION(Image)
 MAKE_POOL_ID_CONVERSION(Texture)
 MAKE_POOL_ID_CONVERSION(Bindings)
+MAKE_POOL_ID_CONVERSION(View)
 
 //------------------------------------------------------------------------------
 // Misc Vulkan support
@@ -83,7 +84,7 @@ struct VulkanOptions
 {
     std::vector<const char*> deviceExtensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-		VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME,
+		//VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME,
 		VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME,
 		VK_EXT_SHADER_ATOMIC_FLOAT_2_EXTENSION_NAME
     };
@@ -186,7 +187,12 @@ struct FrameContext
 	double dt;
 	ev2::BufferID ubo;
 
-	std::deque<ev2::Pass> passes;
+	std::deque<ev2::Pass> pending_passes;
+
+	// One entry per graphics pass recorded this frame, rebuilt from scratch
+	// every frame. Because each FrameContext owns its own, a frame never writes
+	// into a buffer an in-flight frame is still reading.
+	GPUTTable<ev2::PassData> gpu_pass_info;
 
 	std::vector<TransientCommands> commands;
 
@@ -331,8 +337,13 @@ struct RenderPass
 
 	GfxPassInfo info;
 
-	// Contains UBO with view data.
+	// Contains UBO with this pass's PassData. The set is allocated in
+	// begin_gfx_pass but only written in end_frame, once gpu_pass_info has been
+	// uploaded and its buffer is known not to move.
 	VkDescriptorSet descriptor_set;
+
+	// Index into FrameContext::gpu_pass_info.
+	uint32_t pass_data_idx = 0;
 
 	bool render_to_swapchain() {
 		return !target.is_valid();
@@ -520,11 +531,11 @@ struct GfxContext
 	std::unique_ptr<Pool<Image>> image_pool;
 	std::unique_ptr<Pool<Texture>> texture_pool;
 	std::unique_ptr<Pool<Bindings>> bindings_pool;
+	std::unique_ptr<Pool<View>> view_pool;
 
 	DeferredDeleteQueue deferred_delete;
 
 	// Special GPU Resources
-	GPUTTable<ViewData> view_data;
 	GPUTTable<glm::mat4> transforms;
 
 	// defaults to identity matrix
@@ -563,6 +574,7 @@ struct GfxContext
 	MAKE_VERSIONED_HANDLE_ACCESS(Image, image);
 	MAKE_VERSIONED_HANDLE_ACCESS(Texture, texture);
 	MAKE_VERSIONED_HANDLE_ACCESS(Bindings, bindings);
+	MAKE_VERSIONED_HANDLE_ACCESS(View, view);
 
 	MAKE_ASSET_HANDLE_ACCESS(GfxPipeline, gfx_pipeline);
 	MAKE_ASSET_HANDLE_ACCESS(ComputePipeline, compute_pipeline);

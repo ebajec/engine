@@ -11,6 +11,7 @@
 constexpr uint32_t EV2_MAX_BINDLESS_DESCRIPTORS = 1024;
 
 MAKE_HANDLE_VERSIONED(Bindings);
+MAKE_HANDLE_VERSIONED(View);
 
 namespace ev2 {
 
@@ -110,7 +111,6 @@ ev2::Result bind_image_indexed(
 //------------------------------------------------------------------------------
 // Rendering
 
-MAKE_HANDLE(View);
 MAKE_HANDLE(Pass);
 MAKE_HANDLE(RenderTarget);
 

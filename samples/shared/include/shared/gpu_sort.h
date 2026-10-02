@@ -82,6 +82,9 @@ struct GPUSort
 		return (1 + get_max_num_offsets()) * sizeof(uint32_t);
 	}
 };
+static_assert(sizeof(GPUSort::PushConstantHeader) == 32);
+static_assert(offsetof(GPUSort::PushConstantHeader, in_data) == 16);
+
 
 #endif // EV2_GPU_SORT_H
 

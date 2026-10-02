@@ -118,7 +118,9 @@ struct Bindings
 	BindingMode mode;
 };
 
-struct ViewData
+// CPU side only: the camera matrices a ViewID names. Uploaded to the GPU as
+// part of PassData, once per pass that uses it.
+struct View
 {
 	glm::mat4 p;
 	glm::mat4 v;
@@ -126,6 +128,30 @@ struct ViewData
 	glm::vec3 center;
 	glm::ivec2 resolution;
 };
+
+// Exposed to shaders in a graphics pass: the view it was recorded with,
+// plus the properties of the surface it is drawing into. One entry per pass per
+// frame, living in FrameContext::gpu_pass_info.
+//
+// Layout must match struct passdata_t in resource/shader/frame.glsl (std140).
+struct PassData
+{
+	glm::mat4 p;
+	glm::mat4 v;
+	glm::mat4 pv;
+
+	glm::vec3 center;
+	float _pad0 = 0.f;
+
+	glm::vec2 resolution;
+	glm::vec2 inv_resolution;
+
+	float near_plane;
+	float far_plane;
+
+	float _pad1[2] = {0.f, 0.f};
+};
+static_assert(sizeof(PassData) == 240, "PassData must match its std140 layout");
 
 struct RenderTarget
 {
@@ -248,17 +274,82 @@ struct Command {
 	COMMAND_UNION_CONVERSION(Custom, custom)
 };
 
-static inline ViewData view_data_from_matrices(float view[], float proj[])
+static inline View view_data_from_matrices(float view[], float proj[])
 {
 	glm::mat4 view_mat = view ? glm::make_mat4(view) : glm::mat4(1.f);
 	glm::mat4 proj_mat = proj ? glm::make_mat4(proj) : glm::mat4(1.f);
 
-	return ViewData{
+	return View{
 		.p = proj_mat,
 		.v = view_mat,
 		.pv = proj_mat * view_mat,
 		.center = glm::vec3(0),
 	};
+}
+
+// @brief Recover the clip planes from a projection matrix, so shaders that
+// linearize depth don't have to be told them separately.
+//
+// glm is column major, so p[col][row]. Writing z_c and w_c for the clip space
+// z and w produced by p:
+//
+//   perspective (camera_proj_3d): w_c = -z_v, z_c = a*z_v + b, depth 0 at the
+//     near plane and 1 at the far plane, which gives near = b/a and
+//     far = a*near/(a + 1).
+//   orthographic (camera_proj_2d): w_c = 1, z_c = a*z_v + b, so the planes are
+//     just where z_c hits 0 and 1.
+static inline void extract_clip_planes(const glm::mat4 &p, float *p_near, float *p_far)
+{
+	constexpr float eps = 1e-9f;
+
+	const float a = p[2][2];
+	const float b = p[3][2];
+	const float w = p[2][3];
+
+	float near_plane = 0.f;
+	float far_plane = 1.f;
+
+	if (fabsf(w) > eps && fabsf(a) > eps) {
+		near_plane = b / a;
+
+		const float denom = a + 1.f;
+		far_plane = fabsf(denom) > eps ? (a * near_plane) / denom : near_plane;
+	} else if (fabsf(a) > eps) {
+		near_plane = -b / a;
+		far_plane = (1.f - b) / a;
+	}
+
+	// camera_proj_2d has no meaningful clip range (its w row is 1 - z, so the
+	// formulas above collapse to 0/0). Hand shaders a usable range instead of a
+	// degenerate one so nothing divides by far - near and gets an infinity.
+	if (!(far_plane > near_plane)) {
+		near_plane = 0.f;
+		far_plane = 1.f;
+	}
+
+	if (p_near) *p_near = near_plane;
+	if (p_far) *p_far = far_plane;
+}
+
+static inline PassData pass_data_from_view(const View &view, glm::uvec2 resolution)
+{
+	glm::vec2 res = glm::vec2(resolution);
+
+	PassData data = {
+		.p = view.p,
+		.v = view.v,
+		.pv = view.pv,
+		.center = view.center,
+		.resolution = res,
+		.inv_resolution = glm::vec2(
+			res.x > 0.f ? 1.f/res.x : 0.f,
+			res.y > 0.f ? 1.f/res.y : 0.f
+		),
+	};
+
+	extract_clip_planes(view.p, &data.near_plane, &data.far_plane);
+
+	return data;
 }
 
 extern RenderTarget *create_render_target_internal(

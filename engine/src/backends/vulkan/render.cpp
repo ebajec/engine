@@ -30,7 +30,7 @@ static Result reset_frame_context(GfxContext *ctx, FrameContext *frame)
 	//------------------------------------------------------------------------------
 	// cleaup previous state
 
-	frame->passes.clear();
+	frame->pending_passes.clear();
 	frame->render_graph.reset();
 
 	for (TransientCommands &commands : frame->commands) {
@@ -370,26 +370,26 @@ void get_render_target_images(RenderTargetID handle,
 
 ViewID create_view(GfxContext *ctx, float view[], float proj[])
 {
-	ViewData data = view_data_from_matrices(view, proj);
-	uint32_t id = ctx->view_data.add(data);
+	View data = view_data_from_matrices(view, proj);
 
-	return EV2_HANDLE_CAST(View, id);
+	return ctx->emplace_view(std::move(data));
 }
 
 void update_view(GfxContext *ctx, ViewID handle, float view[], float proj[])
 {
-	ViewData data = view_data_from_matrices(view, proj);
+	View *data = ctx->view_pool->get_checked(to_pool_id(handle));
 
-	uint32_t id = static_cast<uint32_t>(handle.id);
+	if (!data) {
+		log_error("ViewID %lu is invalid", (unsigned long)handle.id);
+		return;
+	}
 
-	if (!ctx->view_data.set(id, data))
-		log_error("ViewID %d is invalid",id);
+	*data = view_data_from_matrices(view, proj);
 }
 
 void destroy_view(GfxContext *ctx, ViewID handle)
 {
-	uint32_t id = static_cast<uint32_t>(handle.id);
-	ctx->view_data.remove(id);
+	ctx->view_pool->deallocate(to_pool_id(handle));
 }
 
 static void populate_rendering_info(
@@ -479,7 +479,7 @@ static void populate_rendering_info(
 static Pass *rg_create_pass(GfxContext *ctx, FrameContext *frame, 
 							std::string &&name, uint32_t queue_family_index)
 {
-	Pass *pass = &frame->passes.emplace_back(Pass{
+	Pass *pass = &frame->pending_passes.emplace_back(Pass{
 		.ctx = ctx,
 		.name = std::move(name),
 		.queue_family_index = queue_family_index
@@ -504,19 +504,37 @@ PassID begin_gfx_pass(
 	return begin_gfx_pass(ctx, &info);
 }
 
+// @brief Pixel dimensions a pass actually renders into: its viewport rect when
+// one was given, otherwise the full extent of the target (or the swapchain, for
+// a pass that draws straight to the screen).
+static glm::uvec2 resolve_pass_resolution(GfxContext *ctx, const GfxPassInfo *info)
+{
+	glm::uvec2 target_size = glm::uvec2(
+		ctx->swap_chain.extent.width, ctx->swap_chain.extent.height);
+
+	if (info->target.is_valid()) {
+		if (const RenderTarget *t = EV2_TYPE_PTR_CAST(RenderTarget, info->target))
+			target_size = glm::uvec2(t->w, t->h);
+	}
+
+	const Rect &vp = info->viewport;
+
+	const bool whole = vp.w == 0 || vp.h == 0 ||
+		vp.w == WHOLE_IMAGE.w || vp.h == WHOLE_IMAGE.h;
+
+	return whole ? target_size : glm::uvec2(vp.w, vp.h);
+}
+
 PassID begin_gfx_pass(GfxContext *ctx, const GfxPassInfo *info)
 {
 	ctx->assert_inside_frame();
-
-	if (EV2_IS_NULL(ctx->view_data.buffer))
-		log_error("No views created.  Did you remember to call begin_frame()?"); 
 
 	ViewID view_id = info->view.is_valid() ? info->view : ctx->default_view;
 
 	FrameContext *frame = ctx->get_current_frame();
 
 	std::string name = info->name ? 
-		info->name : ("graphics" + std::to_string((int)frame->passes.size())); 
+		info->name : ("graphics" + std::to_string((int)frame->pending_passes.size())); 
 
 	Pass *pass = rg_create_pass(
 		ctx, frame, 
@@ -548,34 +566,23 @@ PassID begin_gfx_pass(GfxContext *ctx, const GfxPassInfo *info)
 		.pSetLayouts = &layout,
 	};
 
-	VkResult result = 
+	VkResult result =
 		vkAllocateDescriptorSets(ctx->device, &alloc_info, &gfx->descriptor_set);
 
 	if (result != VK_SUCCESS)
 		return EV2_NULL_HANDLE(Pass);
 
-	Buffer * buf = ctx->get_buffer(ctx->view_data.buffer);
+	// The set is written in end_frame: gpu_pass_info may reallocate its buffer
+	// as passes are added, so the buffer handle isn't final until then.
+	const View *view_data = ctx->view_pool->get_checked(to_pool_id(view_id));
 
-	VkDescriptorBufferInfo buffer_info = {
-		.buffer = buf->buffer,
-		.offset = ctx->view_data.get_offset((uint32_t)view_id.id),
-		.range = ctx->view_data.stride
-	};
-
-	VkWriteDescriptorSet write = {
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = gfx->descriptor_set,
-		.dstBinding = 0,
-		.dstArrayElement = 0,
-		.descriptorCount = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		.pBufferInfo = &buffer_info
-	};
-
-	vkUpdateDescriptorSets(ctx->device, 1, &write, 0, nullptr);
-
-	if (!gfx)
+	if (!view_data) {
+		log_error("begin_gfx_pass: invalid ViewID %lu", (unsigned long)view_id.id);
 		return EV2_NULL_HANDLE(Pass);
+	}
+
+	gfx->pass_data_idx = frame->gpu_pass_info.add(
+		pass_data_from_view(*view_data, resolve_pass_resolution(ctx, info)));
 
 	pass->gfx = std::move(gfx);
 
@@ -601,7 +608,7 @@ PassID begin_compute_pass(GfxContext *ctx, const char *name)
 	FrameContext *frame = ctx->get_current_frame();
 
 	std::string name_str = name ? 
-		name : ("graphics" + std::to_string((int)frame->passes.size())); 
+		name : ("graphics" + std::to_string((int)frame->pending_passes.size())); 
 
 	Pass *pass = rg_create_pass(
 		ctx, 
@@ -1192,7 +1199,10 @@ Result begin_frame(GfxContext *ctx)
 	ctx->assets->process_reloads();
 
 	ctx->transforms.update(ctx);
-	ctx->view_data.update(ctx);
+
+	// Rebuilt from scratch below as passes are recorded. The GPU buffer is kept,
+	// so this only resets the CPU side bookkeeping.
+	frame->gpu_pass_info.clear();
 
 	GPUFramedata gpu_data = {
 		.t_sec = static_cast<uint32_t>(frame->t),
@@ -1264,8 +1274,8 @@ static void use_resource_internal(
 	}
 
 	if (!state->written && !is_dst_write) {
-		//log_warn("Pass %s reads from %s %d with no prior write; likely needs intialization!", 
-		//   dst_node.name.c_str(), resource.type_str(), resource.id());
+		log_warn("Pass %s reads from %s %d with no prior write; likely needs intialization!", 
+		   dst_node.name.c_str(), resource.type_str(), resource.id());
 	}
 
 	PassBarrier barrier = {
@@ -2217,6 +2227,57 @@ ev2::Result end_frame(GfxContext *ctx)
 
 	FrameContext *frame = ctx->get_current_frame();
 	RenderGraph *rg = frame->render_graph.get();
+
+	// Every graphics pass for this frame has now been recorded, so the pass data
+	// table has its final size. Upload it, then point each pass's descriptor set
+	// at its own slot - this is deferred to here because add() may reallocate the
+	// buffer, invalidating any handle written earlier.
+	frame->gpu_pass_info.update(ctx);
+	flush_uploads(ctx);
+
+	if (!EV2_IS_NULL(frame->gpu_pass_info.buffer)) {
+		Buffer *buf = ctx->get_buffer(frame->gpu_pass_info.buffer);
+
+		std::vector<VkDescriptorBufferInfo> buffer_infos;
+		std::vector<VkWriteDescriptorSet> writes;
+
+		buffer_infos.reserve(rg->nodes.size());
+		writes.reserve(rg->nodes.size());
+
+		for (const ev2::PassNode &pass : rg->nodes) {
+			if (!pass.gfx)
+				continue;
+
+			buffer_infos.push_back(VkDescriptorBufferInfo{
+				.buffer = buf->buffer,
+				.offset = frame->gpu_pass_info.get_offset(pass.gfx->pass_data_idx),
+				.range = frame->gpu_pass_info.stride
+			});
+		}
+
+		// Filled in a second pass so the pBufferInfo pointers stay valid: the
+		// vector must not reallocate between taking a pointer and the call.
+		size_t i = 0;
+		for (const ev2::PassNode &pass : rg->nodes) {
+			if (!pass.gfx)
+				continue;
+
+			writes.push_back(VkWriteDescriptorSet{
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.dstSet = pass.gfx->descriptor_set,
+				.dstBinding = 0,
+				.dstArrayElement = 0,
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.pBufferInfo = &buffer_infos[i++]
+			});
+		}
+
+		if (!writes.empty()) {
+			vkUpdateDescriptorSets(ctx->device,
+				(uint32_t)writes.size(), writes.data(), 0, nullptr);
+		}
+	}
 
 	result = rg_compile(ctx, rg);
 	if (result != ev2::SUCCESS) {

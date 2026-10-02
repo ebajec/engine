@@ -15,6 +15,9 @@ struct FluidParticle
 	glm::vec2 pos;
 	glm::vec2 vel;
 };
+static_assert(sizeof(FluidParticle) == 16);
+static_assert(offsetof(FluidParticle, pos) == 0);
+static_assert(offsetof(FluidParticle, vel) == 8);
 
 struct GridFluidSim
 {

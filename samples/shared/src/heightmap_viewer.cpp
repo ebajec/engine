@@ -1,4 +1,4 @@
-#include "heightmap_viewer.h"
+#include "shared/heightmap_viewer.h"
 
 #include "ev2/editor.h"
 

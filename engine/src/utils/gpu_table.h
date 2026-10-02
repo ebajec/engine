@@ -39,6 +39,16 @@ struct GPUTTable
 	/// @return True if buffer was resized, false otherwise
 	bool update(ev2::GfxContext *ctx);
 
+	/// @brief Drop every entry without releasing the GPU buffer, so the next
+	/// round of add() calls reuses the allocation. Intended for tables whose
+	/// contents are rebuilt from scratch each frame.
+	void clear()
+	{
+		data.clear();
+		free.clear();
+		updates.clear();
+	}
+
 	/// @brief Get the offset in the buffer for a given element.
 	size_t get_offset(uint32_t idx)
 	{
