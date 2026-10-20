@@ -103,8 +103,6 @@ void EditorState::update_input()
 
 ev2::Result EditorState::resize(int width, int height)
 {
-	glfwSetWindowSize(win.ptr, width, height);
-
 	win.width = width;
 	win.height = height;
 
@@ -491,6 +489,16 @@ ev2::Result begin_frame()
 
 	ev2::Result result = ev2::SUCCESS;
 
+	glfwPollEvents();
+	glfwGetFramebufferSize(g.win.ptr, &g.win.width, &g.win.height);
+	// A minimized window or fullscreen transition may have no drawable yet.
+	while (g.win.width == 0 || g.win.height == 0) {
+		if (g.should_close || glfwWindowShouldClose(g.win.ptr))
+			return ev2::SHOULD_CLOSE;
+		glfwWaitEvents();
+		glfwGetFramebufferSize(g.win.ptr, &g.win.width, &g.win.height);
+	}
+
 	// I find it nicer to have ImGui captured wherever I need it to between frames
 	if (g.frame_counter++) {
 	} else {
@@ -507,8 +515,6 @@ ev2::Result begin_frame()
 	g.input.t0 = glfwGetTime();
 	g.input.dt = g.input.t0 - g.input.t1;
 	g.input.scroll_delta = glm::vec2(0);
-
-	glfwPollEvents();
 
 	g.update_input();
 
@@ -583,8 +589,7 @@ ev2::Result end_frame()
 	// ending the gui pass after all other passes ensures that the ui is rendered last
 	ev2::end_pass(g.ctx, g.gui_pass);
 
-	ev2::end_frame(g.ctx);
-	return ev2::SUCCESS;
+	return ev2::end_frame(g.ctx);
 }
 
 void shutdown()
