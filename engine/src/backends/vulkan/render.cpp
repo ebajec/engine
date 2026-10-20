@@ -1274,8 +1274,8 @@ static void use_resource_internal(
 	}
 
 	if (!state->written && !is_dst_write) {
-		log_warn("Pass %s reads from %s %d with no prior write; likely needs intialization!", 
-		   dst_node.name.c_str(), resource.type_str(), resource.id());
+		//log_warn("Pass %s reads from %s %d with no prior write; likely needs intialization!", 
+		//   dst_node.name.c_str(), resource.type_str(), resource.id());
 	}
 
 	PassBarrier barrier = {

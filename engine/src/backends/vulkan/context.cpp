@@ -296,8 +296,44 @@ static SwapChainSupportDetails querySwapChainSupport(
     return details;
 }
 
+static std::vector<std::string> getEnabledDeviceExtensions(VkPhysicalDevice device, const VulkanOptions &opts)
+{
+    uint32_t extensionCount;
+    vkEnumerateDeviceExtensionProperties(device,nullptr,&extensionCount,nullptr);
+    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
 
-static bool checkDeviceExtensionSupport(VkPhysicalDevice device, 
+    vkEnumerateDeviceExtensionProperties(device,nullptr, 
+										 &extensionCount, availableExtensions.data());
+
+    std::set<std::string> optionalExtensions(
+		opts.optionalExtensions.begin(), opts.optionalExtensions.end());
+
+	std::vector<std::string> enabled_extensions;
+	for (const std::string &s : opts.requiredExtensions)
+		enabled_extensions.push_back(s);
+
+    for (const auto& extension : availableExtensions) {
+		if (optionalExtensions.erase(extension.extensionName) > 0) {
+			enabled_extensions.push_back(extension.extensionName);
+		}
+	}
+
+	if (!optionalExtensions.empty()) {
+		std::stringstream msg;
+		msg << "The following optional device extensions are not supported:\n";
+
+		for (const std::string &s : optionalExtensions) {
+			msg << "\t" << s << "\n";
+		}
+
+		std::string msg_str = msg.str();
+		log_info("%s", msg_str.c_str());
+	}
+
+	return enabled_extensions;
+}
+
+static bool checkRequiredDeviceExtensionSupport(VkPhysicalDevice device, 
 								 const VulkanOptions &opts) 
 {
     uint32_t extensionCount;
@@ -307,20 +343,20 @@ static bool checkDeviceExtensionSupport(VkPhysicalDevice device,
     vkEnumerateDeviceExtensionProperties(device,nullptr, 
 										 &extensionCount, availableExtensions.data());
     std::set<std::string> requiredExtensions(
-		opts.deviceExtensions.begin(), opts.deviceExtensions.end());
-    
+		opts.requiredExtensions.begin(), opts.requiredExtensions.end());
+
     for (const auto& extension : availableExtensions) {
         requiredExtensions.erase(extension.extensionName);
     }
+
     return requiredExtensions.empty();
 }
-
 
 static bool isDeviceSuitable(VkSurfaceKHR surface, VkPhysicalDevice device, 
 							 const VulkanOptions &opts)
 {
     QueueFamilyIndices indices = findQueueFamilies(device, surface);
-    bool extensionsSupported = checkDeviceExtensionSupport(device, opts);
+    bool extensionsSupported = checkRequiredDeviceExtensionSupport(device, opts);
 
     bool swapChainAdequate = false;
     if (extensionsSupported) {
@@ -498,7 +534,88 @@ static ev2::Result create_physical_device(ev2::GfxContext *ctx,
 	return ev2::SUCCESS;
 }
 
-static ev2::Result create_logical_device(ev2::GfxContext *ctx, 
+// Every device feature as (struct member, feature, required).
+// Unsupported optional features are disabled with a warning; unsupported
+// required features fail device creation.
+#define EV2_DEVICE_FEATURES(X) \
+	X(features2.features, shaderInt64,                               false) \
+	X(features12, shaderInt8,                                        false) \
+	X(features12, descriptorBindingSampledImageUpdateAfterBind,      true)  \
+	X(features12, descriptorBindingUpdateUnusedWhilePending,         true)  \
+	X(features12, descriptorBindingPartiallyBound,                   true)  \
+	X(features12, descriptorBindingVariableDescriptorCount,          true)  \
+	X(features12, runtimeDescriptorArray,                            true)  \
+	X(features12, timelineSemaphore,                                 true)  \
+	X(features12, bufferDeviceAddress,                               true)  \
+	X(features12, bufferDeviceAddressCaptureReplay,                  false) \
+	X(features13, shaderDemoteToHelperInvocation,                    false) \
+	X(features13, synchronization2,                                  true)  \
+	X(features13, dynamicRendering,                                  true)  \
+	X(atomicFloat, shaderSharedFloat32AtomicAdd,                     false) \
+	X(atomicFloat2, shaderSharedFloat32AtomicMinMax,                 false)
+
+struct DeviceFeatureChain
+{
+	VkPhysicalDeviceFeatures2 features2;
+	VkPhysicalDeviceVulkan12Features features12;
+	VkPhysicalDeviceVulkan13Features features13;
+	VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomicFloat;
+	VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT atomicFloat2;
+
+	// Self-referential; initialize in place.
+	DeviceFeatureChain()
+	{
+		features2 = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+			.pNext = &features12,
+		};
+		features12 = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+			.pNext = &features13,
+		};
+		features13 = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+			.pNext = &atomicFloat,
+		};
+		atomicFloat = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT,
+			.pNext = &atomicFloat2,
+		};
+		atomicFloat2 = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_2_FEATURES_EXT,
+		};
+	}
+	DeviceFeatureChain(const DeviceFeatureChain&) = delete;
+	DeviceFeatureChain& operator=(const DeviceFeatureChain&) = delete;
+};
+
+// Fills `enabled` with every requested feature the device supports.
+static ev2::Result select_device_features(VkPhysicalDevice device,
+										  DeviceFeatureChain &enabled)
+{
+	DeviceFeatureChain supported;
+	vkGetPhysicalDeviceFeatures2(device, &supported.features2);
+
+	ev2::Result result = ev2::SUCCESS;
+
+#define EV2_SELECT_FEATURE(s, name, required)                                  \
+	if (supported.s.name) {                                                    \
+		enabled.s.name = VK_TRUE;                                              \
+	} else if (required) {                                                     \
+		log_error("Required device feature '" #name "' is not supported");     \
+		result = ev2::EINIT_FAILED;                                            \
+	} else {                                                                   \
+		log_warn("Device feature '" #name "' was requested but is not "        \
+				 "supported, disabling");                                      \
+	}
+
+	EV2_DEVICE_FEATURES(EV2_SELECT_FEATURE)
+#undef EV2_SELECT_FEATURE
+
+	return result;
+}
+
+static ev2::Result create_logical_device(ev2::GfxContext *ctx,
 									   const VulkanOptions &opts)
 {
 	QueueFamilyIndices indices = findQueueFamilies(ctx->physicalDevice, 
@@ -537,69 +654,34 @@ static ev2::Result create_logical_device(ev2::GfxContext *ctx,
     }
     
     // device features
+	DeviceFeatureChain features;
+	if (select_device_features(ctx->physicalDevice, features) != ev2::SUCCESS)
+		return set_error(EINIT_FAILED, "Required device features are unsupported");
 
-	VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT atomicFloat2Features{
-		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_2_FEATURES_EXT,
-		.shaderSharedFloat32AtomicMinMax = VK_TRUE
-	};
+	// extensions
+	std::vector<std::string> enabled_extensions = getEnabledDeviceExtensions(ctx->physicalDevice, opts);
+	{
+		std::vector<const char *> tmp_enabled_extensions;
+		for (const std::string &s : enabled_extensions)
+			tmp_enabled_extensions.push_back(s.c_str());
 
-	VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomicFloatFeatures{
-		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT,
-		.pNext = &atomicFloat2Features,
-		.shaderSharedFloat32AtomicAdd = VK_TRUE,
-	};
+		// Features are passed through VkPhysicalDeviceFeatures2, so
+		// pEnabledFeatures must stay null.
+		VkDeviceCreateInfo createInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+			.pNext = &features.features2,
+			.queueCreateInfoCount = (uint32_t)queueCreateInfos.size(),
+			.pQueueCreateInfos = queueCreateInfos.data(),
+			.enabledExtensionCount = (uint32_t)tmp_enabled_extensions.size(),
+			.ppEnabledExtensionNames = tmp_enabled_extensions.data(),
+		};
 
-	VkPhysicalDeviceVulkan12Features features12{
-		.sType             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-		.pNext = &atomicFloatFeatures,
-		.shaderInt8 = VK_TRUE,
-    	.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
-		.descriptorBindingUpdateUnusedWhilePending = VK_TRUE,
-		.descriptorBindingPartiallyBound = VK_TRUE,
-		.descriptorBindingVariableDescriptorCount = VK_TRUE,
-		.runtimeDescriptorArray = VK_TRUE,
-		.timelineSemaphore = VK_TRUE,
-		.bufferDeviceAddress = VK_TRUE,
-		.bufferDeviceAddressCaptureReplay = VK_TRUE,
-	};
-
-	VkPhysicalDeviceVulkan13Features features13{
-		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-		.pNext = &features12,
-		.shaderDemoteToHelperInvocation = VK_TRUE,
-		.synchronization2 = VK_TRUE,
-		.dynamicRendering = VK_TRUE,
-	};
-
-    VkPhysicalDeviceFeatures2 deviceFeatures2{
-		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-		.pNext = &atomicFloatFeatures,
-	};
-
-	vkGetPhysicalDeviceFeatures2(ctx->physicalDevice, &deviceFeatures2);
-
-	if (!atomicFloatFeatures.shaderSharedFloat32AtomicAdd)
-		return set_error(EINIT_FAILED, "shaderSharedFloat32AtomicAdd is unsupported"); 
-
-	VkPhysicalDeviceFeatures device_features{
-		.shaderInt64 = VK_TRUE
-	};
-
-    VkDeviceCreateInfo createInfo = {
-		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-		.pNext = &features13,
-		.queueCreateInfoCount = (uint32_t)queueCreateInfos.size(),
-		.pQueueCreateInfos = queueCreateInfos.data(),
-		.enabledExtensionCount = (uint32_t)opts.deviceExtensions.size(),
-		.ppEnabledExtensionNames = opts.deviceExtensions.data(),
-		.pEnabledFeatures = &device_features,
-	};
-
-	VkResult result = vkCreateDevice(ctx->physicalDevice, 
-								  &createInfo, nullptr, &ctx->device); 
-    if (result != VK_SUCCESS) {
-		return check_vk_result(result, "vkCreateDevice failed!");
-    }
+		VkResult result = vkCreateDevice(ctx->physicalDevice, 
+									  &createInfo, nullptr, &ctx->device); 
+		if (result != VK_SUCCESS) {
+			return check_vk_result(result, "vkCreateDevice failed!");
+		}
+	}
 
     vkGetDeviceQueue(ctx->device, indices.presentFamily.value(), 0,
 					 &ctx->present_queue);

@@ -82,12 +82,19 @@ extern bool g_enable_reloading;
 
 struct VulkanOptions
 {
-    std::vector<const char*> deviceExtensions = {
+    std::vector<const char*> requiredExtensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    };
+    std::vector<const char*> optionalExtensions = {
+		// This isn't always supported and doens't actually
+		// have a tangible effect on anything. Since image
+		// layout tracking isn't implemented, it could be added
+		// here so a message is logged when it isn't supported
 		//VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME,
+
 		VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME,
 		VK_EXT_SHADER_ATOMIC_FLOAT_2_EXTENSION_NAME
-    };
+	};
 };
 
 struct SwapChain
