@@ -1710,7 +1710,7 @@ const VkPhysicalDeviceLimits *get_vulkan_physical_device_limits(GfxContext *ctx)
 ev2::Result resize_swapchain(GfxContext *ctx, uint32_t width, uint32_t height)
 {
 	uint32_t old_width = ctx->desired_surface_width;
-	uint32_t old_height = ctx->desired_surface_width;
+	uint32_t old_height = ctx->desired_surface_height;
 
 	if (old_width != width || old_height != height) {
 		ctx->desired_surface_width = width;
