@@ -1165,16 +1165,22 @@ Result begin_frame(GfxContext *ctx)
 	};
 
 	uint32_t image_index;
-    VkResult vk_result = vkAcquireNextImage2KHR(ctx->device, &acquire_info, &image_index);
+	for (;;) {
+		acquire_info.swapchain = ctx->swap_chain.swapchain;
+		VkResult vk_result = vkAcquireNextImage2KHR(ctx->device, &acquire_info, &image_index);
 
-	if (vk_result == VK_ERROR_OUT_OF_DATE_KHR) {
-        result = ctx->reset_swap_chain();
-    } else if (vk_result != VK_SUCCESS && vk_result != VK_SUBOPTIMAL_KHR) {
-        return set_error(ev2::EBAD_SWAPCHAIN, "failed to acquire swap chain image!");
-    }
-
-	if (result != SUCCESS) {
-		return result;
+		if (vk_result == VK_ERROR_OUT_OF_DATE_KHR) {
+			result = ctx->reset_swap_chain();
+			if (result != SUCCESS)
+				return result;
+			// No image was acquired. Retry against the replacement swapchain.
+			continue;
+		}
+		if (vk_result != VK_SUCCESS && vk_result != VK_SUBOPTIMAL_KHR)
+			return set_error(ev2::EBAD_SWAPCHAIN, "failed to acquire swap chain image!");
+		if (vk_result == VK_SUBOPTIMAL_KHR)
+			ctx->is_swap_chain_valid = false;
+		break;
 	}
 
 	//------------------------------------------------------------------------------
@@ -2193,11 +2199,16 @@ static VkResult rg_submit(GfxContext *ctx, const RenderGraph *rg)
 	};
 
 	result = vkQueuePresentKHR(ctx->present_queue, &present_info);
-	if (result != VK_SUCCESS || present_result != VK_SUCCESS) {
-		log_error("Present submission failed");
-		return result;
+	for (VkResult status : {result, present_result}) {
+		if (status == VK_ERROR_OUT_OF_DATE_KHR || status == VK_SUBOPTIMAL_KHR) {
+			// Submission succeeded; finish this frame and rebuild before the next.
+			ctx->is_swap_chain_valid = false;
+		} else if (status != VK_SUCCESS) {
+			log_error("Present submission failed");
+			return status;
+		}
 	}
-	return result;
+	return VK_SUCCESS;
 }
 
 static RenderGraph *rg_create(GfxContext *ctx)

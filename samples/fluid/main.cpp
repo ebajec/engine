@@ -38,7 +38,7 @@ struct SimParams
 {
 	glm::vec2 cursor1;
 	glm::vec2 cursor2;
-	uint cursor_flags;
+	uint32_t cursor_flags;
 	bool b_compute_bvh;
 };
 
@@ -253,7 +253,7 @@ struct FLIPFluidSim
 			uint32_t step;
 			glm::vec2 cursor1;
 			glm::vec2 cursor2;
-			uint cursor_flags;
+			uint32_t cursor_flags;
 		} pc_particle = {
 			.count = particle_count,
 			.step = (uint32_t)step,
