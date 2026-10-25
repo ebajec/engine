@@ -180,7 +180,7 @@ ev2::Result ImageViewer::update(ev2::GfxContext *ctx, int *p_flags)
 	ev2::Result status = ev2::SUCCESS;
 	int update_flags = 0;
 
-	if (status = Viewport::imgui(&update_flags); status < ev2::SUCCESS) {
+	if (status = Viewport::update(&update_flags); status < ev2::SUCCESS) {
 		return status;
 	}
 

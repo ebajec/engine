@@ -401,7 +401,8 @@ static void populate_rendering_info(
 	VkRenderingAttachmentInfo *p_stencil_info
 )
 {
-	static float rgb[3] = {0.0f,0.0f,0.0f}; bool has_color = p_target->color_view != VK_NULL_HANDLE;
+	static float rgb[3] = {0.0f,0.0f,0.0f};
+	bool has_color = p_target->color_view != VK_NULL_HANDLE;
 	bool has_depth = p_target->depth_view != VK_NULL_HANDLE;
 	bool has_stencil = has_depth;
 
@@ -417,7 +418,7 @@ static void populate_rendering_info(
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 			.clearValue = VkClearValue{
 				.color = {
-					.float32 = {rgb[0],rgb[0],rgb[0],0.f}
+					.float32 = {rgb[0],rgb[0],rgb[0],1.f}
 				}
 			},
 		};

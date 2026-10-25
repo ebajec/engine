@@ -1552,7 +1552,7 @@ void GfxContext::process_deferred_deletions()
 	deferred_delete.process(this);
 }
 
-Result init_vfs(GfxContext *ctx)
+static Result init_vfs(GfxContext *ctx)
 {
 	ctx->vfs.reset(Vfs::create());
 

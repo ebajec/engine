@@ -11,3 +11,6 @@
 [submodule "external/spirv-reflect/spirv-reflect"]
 	path = external/spirv-reflect/spirv-reflect
 	url = https://github.com/KhronosGroup/SPIRV-Reflect
+[submodule "external/miniaudio/miniaudio"]
+	path = external/miniaudio/miniaudio
+	url = https://github.com/mackron/miniaudio

@@ -106,7 +106,7 @@ int HeightmapViewer::set_texture(ev2::GfxContext *ctx, ev2::TextureID tex)
 int HeightmapViewer::update(ev2::GfxContext *ctx, int *p_flags)
 {
 	(void)ctx;
-	return m_viewport->imgui(p_flags);
+	return m_viewport->update(p_flags);
 }
 
 void HeightmapViewer::render(ev2::GfxContext *ctx)

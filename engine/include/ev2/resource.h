@@ -84,6 +84,8 @@ void flush_uploads(GfxContext * ctx);
 // @return Counter value reached by pool upon completion of the upload.
 uint64_t commit_buffer_uploads(GfxContext *ctx, UploadContext uc, BufferID buf, 
 							   const BufferUpload *uploads, uint32_t count);
+uint64_t commit_buffer_uploads(GfxContext *ctx, UploadContext uc, BufferID buf, 
+							   BufferUpload up);
 uint64_t commit_image_uploads(GfxContext *ctx, UploadContext uc, ImageID img, 
 							  const ImageUpload *uploads, uint32_t count);
 

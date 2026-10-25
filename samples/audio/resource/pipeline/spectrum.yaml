@@ -1,0 +1,5 @@
+shaders:
+  vert: audio://shader/spectrum.vert
+  frag: audio://shader/spectrum.frag
+input:
+  topology: TRIANGLE_STRIP

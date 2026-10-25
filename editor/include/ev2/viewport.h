@@ -49,7 +49,7 @@ class Viewport
 	bool m_closable : 1 = true;
 
 	void cleanup_render_target();
-	ev2::Result update(int *p_flags);
+	ev2::Result update_render_target(int *p_flags);
 public:
 	enum UpdateFlagBits {
 		SHOULD_CLOSE_BIT = 0x1,
@@ -80,7 +80,7 @@ public:
 
 	~Viewport();
 
-	ev2::Result imgui(int *p_flags);
+	ev2::Result update(int *p_flags);
 };
 
 } // namespace ev2

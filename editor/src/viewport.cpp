@@ -52,7 +52,7 @@ void Viewport::cleanup_render_target()
 	m_target = EV2_NULL_HANDLE(RenderTarget);
 }
 
-ev2::Result Viewport::update(int *p_flags)
+ev2::Result Viewport::update_render_target(int *p_flags)
 {
 	ev2::GfxContext *ctx = editor::ctx();
 
@@ -105,10 +105,10 @@ bool Viewport::is_content_selected()
 	return m_content_hovered && m_focused;
 }
 
-ev2::Result Viewport::imgui(int *p_flags)
+ev2::Result Viewport::update(int *p_flags)
 {
 	int update_flags = 0;
-	ev2::Result status = update(&update_flags);
+	ev2::Result status = update_render_target(&update_flags);
 
 	if (p_flags)
 		*p_flags |= update_flags;

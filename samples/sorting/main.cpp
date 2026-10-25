@@ -26,12 +26,12 @@
 #include <algorithm>
 #include <cstdlib>
 
-struct TestApp
+struct AudioViz
 {
 	ev2::GfxContext *ctx;
 
-	std::unique_ptr<ev2::Viewport> viewport;
-	std::shared_ptr<ev2::PanningCamera> camera;
+	std::unique_ptr<ev2::Viewport> main_viewport;
+	std::shared_ptr<ev2::PanningCamera> main_camera;
 
 	std::unique_ptr<GPUSort> sorter;
 	ev2::BufferID buffers[2] = {};
@@ -58,10 +58,10 @@ struct TestApp
 	int update();
 	void render();
 
-	~TestApp();
+	~AudioViz();
 };
 
-TestApp::~TestApp()
+AudioViz::~AudioViz()
 {
 	if (real_buffer.is_valid())
 		ev2::destroy_buffer(ctx, real_buffer);
@@ -70,13 +70,13 @@ TestApp::~TestApp()
 			ev2::destroy_buffer(ctx, buffers[i]);
 }
 
-int TestApp::initialize(int argc, char **argv)
+int AudioViz::initialize(int argc, char **argv)
 {
 	ctx = ev2::editor::ctx();
 
-	camera = std::make_shared<ev2::PanningCamera>(glm::dvec2(0.5, 0.5), 1.0);
-	viewport.reset(new ev2::Viewport("Visualization", 100, 100, 250, 250));
-	viewport->set_camera(camera);
+	main_camera = std::make_shared<ev2::PanningCamera>(glm::dvec2(0.5, 0.5), 1.0);
+	main_viewport.reset(new ev2::Viewport("Visualization", 100, 100, 250, 250));
+	main_viewport->set_camera(main_camera);
 
 	on_count_changed();
 	randomize();
@@ -85,7 +85,7 @@ int TestApp::initialize(int argc, char **argv)
 	return ev2::SUCCESS;
 }
 
-void TestApp::on_count_changed()
+void AudioViz::on_count_changed()
 {
 	sorter.reset(GPUSort::create(ctx, count, 32, "core://shader/sort/sort_uint.slang"));
 
@@ -104,7 +104,7 @@ void TestApp::on_count_changed()
 		ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT | ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT); 
 }
 
-void TestApp::randomize()
+void AudioViz::randomize()
 {
 	values.clear();
 	values.reserve(count);
@@ -117,7 +117,7 @@ void TestApp::randomize()
 	reset();
 }
 
-void TestApp::reset()
+void AudioViz::reset()
 {
 	if (values.size() != count)
 		randomize();
@@ -172,7 +172,7 @@ void TestApp::reset()
 	}
 }
 
-int TestApp::update()
+int AudioViz::update()
 {
 	int result = ev2::SUCCESS;
 
@@ -206,7 +206,7 @@ int TestApp::update()
 	ImGui::End();
 
 	// never close the viewport
-	if (result = viewport->imgui(nullptr); result < ev2::SUCCESS)
+	if (result = main_viewport->update(nullptr); result < ev2::SUCCESS)
 		return result;
 
 	render();
@@ -214,14 +214,14 @@ int TestApp::update()
 	return ev2::SUCCESS;
 }
 
-void TestApp::exec_sort()
+void AudioViz::exec_sort()
 {
 	ev2::PassID pass = ev2::begin_compute_pass(ctx);
 	disp_buffer = sorter->record(pass, bits, buffers, count, sizeof(uint32_t), nullptr, 0);
 	ev2::end_pass(ctx, pass);
 }
 
-void TestApp::render()
+void AudioViz::render()
 {
 	ev2::GfxPipelineID p_points = ev2::load_graphics_pipeline(ctx, "test_sort://pipeline/points.yaml");
 	ev2::GfxPipelineID p_background = ev2::load_graphics_pipeline(ctx, "test_sort://pipeline/bg.yaml");
@@ -233,8 +233,8 @@ void TestApp::render()
 		return;
 
 	ev2::GfxPassInfo pass_info = {
-		.target = viewport->get_target(),
-		.view = viewport->get_view()
+		.target = main_viewport->get_target(),
+		.view = main_viewport->get_view()
 	};
 	ev2::PassID pass = ev2::begin_gfx_pass(ctx, &pass_info);
 
@@ -288,7 +288,7 @@ int main(int argc, char *argv[])
 		return result;
 	add_project_mounts(ev2::editor::ctx());
 
-	std::unique_ptr<TestApp> app (new TestApp{});
+	std::unique_ptr<AudioViz> app (new AudioViz{});
 	if (app->initialize(argc, argv) != ev2::SUCCESS)
 		return EXIT_FAILURE;
 

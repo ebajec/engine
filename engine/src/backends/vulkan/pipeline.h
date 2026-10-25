@@ -283,7 +283,7 @@ static inline View view_data_from_matrices(float view[], float proj[])
 		.p = proj_mat,
 		.v = view_mat,
 		.pv = proj_mat * view_mat,
-		.center = glm::vec3(0),
+		.center = glm::vec3(-view_mat[3]) * glm::mat3(view_mat),
 	};
 }
 

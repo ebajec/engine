@@ -208,6 +208,13 @@ UploadContext begin_upload(GfxContext *ctx, size_t bytes, size_t align)
 }
 
 uint64_t commit_buffer_uploads(GfxContext *ctx, UploadContext uc, BufferID buf, 
+							   BufferUpload up)
+{
+	UploadPool *pool = ctx->pool.get();
+	return pool->commit_buffer(uc.allocation_index, buf, &up, 1);
+}
+
+uint64_t commit_buffer_uploads(GfxContext *ctx, UploadContext uc, BufferID buf, 
 							   const BufferUpload *regions, uint32_t count)
 {
 	UploadPool *pool = ctx->pool.get();

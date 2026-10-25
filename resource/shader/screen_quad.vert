@@ -18,20 +18,12 @@ void main()
 	vec4 corners_ccw[4] = {
 		vec4(-1,-1,0,0),
 	 	vec4(1,-1,1,0),
-		vec4(0,1,0,1),
+		vec4(-1,1,0,1),
 	 	vec4(1,1,1,1)
 	};
 
-	vec2 pos;
-	vec2 uv;
-
-	if (id < 3) {
-		pos = corners_ccw[id].xy;
-		uv = corners_ccw[id].zw;
-	} else {
-		pos = corners_ccw[1 + id % 3 ].xy;
-		uv = corners_ccw[1 + id % 3].zw;
-	}
+	vec2 pos = corners_ccw[id].xy;
+	vec2 uv = corners_ccw[id].zw;
 
 	frag_pos = pos;
 	frag_uv = uv;

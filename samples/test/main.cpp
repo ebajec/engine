@@ -218,7 +218,7 @@ void WaveSim::destroy(ev2::GfxContext *ctx)
 	ev2::destroy_image(ctx, swap_img[1]);
 }
 
-struct TestApp
+struct AudioViz
 {
 	ev2::GfxContext *ctx = nullptr;
 
@@ -236,14 +236,14 @@ struct TestApp
 	} uniforms;
 	ev2::BufferID ubo;
 
-	~TestApp();
+	~AudioViz();
 
 	int initialize(int argc, char **argv);
 	int update();
 	void render();
 };
 
-int TestApp::initialize(int argc, char **argv)
+int AudioViz::initialize(int argc, char **argv)
 {
 	(void)argc; (void)argv;
 
@@ -269,7 +269,7 @@ int TestApp::initialize(int argc, char **argv)
 
 	return ev2::SUCCESS;
 }
-int TestApp::update()
+int AudioViz::update()
 {
 	int result = ev2::SUCCESS;
 
@@ -290,11 +290,11 @@ int TestApp::update()
 
 	return ev2::SUCCESS;
 }
-void TestApp::render()
+void AudioViz::render()
 {
 	heightmap_panel->render(ctx);
 }
-TestApp::~TestApp()
+AudioViz::~AudioViz()
 {
 	if (heightmap_panel)
 		heightmap_panel.reset(nullptr);
@@ -304,7 +304,7 @@ TestApp::~TestApp()
 
 int main(int argc, char *argv[])
 {
-	std::unique_ptr<TestApp> app (new TestApp{});
+	std::unique_ptr<AudioViz> app (new AudioViz{});
 
 	int result = ev2::editor::init(argc, argv, "Wave Sim", 1200, 800);
 	if (result < ev2::SUCCESS)

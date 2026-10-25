@@ -1,0 +1,5 @@
+shaders:
+  vert: audio://shader/ball.vert
+  frag: audio://shader/ball.frag
+input:
+  topology: TRIANGLE

@@ -9,6 +9,7 @@ add_library(ev2-editor STATIC
 
 	src/motion_camera.cpp
 	src/panning_camera.cpp
+	src/spherical_motion_camera.cpp
 )
 
 target_include_directories(ev2-editor PUBLIC include)
