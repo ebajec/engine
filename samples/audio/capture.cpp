@@ -18,6 +18,16 @@ int Capture::init(CaptureMode mode, uint32_t capacity)
 {
 	destroy();
 
+	if (!capacity) {
+		log_error("Capture: buffer capacity must be nonzero");
+		return ev2::EINIT_FAILED;
+	}
+
+#if defined(__APPLE__)
+	if (mode == CAPTURE_MODE_OUTPUT)
+		return init_output_apple(capacity);
+#endif
+
 	ma_context_config context_config = ma_context_config_init();
 	context_config.pulse.pApplicationName = "ev2";
 
@@ -31,19 +41,16 @@ int Capture::init(CaptureMode mode, uint32_t capacity)
 
 	// A null device id is the default input device.
 	ma_device_config config = ma_device_config_init(ma_device_type_capture);
+#if !defined(_WIN32) && !defined(__APPLE__)
 	ma_device_id device_id = {};
+#endif
 
-	// Only WASAPI has a real loopback device. Elsewhere we record from the
-	// default sink's monitor source, which PipeWire and PulseAudio both
-	// provide.
+	// Windows uses WASAPI loopback; Linux uses the default sink's monitor.
+	// macOS output capture is handled by a Core Audio tap above.
 	if (mode == CAPTURE_MODE_OUTPUT) {
 #if defined(_WIN32)
 		config = ma_device_config_init(ma_device_type_loopback);
-#elif defined(__APPLE__)
-		// CoreAudio has no loopback; route output through a virtual device
-		// such as BlackHole and make it the default input.
-		log_info("Capture: no loopback on macOS, recording the default input device");
-#else
+#elif !defined(__APPLE__)
 		strncpy(device_id.pulse, "@DEFAULT_MONITOR@", sizeof(device_id.pulse) - 1);
 		config.capture.pDeviceID = &device_id;
 #endif
@@ -95,6 +102,10 @@ int Capture::init(CaptureMode mode, uint32_t capacity)
 
 void Capture::destroy()
 {
+#if defined(__APPLE__)
+	destroy_output_apple();
+#endif
+
 	if (m_device) {
 		ma_device_uninit(m_device);
 		delete m_device;
@@ -105,6 +116,10 @@ void Capture::destroy()
 		delete m_context;
 		m_context = nullptr;
 	}
+	m_format = {};
+	m_ring.clear();
+	m_capacity = 0;
+	m_written = 0;
 }
 
 void Capture::on_data(ma_device *device, void *out, const void *in, uint32_t frames)

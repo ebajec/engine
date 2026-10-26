@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>audio_viz</string>
+	<key>CFBundleIdentifier</key>
+	<string>org.ev2.audio-viz</string>
+	<key>CFBundleName</key>
+	<string>audio_viz</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Capture system audio to display its spectrum in the audio visualizer.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Capture microphone audio when --mic is selected in the audio visualizer.</string>
+</dict>
+</plist>

@@ -32,6 +32,14 @@ class Capture
 	ma_context *m_context = nullptr;
 	ma_device *m_device = nullptr;
 
+#if defined(__APPLE__)
+	struct AppleCapture;
+	AppleCapture *m_apple = nullptr;
+
+	int init_output_apple(uint32_t capacity);
+	void destroy_output_apple();
+#endif
+
 	CaptureFormat m_format;
 
 	mutable std::mutex m_mutex;

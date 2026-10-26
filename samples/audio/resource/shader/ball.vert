@@ -83,7 +83,7 @@ vec3 map(vec3 p, out vec4 color, out float dc)
 
 	color.rgb *= abs(h - dc);
 
-	p *= (1 + h);
+	p *= 4*(1 + h);
 
 	return vec3(p.x, p.y, p.z);
 }

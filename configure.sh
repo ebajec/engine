@@ -12,6 +12,8 @@ if [ -f /etc/os-release ]; then
             libglfw3-dev \
             libyaml-cpp-dev \
             libglm-dev \
+            libfftw3-dev \
+            pkg-config \
             glslang-tools
     fi
 fi
@@ -28,6 +30,8 @@ if [ "$(uname -s)" = "Darwin" ]; then
         yaml-cpp \
         cmake \
         glfw \
+        fftw \
+        pkgconf \
         glslang \
         coreutils
 fi
