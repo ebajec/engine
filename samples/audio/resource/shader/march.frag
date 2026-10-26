@@ -66,7 +66,7 @@ float func(vec3 p, out vec4 color, out float dc)
 
 	const int bins = min(128, pc.bins);
 
-	float scale = 24/float(bins);
+	float scale = 16/float(bins);
 	dc = pc.spec.data[0] * scale;
 
 	float Fscale = 512;
