@@ -171,13 +171,6 @@ enum BufferUsageFlagBits
 
 typedef uint32_t BufferUsageFlags;
 
-enum IndexType
-{
-	INDEX_TYPE_UINT32,
-	INDEX_TYPE_UINT16,
-	INDEX_TYPE_UINT8,
-};
-
 struct ImageUpload
 {
 	size_t src_offset;
@@ -288,6 +281,13 @@ void unload_mesh(GfxContext *ctx, ShaderID id);
 //------------------------------------------------------------------------------
 
 constexpr uint32_t EV2_MAX_BINDLESS_DESCRIPTORS = 1024;
+
+enum IndexType
+{
+	INDEX_TYPE_UINT32,
+	INDEX_TYPE_UINT16,
+	INDEX_TYPE_UINT8,
+};
 
 enum Usage
 {

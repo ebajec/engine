@@ -424,6 +424,7 @@ void AudioViz::process_audio()
 	fftwf_plan plan = fftwf_plan_dft_r2c_1d(fft_window_size, mono, fft, 0);
 	fftwf_execute(plan);
 	fftwf_destroy_plan(plan);
+
 	fftwf_free(mono);
 
 	ev2::UploadContext uc = ev2::begin_upload(ctx, sizeof(float) * fft_nbins, alignof(float));
@@ -447,8 +448,6 @@ void AudioViz::process_audio()
 	}
 
 	fftwf_free(fft);
-
-	fftwf_destroy_plan(plan);
 
 	ev2::commit_buffer_uploads(ctx, uc, rd.spectrum, {.size = sizeof(float) * fft_nbins});
 }
