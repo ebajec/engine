@@ -3,7 +3,7 @@
 
 #include "backends/opengl/def_opengl.h"
 
-#include "ev2/resource.h"
+#include "ev2/core.h"
 
 #include <cstdint>
 #include <cstddef>

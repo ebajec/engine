@@ -1,6 +1,6 @@
 #ifdef EV2_ENABLE_IMGUI
 
-#include <ev2/resource.h>
+#include <ev2/core.h>
 #include "backends/vulkan/resource.h"
 
 #include "utils/pool.h"

@@ -13,9 +13,7 @@
 #include <ev2/utils/log.h>
 #include <ev2/utils/common.h>
 
-#include <ev2/context.h>
-#include <ev2/pipeline.h>
-#include <ev2/resource.h>
+#include <ev2/core.h>
 
 #include <ev2/utils/camera_math.h>
 #include <ev2/utils/geometry.h>

@@ -1,6 +1,6 @@
 #include "capture.h"
 
-#include <ev2/context.h>
+#include <ev2/core.h>
 #include <ev2/utils/log.h>
 
 #include <miniaudio.h>

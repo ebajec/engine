@@ -3,8 +3,7 @@
 
 #include "ev2/viewport.h"
 
-#include <ev2/pipeline.h>
-#include <ev2/resource.h>
+#include <ev2/core.h>
 
 #include <glm/mat4x4.hpp>
 

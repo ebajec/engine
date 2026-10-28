@@ -4,9 +4,7 @@
 #include "backends/vulkan/def_vulkan.h"
 
 #include <ev2/utils/geometry.h>
-#include <ev2/context.h>
-#include <ev2/pipeline.h>
-#include <ev2/resource.h>
+#include <ev2/core.h>
 
 #include <glm/vec3.hpp>
 #include <glm/mat3x3.hpp>

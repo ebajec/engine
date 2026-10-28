@@ -1,7 +1,7 @@
 #ifndef TILE_CACHE_H
 #define TILE_CACHE_H
 
-#include <ev2/context.h>
+#include <ev2/core.h>
 #include <ev2/globe/tiling.h>
 
 #include "backends/opengl/def_opengl.h"

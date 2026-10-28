@@ -1,4 +1,4 @@
-#include "ev2/asset.h"
+#include "ev2/core.h"
 
 #include "backends/vulkan/context.h"
 #include "utils/asset_table.h"
@@ -94,7 +94,7 @@ static uint64_t commit_simple_upload(GfxContext *ctx,
 	return ev2::commit_buffer_uploads(ctx, uc, dst, &up, 1);
 }
 
-Result ensure_mesh_buffers_loaded(GfxContext *ctx, MeshID mesh_id)
+Result mesh_ensure_buffers_loaded(GfxContext *ctx, MeshID mesh_id)
 {
 	Mesh *mesh = ctx->get_mesh(mesh_id);
 

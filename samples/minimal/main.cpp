@@ -1,6 +1,4 @@
-#include "ev2/context.h"
-#include "ev2/pipeline.h"
-#include "ev2/asset.h"
+#include "ev2/core.h"
 
 #include "GLFW/glfw3.h"
 

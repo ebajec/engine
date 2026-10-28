@@ -1,7 +1,7 @@
 #ifndef EV2_RESOURCE_IMPL_H
 #define EV2_RESOURCE_IMPL_H
 
-#include "ev2/resource.h"
+#include "ev2/core.h"
 #include "ev2/utils/common.h"
 
 #include <robin_hood.h>

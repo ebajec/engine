@@ -1,5 +1,5 @@
 #include "ev2/defines.h"
-#include "ev2/context.h"
+#include "ev2/core.h"
 
 #include "utils/asset_table.h"
 #include "backends/vulkan/context.h"

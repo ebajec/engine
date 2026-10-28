@@ -3,8 +3,7 @@
 
 #include "poisson_solver.h"
 
-#include <ev2/resource.h>
-#include <ev2/pipeline.h>
+#include <ev2/core.h>
 
 #include <glm/vec2.hpp>
 

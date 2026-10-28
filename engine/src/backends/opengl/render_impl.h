@@ -3,8 +3,7 @@
 
 #include "backends/opengl/def_opengl.h"
 
-#include <ev2/resource.h>
-#include <ev2/pipeline.h>
+#include <ev2/core.h>
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/mat4x4.hpp>

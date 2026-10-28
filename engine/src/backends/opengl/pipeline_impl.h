@@ -3,8 +3,7 @@
 
 #include "backends/opengl/def_opengl.h"
 
-#include "ev2/resource.h"
-#include "ev2/pipeline.h"
+#include "ev2/core.h"
 
 #include <unordered_map>
 #include <string>

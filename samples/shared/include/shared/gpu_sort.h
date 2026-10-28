@@ -4,8 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "ev2/pipeline.h"
-#include "ev2/resource.h"
+#include "ev2/core.h"
 
 struct GPUSort
 {

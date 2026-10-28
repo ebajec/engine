@@ -1,19 +1,11 @@
 #ifndef EV2_MESH_H
 #define EV2_MESH_H
 
-#include <ev2/resource.h>
-#include <ev2/asset.h>
+#include <ev2/core.h>
 
 namespace ev2 {
 
 struct GfxContext;
-
-enum IndexType
-{
-	INDEX_TYPE_UINT32,
-	INDEX_TYPE_UINT16,
-	INDEX_TYPE_UINT8,
-};
 
 enum VertexType
 {
@@ -46,8 +38,6 @@ struct VertexPN16f {
 	uint16_t normal[3];
 };
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wswitch-enum"
 constexpr uint32_t get_idx_type_align(IndexType type)
 {
 	switch (type) {
@@ -67,7 +57,6 @@ constexpr uint32_t get_idx_type_size(IndexType type)
 		default: return 0;
 	}
 }
-#pragma clang diagnostic pop
 
 constexpr uint32_t get_vtx_type_size(VertexType type)
 {
@@ -120,20 +109,22 @@ struct MeshParams {
 	IndexType idx_type;
 	VertexType 	vtx_type;
 
-	uint32_t 	vtx_size;
-	uint32_t 	vtx_align;
-
 	uint32_t idx_count;
 	uint32_t vtx_count;
 
 	void *idx_data;
 	void *vtx_data;
+
+	// [optional] For VERTEX_TYPE_CUSTOM 
+	uint32_t 	vtx_size;
+	// [optional] For VERTEX_TYPE_CUSTOM
+	uint32_t 	vtx_align;
 };
 
 extern Mesh *create_mesh_internal(GfxContext *ctx, const MeshParams *params);
 extern void destroy_mesh_internal(GfxContext *ctx);
 
-extern Result ensure_mesh_buffers_loaded(GfxContext *ctx, MeshID mesh);
+extern Result mesh_ensure_buffers_loaded(GfxContext *ctx, MeshID mesh);
 
 }
 

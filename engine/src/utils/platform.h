@@ -1,7 +1,7 @@
 #ifndef EV2_PLATFORM_H
 #define EV2_PLATFORM_H
 
-#include <ev2/context.h>
+#include <ev2/core.h>
 #include <time.h>
 
 namespace ev2::platform

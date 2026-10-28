@@ -1,4 +1,4 @@
-#include <ev2/resource.h>
+#include <ev2/core.h>
 #include <ev2/utils/log.h>
 
 #include "ev2/utils/common.h"

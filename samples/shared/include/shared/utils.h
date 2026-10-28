@@ -3,7 +3,7 @@
 
 #include <cstdint>
 #include <cstring>
-#include <ev2/resource.h>
+#include <ev2/core.h>
 
 template<typename T>
 static uint64_t initialize_image(ev2::GfxContext *ctx, ev2::ImageID img, T defval = (T)0, uint32_t layer = 0)

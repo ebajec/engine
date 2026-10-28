@@ -1,7 +1,7 @@
 #ifndef EV2_UPLOAD_POOL_H
 #define EV2_UPLOAD_POOL_H
 
-#include "ev2/resource.h"
+#include "ev2/core.h"
 #include "def_vulkan.h"
 #include "resource.h"
 

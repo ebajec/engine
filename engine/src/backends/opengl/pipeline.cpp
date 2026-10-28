@@ -1,4 +1,4 @@
-#include <ev2/pipeline.h>
+#include <ev2/core.h>
 #include <ev2/utils/ansi_colors.h>
 #include <ev2/utils/log.h>
 

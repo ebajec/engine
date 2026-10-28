@@ -2,8 +2,7 @@
 #define GLOBE_H
 
 #include <ev2/globe/data_source.h>
-#include <ev2/context.h>
-#include <ev2/pipeline.h>
+#include <ev2/core.h>
 
 typedef struct Globe Globe;
 

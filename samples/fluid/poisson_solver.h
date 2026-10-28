@@ -1,9 +1,7 @@
 #ifndef EV2_SAMPLE_POISSON_SOLVER_H
 #define EV2_SAMPLE_POISSON_SOLVER_H
 
-#include <ev2/context.h>
-#include <ev2/resource.h>
-#include <ev2/pipeline.h>
+#include <ev2/core.h>
 
 constexpr uint32_t MAX_PRESSURE_SOLVER_MIPS = 8;
 

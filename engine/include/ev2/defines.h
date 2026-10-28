@@ -16,13 +16,15 @@ struct name##ID {\
 }
 
 #define MAKE_ASSET_HANDLE(name)\
+namespace ev2{\
 struct name##ID {\
 	uint64_t id = 0;\
 	inline bool is_valid() const{return id;}\
 	constexpr bool operator == (const name##ID &other) const {\
 		return other.id == id;\
 	}\
-}
+};\
+}\
 
 #define MAKE_HANDLE_VERSIONED(name)\
 namespace ev2 {\

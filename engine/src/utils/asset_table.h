@@ -1,7 +1,7 @@
 #ifndef EV2_ASSET_TABLE_H
 #define EV2_ASSET_TABLE_H
 
-#include <ev2/context.h>
+#include <ev2/core.h>
 #include <ev2/utils/monitor.h>
 #include <ev2/utils/log.h>
 

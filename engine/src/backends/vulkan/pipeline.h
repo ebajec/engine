@@ -3,8 +3,7 @@
 
 #include "backends/vulkan/def_vulkan.h"
 
-#include "ev2/resource.h"
-#include "ev2/pipeline.h"
+#include "ev2/core.h"
 #include "robin_hood.h"
 
 #include <glm/gtc/type_ptr.hpp>
@@ -67,7 +66,6 @@ struct BasePipeline
 	std::shared_ptr<const ShaderLayoutMapping> layout_map;
 	std::vector<VkDescriptorSetLayout> set_layouts;
 	VkPipelineLayout layout;
-	VkPipeline pipeline;
 	VkShaderStageFlags stage_mask;
 
 	// Used to allow reloading at runtime.
@@ -77,6 +75,7 @@ struct BasePipeline
 struct GfxPipeline
 {
 	BasePipeline base;
+	VkPipeline pipeline;
 
 	ev2::ShaderID vert;
 	ev2::ShaderID frag;
@@ -85,6 +84,7 @@ struct GfxPipeline
 struct ComputePipeline
 {
 	BasePipeline base;
+	VkPipeline pipeline;
 
 	ev2::ShaderID shader;
 };

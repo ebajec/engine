@@ -1943,14 +1943,14 @@ static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBu
 				CmdBindComputePipeline cmd = base_cmd.bind_compute_pipeline;
 				ComputePipeline *pipeline = ctx->get_compute_pipeline(cmd.pipeline);
 
-				vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->base.pipeline);
+				vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
 				break;
 			}
 			case BindGfxPipeline: {
 				CmdBindGfxPipeline cmd = base_cmd.bind_gfx_pipeline;
 				GfxPipeline *pipeline = ctx->get_gfx_pipeline(cmd.pipeline);
 
-				vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->base.pipeline);
+				vkCmdBindPipeline(cmds, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
 				break;
 			}
 			case BindResources: {

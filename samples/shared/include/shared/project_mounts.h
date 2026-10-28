@@ -1,7 +1,7 @@
 #ifndef EV2_PROJECT_MOUNTS_H
 #define EV2_PROJECT_MOUNTS_H
 
-#include <ev2/context.h>
+#include <ev2/core.h>
 #include <ev2/utils/log.h>
 
 // @brief Mount the resource directories the calling executable registered with

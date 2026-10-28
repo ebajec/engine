@@ -3,8 +3,7 @@
 
 #include "ev2/camera_controller.h"
 
-#include <ev2/context.h>
-#include <ev2/pipeline.h>
+#include <ev2/core.h>
 
 #include <glm/mat2x3.hpp>
 #include <glm/mat4x4.hpp>

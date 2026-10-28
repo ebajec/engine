@@ -1,9 +1,7 @@
 #ifndef EV2_EDITOR_H
 #define EV2_EDITOR_H
 
-#include <ev2/context.h>
-#include <ev2/resource.h>
-#include <ev2/pipeline.h>
+#include <ev2/core.h>
 
 // glfw
 #define GLFW_INCLUDE_VULKAN

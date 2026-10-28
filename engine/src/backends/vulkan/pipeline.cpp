@@ -1,4 +1,4 @@
-#include <ev2/pipeline.h>
+#include <ev2/core.h>
 #include <ev2/utils/ansi_colors.h>
 #include <ev2/utils/log.h>
 
@@ -771,10 +771,7 @@ cleanup:
 static void destroy_base_pipeline(ev2::GfxContext *ctx, ev2::BasePipeline* base)
 {
 	if (base->layout)
-			vkDestroyPipelineLayout(ctx->device, base->layout, nullptr);
-	if (base->pipeline)
-			vkDestroyPipeline(ctx->device, base->pipeline, nullptr);
-
+		vkDestroyPipelineLayout(ctx->device, base->layout, nullptr);
 }
 
 static ev2::Result initialize_gfx_pipeline_vk_pipeline(
@@ -944,7 +941,7 @@ static ev2::Result initialize_gfx_pipeline_vk_pipeline(
 
 	VkResult vk_result = vkCreateGraphicsPipelines(
 		ctx->device, VK_NULL_HANDLE, 1, &pipelineInfo, 
-		nullptr, &pipeline->base.pipeline);
+		nullptr, &pipeline->pipeline);
 
     if (vk_result != VK_SUCCESS) {
     	return set_error(ev2::ELOAD_FAILED, "failed to create graphics pipeline!");
@@ -1020,7 +1017,7 @@ static std::string get_gfx_pipeline_info(ev2::GfxContext *ctx, ev2::GfxPipeline 
 	std::string buf;
 	buf.resize((strlen(fmt) + strlen(vert) + strlen(frag)) + 1);
 	
-	snprintf(buf.data(), buf.size(), fmt, p_pipeline ? p_pipeline->base.pipeline : 0, vert, frag);
+	snprintf(buf.data(), buf.size(), fmt, p_pipeline ? p_pipeline->pipeline : 0, vert, frag);
 	return buf;
 }
 
@@ -1032,6 +1029,8 @@ static void destroy_gfx_pipeline(ev2::GfxContext *ctx, ev2::GfxPipeline *pipelin
 	}
 
 	destroy_base_pipeline(ctx, &pipeline->base);
+	if (pipeline->pipeline)
+		vkDestroyPipeline(ctx->device, pipeline->pipeline, nullptr);
 }
 
 static ev2::Result gfx_pipeline_create_callback(
@@ -1196,7 +1195,7 @@ static ev2::Result compute_pipeline_create_callback(
 		VK_NULL_HANDLE,
 		1, &create_info, 
 		nullptr, 
-		&pipeline->base.pipeline
+		&pipeline->pipeline
 	);
 
 	if (vk_result != VK_SUCCESS) {
@@ -1209,7 +1208,7 @@ static ev2::Result compute_pipeline_create_callback(
 	log_info(
 		"Compute pipeline: " COLORIZE_PATH(%s) "\n"
 		"\tVkPipeline: " ANSI_BLUE(0x%LX),
-		in_name, pipeline->base.pipeline
+		in_name, pipeline->pipeline
 	);
 
 	*pp_pipeline = pipeline.release();
@@ -1217,6 +1216,9 @@ static ev2::Result compute_pipeline_create_callback(
 	return ev2::SUCCESS;
 cleanup:
 	destroy_base_pipeline(ctx, &pipeline->base);
+	if (pipeline->pipeline)
+		vkDestroyPipeline(ctx->device, pipeline->pipeline, nullptr);
+
 	return result;
 }
 
@@ -1226,6 +1228,10 @@ static void destroy_compute_pipeline(ev2::GfxContext *ctx, ev2::ComputePipeline 
 		vkDestroyDescriptorSetLayout(ctx->device, pipeline->base.set_layouts[i], nullptr);
 	}
 	destroy_base_pipeline(ctx, &pipeline->base);
+
+	if (pipeline->pipeline)
+		vkDestroyPipeline(ctx->device, pipeline->pipeline, nullptr);
+
 	ev2::unload_shader(ctx, pipeline->shader);
 
 	delete pipeline;
