@@ -430,10 +430,10 @@ void AudioViz::process_audio()
 
 	float *out = (float*)uc.ptr;
 
-	const long Nmax = Fmax * fft_window_size / format.sample_rate;
+	const long Nmax = std::max((long)Fmax * fft_window_size / format.sample_rate, (long)fft_nbins);
 	const int samp_per_bin = Nmax / fft_nbins;
 
-	const float factor = fft_nbins / float(fft_window_size);
+	const float factor = float(fft_nbins) / float(fft_window_size);
 
 	for (int i = 0, idx = 0; i + samp_per_bin <= Nmax; i += samp_per_bin) {
 		float avg_mag = 0;
@@ -492,6 +492,7 @@ int AudioViz::update()
 		set_fft_nbins(fft_nbins);
 	}
 	if (ImGui::SliderInt("Fmax", &Fmax, 100, 20000)) {
+		Fmax = std::max(Fmax, 10);
 	}
 	if (ImGui::SliderFloat("Rescaling", &normalization, 0.f, 1.f)) {
 	}

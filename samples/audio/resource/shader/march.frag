@@ -50,12 +50,10 @@ float basis(vec3 p, float f, float c)
 	}
 
 	float t = ftime();
-	float sin_t = sin(t);
-	float cos_t = cos(t);
 
-	vec3 phi = 3.14 * vec3(-0.5 * f * t, f * t, 0.5 * f * t);
+	vec3 phi = 3.14 * vec3(-0.5 * f, f, 0.5 * f);
 
-	return c * cos(p.x * f - phi.x) * cos(p.y * f - phi.y) * cos(p.z * f - phi.x);
+	return c * cos(p.x * f - phi.x) * cos(p.y * f - phi.y) * cos(p.z * f - phi.x) * cos(3.14*f*t);
 }
 
 float func(vec3 p, out vec4 color, out float dc)
