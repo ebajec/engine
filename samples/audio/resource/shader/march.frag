@@ -17,6 +17,13 @@ layout (push_constant) uniform PC {
 	int Fmax;
 } pc;
 
+#define MAX_BINS 32
+
+//struct Coefficients
+//{
+//	float data[MAX_BINS];
+//};
+
 vec3 palette(int n, int N)
 {
         const vec3 stops[5] = vec3[](
@@ -59,21 +66,21 @@ float func(vec3 p, out vec4 color, out float dc)
 
 	float sgn = 1;
 
-	const int bins = 32;
+	const int bins = min(128, pc.bins);
 
 	float scale = 24/float(bins);
 	dc = pc.spec.data[0] * scale;
 
-	float Fscale = 2048;
+	float Fscale = 512;
 	float Fstep = pc.Fmax / (Fscale * float(bins));
 
 	for (int i = 0; i < bins; ++i) {
-		float f = i;
+		float f = i * Fstep;
 		float c = pc.spec.data[i];
 		float x = basis(p, f, c) * scale;
 		h += x; 
 
-		color.rgb += 10*abs(x) * palette(int(f), bins);
+		color.rgb += 30*abs(x) * palette(int(i), bins);
 	}
 
 	color.rgb *= abs(h - dc);
@@ -107,7 +114,7 @@ vec3 map(vec3 o, vec3 dir)
 	float eps = 0.01;
 	float dmax = 10000;
 
-	int max_its = 100;
+	int max_its = 150;
 
 	bool oob = false;
 
@@ -117,11 +124,20 @@ vec3 map(vec3 o, vec3 dir)
 
 	vec3 color;
 
+	int refinements = 0;
+
 	int it = 0;
 	for(; it < max_its; ++it) {
+		d = sdf(p, color); 
+
+		if (d < 0) {
+			if (++refinements > 1) {
+				break;
+				acc += 0.1 * abs(d) * color;
+			}
+		}
 		p += dir * d;
 
-		d = sdf(p, color); 
 		oob = d > dmax;
 
 		acc += 0.1/(5 + d*d) * color;
@@ -134,7 +150,7 @@ vec3 map(vec3 o, vec3 dir)
 		vec3 n = grad(p);
 		float f = clamp(dot(n, normalize(vec3(1,1,0))), 0, 0.8) + 0.2;
 
-		return acc;
+		return acc * length(n);
 	}
 
 	return acc;

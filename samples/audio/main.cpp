@@ -226,8 +226,8 @@ struct AudioViz
 	int fft_window_size = 2048;
 
 	// the window is downsampled into this
-	int fft_nbins = 74;
-	int Fmax = 20000;
+	int fft_nbins = 74; int Fmax = 20000;
+	float normalization = 1.f;
 
 	uint32_t index_count;
 
@@ -418,7 +418,7 @@ void AudioViz::process_audio()
 			mono[idx] += latest[n + c];
 		}
 
-		mono[idx] *= hannf(n, fft_window_size) / (float)format.channels;
+		mono[idx] *= normalization * hannf(n, fft_window_size) / (float)format.channels;
 		++idx;
 	}
 
@@ -447,6 +447,8 @@ void AudioViz::process_audio()
 	}
 
 	fftwf_free(fft);
+
+	fftwf_destroy_plan(plan);
 
 	ev2::commit_buffer_uploads(ctx, uc, rd.spectrum, {.size = sizeof(float) * fft_nbins});
 }
@@ -490,6 +492,8 @@ int AudioViz::update()
 		set_fft_nbins(fft_nbins);
 	}
 	if (ImGui::SliderInt("Fmax", &Fmax, 100, 20000)) {
+	}
+	if (ImGui::SliderFloat("Rescaling", &normalization, 0.f, 1.f)) {
 	}
 
 	// order matches VizMode
