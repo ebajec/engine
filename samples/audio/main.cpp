@@ -417,7 +417,7 @@ void AudioViz::process_audio()
 			mono[idx] += latest[n + c];
 		}
 
-		mono[idx] *= normalization * hannf(n, fft_window_size) / (float)format.channels;
+		mono[idx] *= normalization * hannf(idx, fft_window_size) / (float)format.channels;
 		++idx;
 	}
 
