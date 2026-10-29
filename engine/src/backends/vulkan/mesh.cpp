@@ -7,126 +7,157 @@
 
 namespace ev2 {
 
-
-Mesh *create_mesh_internal(GfxContext *ctx, const MeshParams *params)
+static bool validate_geometry(const MeshGeometry *geom)
 {
-	const bool is_custom = params->vtx_type == VERTEX_TYPE_CUSTOM; 
+	const bool is_custom = geom->vtx_format == VERTEX_FORMAT_CUSTOM; 
 
-	if (is_custom && params->vtx_size == 0) {
+	if (is_custom && geom->vtx_size == 0) {
 		log_error( 
-			"If vtx_type is VERTEX_TYPE_CUSTOM, vtx_size (%d) and vtx_align (%d) must be nonzero",
-			params->vtx_size, params->vtx_align);
-		return nullptr;
+			"If vtx_type is VERTEX_FORMAT_CUSTOM, vtx_size (%d) and vtx_align (%d) must be nonzero",
+			geom->vtx_size, geom->vtx_align);
+		return false;
 	}
 
-	if (!is_custom && params->vtx_size != 0) {
+	if (!is_custom && geom->vtx_size != 0) {
 		log_error( 
-			"If vtx_type is NOT VERTEX_TYPE_CUSTOM, vtx_size must be zero, is %d",
-			params->vtx_size);
-		return nullptr;
+			"If vtx_type is NOT VERTEX_FORMAT_CUSTOM, vtx_size must be zero, is %d",
+			geom->vtx_size);
+		return false;
 	}
 
-	uint32_t idx_align = get_idx_type_align(params->idx_type);
+	uint32_t idx_align = get_idx_type_align(geom->idx_type);
 
-	if (reinterpret_cast<uintptr_t>(params->idx_data) % idx_align != 0) {
-		log_error("idx_data is misaligned, should be %d", params->vtx_align);
-		return nullptr;
+	if (reinterpret_cast<uintptr_t>(geom->idx_data) % idx_align != 0) {
+		log_error("idx_data is misaligned, should be %d", geom->vtx_align);
+		return false;
 	}
 
-	size_t idx_size_bytes = (size_t)params->idx_count * 
-		(size_t)get_idx_type_size(params->idx_type);
+	uint32_t vtx_size = geom->vtx_size ? 
+		geom->vtx_size : get_vtx_type_size(geom->vtx_format);
+	uint32_t vtx_align = geom->vtx_align ? 
+		geom->vtx_align : get_vtx_type_align(geom->vtx_format);
 
-	void *idx_data = new (std::align_val_t{idx_align}) char[idx_size_bytes];
-
-	uint32_t vtx_size = is_custom ? 
-		params->vtx_size : get_vtx_type_size(params->vtx_type);
-	uint32_t vtx_align = is_custom ? 
-		params->vtx_align : get_vtx_type_align(params->vtx_type);
-
-	if (reinterpret_cast<uintptr_t>(params->vtx_data) % vtx_align != 0) {
-		log_error("vtx_data is misaligned, should be %d", params->vtx_align);
-		return nullptr;
+	if (reinterpret_cast<uintptr_t>(geom->vtx_data) % vtx_align != 0) {
+		log_error("vtx_data is misaligned, should be %d", geom->vtx_align);
+		return false;
 	}
 
-	uint32_t vtx_count = params->vtx_count;
+	return true;
+}
+
+MeshID create_mesh(GfxContext *ctx, const MeshGeometry *geom)
+{
+	if (!validate_geometry(geom))
+		return EV2_NULL_HANDLE(Mesh);
+
+	size_t idx_size_bytes = (size_t)geom->idx_count * 
+		(size_t)get_idx_type_size(geom->idx_type);
+
+	void *idx_data = new (std::align_val_t{get_idx_type_align(geom->idx_type)}) char[idx_size_bytes];
+
+	uint32_t vtx_size = geom->vtx_size ? 
+		geom->vtx_size : get_vtx_type_size(geom->vtx_format);
+	uint32_t vtx_align = geom->vtx_align ? 
+		geom->vtx_align : get_vtx_type_align(geom->vtx_format);
+	uint32_t vtx_count = geom->vtx_count;
 	size_t vtx_size_bytes = (size_t)vtx_count * (size_t)vtx_size;
 
-	void *vtx_data = new (std::align_val_t{vtx_align}) char[vtx_size_bytes];
+	void *vtx_data = ::operator new (vtx_size_bytes, std::align_val_t{vtx_align});
 
-	assert(params->idx_data);
-	assert(params->vtx_data);
+	assert(geom->idx_data);
+	assert(geom->vtx_data);
 
-	memcpy(vtx_data, params->vtx_data, vtx_size_bytes);
-	memcpy(idx_data, params->idx_data, idx_size_bytes);
+	memcpy(vtx_data, geom->vtx_data, vtx_size_bytes);
+	memcpy(idx_data, geom->idx_data, idx_size_bytes);
 
-	Mesh *mesh = new Mesh {
-		.idx_type = params->idx_type, 
-
-		.vtx_type = params->vtx_type,
-		.vtx_size = vtx_size, 
-		.vtx_align = vtx_align,
-
-		.idx_count = params->idx_count,
-		.vtx_count = vtx_count,
-
-		.idx_data = idx_data,
-		.vtx_data = vtx_data,
+	Mesh mesh = {
+		.geom = *geom
 	};
 
-	return mesh;
+	mesh.geom.vtx_size = vtx_size;
+	mesh.geom.vtx_align = vtx_align;
+	mesh.geom.vtx_data = vtx_data;
+	mesh.geom.idx_data = idx_data;
+
+	MeshID id = ctx->emplace_mesh(std::move(mesh));
+	uint32_t gpu_idx = ctx->mesh_info.add(MeshInfoGPU{});
+	assert(gpu_idx = id.id);
+
+	return id;
 }
 
-void destroy_mesh_internal(GfxContext *ctx)
+void destroy_mesh(GfxContext *ctx, MeshID id)
 {
+	Mesh *mesh = ctx->get_mesh(id);
+	::operator delete[] (mesh->geom.vtx_data, std::align_val_t{mesh->geom.vtx_align});
+	::operator delete[] (mesh->geom.idx_data, std::align_val_t{get_idx_type_align(mesh->geom.idx_type)});
 
+	ev2::destroy_buffer(ctx, mesh->buffer);
+
+	ctx->mesh_pool->deallocate(to_pool_id(id));
 }
 
-static uint64_t commit_simple_upload(GfxContext *ctx, 
-	void *src, size_t size, size_t align, BufferID dst, size_t dst_offset) 
+static void fill_gpu_hdr(MeshBufferHeaderGPU *hdr, const Mesh* mesh)
 {
-	ev2::UploadContext uc = ev2::begin_upload(ctx, size, align); 
-	memcpy(uc.ptr, src, size);
-	BufferUpload up = {
-		.src_offset = 0,
-		.dst_offset = dst_offset, 
-		.size = size,
-	};
-	return ev2::commit_buffer_uploads(ctx, uc, dst, &up, 1);
+	hdr->format = mesh->geom.vtx_format;
+	hdr->count = mesh->geom.vtx_count;
+
+	memcpy(hdr->uv_scale, mesh->geom.uv_scale, sizeof(hdr->uv_scale));
+	memcpy(hdr->uv_offset, mesh->geom.uv_offset, sizeof(hdr->uv_offset));
 }
 
-Result mesh_ensure_buffers_loaded(GfxContext *ctx, MeshID mesh_id)
+Result mesh_ensure_loaded_gpu(GfxContext *ctx, MeshID mesh_id)
 {
 	Mesh *mesh = ctx->get_mesh(mesh_id);
 
 	// For now, just create buffers owned by the mesh 
-	if (mesh->vbo.is_valid() && mesh->ibo.is_valid()) {
+	if (mesh->buffer.is_valid()) {
 		return SUCCESS;
 	}
 
+	size_t hdr_start = 0, vbo_start, ibo_start;
+	size_t bufsize = mesh->prepare_offsets(hdr_start, &vbo_start, &ibo_start);
+
+	mesh->buffer_offset = hdr_start;
+	mesh->buffer = ev2::create_buffer(ctx, bufsize, 
+		ev2::BUFFER_USAGE_TRANSFER_SRC_BIT | ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT);
+
+	//---------------------------------------------------------------------------------------
+	// update table
+	
+	glm::vec3 extent = glm::make_vec3(mesh->geom.pos_extent);
+	glm::vec3 offset = glm::make_vec3(mesh->geom.pos_offset);
+
+	ctx->mesh_info.set(mesh_id.id, MeshInfoGPU{
+		.pos_extent = {extent.x, extent.y, extent.z},
+		.first_index = 0,
+		.pos_offset = {offset.x, offset.y, offset.z},
+		.index_count = mesh->geom.idx_count,
+		.buffer = ev2::get_buffer_device_address(ctx, mesh->buffer),
+	});
+
+	//---------------------------------------------------------------------------------------
+	// upload
+
 	size_t vbo_size = mesh->vbo_size_bytes();
 	size_t ibo_size = mesh->ibo_size_bytes();
+	
+	ev2::UploadContext uc = ev2::begin_upload(ctx, bufsize, 16); 
 
-	//TODO: Be smarter here and try packing vbo + ibo
+	MeshBufferHeaderGPU gpu_hdr;
+	fill_gpu_hdr(&gpu_hdr, mesh);
 
-	mesh->vbo = ev2::create_buffer(ctx, vbo_size, 
-		ev2::BUFFER_USAGE_TRANSFER_SRC_BIT | ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT);
-	mesh->vbo_offset = 0;
+	memcpy(uc.ptr, &gpu_hdr, sizeof(gpu_hdr));
+	memcpy((char*)uc.ptr + vbo_start, mesh->geom.vtx_data, vbo_size);
+	memcpy((char*)uc.ptr + ibo_start, mesh->geom.idx_data, ibo_size);
 
-	mesh->ibo = ev2::create_buffer(ctx, ibo_size, 
-		ev2::BUFFER_USAGE_TRANSFER_SRC_BIT | ev2::BUFFER_USAGE_INDEX_BUFFER_BIT);
-	mesh->ibo_offset = 0;
+	BufferUpload up = {
+		.src_offset = 0,
+		.dst_offset = hdr_start, 
+		.size = bufsize,
+	};
 
-	commit_simple_upload(ctx, 
-		mesh->vtx_data, vbo_size, 
-		mesh->vtx_align, 
-		mesh->vbo, mesh->vbo_offset
-	);
-
-	commit_simple_upload(ctx, 
-		mesh->idx_data, ibo_size, 
-		get_idx_type_align(mesh->idx_type), 
-		mesh->ibo, mesh->ibo_offset
-	);
+	ev2::commit_buffer_uploads(ctx, uc, mesh->buffer, &up, 1);
 
 	return SUCCESS;
 }
@@ -134,20 +165,20 @@ Result mesh_ensure_buffers_loaded(GfxContext *ctx, MeshID mesh_id)
 //------------------------------------------------------------------------------
 // Loading interface
 
-static ev2::Result mesh_reload_callback(ev2::GfxContext *ctx, void** usr, const char *path)
+static ev2::Result model_reload_callback(ev2::GfxContext *ctx, void** usr, const char *path)
 {
 	// TODO...
 	assert(false);
 	return ev2::SUCCESS;
 }
 
-static void mesh_destroy_callback(ev2::GfxContext *ctx, void* usr)
+static void model_destroy_callback(ev2::GfxContext *ctx, void* usr)
 {
 	// TODO...
 	assert(false);
 }
 
-static Mesh *mesh_create_callback(const char * path)
+static Mesh *model_create_callback(const char * path)
 {
 	// TODO...
 	assert(false);
@@ -164,30 +195,30 @@ struct RawTri {
 };
 #pragma pack(pop)
 
-MeshID load_mesh(GfxContext *ctx, const char *path)
+ModelID load_model(GfxContext *ctx, const char *path)
 {
 	AssetID id;
 	ev2::Result result = ctx->assets->load(path, &id);
 
 	if (result < ev2::SUCCESS)
-		return EV2_NULL_HANDLE(Mesh);
+		return EV2_NULL_HANDLE(Model);
 
 	if (id)
-		return MeshID{id};
+		return ModelID{id};
 
 	static AssetVTable vtbl = {
-		.reload = mesh_reload_callback,
-		.destroy = mesh_destroy_callback,
+		.reload = model_reload_callback,
+		.destroy = model_destroy_callback,
 	};
 
-	ev2::Mesh *mesh = mesh_create_callback(path); 
+	ev2::Mesh *mesh = model_create_callback(path); 
 
 	if (result == SUCCESS) {
 		id = ctx->assets->allocate(&vtbl, mesh, path); 
-		return MeshID{id};
+		return ModelID{id};
 	}
 
-	return EV2_NULL_HANDLE(Mesh);
+	return EV2_NULL_HANDLE(Model);
 
 }
 

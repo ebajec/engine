@@ -1030,6 +1030,18 @@ void cmd_draw_indirect(PassID pass_id, BufferID buf_id, size_t offset, uint32_t 
 	});
 }
 
+void cmd_draw_mesh(PassID pass_id, MeshID mesh, uint32_t instance_count)
+{
+	assert(pass_id.is_valid());
+	assert(mesh.is_valid());
+
+	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
+	pass->cmds.push_back(CmdDrawMesh{
+		.mesh = mesh,
+		.instance_count = instance_count,
+	});
+}
+
 //------------------------------------------------------------------------------
 // Render graph compilation
 
@@ -2016,6 +2028,19 @@ static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBu
 				vkCmdDispatch(cmds, cmd.counts[0], cmd.counts[1], cmd.counts[2]);
 				break;
 			}
+			case DrawMesh: {
+				CmdDrawMesh cmd = base_cmd.draw_mesh;
+				Mesh *mesh = ctx->get_mesh(cmd.mesh);
+				Buffer *buffer = ctx->get_buffer(mesh->buffer);
+
+				size_t ibo_start;
+				mesh->prepare_offsets(0, nullptr, &ibo_start);
+
+				// TODO: Would there every be a good reason to avoid re-binding every time
+				vkCmdBindIndexBuffer(cmds, buffer->buffer, ibo_start, idx_type_to_vk(mesh->geom.idx_type));
+				vkCmdDrawIndexed(cmds, mesh->geom.idx_count, cmd.instance_count, 0, 0, cmd.mesh.id);
+				break;
+			}
 			case Custom: {
 				CmdCustom cmd = base_cmd.custom;
 				node.custom_callbacks[cmd.callback_id](cmds);
@@ -2245,6 +2270,7 @@ ev2::Result end_frame(GfxContext *ctx)
 	// at its own slot - this is deferred to here because add() may reallocate the
 	// buffer, invalidating any handle written earlier.
 	frame->gpu_pass_info.update(ctx);
+	ctx->mesh_info.update(ctx);
 	flush_uploads(ctx);
 
 	if (!EV2_IS_NULL(frame->gpu_pass_info.buffer)) {

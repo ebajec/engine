@@ -3,7 +3,7 @@
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_buffer_reference2 : require
 
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 #include "test_sort/shader/test_defs.glsl"
 
 layout (location = 0) out vec2 out_pos;
@@ -32,5 +32,5 @@ void main()
 	out_idx = gl_InstanceIndex;
 	out_w = w;
 
-	gl_Position = u_view.pv * vec4(pos, 0, 1);
+	gl_Position = u_pass.pv * vec4(pos, 0, 1);
 }

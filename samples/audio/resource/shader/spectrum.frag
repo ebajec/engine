@@ -1,5 +1,5 @@
 #version 430 core
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 
 layout (location = 0) in vec4 in_color;
 layout (location = 1) in vec2 in_pos;

@@ -30,15 +30,17 @@ struct ImGui_ImplVulkan_InitInfo;
 MAKE_HANDLE_VERSIONED(Buffer);
 MAKE_HANDLE_VERSIONED(Image);
 MAKE_HANDLE_VERSIONED(Texture);
+MAKE_HANDLE_VERSIONED(Bindings);
+MAKE_HANDLE_VERSIONED(View);
+MAKE_HANDLE_VERSIONED(Transform);
+MAKE_HANDLE_VERSIONED(Mesh);
+MAKE_HANDLE_VERSIONED(Material);
 
 MAKE_ASSET_HANDLE(GfxPipeline);
 MAKE_ASSET_HANDLE(ComputePipeline);
 MAKE_ASSET_HANDLE(Shader);
-MAKE_ASSET_HANDLE(ImageAsset);
-MAKE_ASSET_HANDLE(Mesh);
-
-MAKE_HANDLE_VERSIONED(Bindings);
-MAKE_HANDLE_VERSIONED(View);
+MAKE_ASSET_HANDLE(ImageFile);
+MAKE_ASSET_HANDLE(Model);
 
 enum {
 	EV2_BASE_SET_BINDLESS, 
@@ -247,6 +249,72 @@ void get_texture_gpu_handle(GfxContext *ctx, TextureID h, VkImageView *view);
 void get_texture_dims(GfxContext *ctx, TextureID tex, uint32_t *w, uint32_t *h, uint32_t*d);
 
 //------------------------------------------------------------------------------
+// Meshes
+
+enum IndexType
+{
+	INDEX_TYPE_UINT32,
+	INDEX_TYPE_UINT16,
+	INDEX_TYPE_UINT8,
+};
+
+enum VertexFormat
+{
+	VERTEX_FORMAT_CUSTOM,
+	VERTEX_FORMAT_PN32F,
+	VERTEX_FORMAT_PNUV32F,
+	VERTEX_FORMAT_PN16,
+	VERTEX_FORMAT_PNUV16,
+};
+
+struct VertexPNUV32f {
+	float position[3];
+	float normal[3];
+	float uv[2];
+};
+
+struct VertexPN32f {
+	float position[3];
+	float normal[3];
+};
+
+struct VertexPNUV16 {
+	uint16_t position[3];
+	int16_t normal[3];
+	uint16_t uv[2];
+};
+
+struct VertexPN16 {
+	uint16_t position[3];
+	int16_t normal[3];
+};
+
+struct MeshGeometry
+{
+	VertexFormat vtx_format;
+	uint32_t vtx_count;
+	void *vtx_data;
+
+	// [optional] For VERTEX_FORMAT_CUSTOM 
+	uint32_t vtx_size;
+	// [optional] For VERTEX_FORMAT_CUSTOM 
+	uint32_t vtx_align;
+
+	IndexType idx_type;
+	uint32_t idx_count;
+	void *idx_data;
+
+	float pos_extent[3];
+	float pos_offset[3];
+
+	float uv_scale[2];
+	float uv_offset[2];
+};
+
+MeshID create_mesh(GfxContext *ctx, const MeshGeometry *geom);
+void destroy_mesh(GfxContext *ctx, MeshID mesh);
+
+//------------------------------------------------------------------------------
 //
 //
 // Assets
@@ -264,13 +332,12 @@ ComputePipelineID load_compute_pipeline(GfxContext *ctx, const char *path);
 ComputePipelineID load_compute_pipeline(GfxContext *ctx, const char *path, const char *entrypoint);
 void unload_compute_pipeline(GfxContext *ctx, ComputePipelineID pipe);
 
-ImageAssetID load_image_asset(GfxContext *ctx, const char *path);
-void unload_image_asset(GfxContext *ctx, ImageAssetID id);
-ImageID get_image_resource(GfxContext *ctx, ImageAssetID id);
+ImageFileID load_image_asset(GfxContext *ctx, const char *path);
+void unload_image_asset(GfxContext *ctx, ImageFileID id);
+ImageID get_image_resource(GfxContext *ctx, ImageFileID id);
 
-MeshID load_mesh(GfxContext *ctx, const char *path);
-MeshID load_mesh_from_memory(GfxContext *ctx, const char *path);
-void unload_mesh(GfxContext *ctx, ShaderID id);
+ModelID load_model(GfxContext *ctx, const char *path);
+void unload_model(GfxContext *ctx, ModelID id);
 
 //------------------------------------------------------------------------------
 //
@@ -281,13 +348,6 @@ void unload_mesh(GfxContext *ctx, ShaderID id);
 //------------------------------------------------------------------------------
 
 constexpr uint32_t EV2_MAX_BINDLESS_DESCRIPTORS = 1024;
-
-enum IndexType
-{
-	INDEX_TYPE_UINT32,
-	INDEX_TYPE_UINT16,
-	INDEX_TYPE_UINT8,
-};
 
 enum Usage
 {
@@ -434,6 +494,7 @@ ViewID create_view(GfxContext *ctx, float view[], float proj[]);
 void update_view(GfxContext *ctx, ViewID handle, float view[], float proj[]);
 void destroy_view(GfxContext *ctx, ViewID handle);
 
+
 struct Rect
 {
 	uint32_t x0, y0;
@@ -493,6 +554,12 @@ void cmd_push_constant(PassID pass_id, GfxPipelineID pipeline_id,
 					   uint32_t offset, uint32_t size, void *data);
 void cmd_push_constant(PassID pass_id, ComputePipelineID pipeline_id, 
 					   uint32_t offset, uint32_t size, void *data);
+
+// @brief Draw index given by base instance.
+// @param transform - optional; transform id visible to all instances 
+// @param material - optional; material id visible to all instances 
+void cmd_draw_mesh(PassID pass_id, MeshID mesh, uint32_t instance_count);
+
 void cmd_custom(PassID pass_id, std::function<void(VkCommandBuffer)>&& callback);
 };
 

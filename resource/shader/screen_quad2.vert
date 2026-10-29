@@ -1,8 +1,8 @@
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 
-layout (set = PER_DRAW_SET, binding = 0) uniform sampler2D u_tex;
+layout (set = EV2_BASE_USER_SET, binding = 0) uniform sampler2D u_tex;
 
 //--------------------------------------------------------------------------------------------------
 // Vert
@@ -41,6 +41,6 @@ void main()
 	frag_pos = pos;
 	frag_uv = uv;
 
-	gl_Position = u_view.pv * vec4(pos,0.0,1.0);
+	gl_Position = u_pass.pv * vec4(pos,0.0,1.0);
 }
 

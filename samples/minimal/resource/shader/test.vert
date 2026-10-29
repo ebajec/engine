@@ -1,6 +1,6 @@
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 
 layout (location = 0) out vec2 out_pos;
 layout (location = 1) out vec2 out_uv;
@@ -32,5 +32,5 @@ void main()
 
 	out_pos = pos;
 	out_uv = uv;
-	gl_Position = u_view.pv * vec4(pos, 0, 1); 
+	gl_Position = u_pass.pv * vec4(pos, 0, 1); 
 }

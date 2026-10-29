@@ -133,7 +133,7 @@ struct View
 // plus the properties of the surface it is drawing into. One entry per pass per
 // frame, living in FrameContext::gpu_pass_info.
 //
-// Layout must match struct passdata_t in resource/shader/frame.glsl (std140).
+// Layout must match struct passdata_t in resource/shader/core.glsl (std140).
 struct PassData
 {
 	glm::mat4 p;
@@ -217,6 +217,10 @@ struct CmdUseImage{
 	ImageID image;
 	Usage usage;
 };
+struct CmdDrawMesh{
+	MeshID mesh;
+	uint32_t instance_count;
+};
 struct CmdCustom{
 	uint32_t callback_id;
 };
@@ -234,6 +238,7 @@ enum CmdType
 	Dispatch,
 	UseBuffer,
 	UseImage,
+	DrawMesh,
 	Custom
 };
 
@@ -256,6 +261,7 @@ struct Command {
 		CmdDispatch 			dispatch;
 		CmdUseBuffer 			use_buffer; 
 		CmdUseImage 			use_image;
+		CmdDrawMesh 			draw_mesh;
 		CmdCustom				custom;
 	};
 	CmdType type;
@@ -271,6 +277,7 @@ struct Command {
 	COMMAND_UNION_CONVERSION(Dispatch, dispatch)
 	COMMAND_UNION_CONVERSION(UseBuffer, use_buffer) 
 	COMMAND_UNION_CONVERSION(UseImage, use_image)
+	COMMAND_UNION_CONVERSION(DrawMesh, draw_mesh)
 	COMMAND_UNION_CONVERSION(Custom, custom)
 };
 

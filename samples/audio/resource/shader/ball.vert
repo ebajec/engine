@@ -1,5 +1,5 @@
 #version 430 core
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_buffer_reference2 : require
 

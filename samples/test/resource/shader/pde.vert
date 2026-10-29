@@ -1,6 +1,6 @@
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 
 //--------------------------------------------------------------------------------------------------
 // Vert
@@ -24,6 +24,6 @@ void main()
 	frag_pos = p;
 	frag_uv = uv;
 
-	gl_Position = u_view.pv*vec4(p,0.0,1.0);
+	gl_Position = u_pass.pv*vec4(p,0.0,1.0);
 }
 

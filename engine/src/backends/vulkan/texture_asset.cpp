@@ -7,11 +7,11 @@
 
 namespace ev2 {
 
-static ev2::Result create(GfxContext *ctx, ImageAsset * asset, const char *path);
+static ev2::Result create(GfxContext *ctx, ImageFile * asset, const char *path);
 
 static void destroy(GfxContext *ctx, void *usr)
 {
-	ImageAsset * asset = reinterpret_cast<ImageAsset*>(usr);
+	ImageFile * asset = reinterpret_cast<ImageFile*>(usr);
 
 	if (asset->img.id) {
 		ev2::destroy_image(ctx, asset->img);
@@ -22,14 +22,14 @@ static void destroy(GfxContext *ctx, void *usr)
 
 static ev2::Result reload(GfxContext *ctx, void **usr, const char *path)
 {
-	std::unique_ptr<ImageAsset> asset (new ImageAsset{});
+	std::unique_ptr<ImageFile> asset (new ImageFile{});
 	
 	ev2::Result res = create(ctx, asset.get(), path);
 
 	if (res != ev2::SUCCESS)
 		return res;
 
-	ImageAsset *old = reinterpret_cast<ImageAsset*>(*usr);
+	ImageFile *old = reinterpret_cast<ImageFile*>(*usr);
 
 	if (old)
 		destroy(ctx, old);
@@ -39,7 +39,7 @@ static ev2::Result reload(GfxContext *ctx, void **usr, const char *path)
 	return res;
 }
 
-static ev2::Result create(GfxContext *ctx, ImageAsset * asset, const char *path)
+static ev2::Result create(GfxContext *ctx, ImageFile * asset, const char *path)
 {
 	std::vector<unsigned char> bytes;
 
@@ -88,31 +88,31 @@ static ev2::Result create(GfxContext *ctx, ImageAsset * asset, const char *path)
 //------------------------------------------------------------------------------
 // Interface
 
-ImageAssetID load_image_asset(GfxContext *ctx, const char *path)
+ImageFileID load_image_asset(GfxContext *ctx, const char *path)
 {
 	static AssetVTable vtbl = {
 		.reload = reload,
 		.destroy = destroy
 	};
 
-	std::unique_ptr<ImageAsset> asset (new ImageAsset{}); 
+	std::unique_ptr<ImageFile> asset (new ImageFile{}); 
 	ev2::Result res = create(ctx, asset.get(), path);
 
 	if (res != ev2::SUCCESS)
-		return EV2_NULL_HANDLE(ImageAsset);
+		return EV2_NULL_HANDLE(ImageFile);
 
 	AssetID id = ctx->assets->allocate(&vtbl, asset.release(), path);
 
-	return EV2_HANDLE_CAST(ImageAsset, id);
+	return EV2_HANDLE_CAST(ImageFile, id);
 }
 
-void unload_image_asset(GfxContext *ctx, ImageAssetID h)
+void unload_image_asset(GfxContext *ctx, ImageFileID h)
 {
 }
 
-ImageID get_image_resource(GfxContext *ctx, ImageAssetID h)
+ImageID get_image_resource(GfxContext *ctx, ImageFileID h)
 {
-	ImageAsset *asset = ctx->assets->get<ImageAsset>((uint32_t)h.id);
+	ImageFile *asset = ctx->assets->get<ImageFile>((uint32_t)h.id);
 	return asset->img;
 }
 

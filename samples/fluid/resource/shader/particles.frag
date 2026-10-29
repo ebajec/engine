@@ -1,7 +1,7 @@
 #version 460 core
 #extension GL_GOOGLE_include_directive : require
 
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 
 layout (location = 0) in vec2 in_pos;
 layout (location = 1) flat in vec2 in_center;

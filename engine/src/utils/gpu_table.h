@@ -6,7 +6,7 @@
 #include <vector>
 
 template<typename T>
-struct GPUTTable
+struct GPUPool
 {
 	std::vector<uint32_t> free;
 	std::vector<T> data;
@@ -55,10 +55,10 @@ struct GPUTTable
 		return (size_t)idx * (size_t)stride;
 	}
 
-	GPUTTable() = default;
+	GPUPool() = default;
 	
 	// @param alignment - alignment of data in GPU buffer
-	GPUTTable(size_t _alignment, ev2::BufferUsageFlags usage);
+	GPUPool(size_t _alignment, ev2::BufferUsageFlags usage);
 
 	void destroy(ev2::GfxContext *ctx);
 };
@@ -67,12 +67,12 @@ struct GPUTTable
 // GPUTTable
 
 template<typename T>
-GPUTTable<T>::GPUTTable(size_t _alignment, ev2::BufferUsageFlags _usage) : 
+GPUPool<T>::GPUPool(size_t _alignment, ev2::BufferUsageFlags _usage) : 
 	stride(align_up(sizeof(T), _alignment)), usage(_usage) {
 }
 
 template<typename T>
-void GPUTTable<T>::destroy(ev2::GfxContext *ctx)
+void GPUPool<T>::destroy(ev2::GfxContext *ctx)
 {
 	if (!EV2_IS_NULL(buffer)) {
 		destroy_buffer(ctx, buffer);
@@ -80,7 +80,7 @@ void GPUTTable<T>::destroy(ev2::GfxContext *ctx)
 }
 
 template<typename T>
-uint32_t GPUTTable<T>::add(const T& mat)
+uint32_t GPUPool<T>::add(const T& mat)
 {
 	uint32_t idx;
 	if (!free.empty()) {
@@ -98,7 +98,7 @@ uint32_t GPUTTable<T>::add(const T& mat)
 }
 
 template<typename T>
-bool GPUTTable<T>::remove(uint32_t idx)
+bool GPUPool<T>::remove(uint32_t idx)
 {
 	if (idx >= data.size()) {
 		return false;
@@ -110,7 +110,7 @@ bool GPUTTable<T>::remove(uint32_t idx)
 }
 
 template<typename T>
-bool GPUTTable<T>::set(uint32_t idx, const T& mat)
+bool GPUPool<T>::set(uint32_t idx, const T& mat)
 {
 	if (idx >= data.size()) {
 		log_error("Invalid matrix cache index %d", idx);
@@ -125,7 +125,7 @@ bool GPUTTable<T>::set(uint32_t idx, const T& mat)
 }
 
 template<typename T>
-bool GPUTTable<T>::update(ev2::GfxContext *ctx)
+bool GPUPool<T>::update(ev2::GfxContext *ctx)
 {
 	bool resized = false;
 

@@ -3,7 +3,7 @@
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_buffer_reference2 : require
 
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 
 struct AABB2
 {
@@ -47,5 +47,5 @@ void main()
 
 	out_idx = gl_InstanceIndex;
 
-	gl_Position = u_view.pv * vec4(pc.world * vec3(pos, 1), 0, 1);
+	gl_Position = u_pass.pv * vec4(pc.world * vec3(pos, 1), 0, 1);
 }

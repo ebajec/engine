@@ -4,7 +4,7 @@
 set(EV2_COMPILE_SHADERS_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/../compile_shaders.sh")
 
 # <include root>/<mount> links to each mount root, so shaders include by vfs
-# path ("core/shader/frame.glsl"). compile_shaders.sh maintains the same tree
+# path ("core/shader/core.glsl"). compile_shaders.sh maintains the same tree
 # (next to its output dir); creating it at configure time as well means editor
 # tooling (.nvim.lua) can resolve includes before the first build.
 set(EV2_SHADER_INCLUDE_ROOT "${CMAKE_BINARY_DIR}/shader_include")

@@ -33,7 +33,7 @@ struct Texture
 	TextureFilter filter;
 };
 
-struct ImageAsset
+struct ImageFile
 {
 	ImageID img;
 };

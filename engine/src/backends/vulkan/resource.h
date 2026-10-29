@@ -300,7 +300,7 @@ struct Texture
 	VkImageView view;
 };
 
-struct ImageAsset
+struct ImageFile
 {
 	ImageID img;
 };

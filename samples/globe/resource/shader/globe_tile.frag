@@ -1,7 +1,7 @@
 #version 450 core
 
 #extension GL_GOOGLE_include_directive : require
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 #include "core/shader/common.glsl"
 
 #include "globe/shader/globe.glsl"

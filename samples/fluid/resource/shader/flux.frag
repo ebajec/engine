@@ -1,7 +1,7 @@
 #version 460 core
 #extension GL_GOOGLE_include_directive : require
 
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 
 layout (location = 0) in vec4 in_color;
 

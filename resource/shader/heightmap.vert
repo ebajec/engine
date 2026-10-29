@@ -1,12 +1,12 @@
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 
 layout (location = 0) out vec3 out_pos;
 layout (location = 1) out vec2 out_uv;
 layout (location = 2) out vec3 out_normal;
 
-layout (set = PER_DRAW_SET, binding = 0) uniform sampler2D u_tex;
+layout (set = EV2_BASE_USER_SET, binding = 0) uniform sampler2D u_tex;
 layout (push_constant) uniform PC {
 	float u_scale;
 };
@@ -71,5 +71,5 @@ void main()
 	out_uv = uv;
 	out_normal = n;
 
-	gl_Position = u_view.pv * vec4(uv,z,1);
+	gl_Position = u_pass.pv * vec4(uv,z,1);
 }

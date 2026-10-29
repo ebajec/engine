@@ -2,7 +2,7 @@
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_buffer_reference2 : require
 
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 
 layout (location = 0) out vec4 out_color;
 
@@ -12,17 +12,11 @@ layout (buffer_reference, std430, buffer_reference_align = 16) readonly buffer S
 };
 
 layout (push_constant) uniform PC {
+	layout(offset = 0)
 	Spectrum spec;
 	int bins;
 	int Fmax;
 } pc;
-
-#define MAX_BINS 32
-
-//struct Coefficients
-//{
-//	float data[MAX_BINS];
-//};
 
 vec3 palette(int n, int N)
 {

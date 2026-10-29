@@ -1,7 +1,7 @@
 #version 450 core
 
 #extension GL_GOOGLE_include_directive : require
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 #include "core/shader/common.glsl"
 
 #include "globe/shader/globe.glsl"
@@ -174,7 +174,7 @@ vec4 palette(float v)
 
 void main()
 {
-	mat4 pv = u_view.pv;
+	mat4 pv = u_pass.pv;
 
 	vec4 wpos = vec4(pos, 1);
 

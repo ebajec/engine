@@ -1,6 +1,6 @@
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 #include "core/shader/common.glsl"
 
 layout (location = 0) in vec3 frag_pos;

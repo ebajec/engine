@@ -552,7 +552,8 @@ static ev2::Result create_physical_device(ev2::GfxContext *ctx,
 	X(features13, synchronization2,                                  true)  \
 	X(features13, dynamicRendering,                                  true)  \
 	X(atomicFloat, shaderSharedFloat32AtomicAdd,                     false) \
-	X(atomicFloat2, shaderSharedFloat32AtomicMinMax,                 false)
+	X(atomicFloat2, shaderSharedFloat32AtomicMinMax,                 false) \
+	X(shaderDrawParameters, shaderDrawParameters,                    true)
 
 struct DeviceFeatureChain
 {
@@ -561,6 +562,7 @@ struct DeviceFeatureChain
 	VkPhysicalDeviceVulkan13Features features13;
 	VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomicFloat;
 	VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT atomicFloat2;
+	VkPhysicalDeviceShaderDrawParametersFeatures shaderDrawParameters;
 
 	// Self-referential; initialize in place.
 	DeviceFeatureChain()
@@ -583,6 +585,10 @@ struct DeviceFeatureChain
 		};
 		atomicFloat2 = {
 			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_2_FEATURES_EXT,
+			.pNext = &shaderDrawParameters
+		};
+		shaderDrawParameters = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES
 		};
 	}
 	DeviceFeatureChain(const DeviceFeatureChain&) = delete;
@@ -1092,7 +1098,7 @@ static ev2::Result create_frame_context(ev2::GfxContext *ctx,
 	uint64_t ubo_offset_alignment = 
 		ctx->caps.limits.minUniformBufferOffsetAlignment;
 
-	frame->gpu_pass_info = GPUTTable<ev2::PassData>(
+	frame->gpu_pass_info = GPUPool<ev2::PassData>(
 		(size_t)ubo_offset_alignment,
 		ev2::BUFFER_USAGE_TRANSFER_DST_BIT |
 		ev2::BUFFER_USAGE_UNIFORM_BUFFER_BIT
@@ -1233,7 +1239,7 @@ static ev2::Result create_device_resources(ev2::GfxContext *ctx)
 	uint64_t ubo_offset_alignment = 
 		ctx->caps.limits.minUniformBufferOffsetAlignment;
 
-	ctx->transforms = GPUTTable<glm::mat4>(
+	ctx->transforms = GPUPool<glm::mat4>(
 		(size_t)ubo_offset_alignment,
 		ev2::BUFFER_USAGE_TRANSFER_DST_BIT | 
 		ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT

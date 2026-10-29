@@ -2,7 +2,7 @@
 #extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_nonuniform_qualifier : require
 
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 
 #define DIMS 2
 
@@ -126,5 +126,5 @@ void main()
 		2 * aspect,0, 0,2, -aspect,-1
 	);
 
-	gl_Position = u_view.pv * vec4(world * vec3(pos, 1), 0, 1);
+	gl_Position = u_pass.pv * vec4(world * vec3(pos, 1), 0, 1);
 }

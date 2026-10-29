@@ -1,6 +1,6 @@
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 
 //-------------------------------------------------------------------------------------
 // Vert
@@ -14,7 +14,7 @@ layout (location = 1) out vec2 frag_uv;
 void main()
 {
 	float t = float(u_frame.t_sec) + u_frame.t_fract;
-	mat4 pv = u_view.pv;
+	mat4 pv = u_pass.pv;
 
 	vec4 wpos = vec4(pos.x, pos.y, 0, 1);
 	frag_pos = pos;

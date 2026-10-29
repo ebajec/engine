@@ -1,7 +1,7 @@
 #version 460 core
 #extension GL_GOOGLE_include_directive : require
 
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 #include "core/shader/jet_palette.glsl"
 #include "fluid/shader/fluid_particle.glsl"
 
@@ -12,7 +12,7 @@ layout (location = 3) out vec2 out_vel;
 layout (location = 4) flat out uint out_idx;
 layout (location = 5) flat out float out_w;
 
-layout (set = PER_DRAW_SET, binding = 0) readonly buffer Particles
+layout (set = EV2_BASE_USER_SET, binding = 0) readonly buffer Particles
 {
 	FluidParticle u_parts[];
 };
@@ -55,5 +55,5 @@ void main()
 	out_idx = gl_InstanceIndex;
 	out_w = w;
 
-	gl_Position = u_view.pv * vec4(u_world * vec3(pos, 1), 0, 1);
+	gl_Position = u_pass.pv * vec4(u_world * vec3(pos, 1), 0, 1);
 }

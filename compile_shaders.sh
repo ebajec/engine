@@ -107,7 +107,7 @@ done
 # Include tree
 #
 # INCLUDE_ROOT/<mount> links to each mount root, so shaders can include by vfs
-# path: #include "core/shader/frame.glsl". It sits next to OUTPUT_DIR rather
+# path: #include "core/shader/core.glsl". It sits next to OUTPUT_DIR rather
 # than inside it, so it isn't part of the (monitored) spirv mount. CMake also
 # creates it at configure time for editor tooling, so only this run's mounts
 # are (re)linked here; links for other mounts are left alone.
@@ -149,7 +149,7 @@ needs_recompile() {
 compile_mount() {
 	local name="$1" root="$2"
 
-	# Shaders include and import by vfs path only ("core/shader/frame.glsl",
+	# Shaders include and import by vfs path only ("core/shader/core.glsl",
 	# import "core/shader/sort/sort.slang"), so the include tree is the only
 	# search path.
 	INCLUDE_FLAGS=("-I$INCLUDE_ROOT")

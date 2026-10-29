@@ -67,6 +67,7 @@ MAKE_POOL_ID_CONVERSION(Image)
 MAKE_POOL_ID_CONVERSION(Texture)
 MAKE_POOL_ID_CONVERSION(Bindings)
 MAKE_POOL_ID_CONVERSION(View)
+MAKE_POOL_ID_CONVERSION(Mesh)
 
 //------------------------------------------------------------------------------
 // Misc Vulkan support
@@ -199,7 +200,7 @@ struct FrameContext
 	// One entry per graphics pass recorded this frame, rebuilt from scratch
 	// every frame. Because each FrameContext owns its own, a frame never writes
 	// into a buffer an in-flight frame is still reading.
-	GPUTTable<ev2::PassData> gpu_pass_info;
+	GPUPool<ev2::PassData> gpu_pass_info;
 
 	std::vector<TransientCommands> commands;
 
@@ -539,11 +540,13 @@ struct GfxContext
 	std::unique_ptr<Pool<Texture>> texture_pool;
 	std::unique_ptr<Pool<Bindings>> bindings_pool;
 	std::unique_ptr<Pool<View>> view_pool;
+	std::unique_ptr<Pool<Mesh>> mesh_pool;
 
 	DeferredDeleteQueue deferred_delete;
 
 	// Special GPU Resources
-	GPUTTable<glm::mat4> transforms;
+	GPUPool<glm::mat4> transforms;
+	GPUPool<MeshInfoGPU> mesh_info;
 
 	// defaults to identity matrix
 	ViewID default_view;
@@ -582,11 +585,11 @@ struct GfxContext
 	MAKE_VERSIONED_HANDLE_ACCESS(Texture, texture);
 	MAKE_VERSIONED_HANDLE_ACCESS(Bindings, bindings);
 	MAKE_VERSIONED_HANDLE_ACCESS(View, view);
+	MAKE_VERSIONED_HANDLE_ACCESS(Mesh, mesh);
 
 	MAKE_ASSET_HANDLE_ACCESS(GfxPipeline, gfx_pipeline);
 	MAKE_ASSET_HANDLE_ACCESS(ComputePipeline, compute_pipeline);
 	MAKE_ASSET_HANDLE_ACCESS(Shader, shader);
-	MAKE_ASSET_HANDLE_ACCESS(Mesh, mesh);
 };
 
 extern VkPipelineRenderingCreateInfoKHR get_swapchain_rendering_info(GfxContext *ctx);

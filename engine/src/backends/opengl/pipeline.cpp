@@ -1326,7 +1326,7 @@ static ev2::DescriptorSetID initialize_material(
 		for (size_t i = 0; i < info->bindings.size(); ++i) {
 			const Binding *bind = &info->bindings[i];
 
-			ev2::ImageAssetID texID = bind->path.empty() ? 
+			ev2::ImageFileID texID = bind->path.empty() ? 
 				EV2_NULL_HANDLE : ev2::load_texture_asset(ctx, bind->path.c_str());
 
 			if (!bind->path.empty() && texID == RESOURCE_HANDLE_NULL) {

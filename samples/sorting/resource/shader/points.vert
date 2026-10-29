@@ -1,7 +1,7 @@
 #version 460 core
 #extension GL_GOOGLE_include_directive : require
 
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 #include "test_sort/shader/test_defs.glsl"
 
 layout (location = 0) out vec2 out_pos;
@@ -40,8 +40,8 @@ void main()
 	out_idx = gl_InstanceIndex;
 	out_w = w;
 
-	vec4 scr_cen = u_view.pv * vec4(center, 0, 1);
-	vec4 scr_pos = u_view.pv * vec4(pos, 0, 1);
+	vec4 scr_cen = u_pass.pv * vec4(center, 0, 1);
+	vec4 scr_pos = u_pass.pv * vec4(pos, 0, 1);
 
 	vec2 d = scr_pos.xy - scr_cen.xy;
 

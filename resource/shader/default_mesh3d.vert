@@ -1,6 +1,6 @@
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 #include "core/shader/common.glsl"
 
 //-------------------------------------------------------------------------------------
@@ -19,7 +19,7 @@ layout (location = 2) out vec3 frag_normal;
 void main()
 {
 	float t = ftime();
-	mat4 pv = u_view.pv;
+	mat4 pv = u_pass.pv;
 
 	mat4 m = mat4(1.0f);
 

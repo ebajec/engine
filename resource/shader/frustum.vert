@@ -1,6 +1,6 @@
 #version 430 core
 #extension GL_GOOGLE_include_directive : require
-#include "core/shader/frame.glsl"
+#include "core/shader/core.glsl"
 
 layout (binding = 0) buffer Cameras
 {
@@ -26,5 +26,5 @@ void main()
 	vec4 wpos = inv*pos;
 	out_pos = wpos;
 
-	gl_Position = u_view.pv * wpos;
+	gl_Position = u_pass.pv * wpos;
 }
