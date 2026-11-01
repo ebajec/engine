@@ -10,6 +10,8 @@ layout (location = 3) flat out int out_bins;
 
 layout (buffer_reference, std430, buffer_reference_align = 16) readonly buffer Spectrum
 {
+	int bins;
+	int Fmax;
 	float data[];
 };
 

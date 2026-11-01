@@ -489,6 +489,8 @@ ev2::Result begin_frame()
 
 	ev2::Result result = ev2::SUCCESS;
 
+	g.input.scroll_delta = glm::vec2(0);
+
 	glfwPollEvents();
 	glfwGetFramebufferSize(g.win.ptr, &g.win.width, &g.win.height);
 	// A minimized window or fullscreen transition may have no drawable yet.
@@ -514,7 +516,6 @@ ev2::Result begin_frame()
 	g.input.t1 = g.input.t0;
 	g.input.t0 = glfwGetTime();
 	g.input.dt = g.input.t0 - g.input.t1;
-	g.input.scroll_delta = glm::vec2(0);
 
 	g.update_input();
 

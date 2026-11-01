@@ -55,7 +55,7 @@ HeightmapViewer::HeightmapViewer(ev2::TextureID tex)
 
 	rd.pipeline = ev2::load_graphics_pipeline(ctx, "core://pipeline/heightmap.yaml");
 	rd.bindings = ev2::create_bindings(
-		ctx, rd.pipeline, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_STATIC);
+		ctx, rd.pipeline, EV2_BASE_USER_SET, ev2::BINDING_MODE_STATIC);
 
 	if (tex.is_valid() && set_texture(ctx, tex) != ev2::SUCCESS) {
 		log_error("Failed to set texture");

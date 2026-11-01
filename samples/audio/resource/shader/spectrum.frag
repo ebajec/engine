@@ -12,6 +12,8 @@ layout (location = 0) out vec4 out_color;
 
 layout (buffer_reference, std430, buffer_reference_align = 16) readonly buffer Spectrum
 {
+	int bins;
+	int Fmax;
 	float data[];
 };
 

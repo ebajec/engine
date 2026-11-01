@@ -564,6 +564,8 @@ static ev2::Result merge_shader_layouts(
 
 		const VkDescriptorSetLayoutBinding &b_layout_binding = 
 			b.set_binding_infos.at(b_ent.set).bindings[b_ent.idx];
+		const ev2::ShaderBindingInfo &b_layout_binding_info = 
+			b.set_binding_infos.at(b_ent.set).infos[b_ent.idx];
 
 		auto it = out.binding_names.find(b_name);
 		if (it != out.binding_names.end()) {
@@ -590,10 +592,11 @@ static ev2::Result merge_shader_layouts(
 		} else {
 			auto it_binding = out.set_binding_infos.emplace(b_ent.set, std::vector<VkDescriptorSetLayoutBinding>{});
 			it_binding.first->second.bindings.push_back(b_layout_binding);
+			it_binding.first->second.infos.push_back(b_layout_binding_info);
 
 			out.binding_names[b_name] = {
 				.set = b_ent.set,
-				.idx = (uint32_t)it_binding.first->second.bindings.size()
+				.idx = (uint32_t)it_binding.first->second.bindings.size() - 1
 			};
 		}
 	}
@@ -686,13 +689,12 @@ static ev2::Result generate_shader_descriptor_layouts(
 				create_info.flags = 0;
 
 				binding_flags.resize(binding_count, 0);
+
+				assert(it->second.bindings.size() == it->second.infos.size());
 				
 				for (uint32_t b = 0; b < binding_count; ++b) {
 					const ev2::ShaderBindingInfo &info = it->second.infos[b];
 					binding_flags[b] |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
-
-					//if (info.is_variable_sized)
-					//	binding_flags[b] |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
 				}
 
 				flag_info.pBindingFlags = binding_flags.data();

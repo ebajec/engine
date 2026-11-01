@@ -22,7 +22,7 @@ CameraDebugView::CameraDebugView(ev2::GfxContext *_ctx) : ctx(_ctx)
 
 	pipeline = ev2::load_graphics_pipeline(ctx, "core://pipeline/frustum.yaml");
 
-	desc = ev2::create_bindings(ctx, pipeline, EV2_GFX_SET_PER_DRAW, 
+	desc = ev2::create_bindings(ctx, pipeline, EV2_BASE_USER_SET, 
 							 ev2::BINDING_MODE_STATIC);
 
 	ev2::bind_buffer(ctx, desc, "Camera", ssbo, 0, sizeof(glm::mat4));

@@ -1,56 +1,39 @@
 #version 430 core
-#extension GL_EXT_buffer_reference : require
-#extension GL_EXT_buffer_reference2 : require
 
 #include "core/shader/core.glsl"
 
+// Fractions of an octave
+#define OFRACS 6
+#define MAX_BINS 256
+
 layout (location = 0) out vec4 out_color;
 
-layout (buffer_reference, std430, buffer_reference_align = 16) readonly buffer Spectrum
-{
-	float data[];
-};
-
-layout (push_constant) uniform PC {
-	layout(offset = 0)
-	Spectrum spec;
+layout (set = EV2_BASE_USER_SET, binding = 0, std430) readonly buffer Spectrum {
 	int bins;
 	int Fmax;
-} pc;
+	float coeffs[MAX_BINS];
+} u_spec;
 
-vec3 palette(int n, int N)
+layout (set = EV2_BASE_USER_SET, binding = 1, std430) readonly buffer Palette {
+	vec4 colors[MAX_BINS];
+} u_palette;
+
+float sd_torus(vec3 p, float R1, float R2)
 {
-        const vec3 stops[5] = vec3[](
-                vec3(0.051, 0.031, 0.188), // #0d0830 deep indigo
-                vec3(0.180, 0.110, 0.490), // #2e1c7d violet blue
-                vec3(0.310, 0.290, 0.839), // #4f4ad6 periwinkle
-                vec3(0.639, 0.620, 0.969), // #a39ef7 lavender
-                vec3(1.000, 1.000, 1.000)  // #ffffff
-        );
-
-        float t = N > 0 ? clamp(float(n) / float(N), 0.0, 1.0) : 1.0;
-
-        float x = t * 4.0;
-        int i = min(int(x), 3);
-        vec3 c = mix(stops[i], stops[i + 1], x - float(i));
-
-        return pow(c, vec3(2.2));
+	vec3 ax = vec3(R1 * normalize(p.xy), 0); 
+	return length(p - ax) - R2;
 }
 
-float basis(vec3 p, float f, float c)
+vec2 cmul(vec2 a, vec2 b)
 {
-	if (f == 0) {
-		return c.x;
-	}
-
-	float t = ftime();
-
-	vec3 phi = 3.14 * vec3(-0.5 * f, f, 0.5 * f);
-
-	return c * cos(p.x * f - phi.x) * cos(p.y * f - phi.y) * cos(p.z * f - phi.x) * cos(3.14*f*t);
+	return vec2(a.x * b.x - a.y * b.y, a.y * b.x + a.x * b.y);
 }
 
-float func(vec3 p, out vec4 color, out float dc)
+float smin(float a, float b, float k) {
+    return min(a, b) - k * log2(1.0 + exp2(-abs(a - b) / k));
+}
+
+float func(vec3 p, out vec4 color)
 {
 	float h = 0.0;
 
@@ -58,50 +41,97 @@ float func(vec3 p, out vec4 color, out float dc)
 
 	float sgn = 1;
 
-	const int bins = min(128, pc.bins);
+	// Palette is built over this same capped count, see main.cpp
+	const int bins = min(128, u_spec.bins);
 
-	float scale = 16/float(bins);
-	dc = pc.spec.data[0] * scale;
+	float scale = 8/float(bins);
+	float fscale = 1024;
+	float roughness = 0.5;
 
-	float Fscale = 512;
-	float Fstep = pc.Fmax / (Fscale * float(bins));
+	float t = ftime();
 
-	for (int i = 0; i < bins; ++i) {
-		float f = i * Fstep;
-		float c = pc.spec.data[i];
-		float x = basis(p, f, c) * scale;
-		h += x; 
+	vec3 f = (u_spec.Fmax * pow(2, (1 - bins)/OFRACS) / fscale) * vec3(p);
 
-		color.rgb += 30*abs(x) * palette(int(i), bins);
+	vec3 c2n[OFRACS];
+	vec3 s2n[OFRACS];
+
+	for (int i = 0; i < OFRACS; ++i) {
+		c2n[i] = cos(f);
+		s2n[i] = sin(f);
 	}
 
-	color.rgb *= abs(h - dc);
+	float sd = 1e10;
+	float dc = u_spec.coeffs[0] * scale;
 
-	return h;
+	vec2 dw = vec2(cos(t), sin(t));
+	vec2 dz = vec2(cos(0.2), sin(0.2));
+	vec2 z = vec2(1,0);
+
+	float spacing = 1.0/bins;
+
+	for (int i = 0; i < bins; ++i) {
+		float c = u_spec.coeffs[i];
+
+		int io = i % OFRACS;
+		vec3 ci = c2n[io];
+
+		float x = c * ci.x * ci.y * ci.z * scale;
+
+		float c2 = u_spec.coeffs[bins - i - 1];
+		vec3 off = 0.4*vec3(0,0,3 - 5*(1 + c2) * z.x);
+		vec3 pi = 0.1*p; 
+
+		float R1 = c2*spacing * (i);
+		float R2 = mix(c2,c, 1 - roughness)*spacing;
+
+		float torus1 = sd_torus(pi + off, R1, R2); 
+		float torus2 = sd_torus(vec3(pi -off), R1, R2); 
+		float sd_i = min(torus1, torus2) - 0.3*R2 * h; 
+
+		if (sd_i < sd)
+			color.rgb += 6*abs(x) * u_palette.colors[i].rgb;
+
+		sd = smin(sd_i, sd, 0.1 + 0.15 * dc);
+
+		h += x;
+
+		c2n[io] = ci * dw.x - s2n[io] * dw.y;
+		s2n[io] = dw.x * s2n[io] + dw.y * ci;
+
+		ci = c2n[io];
+
+		c2n[io] = ci * ci - s2n[io] * s2n[io];
+		s2n[io] = 2 * s2n[io] * ci;
+
+		z = cmul(z, dz);
+	}
+
+	return sd;
 }
+
 float sdf(vec3 p, out vec3 c)
 {
 	vec4 color;
-	float dc;
-	float f = func(p, color, dc);
+	float t = ftime();
 
+	float f = func(10*p, color);
 	c = color.rgb;
-	return length(p) - length(normalize(p) * (1 + f));
+	return f;
 }
 
-vec3 grad(vec3 p) {
+vec3 grad(vec3 p, float fc) {
 	float h = 0.1;
 	vec3 c;
 	return vec3(
-		sdf(p + vec3(h, 0, 0),c) - sdf(p - vec3(h, 0, 0),c), 
-		sdf(p + vec3(0, h, 0),c) - sdf(p - vec3(0, h, 0),c), 
-		sdf(p + vec3(0, 0, h),c) - sdf(p - vec3(0, 0, h),c) 
+		sdf(p + vec3(h, 0, 0),c) - fc, 
+		sdf(p + vec3(0, h, 0),c) - fc, 
+		sdf(p + vec3(0, 0, h),c) - fc 
 	) / (2 * h);
 }
 
-vec3 map(vec3 o, vec3 dir)
+vec3 map1(vec3 o, vec3 dir)
 {
-	vec3 p = o + 0.1 * dir;
+	vec3 p = o;
 
 	float eps = 0.01;
 	float dmax = 10000;
@@ -128,20 +158,18 @@ vec3 map(vec3 o, vec3 dir)
 				acc += 0.1 * abs(d) * color;
 			}
 		}
-		p += dir * d;
 
+		p += dir * d;
 		oob = d > dmax;
 
-		acc += 0.1/(5 + d*d) * color;
+		acc += 0.1/(1 + d * d) * color;
 
 		if (abs(d) < eps || oob)
 			break;
 	}
 
 	if (!oob) {
-		vec3 n = grad(p);
-		float f = clamp(dot(n, normalize(vec3(1,1,0))), 0, 0.8) + 0.2;
-
+		vec3 n = grad(p, d);
 		return acc * length(n);
 	}
 
@@ -156,7 +184,7 @@ void main()
 	vec3 o = u_pass.center;
 	vec3 dir = normalize(vec3(screen, -1) * mat3(u_pass.v));
 
-	vec3 color = map(o, dir);
+	vec3 color = map1(o, dir);
 	
 	out_color = vec4(color, 1);
 }

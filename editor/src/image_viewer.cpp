@@ -167,7 +167,7 @@ ev2::Result ImageViewer::set_pipeline(const char *path)
 	}
 
 	ev2::BindingsID bindings = ev2::create_bindings(
-		ctx, pipeline, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_DYNAMIC);
+		ctx, pipeline, EV2_BASE_USER_SET, ev2::BINDING_MODE_DYNAMIC);
 	rd.pipeline = pipeline;
 	rd.bindings = bindings;
 	pipeline_path = path;

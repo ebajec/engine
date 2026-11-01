@@ -542,7 +542,7 @@ int FluidApp::initialize(int argc, char **argv)
 	sim->reset(ctx);
 
 	particles = ev2::load_graphics_pipeline(ctx, "fluid://pipeline/fluid_particles.yaml");
-	particle_bindings = ev2::create_bindings(ctx, particles, EV2_GFX_SET_PER_DRAW, ev2::BINDING_MODE_DYNAMIC);
+	particle_bindings = ev2::create_bindings(ctx, particles, EV2_BASE_USER_SET, ev2::BINDING_MODE_DYNAMIC);
 
 	return result;
 }

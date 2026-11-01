@@ -196,6 +196,41 @@ enum VizMode
 	VIZ_MODE_MARCHED,
 };
 
+constexpr int MAX_BINS = 256;
+constexpr int MAX_MARCH_BINS = 128;
+
+// std430 layout of the Spectrum buffer in the shaders.
+struct SpectrumBuffer
+{
+	int32_t bins;
+	int32_t Fmax;
+	float data[MAX_BINS];
+};
+
+struct PaletteBuffer
+{
+	glm::vec4 colors[MAX_BINS];
+};
+
+glm::vec3 palette(int n, int N)
+{
+	static const glm::vec3 stops[5] = {
+		glm::vec3(0.051, 0.031, 0.188), // #0d0830 deep indigo
+		glm::vec3(0.180, 0.110, 0.490), // #2e1c7d violet blue
+		glm::vec3(0.310, 0.290, 0.839), // #4f4ad6 periwinkle
+		glm::vec3(0.639, 0.620, 0.969), // #a39ef7 lavender
+		glm::vec3(1.000, 1.000, 1.000)  // #ffffff
+	};
+
+	float t = N > 0 ? glm::clamp(float(n) / float(N), 0.f, 1.f) : 1.f;
+
+	float x = t * 4.f;
+	int i = std::min(int(x), 3);
+	glm::vec3 c = glm::mix(stops[i], stops[i + 1], x - float(i));
+
+	return c * c;
+}
+
 struct AudioViz
 {
 	ev2::GfxContext *ctx = nullptr;
@@ -209,6 +244,8 @@ struct AudioViz
 		ev2::BufferID vbo;
 		ev2::BufferID ibo;
 		ev2::BufferID spectrum;
+		ev2::BufferID palette;
+		ev2::BindingsID march_bindings;
 		VizMode mode = VIZ_MODE_RASTER;
 
 		struct PushConstants{
@@ -261,7 +298,7 @@ int AudioViz::initialize(int argc, char **argv)
 	main_camera = std::make_shared<ev2::SphericalMotionCamera2>();
 	main_camera->auto_planes = false;
 	main_camera->far_plane = 100;
-	main_camera->min_height = 0;
+	main_camera->min_height = -1;
 
 	main_viewport.reset(
 		new ev2::Viewport("Viewport", 0, 0, 800, 800,
@@ -280,6 +317,25 @@ int AudioViz::initialize(int argc, char **argv)
 		return result;
 
 	latest.resize(capture.capacity() * capture.format().channels);
+
+	rd.spectrum = ev2::create_buffer(ctx, sizeof(SpectrumBuffer),
+		ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT);
+	rd.palette = ev2::create_buffer(ctx, sizeof(PaletteBuffer),
+		ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+	ev2::GfxPipelineID march = ev2::load_graphics_pipeline(ctx, "audio://pipeline/march.yaml");
+	rd.march_bindings = ev2::create_bindings(ctx, march, EV2_BASE_USER_SET, ev2::BINDING_MODE_STATIC);
+	if (!rd.march_bindings.is_valid())
+		return ev2::EINVALID_BINDING;
+
+	if (int result = ev2::bind_buffer(ctx, rd.march_bindings, "u_spec",
+			rd.spectrum, 0, sizeof(SpectrumBuffer)); result != ev2::SUCCESS)
+		return result;
+	if (int result = ev2::bind_buffer(ctx, rd.march_bindings, "u_palette",
+			rd.palette, 0, sizeof(PaletteBuffer)); result != ev2::SUCCESS)
+		return result;
+	ev2::flush_bindings(ctx, rd.march_bindings);
+
 	set_fft_nbins(fft_nbins);
 
 	uint32_t nfaces, nverts;
@@ -326,10 +382,11 @@ void AudioViz::draw_sdf(ev2::PassID pass)
 {
 	ev2::GfxPipelineID pipeline = ev2::load_graphics_pipeline(ctx, "audio://pipeline/march.yaml");
 	ev2::cmd_use_buffer(pass, rd.spectrum, ev2::USAGE_STORAGE_READ_GRAPHICS);
+	ev2::cmd_use_buffer(pass, rd.palette, ev2::USAGE_STORAGE_READ_GRAPHICS);
 	ev2::cmd_bind_gfx_pipeline(pass, pipeline);
-	ev2::cmd_push_constant(pass, pipeline, 0, sizeof(rd.pc), &rd.pc);
+	ev2::cmd_bind_resources(pass, rd.march_bindings);
 	ev2::cmd_custom(pass, [](VkCommandBuffer cmds){
-		vkCmdDraw(cmds, 4, 1, 0, 0);  
+		vkCmdDraw(cmds, 4, 1, 0, 0);
 	});
 }
 
@@ -398,6 +455,32 @@ float hannf(float n, float N)
 	return x * x;
 }
 
+void logspace_mag(float base, int Nx, const fftwf_complex *x, int Ny, float *y)
+{
+	float W = float(Nx);
+	float B_k = W * powf(base, 1 - Ny);;
+
+	float yp = 0;
+
+	int l = 0;
+	for (int i = 0; i < Ny; ++i) {
+		int r = int(B_k) < Nx ? int(B_k) : (Nx - 1);
+
+		float acc = 0;
+		for (int i = l; i < r; ++i) {
+			acc += hypotf(x[i][0], x[i][1]);
+		}
+
+		if (r > l)
+			yp = acc / float(r - l);
+		
+		y[i] = yp;
+
+		l = r;
+		B_k *= base; 
+	}
+}
+
 void AudioViz::process_audio()
 {
 	capture.read_latest(latest);
@@ -427,16 +510,20 @@ void AudioViz::process_audio()
 
 	fftwf_free(mono);
 
-	ev2::UploadContext uc = ev2::begin_upload(ctx, sizeof(float) * fft_nbins, alignof(float));
+	ev2::UploadContext uc = ev2::begin_upload(ctx, sizeof(SpectrumBuffer), alignof(SpectrumBuffer));
 
-	float *out = (float*)uc.ptr;
+	SpectrumBuffer *out = (SpectrumBuffer*)uc.ptr;
+	out->bins = fft_nbins;
+	out->Fmax = Fmax;
 
 	const long Nmax = std::max((long)Fmax * fft_window_size / format.sample_rate, (long)fft_nbins);
+
+#ifdef FFT_LINSPACED
 	const int samp_per_bin = Nmax / fft_nbins;
 
 	const float factor = float(fft_nbins) / float(fft_window_size);
 
-	for (int i = 0, idx = 0; i + samp_per_bin <= Nmax; i += samp_per_bin) {
+	for (int i = 0, idx = 0; idx < fft_nbins && i + samp_per_bin <= Nmax; i += samp_per_bin) {
 		float avg_mag = 0;
 		for (int j = 0; j < samp_per_bin; ++j) {
 			avg_mag += hypotf(fft[i + j][0], fft[i + j][1]);
@@ -444,12 +531,16 @@ void AudioViz::process_audio()
 
 		avg_mag *= factor;
 
-		out[idx++] = avg_mag;
+		out->data[idx++] = avg_mag;
 	}
+#else
+	logspace_mag(powf(2.f, 1.f/6.f), Nmax, fft, fft_nbins, out->data);
+#endif
 
 	fftwf_free(fft);
 
-	ev2::commit_buffer_uploads(ctx, uc, rd.spectrum, {.size = sizeof(float) * fft_nbins});
+	ev2::commit_buffer_uploads(ctx, uc, rd.spectrum,
+		{.size = offsetof(SpectrumBuffer, data) + sizeof(float) * fft_nbins});
 }
 
 int32_t next_pow2(int32_t n)
@@ -464,14 +555,21 @@ int32_t next_pow2(int32_t n)
     return (int32_t)(v + 1);   // n > 2^30 has no int32 answer
 }
 
-void AudioViz::set_fft_nbins(int fft_nbins)
+void AudioViz::set_fft_nbins(int nbins)
 {
-	fft_nbins = next_pow2(fft_nbins);
-	if (rd.spectrum.is_valid()) {
-		ev2::destroy_buffer(ctx, rd.spectrum);
+	fft_nbins = std::min(std::max(nbins, 1), MAX_BINS);
+
+	// Spread over the bins march.frag actually uses
+	const int N = std::min(fft_nbins, MAX_MARCH_BINS);
+
+	ev2::UploadContext uc = ev2::begin_upload(ctx, sizeof(PaletteBuffer), alignof(PaletteBuffer));
+
+	PaletteBuffer *out = (PaletteBuffer*)uc.ptr;
+	for (int i = 0; i < MAX_BINS; ++i) {
+		out->colors[i] = glm::vec4(palette(i, N), 0);
 	}
-	rd.spectrum = ev2::create_buffer(ctx, fft_nbins * sizeof(float),
-		ev2::USAGE_STORAGE_READ_GRAPHICS);
+
+	ev2::commit_buffer_uploads(ctx, uc, rd.palette, {.size = sizeof(PaletteBuffer)});
 }
 
 int AudioViz::update()
@@ -487,7 +585,7 @@ int AudioViz::update()
 	if (ImGui::SliderInt("FFT Window", &fft_window_size, 512, 2*8192)) {
 		fft_window_size = next_pow2(fft_window_size);
 	}
-	if (ImGui::SliderInt("FFT Bin Count", &fft_nbins, 4, 256)) {
+	if (ImGui::SliderInt("FFT Bin Count", &fft_nbins, 4, MAX_BINS)) {
 		set_fft_nbins(fft_nbins);
 	}
 	if (ImGui::SliderInt("Fmax", &Fmax, 100, 20000)) {

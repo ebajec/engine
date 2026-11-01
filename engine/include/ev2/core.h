@@ -50,7 +50,7 @@ enum {
 };
 
 enum {
-	EV2_GFX_SET_PER_DRAW = 3
+	EV2_BASE_USER_SET = 3
 };
 
 namespace ev2 { 
