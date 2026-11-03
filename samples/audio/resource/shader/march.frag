@@ -89,9 +89,9 @@ float func(vec3 p, out vec4 color)
 		float sd_i = min(torus1, torus2) - 0.3*R2 * h; 
 
 		if (sd_i < sd)
-			color.rgb += 6*abs(x) * u_palette.colors[i].rgb;
+			color.rgb += 10*abs(x) * u_palette.colors[i].rgb;
 
-		sd = smin(sd_i, sd, 0.1 + 0.15 * dc);
+		sd = smin(sd_i, sd, 0.1 + 0.35 * dc);
 
 		h += x;
 
@@ -162,7 +162,7 @@ vec3 map1(vec3 o, vec3 dir)
 		p += dir * d;
 		oob = d > dmax;
 
-		acc += 0.1/(1 + d * d) * color;
+		acc += 0.1/(1 + d ) * color;
 
 		if (abs(d) < eps || oob)
 			break;
@@ -184,7 +184,7 @@ void main()
 	vec3 o = u_pass.center;
 	vec3 dir = normalize(vec3(screen, -1) * mat3(u_pass.v));
 
-	vec3 color = map1(o, dir);
+	vec3 color = map1(2*o, dir);
 	
 	out_color = vec4(color, 1);
 }

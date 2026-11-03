@@ -262,7 +262,7 @@ struct AudioViz
 	int fft_window_size = 2048;
 
 	// the window is downsampled into this
-	int fft_nbins = 74; int Fmax = 20000;
+	int fft_nbins = 48; int Fmax = 20000;
 	float normalization = 1.f;
 
 	uint32_t index_count;
@@ -299,6 +299,7 @@ int AudioViz::initialize(int argc, char **argv)
 	main_camera->auto_planes = false;
 	main_camera->far_plane = 100;
 	main_camera->min_height = -1;
+	main_camera->move(glm::dvec3(0,0,5));
 
 	main_viewport.reset(
 		new ev2::Viewport("Viewport", 0, 0, 800, 800,
