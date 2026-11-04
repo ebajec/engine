@@ -561,7 +561,9 @@ void inspector_panel_imgui(GfxContext *ctx)
 void editor_panel_imgui(GfxContext *ctx)
 {
 	if (ImGui::Begin(EDITOR_PANEL_NAME)) {
-		ImGui::SliderInt("Target framerate", &ctx->framerate_hz, 10, 240);
+		if (ImGui::SliderInt("Target framerate", &ctx->framerate_hz, 10, 240)) {
+			ctx->framerate_hz = std::max(ctx->framerate_hz, 1);
+		}
 	}
 	ImGui::End();
 }

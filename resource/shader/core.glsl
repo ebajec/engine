@@ -116,25 +116,49 @@ MeshVertex read_vertex(MeshInfo mesh, uint vtx)
 	switch(mesh.buf.vtx_format) {
 		case VERTEX_FORMAT_PN16: {
 			start = vtx * VERTEX_SIZE_PN16;
-			return MeshVertex(vec3(0), vec3(0), vec2(0));
+
+			vec2 px_py = unpackUnorm2x16(mesh.buf.data[start]);
+			float pz = unpackUnorm2x16(mesh.buf.data[start + 1]).x;
+			float nx = unpackSnorm2x16(mesh.buf.data[start + 1]).y;
+			vec2 ny_nz = unpackSnorm2x16(mesh.buf.data[start + 2]);
+
+			return MeshVertex(
+				vec3(px_py.x, px_py.y, pz) * mesh.pos_extent + mesh.pos_offset,
+				vec3(nx, ny_nz),
+				vec2(0)
+			);
 		}
 		case VERTEX_FORMAT_PN32F: {
 			start = vtx * VERTEX_SIZE_PN32F;
-			return MeshVertex(vec3(0), vec3(0), vec2(0));
+			vec3 pos = uintBitsToFloat(uvec3(
+				mesh.buf.data[start],
+				mesh.buf.data[start + 1],
+				mesh.buf.data[start + 2]
+			));
+			vec3 normal = uintBitsToFloat(uvec3(
+				mesh.buf.data[start + 3],
+				mesh.buf.data[start + 4],
+				mesh.buf.data[start + 5]
+			));
+			return MeshVertex(
+				pos * mesh.pos_extent + mesh.pos_offset,
+				normal,
+				vec2(0)
+			);
 		}
 		case VERTEX_FORMAT_PNUV16: {
 			start = vtx * VERTEX_SIZE_PNUV16;
 
 			vec2 px_py = unpackUnorm2x16(mesh.buf.data[start]);
-			vec2 pz_nx = unpackUnorm2x16(mesh.buf.data[start + 1]);
+			float pz = unpackUnorm2x16(mesh.buf.data[start + 1]).x;
+			float nx = unpackSnorm2x16(mesh.buf.data[start + 1]).y;
 			vec2 ny_nz = unpackSnorm2x16(mesh.buf.data[start + 2]);
 			vec2 uv = unpackUnorm2x16(mesh.buf.data[start + 3]);
 
-			// normals are snorm
-			pz_nx.y -= float(pz_nx.y > 0.5);
 			return MeshVertex(
-				vec3(px_py.x, px_py.y, pz_nx.x) * mesh.pos_extent + mesh.pos_offset,
-				vec3(pz_nx.y, ny_nz),
+				vec3(px_py.x, px_py.y, pz) * mesh.pos_extent + mesh.pos_offset,
+				// normals are snorm
+				vec3(nx, ny_nz),
 				vec2(uv * mesh.buf.uv_scale + mesh.buf.uv_offset)
 			);
 		}
@@ -161,6 +185,7 @@ MeshVertex read_vertex(MeshInfo mesh, uint vtx)
 			);
 		}
 	}
+	return MeshVertex(vec3(0), vec3(0), vec2(0));
 }
 
 #endif // EV2_CORE_GLSL

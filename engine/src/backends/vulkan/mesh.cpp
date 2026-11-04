@@ -95,6 +95,7 @@ void destroy_mesh(GfxContext *ctx, MeshID id)
 	ev2::destroy_buffer(ctx, mesh->buffer);
 
 	ctx->mesh_pool->deallocate(to_pool_id(id));
+	ctx->mesh_info.remove(id.id - 1);
 }
 
 static void fill_gpu_hdr(MeshBufferHeaderGPU *hdr, const Mesh* mesh)

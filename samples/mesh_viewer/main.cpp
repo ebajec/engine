@@ -16,49 +16,8 @@
 
 // std
 #include <memory>
-#include <complex>
 #include <cstdlib>
 #include <cstring>
-
-static void sphere_mesh(
-	uint32_t *indices,
-	float *vertices,
-	int n_tht, int n_phi
-)
-{
-	std::complex<float> d_tht = std::polar(1.f, PIf / float(n_tht - 1));
-	std::complex<float> d_phi = std::polar(1.f, TWOPIf / float(n_phi));
-	std::complex<float> phi = 1.f;
-
-	int vidx = 0;
-	int iidx = 0;
-
-	for (int i = 0; i < n_phi; ++i) {
-
-		std::complex<float> tht = 1;
-		for (int j = 0; j < n_tht; ++j) {
-			vertices[vidx++] = tht.imag() * phi.real();
-			vertices[vidx++] = tht.imag() * phi.imag();
-			vertices[vidx++] = tht.real();
-
-			int in = i + 1 < n_phi ?  i + 1 : 0; 
-			int jn = j + 1;
-			
-			if (jn < n_tht) {
-				indices[iidx++] = i*n_tht + j;
-				indices[iidx++] = in*n_tht + j;
-				indices[iidx++] = in*n_tht + jn;
-
-				indices[iidx++] = i*n_tht + j;
-				indices[iidx++] = in*n_tht + jn;
-				indices[iidx++] = i*n_tht + jn;
-			}
-			tht *= d_tht;
-		}
-
-		phi *= d_phi;
-	}
-}
 
 uint32_t vindex(glm::ivec2 p, int N)
 {
@@ -139,9 +98,42 @@ static void tri_subdiv_sizes(uint32_t *p_nfaces, uint32_t *p_nverts, int n)
 	*p_nverts = nverts;
 }
 
+#define quantize16u(x) (uint16_t)(roundf(((float)UINT16_MAX * (x))))
+#define quantize16s(x) (int16_t)(roundf(((float)(UINT16_MAX >> 1) * (x))))
+
+ev2::VertexPNUV16 cvt_vtx_pnuv32f_pnuv16(
+	const float pos_scale[3],
+	const float pos_offset[3],
+	const float uv_scale[2],
+	const float uv_offset[2],
+	const ev2::VertexPNUV32f &vtx)
+{
+	return ev2::VertexPNUV16{
+		.position = {
+			quantize16u((vtx.position[0] - pos_offset[0]) / pos_scale[0]),
+			quantize16u((vtx.position[1] - pos_offset[1]) / pos_scale[1]),
+			quantize16u((vtx.position[2] - pos_offset[2]) / pos_scale[2])
+		},
+		.normal = {
+			quantize16s(vtx.normal[0]),
+			quantize16s(vtx.normal[1]),
+			quantize16s(vtx.normal[2]),
+		},
+		.uv = {
+			quantize16u((vtx.uv[0] - uv_offset[0])/uv_scale[0]),
+			quantize16u((vtx.uv[1] - uv_offset[1])/uv_scale[1]),
+		}
+	};
+}
+
+static constexpr glm::vec3 ico_pos_scale(2,2,2);
+static constexpr glm::vec3 ico_pos_offset(-1,-1,-1);
+static constexpr glm::vec2 ico_uv_scale(1,1);
+static constexpr glm::vec2 ico_uv_offset(0,0);
+
 static void ico_sphere_mesh(
 	uint32_t *indices,
-	ev2::VertexPNUV32f *vertices,
+	ev2::VertexPNUV16 *vertices,
 	int n
 )
 {
@@ -177,11 +169,18 @@ static void ico_sphere_mesh(
 			glm::vec3 V = A + b.x * (B - A) + b.y * (C - A);
 			V = glm::normalize(V);
 
-			vertices[vidx++] = ev2::VertexPNUV32f{
+			 ev2::VertexPNUV32f vtx = {
 				.position = {V.x, V.y, V.z},
 				.normal = {V.x, V.y, V.z},
 				.uv = {(PIf + atan2f(V.y, V.x))/TWOPIf, (0.5f * PIf + atan2f(V.z, fabsf(V.x)))/PIf}
 			};
+			
+	  		vertices[vidx++] = cvt_vtx_pnuv32f_pnuv16(
+				glm::value_ptr(ico_pos_scale),
+				glm::value_ptr(ico_pos_offset),
+				glm::value_ptr(ico_uv_scale),
+				glm::value_ptr(ico_uv_offset), 
+				vtx);
 		}
 	}
 }
@@ -207,17 +206,51 @@ struct MeshViewer
 	std::vector<ev2::TransformID> transforms;
 
 	int instance_count = 30000;
+	int ico_subdivs = 1;
+	float sigma_scale = 0.1f;
+	float mu_scale = 0.2f;
 
 	~MeshViewer();
 
 	int initialize(int argc, char **argv);
 	int update();
 
-	void draw_sdf(ev2::PassID pass);
-	void draw_ball(ev2::PassID pass);
 	void render();
-	void generate_objects(int count);
+	void generate_objects();
+	void regen_mesh();
 };
+
+void MeshViewer::regen_mesh()
+{
+	if (rd.mesh.is_valid())
+		ev2::destroy_mesh(ctx, rd.mesh);
+
+	uint32_t nfaces, nverts;
+
+	tri_subdiv_sizes(&nfaces, &nverts, ico_subdivs);
+	nfaces *= 20;
+	nverts *= 20;
+
+	std::unique_ptr<uint32_t[]> indices (new uint32_t[6 * nfaces]);
+	std::unique_ptr<ev2::VertexPNUV16[]> vertices (new ev2::VertexPNUV16[nverts]); 
+
+	ico_sphere_mesh(indices.get(), vertices.get(), ico_subdivs);
+
+	ev2::MeshGeometry geom = {
+		.vtx_format = ev2::VERTEX_FORMAT_PNUV16,
+		.vtx_count = nverts,
+		.vtx_data = vertices.get(),
+		.idx_type = ev2::INDEX_TYPE_UINT32,
+		.idx_count = 3 * nfaces,
+		.idx_data = indices.get(),
+		.pos_extent = {ico_pos_scale.x, ico_pos_scale.y, ico_pos_scale.z},
+		.pos_offset = {ico_pos_offset.x, ico_pos_offset.y, ico_pos_offset.z},
+		.uv_scale = {ico_uv_scale.x, ico_uv_scale.y},
+		.uv_offset = {ico_uv_offset.x, ico_uv_offset.y},
+	};
+
+	rd.mesh = ev2::create_mesh(ctx, &geom);
+}
 
 int MeshViewer::initialize(int argc, char **argv)
 {
@@ -237,47 +270,16 @@ int MeshViewer::initialize(int argc, char **argv)
 
 	rd.tex = ev2::create_texture(ctx, ev2::get_image_resource(ctx, test_image), ev2::FILTER_BILINEAR);
 
-	generate_objects(instance_count);
-
-	uint32_t nfaces, nverts;
-
-#define ICOSAHEDRON
-#ifdef ICOSAHEDRON
-	int n_ico = 1;
-
-	tri_subdiv_sizes(&nfaces, &nverts, n_ico);
-	nfaces *= 20;
-	nverts *= 20;
-#else
-	nverts = nfaces = n_tht * n_phi;
-#endif
-
-	std::unique_ptr<uint32_t[]> indices (new uint32_t[6 * nfaces]);
-	std::unique_ptr<ev2::VertexPNUV32f[]> vertices (new ev2::VertexPNUV32f[nverts]); 
-
-#ifdef ICOSAHEDRON
-	ico_sphere_mesh(indices.get(), vertices.get(), n_ico);
-#else
-	sphere_mesh((uint32_t*)ibo_uc.ptr, (float*)vbo_uc.ptr, n_tht, n_phi);
-#endif
-
-	ev2::MeshGeometry geom = {
-		.vtx_format = ev2::VERTEX_FORMAT_PNUV32F,
-		.vtx_count = nverts,
-		.vtx_data = vertices.get(),
-		.idx_type = ev2::INDEX_TYPE_UINT32,
-		.idx_count = 3 * nfaces,
-		.idx_data = indices.get()
-	};
-
-	rd.mesh = ev2::create_mesh(ctx, &geom);
+	generate_objects();
+	regen_mesh();
 
 	return ev2::SUCCESS;
 }
 
+
 float urandf()
 {
-	return (float)rand()/(float)RAND_MAX;
+	return (float)(rand() + 1.f)/(float)(RAND_MAX + 1.f);
 }
 
 glm::vec3 randvec()
@@ -287,6 +289,13 @@ glm::vec3 randvec()
 		1.f - 2.f * urandf(),
 		1.f - 2.f * urandf()
 	);
+}
+float abs_gaussianf(float mu, float sigma)
+{
+
+    float u = urandf();
+    float r  = sqrtf(-2.0 * logf(u));
+    return mu + sigma * r;
 }
 
 glm::mat3 random_frame()
@@ -298,16 +307,20 @@ glm::mat3 random_frame()
 	return glm::mat3(e1, e2, e3);
 }
 
-void MeshViewer::generate_objects(int count)
+void MeshViewer::generate_objects()
 {
+	int count = instance_count;
+
 	for (ev2::TransformID transform : transforms)
 		ev2::destroy_transform(ctx, transform);
+
+	srand(10);
 
 	transforms.resize(count);
 	for (int i = 0; i < count; ++i) {
 		glm::vec3 c = randvec(); 
-
-		glm::mat3 T = 0.2f*random_frame();
+		float scale = abs_gaussianf(mu_scale, sigma_scale);
+		glm::mat3 T = scale*random_frame();
 
 		glm::mat4 M = glm::mat4(T);
 		M[3] = glm::vec4(10.f * randvec(),1);
@@ -373,7 +386,17 @@ int MeshViewer::update()
 
 	ImGui::Begin("Editor");
 	if (ImGui::SliderInt("Instances", &instance_count, 1, 1024)) {
-		generate_objects(instance_count);
+		generate_objects();
+	}
+	if (ImGui::SliderInt("Subdivisions", &ico_subdivs, 1, 8)) {
+		ico_subdivs = glm::clamp(ico_subdivs, 1, 8);
+		regen_mesh();
+	}
+	if (ImGui::SliderFloat("sigma_scale", &sigma_scale, 0, 0.1)) {
+		generate_objects();
+	}
+	if (ImGui::SliderFloat("mu_scale", &mu_scale, 0, 0.2)) {
+		generate_objects();
 	}
 	ImGui::End();
 
