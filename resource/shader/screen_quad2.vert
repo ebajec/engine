@@ -33,10 +33,14 @@ void main()
 	}
 
 	ivec2 size = textureSize(u_tex, 0);
-	vec2 h = vec2(1.f)/size;
 
-	float aspect = float(size.x)/float(size.y);
+	float aspect = float(size.x)/float(size.y); 
 	pos.x *= aspect;
+
+	float scr_aspect = u_pass.resolution.x / u_pass.resolution.y;
+	if (scr_aspect < aspect) {
+		pos *= scr_aspect/aspect;
+	}
 
 	frag_pos = pos;
 	frag_uv = uv;
