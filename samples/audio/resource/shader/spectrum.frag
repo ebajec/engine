@@ -27,7 +27,7 @@ void main()
 	vec3 rgb = mix(vec3(0.1,0.1,1), vec3(1,0.3,0.3), abs(in_pos.y));
 
 	float dx = (in_pos.x - in_xc) * in_bins;
-	float fade = 1 - exp(-(dx * dx));
+	float fade = 1;// - exp(-(dx * dx));
 
 	out_color = vec4(fade*rgb, 1);
 }

@@ -541,11 +541,12 @@ struct GfxContext
 	std::unique_ptr<Pool<Bindings>> bindings_pool;
 	std::unique_ptr<Pool<View>> view_pool;
 	std::unique_ptr<Pool<Mesh>> mesh_pool;
+	std::unique_ptr<Pool<glm::mat4>> transform_pool;
 
 	DeferredDeleteQueue deferred_delete;
 
 	// Special GPU Resources
-	GPUPool<glm::mat4> transforms;
+	GPUPool<glm::mat4> transforms_gpu;
 	GPUPool<MeshInfoGPU> mesh_info;
 
 	// defaults to identity matrix

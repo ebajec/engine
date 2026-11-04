@@ -27,7 +27,7 @@ struct GPUPool
 	//@return id of entry
 	uint32_t add(const T& val);
 
-	// @brief free up an entry 
+	// @brief free up an entryj
 	// @return true if a valid id was passed
 	bool remove(uint32_t idx);
 
@@ -54,6 +54,8 @@ struct GPUPool
 	{
 		return (size_t)idx * (size_t)stride;
 	}
+
+	size_t size() {return capacity * stride;}
 
 	GPUPool() = default;
 	

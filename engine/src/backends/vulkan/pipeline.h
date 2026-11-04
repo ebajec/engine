@@ -15,7 +15,9 @@
 #include <memory>
 #include <cstdint>
 
-#define EV2_FRAME_UBO_BINDING 0
+#define EV2_FRAME_INFO_BINDING 0
+#define EV2_MESH_INFO_BINDING 1
+#define EV2_TRANSFORM_BINDING 2
 #define EV2_PER_PASS_UBO_BINDING 0
 
 namespace ev2 {

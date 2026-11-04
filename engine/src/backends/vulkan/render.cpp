@@ -392,6 +392,24 @@ void destroy_view(GfxContext *ctx, ViewID handle)
 	ctx->view_pool->deallocate(to_pool_id(handle));
 }
 
+TransformID create_transform(GfxContext *ctx, float T[])
+{
+	glm::mat4 mat = glm::make_mat4(T);
+	uint32_t id = ctx->transforms_gpu.add(mat);
+	return TransformID{.id = id, .gen = 0};
+}
+
+void update_transform(GfxContext *ctx, TransformID id, float T[])
+{
+	glm::mat4 mat = glm::make_mat4(T);
+	ctx->transforms_gpu.set(id.id, mat);
+}
+
+void destroy_transform(GfxContext *ctx, TransformID id)
+{
+	ctx->transforms_gpu.remove(id.id);
+}
+
 static void populate_rendering_info(
 	const RenderTarget *p_target,
 	const RenderPass *pass,
@@ -1036,6 +1054,9 @@ void cmd_draw_mesh(PassID pass_id, MeshID mesh, uint32_t instance_count)
 	assert(mesh.is_valid());
 
 	Pass *pass = EV2_TYPE_PTR_CAST(Pass, pass_id);
+
+	mesh_ensure_loaded_gpu(pass->ctx, mesh);
+
 	pass->cmds.push_back(CmdDrawMesh{
 		.mesh = mesh,
 		.instance_count = instance_count,
@@ -1217,7 +1238,7 @@ Result begin_frame(GfxContext *ctx)
 
 	ctx->assets->process_reloads();
 
-	ctx->transforms.update(ctx);
+	ctx->transforms_gpu.update(ctx);
 
 	// Rebuilt from scratch below as passes are recorded. The GPU buffer is kept,
 	// so this only resets the CPU side bookkeeping.
@@ -1420,6 +1441,17 @@ static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 		PassNode &node = rg->nodes[node_idx];
 		const Pass *pass = node.pass;
 
+		if (pass->gfx) {
+			rg_use_buffer(*rg, ctx, node_idx, CmdUseBuffer{
+				.buffer = ctx->mesh_info.buffer,
+				.usage = USAGE_STORAGE_READ_GRAPHICS
+			});
+			rg_use_buffer(*rg, ctx, node_idx, CmdUseBuffer{
+				.buffer = ctx->transforms_gpu.buffer,
+				.usage = USAGE_STORAGE_READ_GRAPHICS
+			});
+		}
+
 		uint32_t cmd_count = (uint32_t)pass->cmds.size();
 
 		for (uint32_t i = 0; i < cmd_count; ++i) {
@@ -1436,6 +1468,16 @@ static ev2::Result rg_compile(GfxContext *ctx, RenderGraph *rg)
 				case Custom:
 				case Clear:
 				case Dispatch: {
+					rg_new_pass_command(node, cmd);
+					break;
+				}
+				case DrawMesh: {
+					const Mesh * mesh = ctx->get_mesh(cmd.draw_mesh.mesh);
+					CmdUseBuffer use_cmd = {
+						.buffer = mesh->buffer,
+						.usage = USAGE_STORAGE_READ_GRAPHICS
+					};
+					rg_use_buffer(*rg, ctx, node_idx, use_cmd);
 					rg_new_pass_command(node, cmd);
 					break;
 				}
@@ -2036,9 +2078,9 @@ static VkResult rg_record_node(RenderGraph*rg, const PassNode &node, VkCommandBu
 				size_t ibo_start;
 				mesh->prepare_offsets(0, nullptr, &ibo_start);
 
-				// TODO: Would there every be a good reason to avoid re-binding every time
+				// TODO: Would there every be a good reason to avoid re-binding every time?
 				vkCmdBindIndexBuffer(cmds, buffer->buffer, ibo_start, idx_type_to_vk(mesh->geom.idx_type));
-				vkCmdDrawIndexed(cmds, mesh->geom.idx_count, cmd.instance_count, 0, 0, cmd.mesh.id);
+				vkCmdDrawIndexed(cmds, mesh->geom.idx_count, cmd.instance_count, 0, 0, cmd.mesh.id - 1);
 				break;
 			}
 			case Custom: {
@@ -2258,26 +2300,54 @@ static RenderGraph *rg_create(GfxContext *ctx)
 	return rg;
 }
 
-ev2::Result end_frame(GfxContext *ctx)
+static void update_builtin_descriptor_sets(GfxContext *ctx, FrameContext *frame)
 {
-	ev2::Result result = ev2::SUCCESS;
-
-	FrameContext *frame = ctx->get_current_frame();
 	RenderGraph *rg = frame->render_graph.get();
+	
+	VkDescriptorBufferInfo mesh_info_buffer_info, transform_buffer_info;
+	std::vector<VkWriteDescriptorSet> writes;
+	writes.reserve(8);
 
-	// Every graphics pass for this frame has now been recorded, so the pass data
-	// table has its final size. Upload it, then point each pass's descriptor set
-	// at its own slot - this is deferred to here because add() may reallocate the
-	// buffer, invalidating any handle written earlier.
-	frame->gpu_pass_info.update(ctx);
-	ctx->mesh_info.update(ctx);
-	flush_uploads(ctx);
+	if (ctx->mesh_info.buffer.is_valid()) {
+		mesh_info_buffer_info = {
+			.buffer = ctx->get_buffer(ctx->mesh_info.buffer)->buffer,
+			.offset = 0,
+			.range = ctx->mesh_info.size()
+		};
 
-	if (!EV2_IS_NULL(frame->gpu_pass_info.buffer)) {
+		writes.push_back(VkWriteDescriptorSet{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = frame->descriptor_set,
+			.dstBinding = EV2_MESH_INFO_BINDING,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &mesh_info_buffer_info,
+		});
+	}
+	
+	if (ctx->transforms_gpu.buffer.is_valid()) {
+		transform_buffer_info = {
+			.buffer = ctx->get_buffer(ctx->transforms_gpu.buffer)->buffer,
+			.offset = 0,
+			.range = ctx->transforms_gpu.size()
+		};
+
+		writes.push_back(VkWriteDescriptorSet{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = frame->descriptor_set,
+			.dstBinding = EV2_TRANSFORM_BINDING,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &transform_buffer_info,
+		});
+	}
+
+	std::vector<VkDescriptorBufferInfo> buffer_infos;
+
+	if (frame->gpu_pass_info.buffer.is_valid()) {
 		Buffer *buf = ctx->get_buffer(frame->gpu_pass_info.buffer);
-
-		std::vector<VkDescriptorBufferInfo> buffer_infos;
-		std::vector<VkWriteDescriptorSet> writes;
 
 		buffer_infos.reserve(rg->nodes.size());
 		writes.reserve(rg->nodes.size());
@@ -2310,12 +2380,31 @@ ev2::Result end_frame(GfxContext *ctx)
 				.pBufferInfo = &buffer_infos[i++]
 			});
 		}
-
-		if (!writes.empty()) {
-			vkUpdateDescriptorSets(ctx->device,
-				(uint32_t)writes.size(), writes.data(), 0, nullptr);
-		}
 	}
+
+	if (!writes.empty()) {
+		vkUpdateDescriptorSets(ctx->device,
+			(uint32_t)writes.size(), writes.data(), 0, nullptr);
+	}
+}
+
+ev2::Result end_frame(GfxContext *ctx)
+{
+	ev2::Result result = ev2::SUCCESS;
+
+	FrameContext *frame = ctx->get_current_frame();
+	RenderGraph *rg = frame->render_graph.get();
+
+	// Every graphics pass for this frame has now been recorded, so the pass data
+	// table has its final size. Upload it, then point each pass's descriptor set
+	// at its own slot - this is deferred to here because add() may reallocate the
+	// buffer, invalidating any handle written earlier.
+	frame->gpu_pass_info.update(ctx);
+	ctx->mesh_info.update(ctx);
+	ctx->transforms_gpu.update(ctx);
+	flush_uploads(ctx);
+
+	update_builtin_descriptor_sets(ctx, frame);
 
 	result = rg_compile(ctx, rg);
 	if (result != ev2::SUCCESS) {

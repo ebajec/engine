@@ -49,14 +49,14 @@ static ev2::Result create(GfxContext *ctx, ImageFile * asset, const char *path)
 	});
 
 	int width, height, channels;
-	int stbi_res = stbi_info_from_memory(bytes.data(), (size_t)bytes.size(), &width, &height, &channels);
+	int stbi_res = stbi_info_from_memory(bytes.data(), (int)bytes.size(), &width, &height, &channels);
 
 	if (!stbi_res) {
 		log_error("Failed to load image_file : %s",path);
 		return ev2::ELOAD_FAILED;
 	}
 
-	uint8_t* rgba = stbi_load_from_memory(bytes.data(), (size_t)bytes.size(), &width,&height,&channels,STBI_rgb_alpha);
+	uint8_t* rgba = stbi_load_from_memory(bytes.data(), (int)bytes.size(), &width,&height,&channels,STBI_rgb_alpha);
 
 	if (!rgba) {
 		log_error("Failed to load image_file : %s",path);
@@ -68,9 +68,20 @@ static ev2::Result create(GfxContext *ctx, ImageFile * asset, const char *path)
 		ev2::IMAGE_USAGE_SAMPLED_BIT
 	);
 
-	// TODO : upload the data
+	size_t nbytes = width * height * 4;
 
-	log_error("unimplemented");
+	// TODO : upload the data
+	
+	ev2::UploadContext uc = ev2::begin_upload(ctx, nbytes, alignof(uint32_t));
+	memcpy(uc.ptr, rgba, nbytes);
+	ev2::ImageUpload up = {
+		.w = (uint32_t)width,
+		.h = (uint32_t)height,
+	};
+	ev2::commit_image_uploads(ctx, uc, img, &up, 1);
+	ev2::flush_uploads(ctx);
+
+	//log_error("unimplemented");
 
 	asset->img = img;
 

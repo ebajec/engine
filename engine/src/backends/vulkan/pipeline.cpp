@@ -1860,16 +1860,41 @@ VkDescriptorSetLayout generate_per_frame_descriptor_set_layout(ev2::GfxContext *
 	VkDescriptorSetLayoutBinding bindings[] = {
 		// Frame global ubo
 		VkDescriptorSetLayoutBinding{
-			.binding = EV2_FRAME_UBO_BINDING,
+			.binding = EV2_FRAME_INFO_BINDING,
 			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_ALL,
+		},
+		VkDescriptorSetLayoutBinding{
+			.binding = EV2_MESH_INFO_BINDING,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_ALL,
+		},
+		VkDescriptorSetLayoutBinding{
+			.binding = EV2_TRANSFORM_BINDING,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.descriptorCount = 1,
 			.stageFlags = VK_SHADER_STAGE_ALL,
 		}
 	};
+	VkDescriptorBindingFlags binding_flags[] = {
+		VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+	};
+
+	constexpr uint32_t count = sizeof(bindings)/sizeof(bindings[0]); 
+	
+	VkDescriptorSetLayoutBindingFlagsCreateInfo flag_info = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+		.bindingCount = count,
+		.pBindingFlags = binding_flags
+	};
+
 
 	VkDescriptorSetLayoutCreateInfo create_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.flags = 0,
+		.pNext = &flag_info,
+		.flags = 0, 
 		.bindingCount = sizeof(bindings)/sizeof(VkDescriptorSetLayoutBinding),
 		.pBindings = bindings,
 	};

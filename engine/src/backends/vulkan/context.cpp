@@ -1055,7 +1055,7 @@ static ev2::Result create_frame_descriptor_set(ev2::GfxContext *ctx, FrameContex
 		VkWriteDescriptorSet{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = frame->descriptor_set,
-			.dstBinding = EV2_FRAME_UBO_BINDING,
+			.dstBinding = EV2_FRAME_INFO_BINDING,
 			.dstArrayElement = 0,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -1236,14 +1236,20 @@ static ev2::Result create_device_resources(ev2::GfxContext *ctx)
 	}
 
 	// Per-frame updated uniforms
-	uint64_t ubo_offset_alignment = 
-		ctx->caps.limits.minUniformBufferOffsetAlignment;
+	uint64_t offset_alignment = 
+		ctx->caps.limits.minStorageBufferOffsetAlignment;
 
-	ctx->transforms = GPUPool<glm::mat4>(
-		(size_t)ubo_offset_alignment,
+	ctx->transforms_gpu = GPUPool<glm::mat4>(
+		(size_t)offset_alignment,
 		ev2::BUFFER_USAGE_TRANSFER_DST_BIT | 
 		ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT
 	);
+	ctx->mesh_info = GPUPool<MeshInfoGPU>(
+		(size_t)offset_alignment,
+		ev2::BUFFER_USAGE_TRANSFER_DST_BIT | 
+		ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT
+	);
+
 	ctx->view_pool.reset(Pool<ev2::View>::create());
 
 	for (uint32_t i = 0; i < ctx->max_frames_in_flight; ++i) {
@@ -1688,6 +1694,8 @@ GfxContext *create_context_for_vulkan(const GfxContextVulkanInfo &params)
 	ctx->image_pool.reset(Pool<ev2::Image>::create());
 	ctx->texture_pool.reset(Pool<ev2::Texture>::create());
 	ctx->bindings_pool.reset(Pool<ev2::Bindings>::create());
+	ctx->transform_pool.reset(Pool<glm::mat4>::create());
+	ctx->mesh_pool.reset(Pool<Mesh>::create());
 
 	// Call before init_device_resources so the number of swapchain
 	// images can be obtained
@@ -1860,7 +1868,7 @@ void destroy_context(GfxContext *ctx)
 	ctx->assets.reset();
 	ctx->pool.reset();
 
-	ctx->transforms.destroy(ctx);
+	ctx->transforms_gpu.destroy(ctx);
 
 	for (uint32_t i = 0; i < ctx->max_frames_in_flight; ++i) {
 		ctx->frames[i].gpu_pass_info.destroy(ctx);

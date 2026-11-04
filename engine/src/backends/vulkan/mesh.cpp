@@ -81,7 +81,7 @@ MeshID create_mesh(GfxContext *ctx, const MeshGeometry *geom)
 
 	MeshID id = ctx->emplace_mesh(std::move(mesh));
 	uint32_t gpu_idx = ctx->mesh_info.add(MeshInfoGPU{});
-	assert(gpu_idx = id.id);
+	assert(gpu_idx + 1 == id.id);
 
 	return id;
 }
@@ -115,12 +115,16 @@ Result mesh_ensure_loaded_gpu(GfxContext *ctx, MeshID mesh_id)
 		return SUCCESS;
 	}
 
+	// TODO: if an upload is required, have this run asychronously
+
 	size_t hdr_start = 0, vbo_start, ibo_start;
 	size_t bufsize = mesh->prepare_offsets(hdr_start, &vbo_start, &ibo_start);
 
 	mesh->buffer_offset = hdr_start;
 	mesh->buffer = ev2::create_buffer(ctx, bufsize, 
-		ev2::BUFFER_USAGE_TRANSFER_SRC_BIT | ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT);
+		ev2::BUFFER_USAGE_TRANSFER_DST_BIT | 
+		ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT |
+		ev2::BUFFER_USAGE_INDEX_BUFFER_BIT);
 
 	//---------------------------------------------------------------------------------------
 	// update table
@@ -128,7 +132,7 @@ Result mesh_ensure_loaded_gpu(GfxContext *ctx, MeshID mesh_id)
 	glm::vec3 extent = glm::make_vec3(mesh->geom.pos_extent);
 	glm::vec3 offset = glm::make_vec3(mesh->geom.pos_offset);
 
-	ctx->mesh_info.set(mesh_id.id, MeshInfoGPU{
+	ctx->mesh_info.set(mesh_id.id - 1, MeshInfoGPU{
 		.pos_extent = {extent.x, extent.y, extent.z},
 		.first_index = 0,
 		.pos_offset = {offset.x, offset.y, offset.z},
@@ -160,66 +164,6 @@ Result mesh_ensure_loaded_gpu(GfxContext *ctx, MeshID mesh_id)
 	ev2::commit_buffer_uploads(ctx, uc, mesh->buffer, &up, 1);
 
 	return SUCCESS;
-}
-
-//------------------------------------------------------------------------------
-// Loading interface
-
-static ev2::Result model_reload_callback(ev2::GfxContext *ctx, void** usr, const char *path)
-{
-	// TODO...
-	assert(false);
-	return ev2::SUCCESS;
-}
-
-static void model_destroy_callback(ev2::GfxContext *ctx, void* usr)
-{
-	// TODO...
-	assert(false);
-}
-
-static Mesh *model_create_callback(const char * path)
-{
-	// TODO...
-	assert(false);
-	return nullptr;
-}
-
-#pragma pack(push, 1)
-struct RawTri {
-    float nx, ny, nz;
-    float v0x, v0y, v0z;
-    float v1x, v1y, v1z;
-    float v2x, v2y, v2z;
-    uint16_t attrib;
-};
-#pragma pack(pop)
-
-ModelID load_model(GfxContext *ctx, const char *path)
-{
-	AssetID id;
-	ev2::Result result = ctx->assets->load(path, &id);
-
-	if (result < ev2::SUCCESS)
-		return EV2_NULL_HANDLE(Model);
-
-	if (id)
-		return ModelID{id};
-
-	static AssetVTable vtbl = {
-		.reload = model_reload_callback,
-		.destroy = model_destroy_callback,
-	};
-
-	ev2::Mesh *mesh = model_create_callback(path); 
-
-	if (result == SUCCESS) {
-		id = ctx->assets->allocate(&vtbl, mesh, path); 
-		return ModelID{id};
-	}
-
-	return EV2_NULL_HANDLE(Model);
-
 }
 
 }

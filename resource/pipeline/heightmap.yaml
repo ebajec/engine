@@ -1,6 +1,6 @@
 shaders:
   vert: core://shader/heightmap.vert
-  frag: core://shader/default_mesh3d.frag
+  frag: core://shader/heightmap.frag
 rasterizationState:
   depthClampEnable: FALSE
   rasterizerDiscardEnable: FALSE

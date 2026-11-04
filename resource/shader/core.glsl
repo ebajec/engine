@@ -23,9 +23,12 @@ const uint VERTEX_SIZE_PNUV16 = 4;
 
 layout (buffer_reference, std430, buffer_reference_align = 16) readonly buffer MeshBuffer
 {
-	vec2 uv_offset, uv_scale;
+	vec2 uv_scale;
+	vec2 uv_offset;
 	uint vtx_count;
 	uint vtx_format;
+	// header aligned up to 16 bytes
+	uint pad0_, pad1_;
 	uint data[];
 };
 
@@ -72,12 +75,12 @@ layout (set = PER_FRAME_SET, std140, binding = 0) uniform FrameInfoBuffer
 	FrameInfo u_frame;
 };
 
-layout (set = PER_FRAME_SET, std140, binding = 1) uniform MeshInfoBuffer
+layout (set = PER_FRAME_SET, std430, binding = 1) readonly buffer MeshInfoBuffer
 {
 	MeshInfo u_meshes[];
 };
 
-layout (set = PER_FRAME_SET, std140, binding = 2) uniform TransformBuffer
+layout (set = PER_FRAME_SET, std430, binding = 2) readonly buffer TransformBuffer
 {
 	mat4 u_transforms[];
 };

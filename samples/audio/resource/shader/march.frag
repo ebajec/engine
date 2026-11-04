@@ -46,18 +46,21 @@ float func(vec3 p, out vec4 color)
 
 	float scale = 8/float(bins);
 	float fscale = 1024;
-	float roughness = 0.5;
+	float roughness = 0.0;
 
 	float t = ftime();
 
+	float base = pow(2, 1/float(OFRACS));
 	vec3 f = (u_spec.Fmax * pow(2, (1 - bins)/OFRACS) / fscale) * vec3(p);
 
 	vec3 c2n[OFRACS];
 	vec3 s2n[OFRACS];
 
+	float factor = 1;
 	for (int i = 0; i < OFRACS; ++i) {
-		c2n[i] = cos(f);
-		s2n[i] = sin(f);
+		c2n[i] = cos(f * factor);
+		s2n[i] = sin(f * factor);
+		//factor *= base;
 	}
 
 	float sd = 1e10;
@@ -84,7 +87,7 @@ float func(vec3 p, out vec4 color)
 		float R1 = c2*spacing * (i);
 		float R2 = mix(c2,c, 1 - roughness)*spacing;
 
-		float torus1 = sd_torus(pi + off, R1, R2); 
+		float torus1 = sd_torus(abs(pi + off), R1, R2); 
 		float torus2 = sd_torus(vec3(pi -off), R1, R2); 
 		float sd_i = min(torus1, torus2) - 0.3*R2 * h; 
 
@@ -112,8 +115,6 @@ float func(vec3 p, out vec4 color)
 float sdf(vec3 p, out vec3 c)
 {
 	vec4 color;
-	float t = ftime();
-
 	float f = func(10*p, color);
 	c = color.rgb;
 	return f;
@@ -136,7 +137,7 @@ vec3 map1(vec3 o, vec3 dir)
 	float eps = 0.01;
 	float dmax = 10000;
 
-	int max_its = 150;
+	int max_its = 150;;
 
 	bool oob = false;
 

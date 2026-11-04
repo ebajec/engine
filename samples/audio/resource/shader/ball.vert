@@ -3,6 +3,8 @@
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_buffer_reference2 : require
 
+#define OFRACS 6
+
 layout (location = 0) in vec3 in_pos;
 layout (location = 1) in vec3 in_normal;
 layout (location = 0) out vec3 out_pos;
@@ -74,18 +76,18 @@ vec3 map(vec3 p, out vec4 color, out float dc)
 	float Fstep = pc.Fmax / (Fscale * float(pc.bins));
 
 	for (int i = 0; i < pc.bins; ++i) {
-		float f = 6.28 * i * Fstep;
+		float f = i * Fstep;
 		float c = pc.spec.data[i];
 		float x = basis(p, f, c) * scale;
 		h += x; 
 
-		color.rgb += 10*abs(x) * palette(int(f), pc.bins);
+		color.rgb += 0.4*abs(x) * palette(int(f), pc.bins);
 
 	}
 
 	color.rgb *= abs(h - dc);
 
-	p *= 4*(1 + h);
+	p *= (3 + 0.2*h);
 
 	return vec3(p.x, p.y, p.z);
 }

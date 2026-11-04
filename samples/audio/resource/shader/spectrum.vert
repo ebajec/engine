@@ -30,7 +30,7 @@ void main()
 	float amp = pc.spec.data[f_idx];
 
 	float x = (float(idx - pc.bins) + 0.5) / pc.bins;
-	float y = 0.5 * bottom*amp;
+	float y = 0.05 * bottom*amp;
 
 	vec2 pos = vec2(x,y);
 	out_pos = pos;

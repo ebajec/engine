@@ -192,6 +192,7 @@ static void ico_sphere_mesh(
 
 enum VizMode
 {
+	VIZ_MODE_NONE,
 	VIZ_MODE_RASTER,
 	VIZ_MODE_MARCHED,
 };
@@ -428,6 +429,8 @@ void AudioViz::render()
 		switch (rd.mode) {
 			case VIZ_MODE_RASTER: draw_ball(pass); break;
 			case VIZ_MODE_MARCHED: draw_sdf(pass); break;
+			default:
+				break;
 		}
 		ev2::end_pass(ctx, pass); 
 	}
@@ -597,7 +600,7 @@ int AudioViz::update()
 
 	// order matches VizMode
 	int mode = rd.mode;
-	if (ImGui::Combo("Viz Mode", &mode, "Raster\0Marched\0")) {
+	if (ImGui::Combo("Viz Mode", &mode, "None\0Raster\0Marched\0")) {
 		rd.mode = (VizMode)mode;
 	}
 

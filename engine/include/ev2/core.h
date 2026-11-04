@@ -260,11 +260,11 @@ enum IndexType
 
 enum VertexFormat
 {
+	VERTEX_FORMAT_PN32F = 0,
+	VERTEX_FORMAT_PNUV32F = 1,
+	VERTEX_FORMAT_PN16 = 2,
+	VERTEX_FORMAT_PNUV16 = 3,
 	VERTEX_FORMAT_CUSTOM,
-	VERTEX_FORMAT_PN32F,
-	VERTEX_FORMAT_PNUV32F,
-	VERTEX_FORMAT_PN16,
-	VERTEX_FORMAT_PNUV16,
 };
 
 struct VertexPNUV32f {
@@ -304,11 +304,11 @@ struct MeshGeometry
 	uint32_t idx_count;
 	void *idx_data;
 
-	float pos_extent[3];
-	float pos_offset[3];
+	float pos_extent[3] = {1,1,1};
+	float pos_offset[3] = {0,0,0};
 
-	float uv_scale[2];
-	float uv_offset[2];
+	float uv_scale[2] = {1,1};
+	float uv_offset[2] = {0,0};
 };
 
 MeshID create_mesh(GfxContext *ctx, const MeshGeometry *geom);
@@ -491,9 +491,12 @@ Result begin_frame(GfxContext *ctx);
 Result end_frame(GfxContext *ctx);
 
 ViewID create_view(GfxContext *ctx, float view[], float proj[]);
-void update_view(GfxContext *ctx, ViewID handle, float view[], float proj[]);
-void destroy_view(GfxContext *ctx, ViewID handle);
+void update_view(GfxContext *ctx, ViewID id, float view[], float proj[]);
+void destroy_view(GfxContext *ctx, ViewID id);
 
+TransformID create_transform(GfxContext *ctx, float T[]);
+void update_transform(GfxContext *ctx, TransformID id, float T[]);
+void destroy_transform(GfxContext *ctx, TransformID id);
 
 struct Rect
 {
