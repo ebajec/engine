@@ -1,0 +1,20 @@
+cmake_minimum_required(VERSION 3.27)
+set(CMAKE_CXX_STANDARD 23)
+
+include(warnings)
+
+set(TARGET test_shader)
+project(${TARGET})
+
+file(GLOB SOURCES "*.cpp" "*.c")
+
+add_executable(${TARGET} ${SOURCES})
+
+target_link_libraries(${TARGET} PRIVATE
+	samples-shared
+	ev2-editor
+	ev2-engine
+)
+
+ev2_add_mount(${TARGET} NAME test DIR resource)
+

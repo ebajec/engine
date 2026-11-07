@@ -104,6 +104,18 @@ vec3 view_dir()
 	return -m[2].xyz;
 }
 
+// Pixel coordinates to the world space point on the near plane. Assumes a rigid
+// view and a projection where x, y and w don't depend on x_v or y_v of other rows.
+vec3 screen_to_world(vec2 screen)
+{
+	mat4 p = u_pass.p;
+	float z = -u_pass.near_plane;
+	float w = p[2][3] * z + p[3][3];
+	vec2 ndc = 2.0 * screen * u_pass.inv_resolution - 1.0;
+	vec2 xy = (ndc * w - p[2].xy * z - p[3].xy) / vec2(p[0][0], p[1][1]);
+	return u_pass.center + vec3(xy, z) * mat3(u_pass.v);
+}
+
 struct MeshVertex {
 	vec3 pos;
 	vec3 normal;

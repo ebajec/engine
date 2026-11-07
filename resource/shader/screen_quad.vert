@@ -2,9 +2,6 @@
 #extension GL_GOOGLE_include_directive : require
 #include "core/shader/core.glsl"
 
-//--------------------------------------------------------------------------------------------------
-// Vert
-
 layout (location = 0) out vec2 frag_pos;
 layout (location = 1) out vec2 frag_uv;
 

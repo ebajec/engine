@@ -25,7 +25,7 @@
 #include <algorithm>
 #include <cstdlib>
 
-struct AudioViz
+struct GPUSortingSample
 {
 	ev2::GfxContext *ctx;
 
@@ -57,10 +57,10 @@ struct AudioViz
 	int update();
 	void render();
 
-	~AudioViz();
+	~GPUSortingSample();
 };
 
-AudioViz::~AudioViz()
+GPUSortingSample::~GPUSortingSample()
 {
 	if (real_buffer.is_valid())
 		ev2::destroy_buffer(ctx, real_buffer);
@@ -69,7 +69,7 @@ AudioViz::~AudioViz()
 			ev2::destroy_buffer(ctx, buffers[i]);
 }
 
-int AudioViz::initialize(int argc, char **argv)
+int GPUSortingSample::initialize(int argc, char **argv)
 {
 	ctx = ev2::editor::ctx();
 
@@ -84,7 +84,7 @@ int AudioViz::initialize(int argc, char **argv)
 	return ev2::SUCCESS;
 }
 
-void AudioViz::on_count_changed()
+void GPUSortingSample::on_count_changed()
 {
 	sorter.reset(GPUSort::create(ctx, count, 32, "core://shader/sort/sort_uint.slang"));
 
@@ -103,7 +103,7 @@ void AudioViz::on_count_changed()
 		ev2::BUFFER_USAGE_STORAGE_BUFFER_BIT | ev2::BUFFER_USAGE_VERTEX_BUFFER_BIT); 
 }
 
-void AudioViz::randomize()
+void GPUSortingSample::randomize()
 {
 	values.clear();
 	values.reserve(count);
@@ -116,7 +116,7 @@ void AudioViz::randomize()
 	reset();
 }
 
-void AudioViz::reset()
+void GPUSortingSample::reset()
 {
 	if (values.size() != count)
 		randomize();
@@ -171,7 +171,7 @@ void AudioViz::reset()
 	}
 }
 
-int AudioViz::update()
+int GPUSortingSample::update()
 {
 	int result = ev2::SUCCESS;
 
@@ -213,14 +213,14 @@ int AudioViz::update()
 	return ev2::SUCCESS;
 }
 
-void AudioViz::exec_sort()
+void GPUSortingSample::exec_sort()
 {
 	ev2::PassID pass = ev2::begin_compute_pass(ctx);
 	disp_buffer = sorter->record(pass, bits, buffers, count, sizeof(uint32_t), nullptr, 0);
 	ev2::end_pass(ctx, pass);
 }
 
-void AudioViz::render()
+void GPUSortingSample::render()
 {
 	ev2::GfxPipelineID p_points = ev2::load_graphics_pipeline(ctx, "test_sort://pipeline/points.yaml");
 	ev2::GfxPipelineID p_background = ev2::load_graphics_pipeline(ctx, "test_sort://pipeline/bg.yaml");
@@ -287,7 +287,7 @@ int main(int argc, char *argv[])
 		return result;
 	add_project_mounts(ev2::editor::ctx());
 
-	std::unique_ptr<AudioViz> app (new AudioViz{});
+	std::unique_ptr<GPUSortingSample> app (new GPUSortingSample{});
 	if (app->initialize(argc, argv) != ev2::SUCCESS)
 		return EXIT_FAILURE;
 
