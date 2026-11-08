@@ -1,0 +1,34 @@
+#version 460 core
+#extension GL_GOOGLE_include_directive : require
+#include "test/shader/terrain.glsl"
+
+#define GROUP_SIZE 16
+
+layout (local_size_x = GROUP_SIZE, local_size_y = GROUP_SIZE, local_size_z = 1) in;
+
+layout (push_constant) uniform PC {
+	int cell_scale;
+	float F;
+	float noise_scale;
+	int octaves;
+	float speed;
+	uint height_tex; // bindless handle
+} pc;
+
+layout (set = 0, r32f, binding = 0) uniform writeonly image2D img_out;
+
+void main()
+{
+	ivec2 size = imageSize(img_out);
+	ivec2 idx = ivec2(gl_GlobalInvocationID.xy);
+
+	if (any(greaterThanEqual(idx, size)))
+		return;
+
+	vec2 uv = (vec2(idx) + 0.5) / vec2(size);
+	vec2 p = (2 * uv - 1) * TERRAIN_WIDTH;
+
+	float h = terrain_height(p, pc.noise_scale, pc.octaves);
+
+	imageStore(img_out, idx, vec4(h));
+}

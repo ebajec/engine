@@ -1,5 +1,5 @@
 shaders:
   vert: core://shader/screen_quad.vert
-  frag: test://shader/noise.frag
+  frag: test://shader/march_terrain.frag
 input:
   topology: TRIANGLE_STRIP
