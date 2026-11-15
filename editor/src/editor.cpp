@@ -245,6 +245,7 @@ void image_viewer_close_callback(void *usr, ev2::ImageID image)
 		return;
 
 	if (std::shared_ptr<ImageViewer> viewer = it->second.lock()) {
+		log_info("Closed %s", viewer->get_name());
 		g.image_viewers.erase(viewer);
 	}
 
@@ -722,7 +723,7 @@ std::shared_ptr<ImageViewer> open_image_viewer(
 
 void close_image_viewer(std::shared_ptr<ImageViewer> viewer)
 {
-	g.to_close_viewers.push_back(viewer);
+	g.image_viewers.erase(viewer);
 }
 
 } // namespace ev2::editor
